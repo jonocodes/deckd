@@ -6,19 +6,20 @@ import logging
 import signal
 from pathlib import Path
 
-from .input import ScrollController, UinputSink, LoggingScrollSink, LoggingKeySink
+from .input import LoggingKeySink, LoggingScrollSink, ScrollController, UinputSink
+from .platform import default_backend
 from .server import Server
 
 
 async def _run(server: Server) -> None:
     loop = asyncio.get_running_loop()
-    task = asyncio.create_task(server.start())
+    server_task = asyncio.create_task(server.start())
 
     for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, task.cancel)
+        loop.add_signal_handler(sig, server_task.cancel)
 
     try:
-        await task
+        await server_task
     except asyncio.CancelledError:
         pass
     finally:
@@ -30,10 +31,15 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument(
-        "--layouts",
+        "--layouts-dir",
         type=Path,
-        default=Path("layouts/default.yaml"),
-        help="YAML layout file to load",
+        default=Path("layouts"),
+        help="Directory of per-app YAML layouts (one file per app + default.yaml)",
+    )
+    parser.add_argument(
+        "--no-focus",
+        action="store_true",
+        help="Disable the focus watcher (serve only the default layout)",
     )
     parser.add_argument(
         "--client-dist",
@@ -75,8 +81,10 @@ def main() -> None:
     scroll_sink = sink if sink is not None else LoggingScrollSink()
     key_sink = sink if sink is not None else LoggingKeySink()
 
+    focus_backend = None if args.no_focus else default_backend()
+
     server = Server(
-        layouts_path=args.layouts,
+        layouts_dir=args.layouts_dir,
         host=args.host,
         port=args.port,
         scroll=ScrollController(
@@ -85,7 +93,9 @@ def main() -> None:
             momentum_cutoff=args.scroll_momentum_cutoff,
         ),
         key_sink=key_sink,
+        focus_backend=focus_backend,
     )
+    server.start_focus_watcher()
 
     if args.client_dist is not None:
         server.app.router.add_static("/", args.client_dist, show_index=True, append_version=False)

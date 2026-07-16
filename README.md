@@ -51,7 +51,7 @@ What works today: a minimal daemon + web client that proves the wire protocol an
 ```
 daemon/deckd/      Python daemon: aiohttp server, WebSocket, layout loader, action dispatch
 client/            Vite + React + TS web client (the dumb renderer)
-layouts/           Per-app YAML layouts (one for the spike; default.yaml)
+layouts/           Per-app YAML layouts (default.yaml + one per app)
 scripts/smoke.py   End-to-end test that boots the daemon over WS, clicks every button
 docs/INCEPTION.md  Full design doc — source of truth for *what* and *why*
 ```
@@ -109,7 +109,7 @@ http://lute:5173?scrollScale=4&scrollInvert=1
 Daemon-side flick momentum can be tuned with CLI flags:
 
 ```sh
-.venv/bin/deckd --layouts layouts/default.yaml \
+.venv/bin/deckd --layouts-dir layouts \
   --scroll-momentum-friction 0.90 \
   --scroll-momentum-cutoff 20 \
   --verbose
@@ -227,7 +227,7 @@ deckctl status    # hit /health
 
 ## Configuration
 
-A single YAML file for the spike (`layouts/default.yaml`). Each widget has an `id`, `kind` (`button`, `jogstrip`; `trackpad` is declared in the schema but unsupported in the spike), a `grid: [x, y, w, h]` placement, and an optional `action`. Action primitives:
+A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Each widget has an `id`, `kind` (`button`, `jogstrip`; `trackpad` is declared in the schema but unsupported in the spike), a `grid: [x, y, w, h]` placement, and an optional `action`. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. Action primitives:
 
 - `shell: "..."` — run a subprocess (fire-and-forget; stdout/stderr discarded).
 - `key: "ctrl+t"` — fire the keystroke through uinput as a single combo.

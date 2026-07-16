@@ -30,12 +30,12 @@ DEFAULT_PORT = 8765
 
 async def _start_daemon(port: int) -> asyncio.subprocess.Process:
     return await asyncio.create_subprocess_exec(
-        sys.executable,  # populated below
+        sys.executable,
         "-u",
         "-m",
         "deckd",
-        "--layouts",
-        str(LAYOUTS_DIR / "default.yaml"),
+        "--layouts-dir",
+        str(LAYOUTS_DIR),
         "--port",
         str(port),
         cwd=str(REPO_ROOT),

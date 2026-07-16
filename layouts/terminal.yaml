@@ -1,0 +1,36 @@
+match:
+  - org.gnome.Console
+  - foot
+  - kitty
+  - gnome-terminal
+  - konsole
+  - alacritty
+widgets:
+  - id: copy
+    kind: button
+    label: Copy
+    icon: clipboard
+    grid: [0, 0, 1, 1]
+    action:
+      key: "ctrl+shift+c"
+  - id: paste
+    kind: button
+    label: Paste
+    icon: paste
+    grid: [1, 0, 1, 1]
+    action:
+      key: "ctrl+shift+v"
+  - id: new-tab
+    kind: button
+    label: New tab
+    icon: plus
+    grid: [2, 0, 1, 1]
+    action:
+      key: "ctrl+shift+t"
+  - id: find
+    kind: button
+    label: Find
+    icon: search
+    grid: [3, 0, 1, 1]
+    action:
+      key: "ctrl+shift+f"

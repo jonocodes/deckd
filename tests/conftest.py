@@ -18,7 +18,7 @@ from deckd.input import ScrollController
 from deckd.platform import AppInfo
 from deckd.server import Server
 
-LAYOUTS_PATH = Path(__file__).parent.parent / "layouts" / "default.yaml"
+LAYOUTS_DIR = Path(__file__).parent.parent / "layouts"
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +190,7 @@ async def srv(monkeypatch) -> AsyncIterator[ServerHandle]:
     dbus_factory = FakeDbusBusFactory()
 
     server = Server(
-        layouts_path=LAYOUTS_PATH,
+        layouts_dir=LAYOUTS_DIR,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(scroll_sink),
@@ -215,3 +215,35 @@ async def srv(monkeypatch) -> AsyncIterator[ServerHandle]:
 
     await test_server.close()
     await server.scroll.close()
+
+
+# ---------------------------------------------------------------------------
+# Shared test helpers
+# ---------------------------------------------------------------------------
+
+
+def make_test_server(
+    *,
+    layouts_dir: Path,
+    focus_backend=None,
+) -> tuple[Server, FakeScrollSink, FakePointerSink, FakeDbusBusFactory]:
+    """Build a ``Server`` with the same fake sinks used by the fixtures.
+
+    Returns ``(server, scroll_sink, key_sink, dbus_factory)``; the caller
+    is responsible for booting and tearing down the ``TestServer`` and
+    for the ``monkeypatch`` of ``actions._run_shell`` / ``run_terminal``
+    if it wants the fake shell behaviour.
+    """
+    scroll_sink = FakeScrollSink()
+    key_sink = FakePointerSink()
+    dbus_factory = FakeDbusBusFactory()
+    server = Server(
+        layouts_dir=layouts_dir,
+        host="127.0.0.1",
+        port=0,
+        scroll=ScrollController(scroll_sink),
+        key_sink=key_sink,
+        dbus_bus_factory=dbus_factory,
+        focus_backend=focus_backend,
+    )
+    return server, scroll_sink, key_sink, dbus_factory

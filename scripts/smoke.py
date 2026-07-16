@@ -51,7 +51,7 @@ class FakeScrollSink:
 async def main() -> None:
     print("starting server...", flush=True)
     server = Server(
-        layouts_path=Path("layouts/default.yaml"),
+        layouts_dir=Path("layouts"),
         host="127.0.0.1",
         port=18765,
         scroll=ScrollController(FakeScrollSink()),

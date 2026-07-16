@@ -1,0 +1,59 @@
+match:
+  - firefox
+widgets:
+  - id: new-tab
+    kind: button
+    label: New tab
+    icon: plus
+    grid: [0, 0, 1, 1]
+    action:
+      key: "ctrl+t"
+  - id: new-window
+    kind: button
+    label: New window
+    icon: window
+    grid: [1, 0, 1, 1]
+    action:
+      key: "ctrl+n"
+  - id: back
+    kind: button
+    label: Back
+    icon: arrow-left
+    grid: [2, 0, 1, 1]
+    action:
+      key: "alt+Left"
+  - id: forward
+    kind: button
+    label: Forward
+    icon: arrow-right
+    grid: [3, 0, 1, 1]
+    action:
+      key: "alt+Right"
+  - id: reload
+    kind: button
+    label: Reload
+    icon: refresh
+    grid: [0, 1, 1, 1]
+    action:
+      key: "ctrl+r"
+  - id: focus-url
+    kind: button
+    label: URL bar
+    icon: link
+    grid: [1, 1, 1, 1]
+    action:
+      key: "ctrl+l"
+  - id: find
+    kind: button
+    label: Find
+    icon: search
+    grid: [2, 1, 1, 1]
+    action:
+      key: "ctrl+f"
+  - id: close-tab
+    kind: button
+    label: Close tab
+    icon: close
+    grid: [3, 1, 1, 1]
+    action:
+      key: "ctrl+w"
