@@ -73,7 +73,17 @@ type JogStripProps = {
   onJogEnd: (id: string, velocity: number) => void;
 };
 
-const WHEEL_UNITS_PER_PX = 3;
+const SCROLL_UNITS_PER_PX = readNumberSetting(
+  "scrollScale",
+  (import.meta.env.VITE_DECKD_SCROLL_SCALE ?? "") as string,
+  3,
+);
+const SCROLL_DIRECTION = readBooleanSetting(
+  "scrollInvert",
+  (import.meta.env.VITE_DECKD_SCROLL_INVERT ?? "") as string,
+)
+  ? -1
+  : 1;
 
 function JogStrip({ widget, style, onJog, onJogEnd }: JogStripProps) {
   const activePointer = useRef<number | null>(null);
@@ -122,7 +132,7 @@ function JogStrip({ widget, style, onJog, onJogEnd }: JogStripProps) {
         if (activePointer.current !== e.pointerId) return;
         e.preventDefault();
         const dt = Math.max((e.timeStamp - lastT.current) / 1000, 0.001);
-        const delta = (lastY.current - e.clientY) * WHEEL_UNITS_PER_PX;
+        const delta = (lastY.current - e.clientY) * SCROLL_UNITS_PER_PX * SCROLL_DIRECTION;
         pending.current += delta;
         velocity.current = delta / dt;
         lastY.current = e.clientY;
@@ -133,7 +143,19 @@ function JogStrip({ widget, style, onJog, onJogEnd }: JogStripProps) {
       onPointerCancel={(e) => finish(e.currentTarget, e.pointerId, false)}
     >
       <span className="label">{widget.label ?? widget.id}</span>
-      <span className="hint">drag or flick vertically</span>
+      <span className="hint">scale {SCROLL_UNITS_PER_PX} · drag or flick vertically</span>
     </div>
   );
+}
+
+function readNumberSetting(queryName: string, envValue: string, fallback: number): number {
+  const raw = new URLSearchParams(window.location.search).get(queryName) ?? envValue;
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function readBooleanSetting(queryName: string, envValue: string): boolean {
+  const raw = (new URLSearchParams(window.location.search).get(queryName) ?? envValue).toLowerCase();
+  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }

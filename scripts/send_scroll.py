@@ -18,13 +18,13 @@ import json
 import websockets
 
 
-async def send_scroll(url: str, *, delta: int, frames: int, delay: float) -> None:
+async def send_scroll(url: str, *, delta: int, frames: int, delay: float, velocity: int) -> None:
     async with websockets.connect(url, open_timeout=2, close_timeout=2) as ws:
         await ws.recv()  # initial layout push
         for _ in range(frames):
             await ws.send(json.dumps({"type": "jog", "id": "scroll-strip", "delta": delta}))
             await asyncio.sleep(delay)
-        await ws.send(json.dumps({"type": "jog_end", "id": "scroll-strip", "velocity": 0}))
+        await ws.send(json.dumps({"type": "jog_end", "id": "scroll-strip", "velocity": velocity}))
 
 
 def main() -> None:
@@ -33,9 +33,12 @@ def main() -> None:
     parser.add_argument("--delta", type=int, default=30)
     parser.add_argument("--frames", type=int, default=20)
     parser.add_argument("--delay", type=float, default=0.016)
+    parser.add_argument("--velocity", type=int, default=0)
     args = parser.parse_args()
 
-    asyncio.run(send_scroll(args.url, delta=args.delta, frames=args.frames, delay=args.delay))
+    asyncio.run(
+        send_scroll(args.url, delta=args.delta, frames=args.frames, delay=args.delay, velocity=args.velocity)
+    )
 
 
 if __name__ == "__main__":

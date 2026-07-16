@@ -62,6 +62,68 @@ hostname -I
 
 Open `http://<desktop-lan-ip>:8765` on the phone, for example `http://192.168.30.117:8765`. The client connects its WebSocket back to the same host automatically, so no separate `VITE_DECKD_WS` setting is needed for this built-client path.
 
+### Scroll tuning
+
+The jogstrip's drag scale can be tuned from the phone URL without rebuilding:
+
+```text
+http://lute:5173?scrollScale=2
+http://lute:5173?scrollScale=4&scrollInvert=1
+```
+
+`scrollScale` is high-resolution wheel units per CSS pixel. `scrollInvert=1` flips the direction.
+
+Daemon-side flick momentum can be tuned with CLI flags:
+
+```sh
+.venv/bin/deckd --layouts layouts/default.yaml \
+  --scroll-momentum-friction 0.90 \
+  --scroll-momentum-cutoff 20 \
+  --verbose
+```
+
+Lower friction decays faster; `--scroll-momentum-friction 0` effectively disables momentum after one frame. The helper script can test release momentum without the touch UI:
+
+```sh
+sleep 2 && .venv/bin/python -u scripts/send_scroll.py --velocity 1200
+```
+
+### uinput permissions
+
+For real scroll injection, deckd needs write access to `/dev/uinput`. Current-session ACLs may work temporarily, but the reproducible setup is to install the udev rule and add the daemon user to `input`:
+
+```sh
+sudo install -m 0644 packaging/udev/70-deckd-uinput.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=misc --sysname-match=uinput
+sudo usermod -aG input "$USER"
+```
+
+Log out and back in, then check:
+
+```sh
+ls -l /dev/uinput
+id
+just check-uinput
+```
+
+On NixOS, import `packaging/nixos/deckd-spike.nix` and enable the spike service:
+
+```nix
+{
+  imports = [ /home/jono/src/deckd/packaging/nixos/deckd-spike.nix ];
+
+  services.deckd-spike = {
+    enable = true;
+    user = "jono";
+    projectDir = "/home/jono/src/deckd";
+    lan = true;
+  };
+}
+```
+
+Run `just setup` and `just build-client` in the checkout before starting the user service.
+
 ### Dev mode (Vite HMR)
 
 Two terminals:
@@ -86,6 +148,34 @@ just dev-client-lan
 ```
 
 Open `http://lute:5173` on the phone when hostname resolution is available, or use the Network URL printed by Vite. `lute` is listed in Vite's `server.allowedHosts`. `dev-client-lan` sets `VITE_DECKD_WS=ws://lute:8765/ws` automatically, so the Vite page still talks to the daemon.
+
+### Focus watcher spike
+
+GNOME Shell's built-in `org.gnome.Shell.Introspect` API is present on this machine but returns `AccessDenied` for window/app queries. Spike #2 therefore uses a tiny GNOME Shell extension that publishes the focused window over session D-Bus.
+
+Install and enable the local extension:
+
+```sh
+just install-focus-extension
+```
+
+On Wayland, GNOME Shell may not list a newly installed extension until the next login. If the recipe says the extension was installed but not enabled, log out and back in, then run:
+
+```sh
+gnome-extensions enable deckd-focus@local
+```
+
+Then print focus changes:
+
+```sh
+just watch-focus
+```
+
+Expected output shape:
+
+```text
+app_id='org.gnome.Console' wm_class='org.gnome.Console' pid=1234 title='Terminal'
+```
 
 ### Smoke test
 

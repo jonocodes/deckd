@@ -8,6 +8,8 @@ Owner context: solo project, planning-first workflow. Spikes come first because 
 
 ## Spike #1 — uinput scroll end-to-end (issue #1)
 
+**Status:** core path validated; deferred follow-ups remain for reboot/clean-machine install validation and final feel defaults.
+
 **Goal:** prove the *feel* of synthetic scroll injection on GNOME/Wayland *before* building any widget system. Per INCEPTION.md §3 and §3.1.
 
 ### Scope
@@ -33,32 +35,55 @@ Owner context: solo project, planning-first workflow. Spikes come first because 
   - Added LAN testing path: `just build-client`, `just run-daemon-lan`, then open `http://<desktop-lan-ip>:8765` from the phone. The built client uses `window.location.host` for WebSocket reconnect.
   - Added Vite LAN testing path: `just run-daemon-dev-lan` plus `just dev-client-lan`, then open `http://lute:5173` or Vite's printed Network URL from the phone. Vite binds to `0.0.0.0`; `VITE_DECKD_WS` points back to the daemon on port 8765.
   - Phone-to-desktop validation succeeded: dragging the jogstrip in the phone browser scrolls desktop apps via uinput.
+  - Added udev rule artifact at `packaging/udev/70-deckd-uinput.rules`.
+  - Added NixOS spike module at `packaging/nixos/deckd-spike.nix` for uinput, `input` group membership, and a user service.
+  - Added tuning knobs: phone URL `scrollScale` / `scrollInvert`, daemon `--scroll-momentum-friction` / `--scroll-momentum-cutoff`, and helper-script `--velocity`.
+  - Added `just check-uinput` diagnostic for pre/post-reboot permission validation.
 
-### Current gaps
-- Need tune pass for direction, scale, and momentum feel.
-- Need udev rule + group membership check across reboot.
-- Need NixOS expression for udev + group + user service.
+### Deferred follow-ups
+- Need empirical tune pass to choose final direction, scale, friction, and cutoff defaults.
+- Need post-reboot `just check-uinput` pass on this machine.
+- Need NixOS module evaluation on a clean machine.
 
 ---
 
 ## Spike #2 — GNOME-Wayland active-window detection (issue #2)
 
+**Status:** done (X11 unsupported).
+
 **Goal:** resolve the highest-uncertainty design question (INCEPTION.md §4.1) and ship a working `PlatformBackend.watch_active_app()`.
 
+### Decision
+- Chose (a): tiny GNOME Shell extension over session D-Bus.
+- X11 fallback exists in daemon code but is not a supported target; no testing or ongoing maintenance planned for X11.
+- (b) `org.gnome.Shell.Introspect` was ruled out — returns `AccessDenied` on this machine.
+
 ### Scope
-- Choose between (a) tiny GNOME Shell extension over session D-Bus, (b) `org.gnome.Shell.Introspect`, (c) XWayland fallback. Pick whichever works on the installed GNOME version.
-- Implement the chosen path. (a) is the realistic choice per the design doc.
-- `PlatformBackend.watch_active_app() -> AsyncIterator[AppInfo]` over the GNOME/XWayland split (`echo $XDG_SESSION_TYPE`).
+- Tiny GNOME Shell extension over session D-Bus.
+- `PlatformBackend.watch_active_app() -> AsyncIterator[AppInfo]` over the GNOME/Wayland split (`echo $XDG_SESSION_TYPE`).
 - Daemon side: stub that prints focused `app_id` / `WM_CLASS` changes to stdout. No layout switching yet — just prove we can see focus changes.
 
 ### Definition of done
-- [ ] Focused-window changes printed within ~200ms of alt-tab.
-- [ ] Both `app_id` (Wayland-native) and `WM_CLASS` (XWayland) appear correctly.
-- [ ] Behavior documented for the GNOME version this machine runs.
-- [ ] X11 fallback (`xdotool getactivewindow getwindowclass`) works behind the same interface.
+- [x] Focused-window changes printed within ~200ms of alt-tab.
+- [x] Both `app_id` (Wayland-native) and `WM_CLASS` (XWayland) appear correctly.
+- [x] Behavior documented for the GNOME version this machine runs (Shell 50.1).
+- [ ] ~~X11 fallback~~ — unsupported.
 
 ### Progress
-_(none yet — pending kickoff)_
+- **2026-07-15** — Spike #2 kickoff:
+  - Environment observed: GNOME Shell 50.1 on Wayland (`XDG_SESSION_TYPE=wayland`, `XDG_CURRENT_DESKTOP=GNOME`).
+  - `org.gnome.Shell.Introspect` is present, but `GetWindows` and `GetRunningApplications` return `AccessDenied`; this rules it out as the primary path on this machine.
+  - Added GNOME Shell extension scaffold at `packaging/gnome-shell/deckd-focus@local` exposing focused window JSON over session D-Bus (`org.deckd.Focus`).
+  - Added daemon-side `PlatformBackend`, `GnomeShellFocusBackend`, and X11 `xdotool` fallback in `daemon/deckd/platform.py`.
+  - Added `scripts/watch_focus.py` / `just watch-focus` for validation.
+  - Extension bundle packs successfully with `gnome-extensions pack`; `just watch-focus` reports a helpful install hint when `org.deckd.Focus` is not loaded.
+  - `just install-focus-extension` installs the bundle; GNOME Shell on Wayland does not list the new extension until relogin, so enabling may be a second step after logging back in.
+  - Fixed GNOME Shell 50.1 GJS binding issue: `Gio.bus_own_name` requires the sixth `name_lost` callback argument, even when it is `null`.
+- **2026-07-16** — Verification:
+  - Extension installed, enabled, and ACTIVE on GNOME Shell 50.1.
+  - `gdbus call org.deckd.Focus.GetActiveWindow` returns correct `app_id`, `wm_class`, `title`, `pid`.
+  - `just watch-focus` polls at 100ms and prints focus changes on alt-tab.
+  - Native Wayland apps report `app_id`; XWayland apps report `wm_class`.
 
 ---
 

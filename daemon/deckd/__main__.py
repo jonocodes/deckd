@@ -6,6 +6,7 @@ import logging
 import signal
 from pathlib import Path
 
+from .input import ScrollController
 from .server import Server
 
 
@@ -40,15 +41,38 @@ def main() -> None:
         default=None,
         help="Optional path to built client (served at /)",
     )
+    parser.add_argument(
+        "--scroll-momentum-friction",
+        type=float,
+        default=0.90,
+        help="Momentum decay per 60Hz frame; 0 disables momentum, values below 1 decay",
+    )
+    parser.add_argument(
+        "--scroll-momentum-cutoff",
+        type=int,
+        default=20,
+        help="Stop momentum when absolute velocity drops below this high-res-wheel-units/sec value",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
+
+    if not 0 <= args.scroll_momentum_friction < 1:
+        parser.error("--scroll-momentum-friction must be >= 0 and < 1")
 
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
-    server = Server(layouts_path=args.layouts, host=args.host, port=args.port)
+    server = Server(
+        layouts_path=args.layouts,
+        host=args.host,
+        port=args.port,
+        scroll=ScrollController(
+            momentum_friction=args.scroll_momentum_friction,
+            momentum_cutoff=args.scroll_momentum_cutoff,
+        ),
+    )
 
     if args.client_dist is not None:
         server.app.router.add_static("/", args.client_dist, show_index=True, append_version=False)

@@ -77,9 +77,17 @@ def make_scroll_sink() -> ScrollSink:
 
 
 class ScrollController:
-    def __init__(self, sink: ScrollSink | None = None) -> None:
+    def __init__(
+        self,
+        sink: ScrollSink | None = None,
+        *,
+        momentum_friction: float = 0.90,
+        momentum_cutoff: int = 20,
+    ) -> None:
         self._sink = sink if sink is not None else make_scroll_sink()
         self._momentum_tasks: dict[str, asyncio.Task[None]] = {}
+        self._momentum_friction = momentum_friction
+        self._momentum_cutoff = momentum_cutoff
         self._closed = False
 
     def jog(self, widget_id: str, delta: int) -> None:
@@ -92,7 +100,7 @@ class ScrollController:
         if self._closed:
             return
         self._cancel_momentum(widget_id)
-        if abs(velocity) < 20:
+        if abs(velocity) < self._momentum_cutoff:
             return
         self._momentum_tasks[widget_id] = asyncio.create_task(
             self._run_momentum(widget_id, velocity)
@@ -100,17 +108,16 @@ class ScrollController:
 
     async def _run_momentum(self, widget_id: str, velocity: int) -> None:
         frame_s = 1 / 60
-        friction = 0.90
         remainder = 0.0
         try:
-            while abs(velocity) >= 20:
+            while abs(velocity) >= self._momentum_cutoff:
                 await asyncio.sleep(frame_s)
                 delta = velocity * frame_s + remainder
                 whole = int(delta)
                 remainder = delta - whole
                 if whole:
                     self._sink.emit_scroll(whole)
-                velocity = int(velocity * friction)
+                velocity = int(velocity * self._momentum_friction)
         finally:
             self._momentum_tasks.pop(widget_id, None)
 

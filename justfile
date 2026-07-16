@@ -42,6 +42,18 @@ build-client:
 smoke:
     .venv/bin/python -u scripts/smoke.py
 
+# Check whether this shell can create a uinput scroll device.
+check-uinput:
+    .venv/bin/python -u scripts/check_uinput.py
+
+# Install and enable the local GNOME Shell focus extension for Spike #2.
+install-focus-extension:
+    tmpdir="$(mktemp -d)"; gnome-extensions pack -f -o "$tmpdir" packaging/gnome-shell/deckd-focus@local; gnome-extensions install --force --print-uuid "$tmpdir/deckd-focus@local.shell-extension.zip"; rm -rf "$tmpdir"; if gnome-extensions list | grep -qx deckd-focus@local; then gnome-extensions enable deckd-focus@local; else echo "Installed deckd-focus@local. Log out/in, then run: gnome-extensions enable deckd-focus@local"; fi
+
+# Print active app/window changes for Spike #2.
+watch-focus:
+    .venv/bin/python -u scripts/watch_focus.py
+
 # Hit /health.
 status:
     .venv/bin/deckctl status

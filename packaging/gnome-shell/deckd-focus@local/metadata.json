@@ -1,0 +1,7 @@
+{
+  "uuid": "deckd-focus@local",
+  "name": "deckd Focus",
+  "description": "Publishes the focused GNOME Shell window over session D-Bus for deckd.",
+  "shell-version": ["50"],
+  "version": 1
+}

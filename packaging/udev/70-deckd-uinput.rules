@@ -1,0 +1,10 @@
+# Allow the deckd daemon to create virtual input devices without running as root.
+#
+# Install on non-Nix systems as:
+#   sudo install -m 0644 packaging/udev/70-deckd-uinput.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger --subsystem-match=misc --sysname-match=uinput
+#
+# Add the daemon user to the input group, then log out and back in:
+#   sudo usermod -aG input "$USER"
+KERNEL=="uinput", SUBSYSTEM=="misc", MODE="0660", GROUP="input", TAG+="uaccess", OPTIONS+="static_node=uinput"
