@@ -14,6 +14,7 @@ from .server import Server
 async def _run(server: Server) -> None:
     loop = asyncio.get_running_loop()
     server_task = asyncio.create_task(server.start())
+    server.start_focus_watcher()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, server_task.cancel)
@@ -83,6 +84,11 @@ def main() -> None:
 
     focus_backend = None if args.no_focus else default_backend()
 
+    def dbus_bus_factory(bus_type):
+        from dbus_fast.aio import MessageBus
+
+        return MessageBus(bus_type=bus_type)
+
     server = Server(
         layouts_dir=args.layouts_dir,
         host=args.host,
@@ -93,9 +99,9 @@ def main() -> None:
             momentum_cutoff=args.scroll_momentum_cutoff,
         ),
         key_sink=key_sink,
+        dbus_bus_factory=dbus_bus_factory,
         focus_backend=focus_backend,
     )
-    server.start_focus_watcher()
 
     if args.client_dist is not None:
         server.app.router.add_static("/", args.client_dist, show_index=True, append_version=False)
