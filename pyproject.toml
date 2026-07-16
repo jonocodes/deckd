@@ -10,6 +10,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+uinput = [
+    "evdev-binary>=1.9",
+]
 dev = [
     "websockets>=13",
     "pytest>=8",

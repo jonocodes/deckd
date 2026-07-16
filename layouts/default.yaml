@@ -45,6 +45,11 @@ pages:
         grid: [2, 2, 2, 1]
         action:
           page: second
+      - id: scroll-strip
+        kind: jogstrip
+        label: Scroll
+        icon: wheel
+        grid: [0, 3, 4, 1]
   second:
     widgets:
       - id: back-main

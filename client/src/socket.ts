@@ -15,7 +15,16 @@ export function useDeckdSocket(onLayout: (m: Extract<ServerMessage, { type: "lay
     const connect = () => {
       if (stopped) return;
       const ws_url = resolve_ws_url();
-      const ws = new WebSocket(ws_url);
+      let ws: WebSocket;
+      try {
+        ws = new WebSocket(ws_url);
+      } catch (err) {
+        console.error("invalid deckd WebSocket URL", ws_url, err);
+        setStatus("closed");
+        timer = window.setTimeout(connect, Math.min(backoffRef.current, 8000));
+        backoffRef.current *= 2;
+        return;
+      }
       wsRef.current = ws;
       setStatus("connecting");
 
@@ -65,8 +74,25 @@ export function useDeckdSocket(onLayout: (m: Extract<ServerMessage, { type: "lay
 }
 
 function resolve_ws_url(): string {
-  const env = (import.meta.env.VITE_DECKD_WS ?? "") as string;
-  if (env) return env;
+  const env = ((import.meta.env.VITE_DECKD_WS ?? "") as string).trim();
+  if (env) {
+    const url = parse_ws_url(env);
+    if (url) return url;
+    console.warn("Ignoring invalid VITE_DECKD_WS", env);
+  }
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${proto}//${window.location.host}/ws`;
+  const url = new URL("/ws", window.location.href);
+  url.protocol = proto;
+  if (window.location.port === "5173") url.port = "8765";
+  return url.toString();
+}
+
+function parse_ws_url(value: string): string | null {
+  try {
+    const url = new URL(value, window.location.href);
+    if (url.protocol !== "ws:" && url.protocol !== "wss:") return null;
+    return url.toString();
+  } catch {
+    return null;
+  }
 }

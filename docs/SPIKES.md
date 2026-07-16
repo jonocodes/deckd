@@ -23,7 +23,21 @@ Owner context: solo project, planning-first workflow. Spikes come first because 
 - [ ] NixOS expression (udev + group + user-service unit) reproducible on a clean machine.
 
 ### Progress
-_(none yet — pending kickoff)_
+- **2026-07-15** — Spike #1 kickoff:
+  - Added browser `jogstrip` rendering for the hardcoded `Scroll` strip in `layouts/default.yaml`.
+  - Added `jog` / `jog_end` dispatch in the daemon.
+  - Added daemon-side scroll sink abstraction: uinput via `python-evdev` when available, log-only fallback otherwise.
+  - Added daemon-side flick momentum from release velocity.
+  - Added smoke coverage for the jog message path with a fake scroll sink.
+  - Manual same-machine uinput test works with `sleep 2 && .venv/bin/python -u scripts/send_scroll.py`, using the delay to move the pointer over the target scroll area before events fire.
+  - Added LAN testing path: `just build-client`, `just run-daemon-lan`, then open `http://<desktop-lan-ip>:8765` from the phone. The built client uses `window.location.host` for WebSocket reconnect.
+  - Added Vite LAN testing path: `just run-daemon-dev-lan` plus `just dev-client-lan`, then open `http://lute:5173` or Vite's printed Network URL from the phone. Vite binds to `0.0.0.0`; `VITE_DECKD_WS` points back to the daemon on port 8765.
+  - Phone-to-desktop validation succeeded: dragging the jogstrip in the phone browser scrolls desktop apps via uinput.
+
+### Current gaps
+- Need tune pass for direction, scale, and momentum feel.
+- Need udev rule + group membership check across reboot.
+- Need NixOS expression for udev + group + user service.
 
 ---
 

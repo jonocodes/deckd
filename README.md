@@ -8,10 +8,10 @@ See [`docs/INCEPTION.md`](docs/INCEPTION.md) for the full design.
 
 Pre-alpha spike. The de-risking work from §12 of the design doc is in progress:
 
-- **uinput scroll end-to-end** (spike #1) — *not started*
+- **uinput scroll end-to-end** (spike #1) — *in progress*
 - **Focus watcher** (spike #2) — *not started*
 
-What works today: a minimal daemon + web client that proves the wire protocol and config-driven action dispatch (one `shell`, one `key`, one `page` action across two pages). Synthetic input is **not** wired up yet — `key` actions are logged only.
+What works today: a minimal daemon + web client that proves the wire protocol and config-driven action dispatch (`shell`, `terminal`, `key` stub, `page`) plus a hardcoded jogstrip that sends high-resolution scroll deltas. Synthetic scroll uses uinput when `python-evdev` is installed and `/dev/uinput` is accessible; otherwise it falls back to logging emitted deltas.
 
 ## Layout
 
@@ -34,7 +34,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # 2. Create the venv and install deps
 uv venv --python 3.12
-uv pip install -e ".[dev]"
+uv pip install -e ".[dev,uinput]"
 
 # 3. Install JS client deps (once)
 cd client && npm install && cd ..
@@ -46,7 +46,21 @@ just build-client
 just run-daemon
 ```
 
-Open `http://127.0.0.1:8765` in any browser. You should see three buttons: `Open example.com` (fires `xdg-open`), `Send Ctrl+T (stub)` (logs `[key stub]`), and `Second page →` (navigates to a second page).
+Open `http://127.0.0.1:8765` in any browser. You should see the spike buttons plus a `Scroll` jogstrip. Drag or flick vertically on the jogstrip to emit `REL_WHEEL_HI_RES` deltas through uinput, or log-only deltas when uinput is unavailable.
+
+### Phone/tablet testing
+
+The phone must load the web client from a daemon address it can reach. Build the client, run the daemon on all interfaces, then open the desktop's LAN IP from the phone:
+
+```sh
+just build-client
+just run-daemon-lan
+
+# In another terminal, find the desktop IP:
+hostname -I
+```
+
+Open `http://<desktop-lan-ip>:8765` on the phone, for example `http://192.168.30.117:8765`. The client connects its WebSocket back to the same host automatically, so no separate `VITE_DECKD_WS` setting is needed for this built-client path.
 
 ### Dev mode (Vite HMR)
 
@@ -60,6 +74,18 @@ just run-daemon-dev
 just dev-client
 # open http://127.0.0.1:5173
 ```
+
+For phone/tablet testing with Vite HMR, both the daemon and Vite need LAN bindings:
+
+```sh
+# Terminal 1
+just run-daemon-dev-lan
+
+# Terminal 2
+just dev-client-lan
+```
+
+Open `http://lute:5173` on the phone when hostname resolution is available, or use the Network URL printed by Vite. `lute` is listed in Vite's `server.allowedHosts`. `dev-client-lan` sets `VITE_DECKD_WS=ws://lute:8765/ws` automatically, so the Vite page still talks to the daemon.
 
 ### Smoke test
 
@@ -78,18 +104,18 @@ deckctl status    # hit /health
 
 ## Configuration
 
-A single YAML file for the spike (`layouts/default.yaml`). Each widget has an `id`, `kind` (`button` for now; `jogstrip` and `trackpad` declared in the schema but unsupported in the spike), a `grid: [x, y, w, h]` placement, and an `action`. Action primitives:
+A single YAML file for the spike (`layouts/default.yaml`). Each widget has an `id`, `kind` (`button`, `jogstrip`; `trackpad` is declared in the schema but unsupported in the spike), a `grid: [x, y, w, h]` placement, and an optional `action`. Action primitives:
 
 - `shell: "..."` — run a subprocess (fire-and-forget; stdout/stderr discarded).
-- `key: "ctrl+t"` — *(stubbed: logged only; uinput wiring is the next spike.)*
+- `key: "ctrl+t"` — *(stubbed: logged only; key injection is not wired yet.)*
 - `dbus: "..."` — *(stubbed: logged only.)*
 - `page: "<name>"` — switch the client to another page in the same layout.
 
 ## What the spike proves
 
-- WebSocket wire protocol in both directions (layout push, `press` event).
+- WebSocket wire protocol in both directions (layout push, `press`, `jog`, and `jog_end` events).
 - YAML config → Pydantic → `Widget` graph → action dispatch.
-- Three of the four action primitives end-to-end (`shell` for real; `key` and `page` for real but with `key` stubbed at the injection layer; `page` swaps the rendered layout).
+- Jogstrip scroll plumbing from browser pointer movement to daemon-side uinput/log sink, including daemon-side release momentum.
 - Reconnecting client (`useDeckdSocket` exponential backoff).
 - Build output is plain static files — `client/dist/` — served by the daemon.
 

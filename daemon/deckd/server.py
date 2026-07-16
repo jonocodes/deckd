@@ -9,6 +9,7 @@ from aiohttp import WSMsgType, web
 
 from . import protocol as p
 from .actions import ActionContext, execute as run_action
+from .input import ScrollController
 from .layouts import Layout, Widget, load_layout
 
 log = logging.getLogger("deckd.server")
@@ -41,7 +42,14 @@ class Session:
 
 
 class Server:
-    def __init__(self, *, layouts_path: Path, host: str, port: int) -> None:
+    def __init__(
+        self,
+        *,
+        layouts_path: Path,
+        host: str,
+        port: int,
+        scroll: ScrollController | None = None,
+    ) -> None:
         self.layouts_path = layouts_path
         self.host = host
         self.port = port
@@ -49,6 +57,7 @@ class Server:
         self._setup_routes()
         self._sessions: set[Session] = set()
         self.layout: Layout = load_layout(layouts_path)
+        self.scroll = scroll if scroll is not None else ScrollController()
 
     def reload_layout(self) -> None:
         self.layout = load_layout(self.layouts_path)
@@ -107,6 +116,14 @@ class Server:
         if msg_type == "hello":
             log.info("client hello (token=%s)", bool(data.get("token")))
             return
+        if msg_type == "jog":
+            msg = p.JogMessage.model_validate(data)
+            self.scroll.jog(msg.id, msg.delta)
+            return
+        if msg_type == "jog_end":
+            msg = p.JogEndMessage.model_validate(data)
+            self.scroll.jog_end(msg.id, msg.velocity)
+            return
         if msg_type != "press":
             log.debug("ignoring %s in spike", msg_type)
             return
@@ -142,3 +159,4 @@ class Server:
         runner = getattr(self, "_runner", None)
         if runner is not None:
             await runner.cleanup()
+        await self.scroll.close()

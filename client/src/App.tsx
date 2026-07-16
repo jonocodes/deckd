@@ -12,6 +12,8 @@ export function App() {
   const { status, send } = useDeckdSocket(onLayout);
 
   const press = (id: string) => send({ type: "press", id });
+  const jog = (id: string, delta: number) => send({ type: "jog", id, delta });
+  const jogEnd = (id: string, velocity: number) => send({ type: "jog_end", id, velocity });
 
   return (
     <div className="app">
@@ -24,7 +26,7 @@ export function App() {
       </header>
       <main className="surface">
         {layout ? (
-          <ButtonGrid widgets={layout.widgets} onPress={press} />
+          <ButtonGrid widgets={layout.widgets} onPress={press} onJog={jog} onJogEnd={jogEnd} />
         ) : (
           <div className="empty">waiting for daemon…</div>
         )}

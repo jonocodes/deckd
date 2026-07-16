@@ -98,6 +98,41 @@ button {
   letter-spacing: 0.08em;
 }
 
+.cell-jogstrip {
+  background: linear-gradient(180deg, #1d2630, #141a20);
+  border: 1px solid #344150;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  text-align: center;
+  min-height: 0;
+  min-width: 0;
+}
+
+.cell-jogstrip::before {
+  content: "||";
+  color: #7dd3fc;
+  font-size: clamp(22px, 5vw, 34px);
+  line-height: 1;
+}
+
+.cell-jogstrip .label {
+  font-size: clamp(13px, 2.4vw, 18px);
+  font-weight: 700;
+}
+
+.cell-jogstrip .hint {
+  color: #8a96a3;
+  font-size: 12px;
+}
+
 .empty {
   display: grid;
   place-items: center;

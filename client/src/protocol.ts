@@ -20,4 +20,6 @@ export type ServerMessage = ServerLayout | ServerState | ServerBrightness;
 
 export type ClientHello = { type: "hello"; client: "web"; token?: string };
 export type ClientPress = { type: "press"; id: string };
-export type ClientMessage = ClientHello | ClientPress;
+export type ClientJog = { type: "jog"; id: string; delta: number };
+export type ClientJogEnd = { type: "jog_end"; id: string; velocity: number };
+export type ClientMessage = ClientHello | ClientPress | ClientJog | ClientJogEnd;

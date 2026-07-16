@@ -9,6 +9,21 @@ from pathlib import Path
 from .server import Server
 
 
+async def _run(server: Server) -> None:
+    loop = asyncio.get_running_loop()
+    task = asyncio.create_task(server.start())
+
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, task.cancel)
+
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+    finally:
+        await server.stop()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="deckd")
     parser.add_argument("--host", default="127.0.0.1")
@@ -41,18 +56,7 @@ def main() -> None:
             return _req.response(200, text=(args.client_dist / "index.html").read_text(), content_type="text/html")
         server.app.router.add_get("/{path:^(?!ws$|health$|.+\\..+$).*}", spa)
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, lambda: loop.create_task(server.stop()))
-
-    try:
-        loop.run_until_complete(server.start())
-    except KeyboardInterrupt:
-        pass
-    finally:
-        loop.run_until_complete(server.stop())
-        loop.close()
+    asyncio.run(_run(server))
 
 
 if __name__ == "__main__":
