@@ -5,9 +5,10 @@ default:
     @just --list
 
 # Create the venv and install Python + JS deps. Idempotent.
+# (flox activate also does this — use whichever you prefer.)
 setup:
-    uv venv --python 3.12 --allow-existing
-    uv pip install -e ".[dev,uinput]"
+    @if [ ! -d .venv ]; then python -m venv .venv; fi
+    .venv/bin/pip install -e ".[dev,uinput]"
     cd client && npm install
 
 # Run the daemon against the spike layout, serving the built client.
@@ -40,15 +41,15 @@ build-client:
 
 # Run the test suite.
 test:
-    .venv/bin/pytest
+    pytest
 
 # End-to-end smoke test (boots daemon in-process, fires every action primitive).
 smoke:
-    .venv/bin/python -u scripts/smoke.py
+    python -u scripts/smoke.py
 
 # Check whether this shell can create a uinput scroll device.
 check-uinput:
-    .venv/bin/python -u scripts/check_uinput.py
+    python -u scripts/check_uinput.py
 
 # Install and enable the local GNOME Shell focus extension for Spike #2.
 install-focus-extension:
