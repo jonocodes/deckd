@@ -57,8 +57,6 @@ class ActionContext:
 async def execute(
     widget: Widget,
     ctx: ActionContext,
-    *,
-    on_page_change: "callable | None" = None,
 ) -> None:
     action = widget.action
     if action is None:
@@ -73,12 +71,6 @@ async def execute(
     elif action.dbus is not None:
         log.warning("[dbus stub] widget=%s target=%s — dbus dispatch not wired up yet",
                     widget.id, action.dbus)
-    elif action.page is not None:
-        if on_page_change is not None:
-            await on_page_change(action.page)
-        else:
-            log.warning("[page] widget=%s page=%s — no on_page_change wired",
-                        widget.id, action.page)
     else:
         log.warning("widget %s action has no recognised primitive: %s",
                     widget.id, action)

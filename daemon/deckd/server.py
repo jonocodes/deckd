@@ -26,23 +26,15 @@ class Session:
         self.ws = ws
         self.server = server
         self.app_id = "default"
-        self.page = "main"
 
     async def send(self, message: p.ServerMessage) -> None:
         await self.ws.send_json(message.model_dump())
 
     async def push_current(self) -> None:
         layout = self.server.layout_for(self.app_id)
-        widgets = [w.model_dump() for w in layout.pages[self.page].widgets]
-        msg = p.LayoutMessage(type="layout", app=self.app_id, page=self.page, widgets=widgets)
+        widgets = [w.model_dump() for w in layout.widgets]
+        msg = p.LayoutMessage(type="layout", app=self.app_id, widgets=widgets)
         await self.send(msg)
-
-    async def switch_page(self, page: str) -> None:
-        if page not in self.server.layout.pages:
-            log.warning("unknown page %r; staying on %s", page, self.page)
-            return
-        self.page = page
-        await self.push_current()
 
 
 class Server:
@@ -134,7 +126,7 @@ class Server:
             log.debug("ignoring %s in spike", msg_type)
             return
         msg = p.PressMessage.model_validate(data)
-        widget = self._find_widget(session, msg.id)
+        widget = self._find_widget(msg.id)
         if widget is None:
             log.warning("press for unknown widget id=%s", msg.id)
             return
@@ -144,10 +136,10 @@ class Server:
             current_app=session.app_id,
             key_sink=self.key_sink,
         )
-        await run_action(widget, ctx, on_page_change=session.switch_page)
+        await run_action(widget, ctx)
 
-    def _find_widget(self, session: Session, widget_id: str) -> Widget | None:
-        for w in self.layout.pages[session.page].widgets:
+    def _find_widget(self, widget_id: str) -> Widget | None:
+        for w in self.layout.widgets:
             if w.id == widget_id:
                 return w
         return None

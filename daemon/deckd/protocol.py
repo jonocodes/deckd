@@ -10,7 +10,6 @@ class LayoutMessage(BaseModel):
 
     type: Literal["layout"]
     app: str = "default"
-    page: str
     widgets: list[dict]
 
 

@@ -23,21 +23,14 @@ class Action(BaseModel):
     key: str | None = None
     shell: str | None = None
     dbus: str | None = None
-    page: str | None = None
     terminal: bool | str | None = None
-
-
-class Page(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    widgets: list[Widget] = Field(default_factory=list)
 
 
 class Layout(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     match: list[str] = Field(default_factory=list)
-    pages: dict[str, Page] = Field(default_factory=dict)
+    widgets: list[Widget] = Field(default_factory=list)
 
 
 def load_layout(path: Path) -> Layout:

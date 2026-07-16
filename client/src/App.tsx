@@ -2,12 +2,12 @@ import { useCallback, useState } from "react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 
-type LayoutState = { app: string; page: string; widgets: ReturnType<typeof JSON.parse>["widgets"] };
+type LayoutState = { app: string; widgets: ReturnType<typeof JSON.parse>["widgets"] };
 
 export function App() {
   const [layout, setLayout] = useState<LayoutState | null>(null);
-  const onLayout = useCallback((m: { app: string; page: string; widgets: any[] }) => {
-    setLayout({ app: m.app, page: m.page, widgets: m.widgets });
+  const onLayout = useCallback((m: { app: string; widgets: any[] }) => {
+    setLayout({ app: m.app, widgets: m.widgets });
   }, []);
   const { status, send } = useDeckdSocket(onLayout);
 
@@ -20,7 +20,7 @@ export function App() {
       <header className="topbar">
         <span className="brand">deckd</span>
         <span className="meta">
-          {layout ? `${layout.app} / ${layout.page}` : "…"} ·{" "}
+          {layout ? layout.app : "…"} ·{" "}
           <span className={`status status-${status}`}>{status}</span>
         </span>
       </header>

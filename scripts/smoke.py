@@ -76,7 +76,7 @@ async def main() -> None:
         async with websockets.connect("ws://127.0.0.1:18765/ws", open_timeout=2, close_timeout=2) as ws:
             print("ws open", flush=True)
             first = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-            print("first:", first["type"], first["page"], [w["id"] for w in first["widgets"]])
+            print("first:", first["type"], [w["id"] for w in first["widgets"]])
 
             await ws.send(json.dumps({"type": "press", "id": "open-url"}))
             await asyncio.sleep(0.05)
@@ -99,15 +99,6 @@ async def main() -> None:
             await asyncio.sleep(0.05)
             assert scrolls == [12]
             print("after jog:", scrolls)
-
-            await ws.send(json.dumps({"type": "press", "id": "go-second"}))
-            pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-            print("after go-second:", pushed["type"], pushed["page"], [w["id"] for w in pushed["widgets"]])
-
-            await ws.send(json.dumps({"type": "press", "id": "back-main"}))
-            pushed2 = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-            print("after back-main:", pushed2["type"], pushed2["page"], [w["id"] for w in pushed2["widgets"]])
-            assert pushed2["page"] == "main"
 
         print("OK")
     finally:

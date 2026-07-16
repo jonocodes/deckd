@@ -48,7 +48,6 @@ async def test_layout_push_on_connect(srv: ServerHandle) -> None:
         pass
 
     assert layout["type"] == "layout"
-    assert layout["page"] == "main"
     assert isinstance(layout["widgets"], list)
     assert len(layout["widgets"]) > 0
 
@@ -99,25 +98,6 @@ async def test_jog_emits_scroll(srv: ServerHandle) -> None:
         await asyncio.sleep(SIDE_EFFECT_WAIT)
 
     assert 42 in srv.scroll_sink.deltas
-
-
-# ---------------------------------------------------------------------------
-# Page navigation
-# ---------------------------------------------------------------------------
-
-
-async def test_page_navigation(srv: ServerHandle) -> None:
-    async with ws_connected(srv) as (ws, _):
-        await ws.send(json.dumps({"type": "press", "id": "go-second"}))
-        second = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-
-        await ws.send(json.dumps({"type": "press", "id": "back-main"}))
-        back = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-
-    assert second["type"] == "layout"
-    assert second["page"] == "second"
-    assert back["type"] == "layout"
-    assert back["page"] == "main"
 
 
 # ---------------------------------------------------------------------------

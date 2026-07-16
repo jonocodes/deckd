@@ -7,12 +7,8 @@ An app-aware touch control surface for the Linux desktop. A daemon watches the f
 ### UI structure
 
 **Layout**:
-The per-app configuration of what to show on the client surface. A layout has one or more named pages, each containing widgets. Defined in a YAML file matched by app identity; one layout is the default fallback.
+The per-app configuration of what to show on the client surface. A layout has a list of widgets. Defined in a YAML file matched by app identity; one layout is the default fallback.
 _Avoid_: profile, config, scene
-
-**Page**:
-A named collection of widgets within a layout. Pages multiply effective widget count by letting the user navigate between them. A layout must have at least one page.
-_Avoid_: screen, tab, view
 
 **Widget**:
 A single interactive element placed on a page. Current kinds: `button`, `jogstrip`, `trackpad`.
@@ -46,7 +42,7 @@ _Avoid_: touchpad, pad widget
 ### Actions
 
 **Action**:
-What the daemon does when a widget is activated. Primitives: `key` (uinput keystroke), `shell` (subprocess), `dbus` (D-Bus method call), `page` (navigate to another page). Nothing app-specific is ever hard-coded; all behavior lives in config.
+What the daemon does when a widget is activated. Primitives: `key` (uinput keystroke), `shell` (subprocess), `dbus` (D-Bus method call). Nothing app-specific is ever hard-coded; all behavior lives in config.
 _Avoid_: command, handler, binding
 
 ### App identity

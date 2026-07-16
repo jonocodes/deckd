@@ -10,7 +10,6 @@ export type Widget = {
 export type ServerLayout = {
   type: "layout";
   app: string;
-  page: string;
   widgets: Widget[];
 };
 

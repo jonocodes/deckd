@@ -1,66 +1,43 @@
 match:
   - default
-pages:
-  main:
-    widgets:
-      - id: open-url
-        kind: button
-        label: Open example.com
-        icon: globe
-        grid: [0, 0, 2, 1]
-        action:
-          shell: "xdg-open https://example.com"
-      - id: open-terminal
-        kind: button
-        label: Open terminal
-        icon: terminal
-        grid: [2, 0, 2, 1]
-        action:
-          terminal: true
-      - id: xterm
-        kind: button
-        label: xterm
-        icon: terminal
-        grid: [0, 1, 2, 1]
-        action:
-          terminal: "xterm"
-      - id: tilix
-        kind: button
-        label: tilix
-        icon: terminal
-        grid: [2, 1, 2, 1]
-        action:
-          terminal: "tilix"
-      - id: send-key
-        kind: button
-        label: Send Ctrl+T (stub)
-        icon: keyboard
-        grid: [0, 2, 2, 1]
-        action:
-          key: "ctrl+t"
-      - id: go-second
-        kind: button
-        label: Second page →
-        icon: arrow-right
-        grid: [2, 2, 2, 1]
-        action:
-          page: second
-      - id: scroll-strip
-        kind: jogstrip
-        label: Scroll
-        icon: wheel
-        grid: [0, 3, 4, 1]
-  second:
-    widgets:
-      - id: back-main
-        kind: button
-        label: ← Main
-        icon: arrow-left
-        grid: [0, 0, 4, 1]
-        action:
-          page: main
-      - id: spacer
-        kind: button
-        label: (no action)
-        icon: minus
-        grid: [0, 1, 4, 1]
+widgets:
+  - id: open-url
+    kind: button
+    label: Open example.com
+    icon: globe
+    grid: [0, 0, 2, 1]
+    action:
+      shell: "xdg-open https://example.com"
+  - id: open-terminal
+    kind: button
+    label: Open terminal
+    icon: terminal
+    grid: [2, 0, 2, 1]
+    action:
+      terminal: true
+  - id: xterm
+    kind: button
+    label: xterm
+    icon: terminal
+    grid: [0, 1, 2, 1]
+    action:
+      terminal: "xterm"
+  - id: tilix
+    kind: button
+    label: tilix
+    icon: terminal
+    grid: [2, 1, 2, 1]
+    action:
+      terminal: "tilix"
+  - id: send-key
+    kind: button
+    label: Send Ctrl+T
+    icon: keyboard
+    grid: [0, 2, 2, 1]
+    action:
+      key: "ctrl+t"
+  - id: scroll-strip
+    kind: jogstrip
+    label: Scroll
+    icon: wheel
+    grid: [0, 3, 4, 1]
