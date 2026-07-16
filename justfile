@@ -22,12 +22,6 @@ run-daemon-dev:
 dev-client:
     cd client && npm run dev
 
-# Run the daemon under a supervisor that auto-reloads on YAML edits and
-# auto-restarts on Python edits. Use together with `just dev-client` in another
-# terminal.
-dev:
-    .venv/bin/deckd-dev
-
 # Build the client (output: client/dist/).
 build-client:
     cd client && npm run build

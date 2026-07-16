@@ -48,23 +48,18 @@ just run-daemon
 
 Open `http://127.0.0.1:8765` in any browser. You should see three buttons: `Open example.com` (fires `xdg-open`), `Send Ctrl+T (stub)` (logs `[key stub]`), and `Second page →` (navigates to a second page).
 
-### Dev mode (Vite HMR + auto-reload)
+### Dev mode (Vite HMR)
 
 Two terminals:
 
 ```sh
-# Terminal 1: supervisor — runs the daemon, auto-reloads on YAML edits,
-# auto-restarts on Python edits.
-just dev
+# Terminal 1: daemon (no --client-dist; vite handles the UI)
+just run-daemon-dev
 
-# Terminal 2: vite dev server (HMR for client/src/**).
+# Terminal 2: vite dev server, proxies /ws to the daemon
 just dev-client
 # open http://127.0.0.1:5173
 ```
-
-Edit any YAML in `layouts/` → layout hot-pushes to your open browser tab.
-Edit any Python in `daemon/deckd/` → daemon restarts in place; reload your
-browser tab to reconnect. Edit any TSX/CSS in `client/src/` → Vite HMR.
 
 ### Smoke test
 
