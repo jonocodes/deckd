@@ -5,10 +5,10 @@ default:
     @just --list
 
 # Create the venv and install Python + JS deps. Idempotent.
-# (flox activate also does this — use whichever you prefer.)
+# Run once. flox activate handles PATH; this sets up the venv itself.
 setup:
-    @if [ ! -d .venv ]; then python -m venv .venv; fi
-    .venv/bin/pip install -e ".[dev,uinput]"
+    uv venv --python 3.12 --allow-existing
+    uv pip install -e ".[dev,uinput]"
     cd client && npm install
 
 # Run the daemon against the spike layout, serving the built client.
