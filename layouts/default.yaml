@@ -36,6 +36,13 @@ widgets:
     grid: [0, 2, 2, 1]
     action:
       key: "ctrl+t"
+  - id: mpris-toggle
+    kind: button
+    label: Play / Pause
+    icon: media-play
+    grid: [2, 2, 2, 1]
+    action:
+      dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
   - id: scroll-strip
     kind: jogstrip
     label: Scroll

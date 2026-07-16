@@ -131,3 +131,26 @@ async def test_press_key(srv: ServerHandle) -> None:
     event = srv.key_sink.events[0]
     assert event["type"] == "key"
     assert event["keycodes"] == [29, 20]  # KEY_LEFTCTRL, KEY_T
+
+
+# ---------------------------------------------------------------------------
+# Button press → D-Bus dispatch
+# ---------------------------------------------------------------------------
+
+
+async def test_press_dbus(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "press", "id": "mpris-toggle"}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    assert len(srv.dbus_calls) == 1
+    call = srv.dbus_calls[0]
+    assert call["destination"] == "org.mpris.MediaPlayer2.vlc"
+    assert call["path"] == "/org/mpris/MediaPlayer2"
+    assert call["interface"] == "org.mpris.MediaPlayer2.Player"
+    assert call["method"] == "PlayPause"
+    assert call["args"] == []
+    # Bus is closed after the call.
+    bus = srv.dbus_buses[0]
+    assert bus.connected is True
+    assert bus.disconnected is True

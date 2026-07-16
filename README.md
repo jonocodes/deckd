@@ -230,8 +230,8 @@ deckctl status    # hit /health
 A single YAML file for the spike (`layouts/default.yaml`). Each widget has an `id`, `kind` (`button`, `jogstrip`; `trackpad` is declared in the schema but unsupported in the spike), a `grid: [x, y, w, h]` placement, and an optional `action`. Action primitives:
 
 - `shell: "..."` — run a subprocess (fire-and-forget; stdout/stderr discarded).
-- `key: "ctrl+t"` — *(stubbed: logged only; key injection is not wired yet.)*
-- `dbus: "..."` — *(stubbed: logged only.)*
+- `key: "ctrl+t"` — fire the keystroke through uinput as a single combo.
+- `dbus: "service:path org.Interface.Method arg1 arg2"` — call a D-Bus method via `dbus-fast`. The bus is inferred from the interface name (`org.freedesktop.login1.*`, `systemd1.*`, `timedate1.*`, `locale1.*`, etc. → system bus; everything else → session bus). Errors are logged, not surfaced to the client. With the `service:path` prefix omitted, the daemon derives them from the first two / three segments of the interface name.
 - `page: "<name>"` — switch the client to another page in the same layout.
 
 ## What the spikes prove

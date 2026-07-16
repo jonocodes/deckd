@@ -6,6 +6,7 @@ import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import pytest
 import pytest_asyncio
@@ -80,6 +81,68 @@ class FakeFocusBackend:
             yield await self._queue.get()
 
 
+class FakeDbusBus:
+    """Stand-in for ``dbus_fast.aio.MessageBus`` at the ActionContext seam.
+
+    Records every ``call(message)`` into the shared ``all_calls`` list passed
+    at construction time so a test can assert on the destination, path,
+    interface, method, and body across every bus opened. Optionally raises
+    a configured exception from ``call`` to exercise the error path.
+    """
+
+    def __init__(
+        self,
+        bus_type: Any,
+        all_calls: list[dict] | None = None,
+        error: Exception | None = None,
+    ) -> None:
+        self.bus_type = bus_type
+        self.all_calls = all_calls if all_calls is not None else []
+        self._error = error
+        self.connected = False
+        self.disconnected = False
+
+    async def connect(self) -> "FakeDbusBus":
+        self.connected = True
+        return self
+
+    def disconnect(self) -> None:
+        self.disconnected = True
+
+    async def call(self, message: Any) -> Any:
+        if self._error is not None:
+            raise self._error
+        self.all_calls.append(
+            {
+                "bus_type": self.bus_type,
+                "destination": message.destination,
+                "path": message.path,
+                "interface": message.interface,
+                "method": message.member,
+                "args": list(message.body or []),
+            }
+        )
+        return None
+
+
+class FakeDbusBusFactory:
+    """Callable returning ``FakeDbusBus`` instances, one per call.
+
+    Buses are appended to ``self.buses`` and every call made on any bus is
+    appended to ``self.calls`` so a test can inspect them after the fact.
+    """
+
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+        self.buses: list[FakeDbusBus] = []
+        self.calls: list[dict] = []
+
+    def __call__(self, bus_type: Any) -> Any:
+        bus = FakeDbusBus(bus_type, all_calls=self.calls, error=self.error)
+        self.buses.append(bus)
+        return bus
+
+
 # ---------------------------------------------------------------------------
 # Server fixture
 # ---------------------------------------------------------------------------
@@ -94,6 +157,8 @@ class ServerHandle:
     key_sink: FakePointerSink
     called: list[tuple[str, str]]  # ("shell"|"terminal", value)
     port: int
+    dbus_buses: list  # list of fake dbus buses (one per press)
+    dbus_calls: list[dict]  # all dbus call records from the session
 
     @property
     def ws_url(self) -> str:
@@ -122,6 +187,7 @@ async def srv(monkeypatch) -> AsyncIterator[ServerHandle]:
 
     scroll_sink = FakeScrollSink()
     key_sink = FakePointerSink()
+    dbus_factory = FakeDbusBusFactory()
 
     server = Server(
         layouts_path=LAYOUTS_PATH,
@@ -129,6 +195,7 @@ async def srv(monkeypatch) -> AsyncIterator[ServerHandle]:
         port=0,
         scroll=ScrollController(scroll_sink),
         key_sink=key_sink,
+        dbus_bus_factory=dbus_factory,
     )
 
     test_server = TestServer(server.app, host="127.0.0.1")
@@ -140,7 +207,9 @@ async def srv(monkeypatch) -> AsyncIterator[ServerHandle]:
         scroll_sink=scroll_sink,
         key_sink=key_sink,
         called=called,
-        port=port,
+        port=port or 0,
+        dbus_buses=dbus_factory.buses,
+        dbus_calls=dbus_factory.calls,
     )
     yield handle
 

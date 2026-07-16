@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from aiohttp import WSMsgType, web
 
@@ -14,6 +14,9 @@ from .input import ScrollController
 from .layouts import Layout, Widget, load_layout
 
 if TYPE_CHECKING:
+    from dbus_fast import BusType as BusTypeT
+    from dbus_fast.aio import MessageBus
+
     from .input import KeySink
 
 log = logging.getLogger("deckd.server")
@@ -46,6 +49,7 @@ class Server:
         port: int,
         scroll: ScrollController | None = None,
         key_sink: "KeySink | None" = None,
+        dbus_bus_factory: "Callable[[BusTypeT], MessageBus] | None" = None,
     ) -> None:
         self.layouts_path = layouts_path
         self.host = host
@@ -56,6 +60,7 @@ class Server:
         self.layout: Layout = load_layout(layouts_path)
         self.scroll = scroll if scroll is not None else ScrollController()
         self.key_sink = key_sink
+        self.dbus_bus_factory = dbus_bus_factory
 
     def reload_layout(self) -> None:
         self.layout = load_layout(self.layouts_path)
@@ -135,6 +140,7 @@ class Server:
             get_current_layout=lambda: self.layout,
             current_app=session.app_id,
             key_sink=self.key_sink,
+            dbus_bus_factory=self.dbus_bus_factory,
         )
         await run_action(widget, ctx)
 
