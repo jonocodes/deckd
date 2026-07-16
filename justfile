@@ -15,17 +15,13 @@ setup:
 run-daemon:
     .venv/bin/deckd --layouts layouts/default.yaml --client-dist client/dist --verbose
 
-# Run the built client and daemon on the LAN for phone/tablet testing.
+# Run the daemon on the LAN without a built client (use dev-client-lan for HMR).
 run-daemon-lan:
-    .venv/bin/deckd --host 0.0.0.0 --layouts layouts/default.yaml --client-dist client/dist --verbose
+    .venv/bin/deckd --host 0.0.0.0 --layouts layouts/default.yaml --verbose
 
-# Run the daemon without a built client (dev mode uses vite dev server proxy).
+# Run the daemon without a built client (use dev-client for HMR).
 run-daemon-dev:
     .venv/bin/deckd --layouts layouts/default.yaml --verbose
-
-# Run the daemon on the LAN without a built client.
-run-daemon-dev-lan:
-    .venv/bin/deckd --host 0.0.0.0 --layouts layouts/default.yaml --verbose
 
 # Vite dev server (proxies /ws to the daemon).
 dev-client:
