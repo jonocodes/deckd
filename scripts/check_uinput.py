@@ -7,7 +7,7 @@ import os
 import stat
 from pathlib import Path
 
-from deckd.input import UinputScrollSink
+from deckd.input import UinputSink
 
 
 def main() -> None:
@@ -34,14 +34,14 @@ def main() -> None:
         print("WARN current shell is not in group 'input'; ACL/uaccess may be carrying this session")
 
     try:
-        sink = UinputScrollSink()
+        sink = UinputSink()
     except Exception as exc:
-        print(f"FAIL could not create uinput scroll sink: {exc}")
+        print(f"FAIL could not create uinput sink: {exc}")
         ok = False
     else:
         try:
             sink.emit_scroll(1)
-            print("OK created uinput scroll sink and emitted REL_WHEEL_HI_RES=1")
+            print("OK created uinput sink and emitted REL_WHEEL_HI_RES=1")
         finally:
             sink.close()
 
