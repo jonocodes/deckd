@@ -16,6 +16,7 @@ uinput = [
 dev = [
     "websockets>=13",
     "pytest>=8",
+    "pytest-asyncio>=0.23",
     "watchfiles>=1.0",
 ]
 
@@ -31,3 +32,7 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["daemon"]
 include = ["deckd*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

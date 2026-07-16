@@ -6,12 +6,45 @@ See [`docs/INCEPTION.md`](docs/INCEPTION.md) for the full design.
 
 ## Status
 
-Pre-alpha spike. The de-risking work from §12 of the design doc is in progress:
+Pre-alpha. Spikes from §12 of the design doc are resolved:
 
-- **uinput scroll end-to-end** (spike #1) — *in progress*
-- **Focus watcher** (spike #2) — *not started*
+- **uinput scroll end-to-end** (spike #1) — *done*
+- **Focus watcher** (spike #2) — *done*
 
-What works today: a minimal daemon + web client that proves the wire protocol and config-driven action dispatch (`shell`, `terminal`, `key` stub, `page`) plus a hardcoded jogstrip that sends high-resolution scroll deltas. Synthetic scroll uses uinput when `python-evdev` is installed and `/dev/uinput` is accessible; otherwise it falls back to logging emitted deltas.
+What works today: a minimal daemon + web client that proves the wire protocol and config-driven action dispatch (`shell`, `terminal`, `key` stub, `page`) plus a hardcoded jogstrip that sends high-resolution scroll deltas via uinput. Active-window detection uses a GNOME Shell extension over session D-Bus; the daemon polls it at 100ms to track focus changes.
+
+```
+                        ┌──────────┐
+                        │  Phone /  │
+                        │  Tablet   │
+                        │  Browser  │
+                        └────┬─────┘
+                             │
+                      WebSocket (ws://)
+                             │
+          ┌──────────────────┼──────────────────┐
+          │             deckd daemon             │
+          │            (aiohttp, asyncio)        │
+          │                                      │
+          │  ┌──────────┐  ┌──────────┐          │
+          │  │  Layout   │  │  Action  │          │
+          │  │  Loader   │  │ Dispatch │          │
+          │  └──────────┘  └────┬─────┘          │
+          │         │           │                │
+          └─────────┼───────────┼────────────────┘
+                    │           │
+        layouts/*.yaml    ┌─────┴─────┬──────────┐
+                          │           │          │
+                      uinput       shell     D-Bus
+                     (evdev)     (subprocess)  gdbus
+                          │                    │
+                     scroll deltas     ┌───────┴───────┐
+                          │           │                │
+                     /dev/uinput   GNOME Shell     (X11 fallback
+                                   Extension        xdotool —
+                                  deckd-focus      unsupported)
+                                   @local
+```
 
 ## Layout
 
@@ -149,33 +182,33 @@ just dev-client-lan
 
 Open `http://lute:5173` on the phone when hostname resolution is available, or use the Network URL printed by Vite. `lute` is listed in Vite's `server.allowedHosts`. `dev-client-lan` sets `VITE_DECKD_WS=ws://lute:8765/ws` automatically, so the Vite page still talks to the daemon.
 
-### Focus watcher spike
+### Focus watcher
 
-GNOME Shell's built-in `org.gnome.Shell.Introspect` API is present on this machine but returns `AccessDenied` for window/app queries. Spike #2 therefore uses a tiny GNOME Shell extension that publishes the focused window over session D-Bus.
+GNOME Shell's built-in `org.gnome.Shell.Introspect` API returns `AccessDenied` for window queries. Instead, a tiny GNOME Shell extension (`deckd-focus@local`) publishes the focused window as JSON over session D-Bus (`org.deckd.Focus`). The daemon polls this at 100ms via `GnomeShellFocusBackend`.
 
-Install and enable the local extension:
+Install and enable (relogin required on Wayland if the extension is not yet listed):
 
 ```sh
 just install-focus-extension
-```
-
-On Wayland, GNOME Shell may not list a newly installed extension until the next login. If the recipe says the extension was installed but not enabled, log out and back in, then run:
-
-```sh
+# If it says "Installed but not enabled", log out/in then:
 gnome-extensions enable deckd-focus@local
 ```
 
-Then print focus changes:
+Verify:
 
 ```sh
-just watch-focus
+just watch-focus           # polls and prints focus changes
+just watch-focus-once      # single snapshot
 ```
 
-Expected output shape:
+Expected output:
 
 ```text
 app_id='org.gnome.Console' wm_class='org.gnome.Console' pid=1234 title='Terminal'
+app_id=None wm_class='firefox' pid=188566 title='YouTube — Mozilla Firefox'
 ```
+
+X11 (`xdotool`) fallback exists in `daemon/deckd/platform.py` but is not a supported target.
 
 ### Smoke test
 
@@ -201,11 +234,12 @@ A single YAML file for the spike (`layouts/default.yaml`). Each widget has an `i
 - `dbus: "..."` — *(stubbed: logged only.)*
 - `page: "<name>"` — switch the client to another page in the same layout.
 
-## What the spike proves
+## What the spikes prove
 
 - WebSocket wire protocol in both directions (layout push, `press`, `jog`, and `jog_end` events).
 - YAML config → Pydantic → `Widget` graph → action dispatch.
-- Jogstrip scroll plumbing from browser pointer movement to daemon-side uinput/log sink, including daemon-side release momentum.
+- Jogstrip scroll plumbing from browser pointer movement to daemon-side uinput, including release momentum.
+- Active-window detection via GNOME Shell extension + session D-Bus (`app_id`, `wm_class`, `title`, `pid`).
 - Reconnecting client (`useDeckdSocket` exponential backoff).
 - Build output is plain static files — `client/dist/` — served by the daemon.
 

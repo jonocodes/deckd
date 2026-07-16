@@ -38,6 +38,10 @@ dev-client-lan:
 build-client:
     cd client && npm run build
 
+# Run the test suite.
+test:
+    .venv/bin/pytest
+
 # End-to-end smoke test (boots daemon in-process, fires every action primitive).
 smoke:
     .venv/bin/python -u scripts/smoke.py
@@ -53,6 +57,10 @@ install-focus-extension:
 # Print active app/window changes for Spike #2.
 watch-focus:
     .venv/bin/python -u scripts/watch_focus.py
+
+# Single snapshot of the active app/window.
+watch-focus-once:
+    .venv/bin/python -u scripts/watch_focus.py --once
 
 # Hit /health.
 status:
