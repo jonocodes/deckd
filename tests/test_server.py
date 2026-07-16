@@ -135,3 +135,19 @@ async def test_reload_pushes_layout(srv: ServerHandle) -> None:
 
     assert result["ok"] is True
     assert pushed["type"] == "layout"
+
+
+# ---------------------------------------------------------------------------
+# Button press → key injection
+# ---------------------------------------------------------------------------
+
+
+async def test_press_key(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "press", "id": "send-key"}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    assert len(srv.key_sink.events) == 1
+    event = srv.key_sink.events[0]
+    assert event["type"] == "key"
+    assert event["keycodes"] == [29, 20]  # KEY_LEFTCTRL, KEY_T

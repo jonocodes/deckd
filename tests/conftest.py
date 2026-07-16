@@ -39,16 +39,15 @@ class FakeScrollSink:
 
 
 class FakePointerSink:
-    """Records pointer and key events emitted by a future uinput device.
+    """Records pointer and key events emitted by a uinput device.
 
     Each entry is a dict: {"type": "key"|"pointer"|"click", ...}
-    Added in T1 for future tickets; not wired to the daemon yet.
     """
 
     def __init__(self) -> None:
         self.events: list[dict] = []
 
-    def emit_key(self, keycodes: list[str]) -> None:
+    def emit_key(self, keycodes: list[int]) -> None:
         self.events.append({"type": "key", "keycodes": keycodes})
 
     def emit_pointer(self, dx: int, dy: int) -> None:
@@ -92,6 +91,7 @@ class ServerHandle:
 
     server: Server
     scroll_sink: FakeScrollSink
+    key_sink: FakePointerSink
     called: list[tuple[str, str]]  # ("shell"|"terminal", value)
     port: int
 
@@ -121,12 +121,14 @@ async def srv(monkeypatch) -> AsyncIterator[ServerHandle]:
     monkeypatch.setattr(actions_mod, "run_terminal", fake_terminal)
 
     scroll_sink = FakeScrollSink()
+    key_sink = FakePointerSink()
 
     server = Server(
         layouts_path=LAYOUTS_PATH,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(scroll_sink),
+        key_sink=key_sink,
     )
 
     test_server = TestServer(server.app, host="127.0.0.1")
@@ -136,6 +138,7 @@ async def srv(monkeypatch) -> AsyncIterator[ServerHandle]:
     handle = ServerHandle(
         server=server,
         scroll_sink=scroll_sink,
+        key_sink=key_sink,
         called=called,
         port=port,
     )

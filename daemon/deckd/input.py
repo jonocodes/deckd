@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Sequence
 from typing import Protocol
 
 log = logging.getLogger("deckd.input")
@@ -15,6 +16,106 @@ class ScrollSink(Protocol):
         """Release any OS resources held by the sink."""
 
 
+class KeySink(Protocol):
+    def emit_key(self, keycodes: list[int]) -> None:
+        """Press and release the given evdev keycodes as a combo."""
+
+    def close(self) -> None:
+        """Release any OS resources held by the sink."""
+
+
+# ---------------------------------------------------------------------------
+# Key name → Linux input event code (evdev keycodes)
+# ---------------------------------------------------------------------------
+
+MODIFIER_MAP: dict[str, int] = {
+    "ctrl":  29,  # KEY_LEFTCTRL
+    "shift": 42,  # KEY_LEFTSHIFT
+    "alt":    56,  # KEY_LEFTALT
+    "super": 125,  # KEY_LEFTMETA
+    "meta":  125,  # KEY_LEFTMETA  (alias)
+}
+
+_SINGLE_KEY_MAP: dict[str, int] = {
+    "a": 30, "b": 48, "c": 46, "d": 32, "e": 18, "f": 33, "g": 34, "h": 35,
+    "i": 23, "j": 36, "k": 37, "l": 38, "m": 50, "n": 49, "o": 24, "p": 25,
+    "q": 16, "r": 19, "s": 31, "t": 20, "u": 22, "v": 47, "w": 17, "x": 45,
+    "y": 21, "z": 44,
+    "0": 11, "1": 2, "2": 3, "3": 4, "4": 5, "5": 6, "6": 7, "7": 8,
+    "8": 9, "9": 10,
+    "f1": 59, "f2": 60, "f3": 61, "f4": 62, "f5": 63, "f6": 64,
+    "f7": 65, "f8": 66, "f9": 67, "f10": 68, "f11": 87, "f12": 88,
+    "esc": 1, "escape": 1,
+    "tab": 15,
+    "enter": 28, "return": 28,
+    "space": 57,
+    "backspace": 14,
+    "delete": 111, "del": 111,
+    "insert": 110, "ins": 110,
+    "home": 102,
+    "end": 107,
+    "pageup": 104, "pgup": 104,
+    "pagedown": 109, "pgdn": 109,
+    "up": 103,
+    "down": 108,
+    "left": 105,
+    "right": 106,
+    "minus": 12, "-": 12,
+    "equal": 13, "=": 13,
+    "leftbrace": 26, "[": 26,
+    "rightbrace": 27, "]": 27,
+    "semicolon": 39, ";": 39,
+    "apostrophe": 40, "'": 40,
+    "grave": 41, "`": 41,
+    "backslash": 43, "\\": 43,
+    "comma": 51, ",": 51,
+    "dot": 52, ".": 52,
+    "slash": 53, "/": 53,
+    "capslock": 58,
+    "print": 99, "sysrq": 99,
+    "scrolllock": 70,
+    "pause": 119,
+}
+
+ALL_REGISTERED_KEYCODES: list[int] = list(
+    set(list(MODIFIER_MAP.values()) + list(_SINGLE_KEY_MAP.values()))
+)
+
+
+def parse_key_combo(key_string: str) -> list[int]:
+    """Parse a key-combo string like ``"ctrl+t"`` into evdev keycodes.
+
+    Modifiers come first; the final token is the main key.  All tokens are
+    case-insensitive.  Unknown tokens are logged and dropped.
+    """
+    tokens = [t.strip().lower() for t in key_string.split("+")]
+    if not tokens:
+        return []
+
+    *modifiers, main = tokens
+    keycodes: list[int] = []
+
+    for mod in modifiers:
+        code = MODIFIER_MAP.get(mod)
+        if code is not None:
+            keycodes.append(code)
+        else:
+            log.warning("[key parse] unknown modifier %r in %r", mod, key_string)
+
+    code = MODIFIER_MAP.get(main) or _SINGLE_KEY_MAP.get(main)
+    if code is not None:
+        keycodes.append(code)
+    else:
+        log.warning("[key parse] unknown key %r in %r", main, key_string)
+
+    return keycodes
+
+
+# ---------------------------------------------------------------------------
+# Fallback / logging sinks
+# ---------------------------------------------------------------------------
+
+
 class LoggingScrollSink:
     """Fallback sink used when python-evdev or /dev/uinput is unavailable."""
 
@@ -25,7 +126,25 @@ class LoggingScrollSink:
         pass
 
 
-class UinputScrollSink:
+class LoggingKeySink:
+    """Fallback sink that logs key events when uinput is unavailable."""
+
+    def emit_key(self, keycodes: list[int]) -> None:
+        log.info("[key log] keycodes=%s", keycodes)
+
+    def close(self) -> None:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Combined uinput sink (single device for scroll + key)
+# ---------------------------------------------------------------------------
+
+
+class UinputSink:
+    """Single write-only uinput device supporting EV_REL (scroll) and
+    EV_KEY (keyboard) events."""
+
     def __init__(self) -> None:
         try:
             from evdev import UInput, ecodes
@@ -39,23 +158,24 @@ class UinputScrollSink:
                 return None
 
         self._ecodes = ecodes
-        capabilities = {
+        capabilities: dict[int, Sequence[int]] = {
             ecodes.EV_REL: [
                 ecodes.REL_WHEEL,
                 ecodes.REL_WHEEL_HI_RES,
             ],
+            ecodes.EV_KEY: ALL_REGISTERED_KEYCODES,
         }
-        self._device = WriteOnlyUInput(capabilities, name="deckd scroll")
+        self._device = WriteOnlyUInput(capabilities, name="deckd")
         self._wheel_remainder = 0
-        log.info("created write-only uinput scroll device at %s", self._device.devnode)
+        log.info("created write-only uinput device at %s", self._device.devnode)
+
+    # -- scroll ---------------------------------------------------------------
 
     def emit_scroll(self, delta: int) -> None:
         if delta == 0:
             return
         self._device.write(self._ecodes.EV_REL, self._ecodes.REL_WHEEL_HI_RES, delta)
 
-        # Keep legacy wheel consumers moving without throwing away sub-notch
-        # precision for compositors that understand REL_WHEEL_HI_RES.
         self._wheel_remainder += delta
         detents = int(self._wheel_remainder / 120)
         if detents:
@@ -64,16 +184,49 @@ class UinputScrollSink:
         self._device.syn()
         log.debug("[scroll] REL_WHEEL_HI_RES=%s", delta)
 
+    # -- key ------------------------------------------------------------------
+
+    def emit_key(self, keycodes: list[int]) -> None:
+        if not keycodes:
+            return
+        for kc in keycodes:
+            self._device.write(self._ecodes.EV_KEY, kc, 1)
+        self._device.syn()
+        for kc in reversed(keycodes):
+            self._device.write(self._ecodes.EV_KEY, kc, 0)
+        self._device.syn()
+        log.debug("[key] keycodes=%s", keycodes)
+
+    # -- close ----------------------------------------------------------------
+
     def close(self) -> None:
         self._device.close()
 
 
+# ---------------------------------------------------------------------------
+# Factory helpers
+# ---------------------------------------------------------------------------
+
+
 def make_scroll_sink() -> ScrollSink:
     try:
-        return UinputScrollSink()
+        return UinputSink()
     except Exception as exc:
         log.warning("uinput scroll unavailable; falling back to logging only: %s", exc)
         return LoggingScrollSink()
+
+
+def make_key_sink() -> KeySink:
+    try:
+        return UinputSink()
+    except Exception as exc:
+        log.warning("uinput key unavailable; falling back to logging only: %s", exc)
+        return LoggingKeySink()
+
+
+# ---------------------------------------------------------------------------
+# ScrollController
+# ---------------------------------------------------------------------------
 
 
 class ScrollController:

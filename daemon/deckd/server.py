@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from aiohttp import WSMsgType, web
 
@@ -11,6 +12,9 @@ from . import protocol as p
 from .actions import ActionContext, execute as run_action
 from .input import ScrollController
 from .layouts import Layout, Widget, load_layout
+
+if TYPE_CHECKING:
+    from .input import KeySink
 
 log = logging.getLogger("deckd.server")
 
@@ -49,6 +53,7 @@ class Server:
         host: str,
         port: int,
         scroll: ScrollController | None = None,
+        key_sink: "KeySink | None" = None,
     ) -> None:
         self.layouts_path = layouts_path
         self.host = host
@@ -58,6 +63,7 @@ class Server:
         self._sessions: set[Session] = set()
         self.layout: Layout = load_layout(layouts_path)
         self.scroll = scroll if scroll is not None else ScrollController()
+        self.key_sink = key_sink
 
     def reload_layout(self) -> None:
         self.layout = load_layout(self.layouts_path)
@@ -136,6 +142,7 @@ class Server:
             send_layout=session.push_current,
             get_current_layout=lambda: self.layout,
             current_app=session.app_id,
+            key_sink=self.key_sink,
         )
         await run_action(widget, ctx, on_page_change=session.switch_page)
 
@@ -160,3 +167,5 @@ class Server:
         if runner is not None:
             await runner.cleanup()
         await self.scroll.close()
+        if self.key_sink is not None:
+            self.key_sink.close()

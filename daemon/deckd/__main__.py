@@ -6,7 +6,7 @@ import logging
 import signal
 from pathlib import Path
 
-from .input import ScrollController
+from .input import ScrollController, UinputSink, LoggingScrollSink, LoggingKeySink
 from .server import Server
 
 
@@ -64,14 +64,27 @@ def main() -> None:
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
+    try:
+        sink = UinputSink()
+    except Exception as exc:
+        logging.getLogger("deckd").warning(
+            "uinput unavailable; falling back to logging only: %s", exc
+        )
+        sink = None
+
+    scroll_sink = sink if sink is not None else LoggingScrollSink()
+    key_sink = sink if sink is not None else LoggingKeySink()
+
     server = Server(
         layouts_path=args.layouts,
         host=args.host,
         port=args.port,
         scroll=ScrollController(
+            sink=scroll_sink,
             momentum_friction=args.scroll_momentum_friction,
             momentum_cutoff=args.scroll_momentum_cutoff,
         ),
+        key_sink=key_sink,
     )
 
     if args.client_dist is not None:

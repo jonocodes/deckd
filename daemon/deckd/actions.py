@@ -5,8 +5,12 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .layouts import Action, Widget
+
+if TYPE_CHECKING:
+    from .input import KeySink
 
 log = logging.getLogger("deckd.actions")
 
@@ -47,6 +51,7 @@ class ActionContext:
     send_layout: "callable"
     get_current_layout: "callable"
     current_app: str
+    key_sink: "KeySink | None" = None
 
 
 async def execute(
@@ -64,8 +69,7 @@ async def execute(
     elif action.terminal is not None:
         await run_terminal(action.terminal)
     elif action.key is not None:
-        log.info("[key stub] widget=%s keysym=%s — uinput not wired up yet",
-                 widget.id, action.key)
+        await _dispatch_key(action.key, ctx)
     elif action.dbus is not None:
         log.warning("[dbus stub] widget=%s target=%s — dbus dispatch not wired up yet",
                     widget.id, action.dbus)
@@ -94,3 +98,19 @@ async def _run_shell(command: str) -> None:
     rc = await proc.wait()
     if rc != 0:
         log.warning("[shell] %s exited rc=%s", command, rc)
+
+
+async def _dispatch_key(key_string: str, ctx: ActionContext) -> None:
+    from .input import parse_key_combo
+
+    keycodes = parse_key_combo(key_string)
+    if not keycodes:
+        log.warning("[key] widget key=%r parsed to empty keycode list", key_string)
+        return
+
+    sink = ctx.key_sink
+    if sink is not None:
+        sink.emit_key(keycodes)
+        log.info("[key] keycodes=%s", keycodes)
+    else:
+        log.info("[key log] keycodes=%s (no sink wired)", keycodes)
