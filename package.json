@@ -1,0 +1,6 @@
+{
+  "name": "deckd",
+  "version": "0.0.1",
+  "description": "App-aware touch control surface for the Linux desktop",
+  "private": true
+}

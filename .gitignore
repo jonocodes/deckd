@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+.venv/
+dist/
+build/
+*.egg-info/
+
+# Vite/Node
+client/node_modules/
+client/dist/
+.vite/
+client/.env
+client/.env.local
+
+# Editor
+.idea/
+.vscode/
+*.swp
+
+# direnv
+.direnv/
+
+.flox

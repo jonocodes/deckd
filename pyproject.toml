@@ -1,0 +1,30 @@
+[project]
+name = "deckd"
+version = "0.0.1"
+description = "App-aware touch control surface daemon"
+requires-python = ">=3.11"
+dependencies = [
+    "aiohttp>=3.9",
+    "pyyaml>=6.0",
+    "pydantic>=2.6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "websockets>=13",
+    "pytest>=8",
+    "watchfiles>=1.0",
+]
+
+[project.scripts]
+deckd = "deckd.__main__:main"
+deckd-dev = "deckd.dev:main"
+deckctl = "deckd.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["daemon"]
+include = ["deckd*"]
