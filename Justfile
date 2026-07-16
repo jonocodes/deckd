@@ -11,21 +11,21 @@ setup:
     uv pip install -e ".[dev,uinput]"
     cd client && npm install
 
-# Run the daemon against the spike layout, serving the built client.
+# Run the daemon against the layouts directory, serving the built client.
 run-daemon:
-    .venv/bin/deckd --layouts layouts/default.yaml --client-dist client/dist --verbose
+    .venv/bin/deckd --layouts-dir layouts --client-dist client/dist --verbose
 
 # Run the daemon on the LAN without a built client (use dev-client-lan for HMR).
 run-daemon-lan:
-    .venv/bin/deckd --host 0.0.0.0 --layouts layouts/default.yaml --verbose
+    .venv/bin/deckd --host 0.0.0.0 --layouts-dir layouts --verbose
 
-# Run the daemon without a built client (use dev-client for HMR).
-run-daemon-dev:
-    .venv/bin/deckd --layouts layouts/default.yaml --verbose
+# # Run the daemon without a built client (use dev-client for HMR).
+# run-daemon-dev:
+#     .venv/bin/deckd --layouts-dir layouts --verbose
 
-# Vite dev server (proxies /ws to the daemon).
-dev-client:
-    cd client && npm run dev -- --strictPort
+# # Vite dev server (proxies /ws to the daemon).
+# dev-client:
+#     cd client && npm run dev -- --strictPort
 
 # Vite dev server on the LAN, with WS pointed at this host's LAN IP.
 dev-client-lan:
