@@ -17,11 +17,34 @@ class ScrollSink(Protocol):
 
 
 class KeySink(Protocol):
+    """Sink for synthetic input events emitted via uinput.
+
+    T2 introduced this for keystrokes; T8 widened it to cover the trackpad's
+    pointer motion and mouse buttons. In production a single ``UinputSink``
+    device backs all three methods; tests use a recording fake.
+    """
+
     def emit_key(self, keycodes: list[int]) -> None:
         """Press and release the given evdev keycodes as a combo."""
 
+    def emit_pointer(self, dx: int, dy: int) -> None:
+        """Emit a relative pointer-motion event (REL_X / REL_Y)."""
+
+    def emit_click(self, button: str, pressed: bool) -> None:
+        """Press (``pressed=True``) or release a mouse button.
+
+        ``button`` is one of ``"left"``, ``"right"``, ``"middle"``.
+        """
+
     def close(self) -> None:
         """Release any OS resources held by the sink."""
+
+
+MOUSE_BUTTON_CODES: dict[str, int] = {
+    "left": 0x110,   # BTN_LEFT
+    "right": 0x111,  # BTN_RIGHT
+    "middle": 0x112, # BTN_MIDDLE
+}
 
 
 # ---------------------------------------------------------------------------
@@ -127,10 +150,16 @@ class LoggingScrollSink:
 
 
 class LoggingKeySink:
-    """Fallback sink that logs key events when uinput is unavailable."""
+    """Fallback sink that logs key + pointer events when uinput is unavailable."""
 
     def emit_key(self, keycodes: list[int]) -> None:
         log.info("[key log] keycodes=%s", keycodes)
+
+    def emit_pointer(self, dx: int, dy: int) -> None:
+        log.info("[pointer log] dx=%s dy=%s", dx, dy)
+
+    def emit_click(self, button: str, pressed: bool) -> None:
+        log.info("[click log] button=%s pressed=%s", button, pressed)
 
     def close(self) -> None:
         pass
@@ -162,8 +191,12 @@ class UinputSink:
             ecodes.EV_REL: [
                 ecodes.REL_WHEEL,
                 ecodes.REL_WHEEL_HI_RES,
+                ecodes.REL_X,
+                ecodes.REL_Y,
             ],
-            ecodes.EV_KEY: ALL_REGISTERED_KEYCODES,
+            ecodes.EV_KEY: (
+                ALL_REGISTERED_KEYCODES + list(MOUSE_BUTTON_CODES.values())
+            ),
         }
         self._device = WriteOnlyUInput(capabilities, name="deckd")
         self._wheel_remainder = 0
@@ -196,6 +229,27 @@ class UinputSink:
             self._device.write(self._ecodes.EV_KEY, kc, 0)
         self._device.syn()
         log.debug("[key] keycodes=%s", keycodes)
+
+    # -- pointer / click ------------------------------------------------------
+
+    def emit_pointer(self, dx: int, dy: int) -> None:
+        if dx == 0 and dy == 0:
+            return
+        if dx:
+            self._device.write(self._ecodes.EV_REL, self._ecodes.REL_X, dx)
+        if dy:
+            self._device.write(self._ecodes.EV_REL, self._ecodes.REL_Y, dy)
+        self._device.syn()
+        log.debug("[pointer] dx=%s dy=%s", dx, dy)
+
+    def emit_click(self, button: str, pressed: bool) -> None:
+        code = MOUSE_BUTTON_CODES.get(button)
+        if code is None:
+            log.warning("[click] unknown button %r", button)
+            return
+        self._device.write(self._ecodes.EV_KEY, code, 1 if pressed else 0)
+        self._device.syn()
+        log.debug("[click] button=%s pressed=%s", button, pressed)
 
     # -- close ----------------------------------------------------------------
 

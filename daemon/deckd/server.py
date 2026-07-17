@@ -332,6 +332,23 @@ class Server:
             msg = p.JogEndMessage.model_validate(data)
             self.scroll.jog_end(msg.id, msg.velocity)
             return
+        if msg_type == "pad":
+            pad = p.PadMessage.model_validate(data)
+            if self.key_sink is not None:
+                self.key_sink.emit_pointer(pad.dx, pad.dy)
+            return
+        if msg_type == "pad_tap":
+            tap = p.PadTapMessage.model_validate(data)
+            if self.key_sink is not None:
+                button = "right" if tap.fingers == 2 else "left"
+                self.key_sink.emit_click(button, True)
+                self.key_sink.emit_click(button, False)
+            return
+        if msg_type == "pad_drag":
+            drag = p.PadDragMessage.model_validate(data)
+            if self.key_sink is not None:
+                self.key_sink.emit_click("left", drag.state == "start")
+            return
         if msg_type != "press":
             log.debug("ignoring %s", msg_type)
             return

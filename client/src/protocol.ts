@@ -25,4 +25,14 @@ export type ClientHello = { type: "hello"; client: "web"; token?: string };
 export type ClientPress = { type: "press"; id: string };
 export type ClientJog = { type: "jog"; id: string; delta: number };
 export type ClientJogEnd = { type: "jog_end"; id: string; velocity: number };
-export type ClientMessage = ClientHello | ClientPress | ClientJog | ClientJogEnd;
+export type ClientPad = { type: "pad"; id: string; dx: number; dy: number };
+export type ClientPadTap = { type: "pad_tap"; id: string; fingers: number };
+export type ClientPadDrag = { type: "pad_drag"; id: string; state: "start" | "end" };
+export type ClientMessage =
+  | ClientHello
+  | ClientPress
+  | ClientJog
+  | ClientJogEnd
+  | ClientPad
+  | ClientPadTap
+  | ClientPadDrag;

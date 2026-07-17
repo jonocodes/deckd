@@ -322,6 +322,83 @@ widgets:
 
 
 # ---------------------------------------------------------------------------
+# Trackpad mode (T8 / issue #14).
+#
+# WS carries three trackpad messages: ``pad`` (dx/dy movement), ``pad_tap``
+# (single/two-finger click), and ``pad_drag`` (start/end of a button-held
+# drag lock). The daemon forwards each to a pointer/click uinput sink.
+# Client-side gesture recognition (tap-vs-drag, tap-and-a-half timing) is
+# out of scope for the daemon; these tests exercise only the WS boundary.
+# ---------------------------------------------------------------------------
+
+
+async def test_pad_message_emits_pointer_delta(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "pad", "id": "trackpad", "dx": 5, "dy": -3}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    events = [e for e in srv.key_sink.events if e["type"] == "pointer"]
+    assert events == [{"type": "pointer", "dx": 5, "dy": -3}]
+
+
+async def test_pad_tap_one_finger_emits_left_click(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "pad_tap", "id": "trackpad", "fingers": 1}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    clicks = [e for e in srv.key_sink.events if e["type"] == "click"]
+    assert clicks == [
+        {"type": "click", "button": "left", "pressed": True},
+        {"type": "click", "button": "left", "pressed": False},
+    ]
+
+
+async def test_pad_tap_two_fingers_emits_right_click(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "pad_tap", "id": "trackpad", "fingers": 2}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    clicks = [e for e in srv.key_sink.events if e["type"] == "click"]
+    assert clicks == [
+        {"type": "click", "button": "right", "pressed": True},
+        {"type": "click", "button": "right", "pressed": False},
+    ]
+
+
+async def test_pad_drag_start_presses_left_button(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "pad_drag", "id": "trackpad", "state": "start"}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    clicks = [e for e in srv.key_sink.events if e["type"] == "click"]
+    assert clicks == [{"type": "click", "button": "left", "pressed": True}]
+
+
+async def test_pad_drag_end_releases_left_button(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "pad_drag", "id": "trackpad", "state": "end"}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    clicks = [e for e in srv.key_sink.events if e["type"] == "click"]
+    assert clicks == [{"type": "click", "button": "left", "pressed": False}]
+
+
+async def test_pad_drag_full_sequence(srv: ServerHandle) -> None:
+    """End-to-end tap-and-a-half sequence: start drag, move, end drag."""
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "pad_drag", "id": "trackpad", "state": "start"}))
+        await ws.send(json.dumps({"type": "pad", "id": "trackpad", "dx": 4, "dy": 0}))
+        await ws.send(json.dumps({"type": "pad", "id": "trackpad", "dx": 0, "dy": 6}))
+        await ws.send(json.dumps({"type": "pad_drag", "id": "trackpad", "state": "end"}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    types_in_order = [e["type"] for e in srv.key_sink.events]
+    assert types_in_order == ["click", "pointer", "pointer", "click"]
+    assert srv.key_sink.events[0] == {"type": "click", "button": "left", "pressed": True}
+    assert srv.key_sink.events[-1] == {"type": "click", "button": "left", "pressed": False}
+
+
+# ---------------------------------------------------------------------------
 # Layouts hot-reload: watcher + error-tolerant reload.
 #
 # Layouts are user configuration, so the daemon watches ``layouts/*.y[a]ml``

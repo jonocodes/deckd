@@ -2,16 +2,18 @@ import { useCallback, useState } from "react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
+import { Trackpad } from "./Trackpad";
 import type { JogHandle } from "./JogStrip";
 import type { ServerLayout } from "./protocol";
 
 type View = "layout" | "trackpad";
 type SocketStatus = "connecting" | "open" | "closed";
 
-/** Sentinel id for the persistent chrome jogstrip. The daemon's ``jog``
- * path ignores the id for emission (only used as a momentum-task key), so
- * this never collides with real layout widgets. */
+/** Sentinel ids for the always-on chrome widgets. The daemon's pad / jog
+ * paths ignore ids for emission (they're just book-keeping keys), so these
+ * never collide with real layout widgets. */
 const CHROME_JOG_ID = "__chrome__";
+const TRACKPAD_ID = "__trackpad__";
 
 const CHROME_JOG_HANDLE: JogHandle = { id: CHROME_JOG_ID };
 
@@ -30,6 +32,10 @@ export function App() {
   const press = (id: string) => send({ type: "press", id });
   const jog = (id: string, delta: number) => send({ type: "jog", id, delta });
   const jogEnd = (id: string, velocity: number) => send({ type: "jog_end", id, velocity });
+  const pad = (dx: number, dy: number) => send({ type: "pad", id: TRACKPAD_ID, dx, dy });
+  const padTap = (fingers: number) => send({ type: "pad_tap", id: TRACKPAD_ID, fingers });
+  const padDrag = (state: "start" | "end") =>
+    send({ type: "pad_drag", id: TRACKPAD_ID, state });
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
@@ -39,9 +45,7 @@ export function App() {
       <div className="chrome-page">
         <main className="surface">
           {view === "trackpad" ? (
-            <div className="trackpad-placeholder">
-              <span className="trackpad-hint">trackpad</span>
-            </div>
+            <Trackpad onPad={pad} onTap={padTap} onDrag={padDrag} />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">
               <span className="layout-error-title">Layout error</span>

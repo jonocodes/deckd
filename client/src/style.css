@@ -233,22 +233,24 @@ button {
 }
 
 /* ---------------------------------------------------------------------------
- * Trackpad placeholder view (T8 wires the real widget)
+ * Trackpad view: absolute pointing surface for relative cursor movement.
  * ------------------------------------------------------------------------- */
 
-.trackpad-placeholder {
+.trackpad {
   position: relative;
   display: grid;
   place-items: center;
   width: 100%;
   height: 100%;
-  border: 2px dashed #2a333d;
+  border: 2px solid #2a333d;
   border-radius: 16px;
-  color: #6b7785;
-  background: #11161b;
+  color: #2a333d;
+  background: linear-gradient(180deg, #11161b, #0d1116);
+  /* Pointer Events only — must not scroll, pinch, or bounce. */
   touch-action: none;
   user-select: none;
   -webkit-user-select: none;
+  cursor: crosshair;
 }
 
 .trackpad-hint {
@@ -256,6 +258,8 @@ button {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .empty {
