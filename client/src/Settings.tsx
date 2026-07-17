@@ -14,12 +14,22 @@ type Props = {
  * are T13; this ships enough of the settings surface for a user to check
  * "why isn't PWA install working" / "is the socket really open" / "which
  * layout am I on right now" without opening devtools on the phone. */
+type Health = {
+  hostname?: string;
+  os?: string;
+  desktop?: string;
+};
+
 export function Settings({ layout, status }: Props) {
   const orientation = useOrientation();
   const standalone = useStandaloneMode();
   const viewport = useViewportSize();
+  const health = useDaemonHealth();
 
   const rows: Array<[string, string]> = [
+    ["Host", health?.hostname ?? "…"],
+    ["Host OS", health?.os ?? "…"],
+    ["Desktop", health?.desktop ?? "…"],
     ["PWA / standalone", standalone ? "yes" : "no"],
     ["Connection", status],
     ["App", layout?.app ?? "—"],
@@ -75,6 +85,31 @@ function useViewportSize(): [number, number] {
     return () => window.removeEventListener("resize", onResize);
   }, []);
   return size;
+}
+
+/** One-shot fetch of the daemon's ``/health`` when the settings panel
+ * mounts. The response carries hostname / OS / desktop-env identity that
+ * the browser can't discover on its own. Failures fall through silently:
+ * the settings panel just shows ``…`` for those rows. */
+function useDaemonHealth(): Health | null {
+  const [health, setHealth] = useState<Health | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await fetch("/health", { cache: "no-store" });
+        if (!r.ok) return;
+        const body = (await r.json()) as Health;
+        if (!cancelled) setHealth(body);
+      } catch {
+        // Network or CORS error — leave the placeholder rows blank.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return health;
 }
 
 function currentWsUrl(): string {

@@ -3,6 +3,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
+import platform
+import socket
 from pathlib import Path
 from typing import TYPE_CHECKING, Callable
 
@@ -23,6 +26,39 @@ if TYPE_CHECKING:
 log = logging.getLogger("deckd.server")
 
 DEFAULT_APP_ID = "default"
+
+
+# ---------------------------------------------------------------------------
+# Host-identity helpers used by /health. Cheap to compute per-request; no
+# caching needed. Broken out so the tests can pin them via monkeypatch.
+# ---------------------------------------------------------------------------
+
+
+def _hostname() -> str:
+    try:
+        return socket.gethostname()
+    except OSError:
+        return "unknown"
+
+
+def _os_pretty() -> str:
+    """Best human-readable OS string: PRETTY_NAME from /etc/os-release when
+    available, ``uname``-derived fallback otherwise."""
+    try:
+        info = platform.freedesktop_os_release()
+        return info.get("PRETTY_NAME") or info.get("NAME") or platform.system()
+    except (OSError, AttributeError):
+        return f"{platform.system()} {platform.release()}".strip()
+
+
+def _desktop_env() -> str:
+    """XDG_CURRENT_DESKTOP / XDG_SESSION_DESKTOP if the daemon runs under a
+    graphical session, ``"unknown"`` otherwise (headless, TTY, container)."""
+    for var in ("XDG_CURRENT_DESKTOP", "XDG_SESSION_DESKTOP", "DESKTOP_SESSION"):
+        val = os.environ.get(var)
+        if val:
+            return val
+    return "unknown"
 
 
 class Session:
@@ -256,7 +292,14 @@ class Server:
 
     async def _health(self, _req: web.Request) -> web.Response:
         return web.json_response(
-            {"ok": True, "sessions": len(self._sessions), "app": self._current_app_id}
+            {
+                "ok": True,
+                "sessions": len(self._sessions),
+                "app": self._current_app_id,
+                "hostname": _hostname(),
+                "os": _os_pretty(),
+                "desktop": _desktop_env(),
+            }
         )
 
     async def _reload(self, _req: web.Request) -> web.Response:

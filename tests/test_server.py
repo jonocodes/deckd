@@ -37,6 +37,11 @@ async def test_health(srv: ServerHandle) -> None:
 
     assert body["ok"] is True
     assert "sessions" in body
+    # Host-identity fields (T-followup: settings-page diagnostics).
+    # Values are environment-dependent; assert they exist and are strings.
+    for field in ("hostname", "os", "desktop"):
+        assert field in body, f"/health missing {field!r}"
+        assert isinstance(body[field], str) and body[field]
 
 
 # ---------------------------------------------------------------------------
