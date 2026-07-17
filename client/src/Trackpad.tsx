@@ -38,9 +38,27 @@ export function Trackpad({ onPad, onTap, onDrag }: Props) {
   const lastTapAt = useRef(0);
   const dragLocked = useRef(false);
   const dragPointerId = useRef<number | null>(null);
+  // Subpixel accumulators: pointermove hands us fractional deltas
+  // (e.g. 3.33px per frame at 60fps). uinput REL_X/REL_Y takes integers,
+  // and the wire schema (PadMessage) declares dx/dy as int, so we truncate
+  // to whole pixels and carry the remainder into the next frame — same
+  // pattern JogStrip uses for scroll deltas.
+  const pendingDx = useRef(0);
+  const pendingDy = useRef(0);
+
+  const flushPad = () => {
+    const wx = Math.trunc(pendingDx.current);
+    const wy = Math.trunc(pendingDy.current);
+    if (wx === 0 && wy === 0) return;
+    pendingDx.current -= wx;
+    pendingDy.current -= wy;
+    onPad(wx, wy);
+  };
 
   const resetGesture = () => {
     maxFingers.current = 0;
+    pendingDx.current = 0;
+    pendingDy.current = 0;
   };
 
   return (
@@ -93,10 +111,14 @@ export function Trackpad({ onPad, onTap, onDrag }: Props) {
         // is the drag pointer, or (b) there's a single pointer down (a plain
         // one-finger drag). A second finger present suppresses movement so
         // pinching / two-finger idling doesn't jitter the cursor.
-        if (dragLocked.current) {
-          if (e.pointerId === dragPointerId.current) onPad(dx, dy);
-        } else if (pointers.current.size === 1) {
-          onPad(dx, dy);
+        const routeMove =
+          dragLocked.current
+            ? e.pointerId === dragPointerId.current
+            : pointers.current.size === 1;
+        if (routeMove) {
+          pendingDx.current += dx;
+          pendingDy.current += dy;
+          flushPad();
         }
       }}
       onPointerUp={(e) => {
