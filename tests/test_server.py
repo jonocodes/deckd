@@ -154,3 +154,52 @@ async def test_press_dbus(srv: ServerHandle) -> None:
     bus = srv.dbus_buses[0]
     assert bus.connected is True
     assert bus.disconnected is True
+
+
+# ---------------------------------------------------------------------------
+# Layout override endpoint (T5/issue #11): POST /layout/<name> force-switches
+# all connected clients to a named layout regardless of focus.
+# ---------------------------------------------------------------------------
+
+
+async def test_layout_override_switches_clients_to_named_layout(
+    srv: ServerHandle,
+) -> None:
+    async with ws_connected(srv) as (ws, initial):
+        assert initial["app"] == "default"
+
+        async with aiohttp.ClientSession() as http:
+            async with http.post(f"{srv.http_url}/layout/firefox") as r:
+                result = await r.json()
+
+        pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+
+    assert result["ok"] is True
+    assert pushed["type"] == "layout"
+    assert pushed["app"] == "firefox"
+    ids = [w["id"] for w in pushed["widgets"]]
+    assert "back" in ids
+    assert srv.server.current_app_id == "firefox"
+
+
+async def test_layout_override_to_default(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (ws, _):
+        async with aiohttp.ClientSession() as http:
+            async with http.post(f"{srv.http_url}/layout/default") as r:
+                result = await r.json()
+
+        pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+
+    assert result["ok"] is True
+    assert pushed["app"] == "default"
+    assert srv.server.current_app_id == "default"
+
+
+async def test_layout_override_unknown_name_returns_error(srv: ServerHandle) -> None:
+    async with aiohttp.ClientSession() as http:
+        async with http.post(f"{srv.http_url}/layout/nonexistent") as r:
+            assert r.status == 404
+            body = await r.json()
+
+    assert body["ok"] is False
+    assert "nonexistent" in body["error"]

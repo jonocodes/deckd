@@ -17,6 +17,7 @@ import pytest
 import websockets
 
 from conftest import FakeFocusBackend, ServerHandle
+from deckd.platform import AppInfo
 
 SIDE_EFFECT_WAIT = 0.05
 LAYOUT_TIMEOUT = 2.0
@@ -149,9 +150,12 @@ async def _focus_srv(
         dbus_buses=dbus_factory.buses,
         dbus_calls=dbus_factory.calls,
     )
+    # The Server needs to know its real bound port so deckd-window
+    # detection (the daemon's own port in the focused window title) works
+    # under TestServer, which picks a random port after construction.
+    server.port = test_server.port or 0
 
     # Seed initial focus and start watcher.
-    from deckd.platform import AppInfo
 
     if initial_focus == "firefox":
         await focus.push(AppInfo(app_id="firefox", wm_class="firefox"))
@@ -211,7 +215,6 @@ async def test_new_client_receives_default_when_focus_unmatched(
 async def test_focus_change_pushes_new_layout_to_existing_clients(
     monkeypatch, focus_layouts_dir: Path
 ) -> None:
-    from deckd.platform import AppInfo
 
     async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
         async with websockets.connect(srv.ws_url) as ws:
@@ -229,7 +232,6 @@ async def test_focus_change_pushes_new_layout_to_existing_clients(
 async def test_focus_change_pushes_default_when_no_match(
     monkeypatch, focus_layouts_dir: Path
 ) -> None:
-    from deckd.platform import AppInfo
 
     async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
         async with websockets.connect(srv.ws_url) as ws:
@@ -244,7 +246,6 @@ async def test_focus_change_pushes_default_when_no_match(
 async def test_focus_change_pushes_to_multiple_clients(
     monkeypatch, focus_layouts_dir: Path
 ) -> None:
-    from deckd.platform import AppInfo
 
     async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
         async with websockets.connect(srv.ws_url) as ws_a, websockets.connect(srv.ws_url) as ws_b:
@@ -264,7 +265,6 @@ async def test_no_push_when_layout_unchanged(
     monkeypatch, focus_layouts_dir: Path
 ) -> None:
     """If the new focus resolves to the same layout, do not push."""
-    from deckd.platform import AppInfo
 
     async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
         async with websockets.connect(srv.ws_url) as ws:
@@ -402,10 +402,151 @@ async def test_reload_falls_back_to_default_when_current_app_removed(
 
 
 # ---------------------------------------------------------------------------
+# Layout override via `deckctl layout <name>` (T5/issue #11)
+#
+# `POST /layout/<name>` force-switches every client to a named layout and
+# sets an override that is cleared by the next genuine (non-deckd-window)
+# focus change, so normal focus-driven switching resumes.
+# ---------------------------------------------------------------------------
+
+
+async def test_layout_override_then_genuine_focus_clears_it(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    import aiohttp
+
+    async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
+        async with websockets.connect(srv.ws_url) as ws:
+            first = await _recv_layout(ws)
+            assert first["app"] == "firefox"
+
+            # Force-switch to the default layout via the override endpoint.
+            async with aiohttp.ClientSession() as http:
+                async with http.post(f"{srv.http_url}/layout/default") as r:
+                    assert r.status == 200
+            override_push = await _recv_eventual_layout(ws)
+            assert override_push["app"] == "default"
+
+            # A genuine focus change resumes normal switching: the override
+            # does not stick, so the terminal layout is pushed.
+            await focus.push(
+                AppInfo(app_id="org.gnome.Console", wm_class="org.gnome.Console")
+            )
+            pushed = await _recv_eventual_layout(ws)
+            assert pushed["app"] == "org.gnome.Console"
+            assert srv.server.current_app_id == "org.gnome.Console"
+
+
+async def test_layout_override_held_while_deckd_window_focused(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    """Focusing the deckd client window must NOT clear an active override."""
+    import aiohttp
+
+    async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
+        async with websockets.connect(srv.ws_url) as ws:
+            await _recv_layout(ws)
+
+            async with aiohttp.ClientSession() as http:
+                async with http.post(f"{srv.http_url}/layout/default") as r:
+                    assert r.status == 200
+            override_push = await _recv_eventual_layout(ws)
+            assert override_push["app"] == "default"
+
+            # Focus the deckd client window: the held override layout must not change.
+            await focus.push(_deckd_window_app(srv))
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(ws.recv(), timeout=0.3)
+            assert srv.server.current_app_id == "default"
+
+
+# ---------------------------------------------------------------------------
 # Auto-ignore the deckd client window (T5/issue #11)
 #
-# The T4 spec lists this as a separate ticket (#11 / T5). We do not wire
-# it here — but the seam where it'd plug in (the focus handler) is
-# already the right one. Asserting that the watcher *does* react to focus
-# changes on the focused window is enough for T4.
+# When the focus backend reports the deckd client browser window gaining
+# focus — matched by the daemon's own port appearing in the window title
+# — the daemon holds the current layout instead of switching away.
 # ---------------------------------------------------------------------------
+
+
+def _deckd_window_app(srv: ServerHandle) -> AppInfo:
+    """A focused-window event that represents the deckd client browser:
+    its title contains the daemon's own bound port (and the page title)."""
+    port = srv.server.port
+    return AppInfo(
+        app_id="org.gnome.Epiphany",
+        wm_class="epiphany",
+        title=f"deckd · http://lute:{port}",
+        pid=4242,
+    )
+
+
+async def test_deckd_window_focus_does_not_change_layout(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    """Clicking the browser tab running the deckd client must not switch the
+    active layout — the daemon holds whatever is current."""
+
+    async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
+        async with websockets.connect(srv.ws_url) as ws:
+            first = await _recv_layout(ws)
+            assert first["app"] == "firefox"
+
+            # The deckd client browser window gains focus.
+            await focus.push(_deckd_window_app(srv))
+
+            # Layout must be unchanged — the WS stays silent.
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(ws.recv(), timeout=0.3)
+
+            # Sanity: a subsequent genuine focus change still switches.
+            await focus.push(
+                AppInfo(app_id="org.gnome.Console", wm_class="org.gnome.Console")
+            )
+            pushed = await _recv_eventual_layout(ws)
+            assert pushed["app"] == "org.gnome.Console"
+
+
+async def test_deckd_window_detection_matches_own_port(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    """The defining mechanism: the daemon's own port in the window title."""
+
+    async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
+        async with websockets.connect(srv.ws_url) as ws:
+            await _recv_layout(ws)
+
+            port = srv.server.port
+            # Title carries the port but not the literal "deckd", so this
+            # exercises the port branch of detection specifically.
+            await focus.push(
+                AppInfo(
+                    app_id="org.gnome.Epiphany",
+                    wm_class="epiphany",
+                    title=f"http://127.0.0.1:{port}/",
+                )
+            )
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(ws.recv(), timeout=0.3)
+
+
+async def test_other_port_in_title_does_not_trigger_ignore(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    """A window whose title contains a *different* port is not ignored."""
+
+    async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
+        async with websockets.connect(srv.ws_url) as ws:
+            await _recv_layout(ws)
+
+            await focus.push(
+                AppInfo(
+                    app_id="org.gnome.Epiphany",
+                    wm_class="epiphany",
+                    title="http://127.0.0.1:9999/",
+                )
+            )
+            # Epiphany is not in any layout's match list, so it falls back to
+            # default — i.e. the focus change propagated normally.
+            pushed = await _recv_eventual_layout(ws)
+            assert pushed["app"] == "default"

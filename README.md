@@ -210,6 +210,22 @@ app_id=None wm_class='firefox' pid=188566 title='YouTube — Mozilla Firefox'
 
 X11 (`xdotool`) fallback exists in `daemon/deckd/platform.py` but is not a supported target.
 
+### Dev UX: auto-ignore + layout override
+
+Two conveniences for local development without a separate device:
+
+**Auto-ignore.** When the focus watcher reports the deckd client browser window gaining focus (matched by the daemon's own port appearing in the window title, or the deckd page title `"deckd"` in the title), the daemon **holds the current layout** instead of switching away. So clicking the browser tab that's rendering the control surface doesn't flip the layout to the browser's own (e.g. Firefox) layout while you're testing something else.
+
+**Layout override.** `deckctl layout <name>` force-switches every connected client to a named layout regardless of focus, so you can test a specific app's layout without opening that app:
+
+```sh
+deckctl layout firefox    # force the firefox layout on all clients
+deckctl layout default    # back to the default layout
+deckctl layout nonexistent  # error: unknown layout (exit 1)
+```
+
+This hits `POST /layout/<name>` on the daemon. The override is **not sticky**: the next genuine (non-deckd-window) focus change clears it and normal focus-driven switching resumes.
+
 ### Smoke test
 
 `scripts/smoke.py` boots the daemon in-process, connects a WS client, fires every action primitive, and asserts the right things happen. Useful as a quick "did I just break the wire?" check:
@@ -222,7 +238,10 @@ uv pip install -e ".[dev]"   # installs the websockets test dep
 ### CLI
 
 ```sh
-deckctl status    # hit /health
+deckctl status              # hit /health
+deckctl reload              # POST /reload — re-read layout YAML and push
+deckctl layout firefox      # force all clients to the firefox layout (dev)
+deckctl layout default      # force the default layout
 ```
 
 ## Configuration

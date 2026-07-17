@@ -119,7 +119,27 @@ class Server:
 
     # -- focus watcher -------------------------------------------------------
 
+    def _is_deckd_window(self, app: "AppInfo") -> bool:
+        """True if ``app`` is the deckd client browser gaining focus.
+
+        The defining signal is the daemon's own port appearing in the
+        focused window's title (the deckd client is served at that port,
+        so browsers that surface the URL in the title reveal it). The
+        page-title fallback ("deckd") covers browsers whose window title
+        is only the page's ``<title>``.
+        """
+        title = app.title or ""
+        port = self.port
+        if port and port > 0 and str(port) in title:
+            return True
+        return "deckd" in title.lower()
+
     async def _on_focus(self, app: "AppInfo") -> None:
+        if self._is_deckd_window(app):
+            log.debug("holding layout; deckd client window focused (%s)", app)
+            return
+        # A genuine (non-deckd) focus change re-resolves the layout, so a
+        # `deckctl layout` override never sticks past the next real switch.
         new_layout = resolve_layout(self.layouts, app)
         new_app_id = new_layout.id
         if new_app_id == self._current_app_id and new_layout is self._current_layout:
@@ -165,6 +185,7 @@ class Server:
         self.app.router.add_get("/ws", self._ws_handler)
         self.app.router.add_get("/health", self._health)
         self.app.router.add_post("/reload", self._reload)
+        self.app.router.add_post("/layout/{layout_id}", self._set_layout)
 
     async def _health(self, _req: web.Request) -> web.Response:
         return web.json_response(
@@ -179,6 +200,31 @@ class Server:
         return web.json_response(
             {"ok": True, "sessions": len(self._sessions), "app": self._current_app_id}
         )
+
+    async def _set_layout(self, req: web.Request) -> web.Response:
+        layout_id = req.match_info["layout_id"]
+        try:
+            layout = self.layouts[layout_id]
+        except KeyError:
+            return web.json_response(
+                {"ok": False, "error": f"unknown layout: {layout_id}"}, status=404
+            )
+        await self._apply_layout_override(layout_id, layout)
+        return web.json_response(
+            {"ok": True, "app": layout_id, "sessions": len(self._sessions)}
+        )
+
+    async def _apply_layout_override(self, layout_id: str, layout: Layout) -> None:
+        """Force every connected client to ``layout`` (addressed by ``layout_id``).
+
+        Bypasses focus detection entirely. The override is not sticky: the
+        next genuine (non-deckd-window) focus change re-resolves the layout
+        and switches as normal.
+        """
+        self._current_app_id = layout_id
+        self._current_layout = layout
+        log.info("layout override -> %s", layout_id)
+        await self._push_to_all()
 
     async def _ws_handler(self, req: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse(heartbeat=30)
