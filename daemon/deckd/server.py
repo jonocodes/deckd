@@ -291,6 +291,11 @@ class Server:
         self.app.router.add_post("/layout/{layout_id}", self._set_layout)
 
     async def _health(self, _req: web.Request) -> web.Response:
+        # The web client fetches /health from the Settings panel to read
+        # host identity. On the Vite dev path (:5173 -> :8765) that fetch
+        # is cross-origin, so the browser needs an explicit allow header
+        # or it drops the response. A local dev tool with no auth has
+        # nothing to protect by cornering the origin, so ``*`` is fine.
         return web.json_response(
             {
                 "ok": True,
@@ -299,7 +304,8 @@ class Server:
                 "hostname": _hostname(),
                 "os": _os_pretty(),
                 "desktop": _desktop_env(),
-            }
+            },
+            headers={"Access-Control-Allow-Origin": "*"},
         )
 
     async def _reload(self, _req: web.Request) -> web.Response:

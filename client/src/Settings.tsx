@@ -97,7 +97,7 @@ function useDaemonHealth(): Health | null {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch("/health", { cache: "no-store" });
+        const r = await fetch(daemonHttpUrl("/health"), { cache: "no-store" });
         if (!r.ok) return;
         const body = (await r.json()) as Health;
         if (!cancelled) setHealth(body);
@@ -110,6 +110,27 @@ function useDaemonHealth(): Health | null {
     };
   }, []);
   return health;
+}
+
+/** Resolve an HTTP URL for a daemon endpoint. Mirrors socket.ts's
+ * WebSocket resolution so a Vite dev server at :5173 correctly forwards
+ * fetches to the daemon at :8765, and the ``VITE_DECKD_WS`` env override
+ * used for LAN phone testing points fetches at the same host as the
+ * WebSocket. */
+function daemonHttpUrl(path: string): string {
+  const env = ((import.meta.env.VITE_DECKD_WS ?? "") as string).trim();
+  if (env) {
+    try {
+      const ws = new URL(env);
+      const proto = ws.protocol === "wss:" ? "https:" : "http:";
+      return `${proto}//${ws.host}${path}`;
+    } catch {
+      // fall through to same-origin resolution
+    }
+  }
+  const url = new URL(path, window.location.href);
+  if (window.location.port === "5173") url.port = "8765";
+  return url.toString();
 }
 
 function currentWsUrl(): string {
