@@ -218,13 +218,23 @@ class MacKeySink(KeySink):
         # button. Picking the right one is what makes the tap-and-a-half
         # drag-lock feel native (selections / windows actually drag).
         event_type = Q.kCGEventLeftMouseDragged if self._dragging_left else Q.kCGEventMouseMoved
+        # Compute the new absolute cursor position rather than setting the
+        # delta fields. ``CGEventCreateMouseEvent`` with a (0, 0) cursor
+        # position is read by Quartz as "warp the cursor to (0, 0)"; the
+        # deltaX / deltaY fields are then ignored (or applied in addition
+        # to the warp), so the cursor snaps to a screen corner on every
+        # event instead of moving relative to where it was. Posting at
+        # ``current + delta`` is the reliable path.
+        #
+        # The wire's dy is screen-down (CSS convention). Quartz screen
+        # coordinates have origin at bottom-left, Y up, so we invert.
+        current = Q.CGEventGetLocation(Q.CGEventCreate(None))
+        new_pos = Q.CGPoint(current.x + dx, current.y - dy)
         event = Q.CGEventCreateMouseEvent(
-            None, event_type, Q.CGPoint(0, 0), Q.kCGMouseButtonLeft
+            None, event_type, new_pos, Q.kCGMouseButtonLeft
         )
-        Q.CGEventSetIntegerValueField(event, Q.kCGMouseEventDeltaX, dx)
-        Q.CGEventSetIntegerValueField(event, Q.kCGMouseEventDeltaY, dy)
         Q.CGEventPost(Q.kCGHIDEventTap, event)
-        log.debug("[mac pointer] dx=%s dy=%s (drag=%s)", dx, dy, self._dragging_left)
+        log.debug("[mac pointer] dx=%s dy=%s -> (%.1f, %.1f)", dx, dy, new_pos.x, new_pos.y)
 
     def emit_click(self, button: str, pressed: bool) -> None:
         if not self._has_quartz:
