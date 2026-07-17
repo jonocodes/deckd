@@ -80,10 +80,12 @@ function resolve_ws_url(): string {
     if (url) return url;
     console.warn("Ignoring invalid VITE_DECKD_WS", env);
   }
+  // Default to same-origin ``/ws``. When the client is loaded via Vite,
+  // ``vite.config.ts`` proxies ``/ws`` to the daemon; when loaded directly
+  // from the daemon (via --client-dist), this hits the daemon's own /ws.
   const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
   const url = new URL("/ws", window.location.href);
   url.protocol = proto;
-  if (window.location.port === "5173") url.port = "8765";
   return url.toString();
 }
 

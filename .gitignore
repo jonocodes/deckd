@@ -12,6 +12,12 @@ client/dist/
 .vite/
 client/.env
 client/.env.local
+# Tailscale-provisioned TLS certs for dev-client-tailscale, plus the
+# common shapes ``tailscale cert`` leaves lying around in cwd.
+client/.tls/
+*.crt
+*.key
+*.pem
 
 # Editor
 .idea/

@@ -2,7 +2,7 @@
 
 App-aware touch control surface for the Linux desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a trackpad mode, rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps layouts automatically.
 
-See [`docs/INCEPTION.md`](docs/INCEPTION.md) for the full design.
+See `[docs/INCEPTION.md](docs/INCEPTION.md)` for the full design.
 
 ## Status
 
@@ -22,20 +22,20 @@ What works today: focus a window on the desktop and the phone's browser flips to
 
 ```
                         ┌──────────┐
-                        │  Phone /  │
-                        │  Tablet   │
-                        │  Browser  │
+                        │  Phone / │
+                        │  Tablet  │
+                        │  Browser │
                         └────┬─────┘
                              │
                       WebSocket (ws://)
                              │
-          ┌──────────────────┼──────────────────┐
+          ┌──────────────────┼───────────────────┐
           │             deckd daemon             │
           │            (aiohttp, asyncio)        │
           │                                      │
           │  ┌──────────┐  ┌──────────┐          │
-          │  │  Layout   │  │  Action  │          │
-          │  │  Loader   │  │ Dispatch │          │
+          │  │  Layout  │  │  Action  │          │
+          │  │  Loader  │  │ Dispatch │          │
           │  └──────────┘  └────┬─────┘          │
           │         │           │                │
           └─────────┼───────────┼────────────────┘
@@ -46,7 +46,7 @@ What works today: focus a window on the desktop and the phone's browser flips to
                      (evdev)     (subprocess)  gdbus
                           │                    │
               scroll + keys + pointer  ┌───────┴───────┐
-                          │           │                │
+                          │            │               │
                      /dev/uinput   GNOME Shell     (X11 fallback
                                    Extension        xdotool —
                                   deckd-focus      unsupported)
@@ -65,7 +65,7 @@ docs/INCEPTION.md  Full design doc — source of truth for *what* and *why*
 
 ## Running deckd
 
-You need Python 3.11+ and Node 18+. Dependencies are managed with [`uv`](https://docs.astral.sh/uv/):
+You need Python 3.11+ and Node 18+. Dependencies are managed with `[uv](https://docs.astral.sh/uv/)`:
 
 ```sh
 # 1. Install uv (one-time)
@@ -106,25 +106,26 @@ Open `http://<desktop-lan-ip>:8765` on the phone, for example `http://192.168.30
 
 "Add to Home Screen" on Android Chrome / Edge only prompts over a **secure context** (`localhost` or HTTPS). Plain `http://<lan-ip>:8765` from a phone doesn't qualify, so the install banner never shows. iOS Safari is looser and accepts HTTP LAN, so it's Chrome/Edge that need help.
 
-If both devices are on a [Tailscale](https://tailscale.com/) tailnet, front deckd with Tailscale's built-in HTTPS reverse proxy:
+If both devices are on a [Tailscale](https://tailscale.com/) tailnet, deckd has a `just dev-client-tailscale` recipe that:
+
+1. Uses `tailscale cert` to provision (or reuse) a Let's-Encrypt cert for your tailnet hostname.
+2. Runs Vite's dev server on `:5173` with HTTPS backed by that cert.
+3. Configures Vite to proxy `/ws` and `/health` to the local daemon on `:8765`, so the whole app is same-origin — no extra `VITE_DECKD_WS` config, HMR still works, PWA install still eligible.
 
 ```sh
-# One-time: enable HTTPS certs for your tailnet in the admin console
+# One-time: enable HTTPS certs for your tailnet
 # https://login.tailscale.com/admin/dns  →  "Enable HTTPS"
 
-# One-time per host: provision the Let's-Encrypt cert
-sudo tailscale cert "$(tailscale status --self --json | jq -r .Self.DNSName | sed s:\\.$::)"
+# Terminal 1 — daemon on localhost (the recipe expects it at 127.0.0.1:8765):
+just dev-daemon
 
-# Run deckd on localhost as usual:
-just run-daemon
-
-# Proxy tailnet HTTPS (:443) -> deckd (:8765):
-tailscale serve --bg 8765
+# Terminal 2 — Vite HTTPS backed by tailscale cert:
+just dev-client-tailscale
 ```
 
-Open `https://<hostname>.<tailnet>.ts.net/` on the phone (Tailscale prints the URL when `serve` starts). Chrome's install banner should appear and "Add to Home Screen" installs deckd fullscreen. Full CLI reference: <https://tailscale.com/kb/1312/serve>.
+On first run the recipe writes `<host>.crt` / `<host>.key` under `client/.tls/` (gitignored). Then it prints the URL. Open `https://<hostname>.<tailnet>.ts.net:5173/` on the phone — Chrome's install banner should appear, tap "Add to Home Screen", and deckd installs fullscreen.
 
-Stop the proxy with `tailscale serve --https=443 off`.
+Cert files last ~3 months (Let's Encrypt); delete `client/.tls/*` and rerun the recipe to renew.
 
 ### Client chrome
 
@@ -139,12 +140,14 @@ Layout widget coordinates are relative to the chrome-excluded area; the client c
 
 Tap the `trackpad` button in the bottom chrome and the layout area is replaced by a full-surface trackpad. All gesture recognition is client-side; the daemon receives high-level events over WebSocket and maps them to `REL_X` / `REL_Y` + `BTN_LEFT` / `BTN_RIGHT` events on the same uinput device that handles keys and scroll.
 
-| Gesture | Action |
-|---|---|
-| One-finger drag | Move the desktop cursor (relative motion, like a laptop trackpad) |
-| Quick tap (< 250ms, < 10px) | Left click |
-| Two-finger tap (both down, both up together) | Right click |
-| Tap-and-a-half (tap, then touch again within 400ms and drag) | Left button held during the drag; release on finger lift |
+
+| Gesture                                                      | Action                                                            |
+| ------------------------------------------------------------ | ----------------------------------------------------------------- |
+| One-finger drag                                              | Move the desktop cursor (relative motion, like a laptop trackpad) |
+| Quick tap (< 250ms, < 10px)                                  | Left click                                                        |
+| Two-finger tap (both down, both up together)                 | Right click                                                       |
+| Tap-and-a-half (tap, then touch again within 400ms and drag) | Left button held during the drag; release on finger lift          |
+
 
 Chrome stays visible in trackpad mode — the right-side jogstrip is still available for scrolling while you're pointing. Tap the `trackpad` button again to return to the app layout.
 

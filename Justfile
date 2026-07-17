@@ -31,9 +31,27 @@ dev-daemon:
 dev-daemon-lan:
     .venv/bin/deckd-dev --host 0.0.0.0 --verbose
 
-# Vite dev server on the LAN, with WS pointed at this host's LAN IP.
+# Vite dev server on the LAN. Vite proxies /ws and /health to the local
+# daemon (see vite.config.ts), so the client is same-origin at :5173.
 dev-client-lan:
-    host="$(hostname -s)"; echo "VITE_DECKD_WS=ws://$host:8765/ws"; cd client && VITE_DECKD_WS="ws://$host:8765/ws" npm run dev -- --host 0.0.0.0 --strictPort
+    cd client && npm run dev -- --host 0.0.0.0 --strictPort
+
+# Vite dev server with HTTPS via a tailscale-provisioned cert. Required
+# for Chrome's PWA install prompt (secure-context gate). Provisions the
+# cert lazily on first run; caches it under client/.tls (gitignored).
+# Phone opens https://<host>.<tailnet>.ts.net:5173/ .
+dev-client-tailscale:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    host="$(tailscale status --self --json | jq -r .Self.DNSName | sed 's:\.$::')"
+    tls="client/.tls"
+    mkdir -p "$tls"
+    if [ ! -f "$tls/$host.crt" ] || [ ! -f "$tls/$host.key" ]; then
+      echo "Provisioning tailscale cert for $host in $tls/ (requires sudo)..."
+      (cd "$tls" && sudo tailscale cert "$host" && sudo chown "$USER" "$host.crt" "$host.key")
+    fi
+    echo "-> https://$host:5173/"
+    cd client && DECKD_TLS_DIR="./.tls" DECKD_TLS_HOST="$host" npm run dev -- --host 0.0.0.0 --strictPort
 
 # Build the client (output: client/dist/).
 build-client:

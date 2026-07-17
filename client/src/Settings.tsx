@@ -112,11 +112,11 @@ function useDaemonHealth(): Health | null {
   return health;
 }
 
-/** Resolve an HTTP URL for a daemon endpoint. Mirrors socket.ts's
- * WebSocket resolution so a Vite dev server at :5173 correctly forwards
- * fetches to the daemon at :8765, and the ``VITE_DECKD_WS`` env override
- * used for LAN phone testing points fetches at the same host as the
- * WebSocket. */
+/** Resolve an HTTP URL for a daemon endpoint. Same-origin by default —
+ * ``vite.config.ts`` proxies ``/health`` to the daemon during dev, and the
+ * daemon serves it directly when the built client is loaded via
+ * --client-dist. The ``VITE_DECKD_WS`` env override lets a caller point
+ * at an off-origin daemon; the http host is derived from the ws URL. */
 function daemonHttpUrl(path: string): string {
   const env = ((import.meta.env.VITE_DECKD_WS ?? "") as string).trim();
   if (env) {
@@ -128,9 +128,7 @@ function daemonHttpUrl(path: string): string {
       // fall through to same-origin resolution
     }
   }
-  const url = new URL(path, window.location.href);
-  if (window.location.port === "5173") url.port = "8765";
-  return url.toString();
+  return new URL(path, window.location.href).toString();
 }
 
 function currentWsUrl(): string {
