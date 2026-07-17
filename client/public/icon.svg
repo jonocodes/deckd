@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="deckd">
-  <!-- Rounded dark tile — leaves ~10% safe zone for maskable clipping. -->
+  <!-- Rounded dark tile — leaves ~15% horizontal safe zone (80px on a
+       512-canvas) so maskable clipping doesn't crop the button glyphs. -->
   <rect width="512" height="512" rx="112" fill="#0e1115"/>
   <!-- Stylized 2x2 button deck in the deckd accent cyan. -->
   <g fill="#7dd3fc">

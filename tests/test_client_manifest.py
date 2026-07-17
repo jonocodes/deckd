@@ -12,10 +12,12 @@ from pathlib import Path
 
 import pytest
 
-MANIFEST_PATH = (
-    Path(__file__).parent.parent / "client" / "public" / "manifest.json"
-)
-ICON_PATH = Path(__file__).parent.parent / "client" / "public" / "icon.svg"
+REPO_ROOT = Path(__file__).parent.parent
+CLIENT_PUBLIC = REPO_ROOT / "client" / "public"
+CLIENT_INDEX = REPO_ROOT / "client" / "index.html"
+
+MANIFEST_PATH = CLIENT_PUBLIC / "manifest.json"
+ICON_PATH = CLIENT_PUBLIC / "icon.svg"
 
 
 def test_manifest_file_exists() -> None:
@@ -53,8 +55,7 @@ def test_manifest_has_install_metadata(manifest: dict) -> None:
 def test_manifest_theme_matches_html_meta(manifest: dict) -> None:
     """Manifest theme colour must match the ``<meta name="theme-color">`` in
     index.html so the OS status bar doesn't flash on install."""
-    html = (Path(__file__).parent.parent / "client" / "index.html").read_text()
-    assert manifest["theme_color"] in html
+    assert manifest["theme_color"] in CLIENT_INDEX.read_text()
 
 
 def test_manifest_lists_at_least_one_icon(manifest: dict) -> None:
