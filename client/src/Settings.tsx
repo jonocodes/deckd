@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useOrientation } from "./orientation";
-import { SCROLL_UNITS_PER_PX, SCROLL_DIRECTION } from "./JogStrip";
+import { SCROLL_SCALE_MAX, SCROLL_SCALE_MIN } from "./settings-store";
 import type { ServerLayout } from "./protocol";
 
 type SocketStatus = "connecting" | "open" | "closed";
@@ -8,19 +8,29 @@ type SocketStatus = "connecting" | "open" | "closed";
 type Props = {
   layout: ServerLayout | null;
   status: SocketStatus;
+  scrollScale: number;
+  scrollInvert: boolean;
+  onScrollScaleChange: (n: number) => void;
+  onScrollInvertChange: (v: boolean) => void;
 };
 
-/** Read-only diagnostics view. Editable settings (scroll tuning etc.)
- * are T13; this ships enough of the settings surface for a user to check
- * "why isn't PWA install working" / "is the socket really open" / "which
- * layout am I on right now" without opening devtools on the phone. */
 type Health = {
   hostname?: string;
   os?: string;
   desktop?: string;
 };
 
-export function Settings({ layout, status }: Props) {
+/** Editable client settings (scroll tuning) plus a read-only diagnostics
+ * dump. State for the editable half lives one level up in ``App`` so the
+ * jogstrip widgets and the settings UI see the same values live. */
+export function Settings({
+  layout,
+  status,
+  scrollScale,
+  scrollInvert,
+  onScrollScaleChange,
+  onScrollInvertChange,
+}: Props) {
   const orientation = useOrientation();
   const standalone = useStandaloneMode();
   const viewport = useViewportSize();
@@ -42,14 +52,66 @@ export function Settings({ layout, status }: Props) {
     ["WebSocket URL", currentWsUrl()],
     ["Origin", window.location.origin],
     ["Secure context", String(window.isSecureContext)],
-    ["Scroll scale", `${SCROLL_UNITS_PER_PX} px/unit`],
-    ["Scroll invert", SCROLL_DIRECTION < 0 ? "yes" : "no"],
     ["User agent", navigator.userAgent],
   ];
 
   return (
-    <div className="settings" role="region" aria-label="Diagnostics">
-      <h2 className="settings-title">Diagnostics</h2>
+    <div className="settings" role="region" aria-label="Settings">
+      <h2 className="settings-title">Scroll</h2>
+      <div className="settings-controls">
+        <div className="settings-control">
+          <span className="settings-control-label">Scale</span>
+          <div className="stepper" role="group" aria-label="Scroll scale">
+            <button
+              type="button"
+              className="stepper-btn"
+              aria-label="Decrease scroll scale"
+              disabled={scrollScale <= SCROLL_SCALE_MIN}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                onScrollScaleChange(scrollScale - 1);
+              }}
+            >
+              −
+            </button>
+            <span className="stepper-value" aria-live="polite">{scrollScale}</span>
+            <button
+              type="button"
+              className="stepper-btn"
+              aria-label="Increase scroll scale"
+              disabled={scrollScale >= SCROLL_SCALE_MAX}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                onScrollScaleChange(scrollScale + 1);
+              }}
+            >
+              +
+            </button>
+          </div>
+          <span className="settings-control-hint">px per wheel unit</span>
+        </div>
+        <div className="settings-control">
+          <span className="settings-control-label">Invert</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={scrollInvert}
+            className={`toggle${scrollInvert ? " toggle-on" : ""}`}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onScrollInvertChange(!scrollInvert);
+            }}
+          >
+            <span className="toggle-track" />
+            <span className="toggle-thumb" />
+          </button>
+          <span className="settings-control-hint">
+            {scrollInvert ? "reversed" : "default"}
+          </span>
+        </div>
+      </div>
+
+      <h2 className="settings-title settings-title-sub">Diagnostics</h2>
       <dl className="settings-list">
         {rows.map(([k, v]) => (
           <div className="settings-row" key={k}>

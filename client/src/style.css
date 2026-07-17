@@ -308,6 +308,124 @@ button {
   color: #7dd3fc;
 }
 
+.settings-title-sub {
+  margin-top: 22px;
+}
+
+/* Editable controls (scroll tuning). Steppers and toggles are laid out
+   as rows: [label] [control] [hint]. */
+
+.settings-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.settings-control {
+  display: grid;
+  grid-template-columns: minmax(80px, 20%) auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.settings-control-label {
+  font-size: 12px;
+  color: #8a96a3;
+  letter-spacing: 0.04em;
+}
+
+.settings-control-hint {
+  font-size: 11px;
+  color: #6b7785;
+  letter-spacing: 0.02em;
+}
+
+.stepper {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid #2a333d;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #1b222a;
+  touch-action: manipulation;
+}
+
+.stepper-btn {
+  width: 40px;
+  height: 34px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #e6e9ef;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  transition: background 80ms ease, transform 80ms ease;
+}
+.stepper-btn:active {
+  transform: scale(0.94);
+  background: #2a333d;
+}
+.stepper-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.stepper-value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  padding: 0 8px;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: #7dd3fc;
+  border-left: 1px solid #2a333d;
+  border-right: 1px solid #2a333d;
+  background: #11161b;
+}
+
+.toggle {
+  position: relative;
+  width: 54px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: #1b222a;
+  border: 1px solid #2a333d;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #6b7785;
+  transition: transform 120ms ease, background 120ms ease;
+}
+
+.toggle-on .toggle-track {
+  background: #14364a;
+  border-color: #3fb1d8;
+}
+.toggle-on .toggle-thumb {
+  transform: translateX(24px);
+  background: #7dd3fc;
+}
+
 .settings-list {
   display: flex;
   flex-direction: column;

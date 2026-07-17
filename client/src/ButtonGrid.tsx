@@ -8,6 +8,8 @@ type Props = {
   onPress: (id: string) => void;
   onJog: (id: string, delta: number) => void;
   onJogEnd: (id: string, velocity: number) => void;
+  scrollScale: number;
+  scrollInvert: boolean;
 };
 
 const FALLBACK_DIM = 4;
@@ -29,7 +31,7 @@ function deriveDims(widgets: Widget[]): [number, number] {
   return [Math.max(cols, 1), Math.max(rows, 1)];
 }
 
-export function ButtonGrid({ widgets, onPress, onJog, onJogEnd }: Props) {
+export function ButtonGrid({ widgets, onPress, onJog, onJogEnd, scrollScale, scrollInvert }: Props) {
   const orientation = useOrientation();
   // In portrait, transpose so a landscape-authored grid keeps sensibly-sized
   // cells (a 4x2 firefox layout becomes 2x4 with taller buttons).
@@ -64,6 +66,8 @@ export function ButtonGrid({ widgets, onPress, onJog, onJogEnd }: Props) {
                 key={w.id}
                 widget={w}
                 style={style}
+                scale={scrollScale}
+                invert={scrollInvert}
                 onJog={onJog}
                 onJogEnd={onJogEnd}
               />

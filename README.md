@@ -16,7 +16,9 @@ Pre-alpha, but the v1 milestone spine is landing. Both design-doc spikes are res
 - **T4** per-app layout switching from focus — *done*
 - **T5** dev UX (auto-ignore + `deckctl layout` override) — *done*
 - **T6** client chrome (bottom strip + persistent jogstrip) — *done*
+- **T7** PWA manifest + orientation-safe chrome — *done*
 - **T8** trackpad mode (cursor + tap + drag-lock) — *done*
+- **T13** settings page (scroll steppers + invert, localStorage) — *done*
 
 What works today: focus a window on the desktop and the phone's browser flips to that app's layout automatically. Tap layout buttons to fire `shell`, `terminal`, `key`, or `dbus` actions. Drag the always-on right-side jogstrip to scroll the focused window through `REL_WHEEL_HI_RES`. Tap the chrome trackpad button and the phone becomes a mouse — drag to move the cursor, tap to click, two-finger tap to right-click, tap-and-a-half to drag. Edit any `layouts/*.yaml` file on the desktop and every connected client re-renders; a broken save shows an error diagnostic in place of the grid without killing the daemon.
 
@@ -165,11 +167,13 @@ Chrome stays visible in trackpad mode — the right-side jogstrip is still avail
 
 ### Scroll tuning
 
-The jogstrip's drag scale can be tuned from the phone URL without rebuilding:
+Tap the `settings` button in the bottom chrome to reveal a **Scroll** panel with a stepper for scale (1–10, default 3) and an invert toggle. Values persist per-device to `localStorage` — closing and reopening the client keeps your tuning. The persistent right-side jogstrip stays live inside the settings view so you can feel each change immediately.
+
+URL query params still work as a one-shot dev override (won't touch `localStorage`):
 
 ```text
-http://lute:5173?scrollScale=2
-http://lute:5173?scrollScale=4&scrollInvert=1
+https://lute.wolf-typhon.ts.net:5173/?scrollScale=2
+https://lute.wolf-typhon.ts.net:5173/?scrollScale=4&scrollInvert=1
 ```
 
 `scrollScale` is high-resolution wheel units per CSS pixel. `scrollInvert=1` flips the direction.

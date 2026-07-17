@@ -15,27 +15,23 @@ export type JogStripProps = {
   style?: CSSProperties;
   className?: string;
   variant?: "grid" | "chrome";
+  /** High-resolution wheel units per CSS pixel. Owned by the parent
+   * (``useScrollSettings``) so the setting can be tuned live from the
+   * settings view. */
+  scale: number;
+  /** Flip the vertical scroll direction. */
+  invert: boolean;
   onJog: (id: string, delta: number) => void;
   onJogEnd: (id: string, velocity: number) => void;
 };
-
-export const SCROLL_UNITS_PER_PX = readNumberSetting(
-  "scrollScale",
-  (import.meta.env.VITE_DECKD_SCROLL_SCALE ?? "") as string,
-  3,
-);
-export const SCROLL_DIRECTION = readBooleanSetting(
-  "scrollInvert",
-  (import.meta.env.VITE_DECKD_SCROLL_INVERT ?? "") as string,
-)
-  ? -1
-  : 1;
 
 export function JogStrip({
   widget,
   style,
   className,
   variant = "grid",
+  scale,
+  invert,
   onJog,
   onJogEnd,
 }: JogStripProps) {
@@ -45,6 +41,12 @@ export function JogStrip({
   const velocity = useRef(0);
   const pending = useRef(0);
   const raf = useRef<number | null>(null);
+  // Snapshot scale/invert into refs so pointer callbacks read the latest
+  // value without stale-closure risk if React re-renders mid-gesture.
+  const scaleRef = useRef(scale);
+  scaleRef.current = scale;
+  const dirRef = useRef(invert ? -1 : 1);
+  dirRef.current = invert ? -1 : 1;
 
   const flush = () => {
     raf.current = null;
@@ -85,7 +87,7 @@ export function JogStrip({
         if (activePointer.current !== e.pointerId) return;
         e.preventDefault();
         const dt = Math.max((e.timeStamp - lastT.current) / 1000, 0.001);
-        const delta = (lastY.current - e.clientY) * SCROLL_UNITS_PER_PX * SCROLL_DIRECTION;
+        const delta = (lastY.current - e.clientY) * scaleRef.current * dirRef.current;
         pending.current += delta;
         velocity.current = delta / dt;
         lastY.current = e.clientY;
@@ -98,23 +100,11 @@ export function JogStrip({
       {variant === "grid" ? (
         <>
           <span className="label">{widget.label ?? widget.id}</span>
-          <span className="hint">scale {SCROLL_UNITS_PER_PX} · drag or flick vertically</span>
+          <span className="hint">scale {scale} · drag or flick vertically</span>
         </>
       ) : (
         <span className="hint chrome-jogstrip-hint">scroll</span>
       )}
     </div>
   );
-}
-
-function readNumberSetting(queryName: string, envValue: string, fallback: number): number {
-  const raw = new URLSearchParams(window.location.search).get(queryName) ?? envValue;
-  if (!raw) return fallback;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
-}
-
-function readBooleanSetting(queryName: string, envValue: string): boolean {
-  const raw = (new URLSearchParams(window.location.search).get(queryName) ?? envValue).toLowerCase();
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
 }

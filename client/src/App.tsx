@@ -4,6 +4,7 @@ import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
 import { Trackpad } from "./Trackpad";
 import { Settings } from "./Settings";
+import { useScrollSettings } from "./settings-store";
 import type { JogHandle } from "./JogStrip";
 import type { ServerLayout } from "./protocol";
 
@@ -29,6 +30,7 @@ export function App() {
   const [view, setView] = useState<View>("layout");
   const onLayout = useCallback((m: ServerLayout) => setLayout(m), []);
   const { status, send } = useDeckdSocket(onLayout);
+  const scroll = useScrollSettings();
 
   const press = (id: string) => send({ type: "press", id });
   const jog = (id: string, delta: number) => send({ type: "jog", id, delta });
@@ -48,14 +50,28 @@ export function App() {
           {view === "trackpad" ? (
             <Trackpad onPad={pad} onTap={padTap} onDrag={padDrag} />
           ) : view === "settings" ? (
-            <Settings layout={layout} status={status} />
+            <Settings
+              layout={layout}
+              status={status}
+              scrollScale={scroll.scale}
+              scrollInvert={scroll.invert}
+              onScrollScaleChange={scroll.setScale}
+              onScrollInvertChange={scroll.setInvert}
+            />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">
               <span className="layout-error-title">Layout error</span>
               <pre className="layout-error-body">{layout.error}</pre>
             </div>
           ) : layout ? (
-            <ButtonGrid widgets={layout.widgets} onPress={press} onJog={jog} onJogEnd={jogEnd} />
+            <ButtonGrid
+              widgets={layout.widgets}
+              onPress={press}
+              onJog={jog}
+              onJogEnd={jogEnd}
+              scrollScale={scroll.scale}
+              scrollInvert={scroll.invert}
+            />
           ) : (
             <div className="empty">waiting for daemon…</div>
           )}
@@ -65,6 +81,8 @@ export function App() {
             <JogStrip
               widget={CHROME_JOG_HANDLE}
               variant="chrome"
+              scale={scroll.scale}
+              invert={scroll.invert}
               onJog={jog}
               onJogEnd={jogEnd}
             />
