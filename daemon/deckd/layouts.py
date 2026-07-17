@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .platform import AppInfo
+
+log = logging.getLogger("deckd.layouts")
 
 
 class Widget(BaseModel):
@@ -120,17 +123,40 @@ def resolve_layout(store: LayoutStore, app: AppInfo) -> Layout:
     return store.default()
 
 
-def load_layouts(layouts_dir: Path) -> LayoutStore:
-    """Load every ``*.yaml`` / ``*.yml`` file in ``layouts_dir``.
+def load_layouts(
+    layouts_dir: Path, overlay_dir: Path | None = None
+) -> LayoutStore:
+    """Load every ``*.yaml`` / ``*.yml`` file in ``layouts_dir`` plus an
+    optional platform overlay.
 
-    A missing directory is a fatal startup error (matches the existing
-    single-file behavior: bad config = ``SystemExit``). Non-yaml files in
-    the directory are ignored.
+    The overlay is loaded first; same-id base entries are then dropped.
+    Effect: if the overlay defines a layout with the same id as a base
+    layout (typically because both name their file ``<id>.yaml``), the
+    overlay wins. The overlay can also add layouts for apps the base
+    doesn't cover. A missing ``layouts_dir`` is fatal; a missing overlay
+    is fine (no overlay is the most common case).
+
+    Resolution semantics stay first-match-wins within the combined list,
+    so loading the overlay first means its entries shadow base entries
+    that match the same focused-app identity -- which is the intuitive
+    "platform overrides shared" semantic.
     """
     if not layouts_dir.is_dir():
         raise SystemExit(f"layouts directory not found: {layouts_dir}")
 
     layouts: list[Layout] = []
+
+    if overlay_dir is not None and overlay_dir.is_dir():
+        for path in sorted(overlay_dir.glob("*.y*ml")):
+            if path.suffix not in {".yaml", ".yml"}:
+                continue
+            try:
+                layout = load_layout(path)
+            except SystemExit as exc:
+                raise SystemExit(f"{exc}") from None
+            layouts.append(layout)
+
+    overlay_ids = {l.id for l in layouts if l.id}
     for path in sorted(layouts_dir.glob("*.y*ml")):
         if path.suffix not in {".yaml", ".yml"}:
             continue
@@ -138,7 +164,11 @@ def load_layouts(layouts_dir: Path) -> LayoutStore:
             layout = load_layout(path)
         except SystemExit as exc:
             raise SystemExit(f"{exc}") from None
+        if layout.id and layout.id in overlay_ids:
+            log.info("layout %r overridden by overlay %s", layout.id, path)
+            continue
         layouts.append(layout)
+
     return LayoutStore(layouts)
 
 

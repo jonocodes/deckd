@@ -4,32 +4,58 @@
 default:
     @just --list
 
-# Create the venv and install Python + JS deps. Idempotent.
-# Run once. flox activate handles PATH; this sets up the venv itself.
-setup:
+# Per-platform setup recipes. `setup` auto-picks the right one; use the
+# explicit recipe when you want to override (e.g. cross-checking on a CI box).
+
+# Linux/GNOME dev: [dev,uinput] (evdev-binary is Linux-only).
+setup-linux:
     uv venv --python 3.12 --allow-existing
     uv pip install -e ".[dev,uinput]"
     cd client && npm install
 
+# macOS dev: [dev] only + cliclick via Homebrew for the trackpad +
+# PyObjC Quartz for synthetic wheel events on the jogstrip.
+setup-macos:
+    uv venv --python 3.12 --allow-existing
+    uv pip install -e ".[dev,macos]"
+    cd client && npm install
+    @if command -v cliclick >/dev/null 2>&1; then \
+        echo "cliclick already installed: $(command -v cliclick)"; \
+    elif command -v brew >/dev/null 2>&1; then \
+        echo "Installing cliclick via Homebrew..."; \
+        brew install cliclick; \
+    else \
+        echo "Homebrew not found; install cliclick manually from https://github.com/BlueM/cliclick" >&2; exit 1; \
+    fi
+
+# Dispatch: picks setup-linux on Linux, setup-macos on macOS. flox users
+# don't need this -- flox activate handles its own venv.
+setup:
+    @if [ "$(uname)" = Darwin ]; then \
+        just setup-macos; \
+    else \
+        just setup-linux; \
+    fi
+
 # Run the daemon against the layouts directory, serving the built client.
 run-daemon:
-    .venv/bin/deckd --layouts-dir layouts --client-dist client/dist --verbose
+    deckd --layouts-dir layouts --client-dist client/dist --verbose
 
 # Run the daemon on the LAN without a built client (use dev-client-lan for HMR).
 run-daemon-lan:
-    .venv/bin/deckd --host 0.0.0.0 --layouts-dir layouts --verbose
+    deckd --host 0.0.0.0 --layouts-dir layouts --verbose
 
 # Run the daemon under a supervisor that restarts it when daemon/**/*.py
 # changes. Layout YAML hot-reload is built into the daemon itself; this is
 # only useful when editing Python.
 dev-daemon:
-    .venv/bin/deckd-dev --verbose
+    deckd-dev --verbose
 
 # Same, but bind the daemon to all interfaces so a phone on the LAN
 # (or Tailscale) can reach it. deckd-dev forwards unknown args to the
 # child, so --host and --verbose end up on the deckd process.
 dev-daemon-lan:
-    .venv/bin/deckd-dev --host 0.0.0.0 --verbose
+    deckd-dev --host 0.0.0.0 --verbose
 
 # Vite dev server on the LAN. Vite proxies /ws and /health to the local
 # daemon (see vite.config.ts), so the client is same-origin at :5173.
@@ -75,12 +101,12 @@ install-focus-extension:
 
 # Print active app/window changes for Spike #2.
 watch-focus:
-    .venv/bin/python -u scripts/watch_focus.py
+    python -u scripts/watch_focus.py
 
 # Single snapshot of the active app/window.
 watch-focus-once:
-    .venv/bin/python -u scripts/watch_focus.py --once
+    python -u scripts/watch_focus.py --once
 
 # Hit /health.
 status:
-    .venv/bin/deckctl status
+    deckctl status

@@ -20,6 +20,11 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
 ]
+macos = [
+    # PyObjC Quartz for synthetic wheel-event injection via CGEventCreateScrollWheelEvent.
+    # Needed on macOS for the jogstrip to actually scroll the focused window.
+    "pyobjc-framework-Quartz>=10.0",
+]
 
 [project.scripts]
 deckd = "deckd.__main__:main"

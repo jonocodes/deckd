@@ -4,6 +4,7 @@ import asyncio
 import ast
 import json
 import os
+import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 
@@ -70,6 +71,10 @@ class X11FocusBackend(PlatformBackend):
 
 
 def default_backend() -> PlatformBackend:
+    if sys.platform == "darwin":
+        from .platform_macos import MacFocusBackend
+
+        return MacFocusBackend()
     if os.environ.get("XDG_SESSION_TYPE") == "x11":
         return X11FocusBackend()
     return GnomeShellFocusBackend()

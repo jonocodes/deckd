@@ -1,0 +1,65 @@
+# Firefox on macOS. Same match token as the Linux firefox.yaml (the Mac
+# process is reported as `firefox`), so this file sorts first (the `-` is
+# ASCII 0x2D, before `.`) and wins on the Mac. On a Linux checkout delete
+# this file or restructure into per-platform layouts dirs.
+match:
+  - firefox
+widgets:
+  - id: new-tab
+    kind: button
+    label: New tab
+    icon: plus
+    grid: [0, 0, 1, 1]
+    action:
+      key: "super+t"
+  - id: new-window
+    kind: button
+    label: New window
+    icon: window
+    grid: [1, 0, 1, 1]
+    action:
+      key: "super+n"
+  - id: back
+    kind: button
+    label: Back
+    icon: arrow-left
+    color: "#1e3a8a"
+    grid: [2, 0, 1, 1]
+    action:
+      key: "super+["
+  - id: forward
+    kind: button
+    label: Forward
+    icon: arrow-right
+    color: "#1e3a8a"
+    grid: [3, 0, 1, 1]
+    action:
+      key: "super+]"
+  - id: reload
+    kind: button
+    label: Reload
+    icon: refresh
+    grid: [0, 1, 1, 1]
+    action:
+      key: "super+r"
+  - id: focus-url
+    kind: button
+    label: URL bar
+    icon: link
+    grid: [1, 1, 1, 1]
+    action:
+      key: "super+l"
+  - id: find
+    kind: button
+    label: Find
+    icon: search
+    grid: [2, 1, 1, 1]
+    action:
+      key: "super+f"
+  - id: close-tab
+    kind: button
+    label: Close tab
+    icon: close
+    grid: [3, 1, 1, 1]
+    action:
+      key: "super+w"

@@ -1,0 +1,66 @@
+# Mac fallback layout. Used when no per-app layout matches. Same `id` as
+# `layouts/default.yaml` so the overlay-replaces-base loader picks this
+# one on Mac without touching the shared base.
+#
+# Designed for "works for max apps": the buttons below are useful in a
+# long tail of Mac apps (browsers, terminals, editors, chat clients, etc.)
+# and the launchers work regardless of which app is focused.
+match:
+  - default
+widgets:
+  - id: new-tab
+    kind: button
+    label: New tab
+    icon: plus
+    grid: [0, 0, 1, 1]
+    action:
+      key: "super+t"
+  - id: close-tab
+    kind: button
+    label: Close
+    icon: close
+    grid: [1, 0, 1, 1]
+    action:
+      key: "super+w"
+  - id: find
+    kind: button
+    label: Find
+    icon: search
+    grid: [2, 0, 1, 1]
+    action:
+      key: "super+f"
+  - id: new-window
+    kind: button
+    label: New window
+    icon: window
+    grid: [3, 0, 1, 1]
+    action:
+      key: "super+n"
+  - id: open-url
+    kind: button
+    label: Open example.com
+    icon: globe
+    grid: [0, 1, 1, 1]
+    action:
+      shell: "open https://example.com"
+  - id: launch-iterm
+    kind: button
+    label: iTerm
+    icon: terminal
+    grid: [1, 1, 1, 1]
+    action:
+      shell: "open -a iTerm"
+  - id: launch-terminal
+    kind: button
+    label: Terminal
+    icon: terminal
+    grid: [2, 1, 1, 1]
+    action:
+      shell: "open -a Terminal"
+  - id: system-settings
+    kind: button
+    label: Settings
+    icon: cog
+    grid: [3, 1, 1, 1]
+    action:
+      shell: "open -a \"System Settings\""

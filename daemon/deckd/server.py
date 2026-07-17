@@ -110,14 +110,16 @@ class Server:
         key_sink: "KeySink | None" = None,
         dbus_bus_factory: "Callable[[BusTypeT], MessageBus] | None" = None,
         focus_backend: "PlatformBackend | None" = None,
+        overlay_dir: Path | None = None,
     ) -> None:
         self.layouts_dir = layouts_dir
+        self.overlay_dir = overlay_dir
         self.host = host
         self.port = port
         self.app = web.Application()
         self._setup_routes()
         self._sessions: set[Session] = set()
-        self.layouts: LayoutStore = load_layouts(layouts_dir)
+        self.layouts: LayoutStore = load_layouts(layouts_dir, overlay_dir)
         self._current_app_id: str = DEFAULT_APP_ID
         self._current_layout: Layout = self.layouts.default()
         self.scroll = scroll if scroll is not None else ScrollController()
@@ -143,7 +145,7 @@ class Server:
         return self._current_error
 
     def reload_layouts(self) -> None:
-        """Re-read every layout YAML in ``layouts_dir``.
+        """Re-read every layout YAML in ``layouts_dir`` (and overlay_dir).
 
         On success: rebuild the store, keep the current app_id if it still
         resolves, else fall back to default, and clear any prior error.
@@ -154,7 +156,7 @@ class Server:
         the grid. Callers should not have to catch anything.
         """
         try:
-            new_store = load_layouts(self.layouts_dir)
+            new_store = load_layouts(self.layouts_dir, self.overlay_dir)
         except SystemExit as exc:
             self._current_error = str(exc)
             log.error("layout reload failed (keeping last-good): %s", exc)
@@ -167,7 +169,11 @@ class Server:
             new_layout = self.layouts.default()
         self._current_layout = new_layout
         self._current_error = None
-        log.info("reloaded layouts from %s", self.layouts_dir)
+        log.info(
+            "reloaded layouts from %s%s",
+            self.layouts_dir,
+            f" + {self.overlay_dir}" if self.overlay_dir else "",
+        )
 
     async def _push_to_all(self) -> None:
         """Push the current layout to every live session.
@@ -193,14 +199,16 @@ class Server:
         The defining signal is the daemon's own port appearing in the
         focused window's title (the deckd client is served at that port,
         so browsers that surface the URL in the title reveal it). The
-        page-title fallback ("deckd") covers browsers whose window title
-        is only the page's ``<title>``.
+        page-title fallback is an exact match on the client's ``<title>``
+        (``"deckd"``), which avoids false positives on any tab whose
+        title merely contains "deckd" as a substring (e.g. a GitHub tab
+        for the deckd repo).
         """
-        title = app.title or ""
+        title = (app.title or "").strip()
         port = self.port
         if port and port > 0 and str(port) in title:
             return True
-        return "deckd" in title.lower()
+        return title.lower() == "deckd"
 
     async def _on_focus(self, app: "AppInfo") -> None:
         if self._is_deckd_window(app):
@@ -251,7 +259,7 @@ class Server:
 
     async def run_layouts_watcher(self) -> None:
         """Long-running task: reload layouts when a YAML file in the layouts
-        directory is created, edited, or removed.
+        directory (or its platform overlay) is created, edited, or removed.
 
         Layouts are user configuration, not just a dev-only artifact —
         watching them is on by default so a user can iterate on their YAML
@@ -264,8 +272,11 @@ class Server:
         except ImportError:
             log.warning("watchfiles not installed; layouts hot-reload disabled")
             return
+        watch_paths = [self.layouts_dir]
+        if self.overlay_dir is not None and self.overlay_dir.is_dir():
+            watch_paths.append(self.overlay_dir)
         yaml_suffixes = {".yaml", ".yml"}
-        async for changes in awatch(self.layouts_dir):
+        async for changes in awatch(*watch_paths):
             if not any(Path(p).suffix in yaml_suffixes for _, p in changes):
                 continue
             log.info("layouts dir changed -> reload")
