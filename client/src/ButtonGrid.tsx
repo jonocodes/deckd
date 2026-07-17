@@ -50,7 +50,7 @@ export function ButtonGrid({ widgets, onPress, onJog, onJogEnd }: Props) {
           if (!w) return <div key={`${x}-${y}`} className="cell cell-empty" />;
           const [gx, gy, gw, gh] = w.grid;
           const isOrigin = gx === x && gy === y;
-          if (!isOrigin) return <div key={`${x}-${y}`} className="cell cell-empty" />;
+          if (!isOrigin) return null;
           const style: CSSProperties = { gridColumn: `span ${gw}`, gridRow: `span ${gh}` };
           if (w.kind === "jogstrip") {
             return (
