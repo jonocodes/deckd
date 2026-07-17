@@ -38,7 +38,7 @@ widgets:
       key: "ctrl+t"
   - id: mpris-toggle
     kind: button
-    label: Play / Pause
+    label: VLC Play/Pause
     icon: media-play
     grid: [1, 1, 1, 1]
     action:
