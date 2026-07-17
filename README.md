@@ -6,12 +6,19 @@ See [`docs/INCEPTION.md`](docs/INCEPTION.md) for the full design.
 
 ## Status
 
-Pre-alpha. Spikes from §12 of the design doc are resolved:
+Pre-alpha, but the v1 milestone spine is landing. Both design-doc spikes are resolved and the T-series milestones through T8 are shipped:
 
 - **uinput scroll end-to-end** (spike #1) — *done*
 - **Focus watcher** (spike #2) — *done*
+- **T1** pytest suite + domain docs — *done*
+- **T2** keystroke injection — *done*
+- **T3** D-Bus action primitive — *done*
+- **T4** per-app layout switching from focus — *done*
+- **T5** dev UX (auto-ignore + `deckctl layout` override) — *done*
+- **T6** client chrome (bottom strip + persistent jogstrip) — *done*
+- **T8** trackpad mode (cursor + tap + drag-lock) — *done*
 
-What works today: a minimal daemon + web client that proves the wire protocol and config-driven action dispatch (`shell`, `terminal`, `key` stub, `page`) plus a hardcoded jogstrip that sends high-resolution scroll deltas via uinput. Active-window detection uses a GNOME Shell extension over session D-Bus; the daemon polls it at 100ms to track focus changes.
+What works today: focus a window on the desktop and the phone's browser flips to that app's layout automatically. Tap layout buttons to fire `shell`, `terminal`, `key`, or `dbus` actions. Drag the always-on right-side jogstrip to scroll the focused window through `REL_WHEEL_HI_RES`. Tap the chrome trackpad button and the phone becomes a mouse — drag to move the cursor, tap to click, two-finger tap to right-click, tap-and-a-half to drag. Edit any `layouts/*.yaml` file on the desktop and every connected client re-renders; a broken save shows an error diagnostic in place of the grid without killing the daemon.
 
 ```
                         ┌──────────┐
@@ -38,7 +45,7 @@ What works today: a minimal daemon + web client that proves the wire protocol an
                       uinput       shell     D-Bus
                      (evdev)     (subprocess)  gdbus
                           │                    │
-                     scroll deltas     ┌───────┴───────┐
+              scroll + keys + pointer  ┌───────┴───────┐
                           │           │                │
                      /dev/uinput   GNOME Shell     (X11 fallback
                                    Extension        xdotool —
@@ -56,7 +63,7 @@ scripts/smoke.py   End-to-end test that boots the daemon over WS, clicks every b
 docs/INCEPTION.md  Full design doc — source of truth for *what* and *why*
 ```
 
-## Running the spike
+## Running deckd
 
 You need Python 3.11+ and Node 18+. Dependencies are managed with [`uv`](https://docs.astral.sh/uv/):
 
@@ -79,7 +86,7 @@ just build-client
 just run-daemon
 ```
 
-Open `http://127.0.0.1:8765` in any browser. You should see the spike buttons plus a `Scroll` jogstrip. Drag or flick vertically on the jogstrip to emit `REL_WHEEL_HI_RES` deltas through uinput, or log-only deltas when uinput is unavailable.
+Open `http://127.0.0.1:8765` in any browser. You should see the active layout's buttons filling the main area, an always-on jogstrip pinned to the right edge, and a chrome bottom strip with the app name, a connection status dot, and a `trackpad` button. Drag or flick vertically on the right-side jogstrip to emit `REL_WHEEL_HI_RES` deltas through uinput (log-only when uinput is unavailable). Tap the `trackpad` button to swap the button grid for a full-area trackpad surface — see the [Trackpad mode](#trackpad-mode) section for the gesture list.
 
 ### Phone/tablet testing
 
@@ -94,6 +101,28 @@ hostname -I
 ```
 
 Open `http://<desktop-lan-ip>:8765` on the phone, for example `http://192.168.30.117:8765`. The client connects its WebSocket back to the same host automatically, so no separate `VITE_DECKD_WS` setting is needed for this built-client path.
+
+### Client chrome
+
+Every layout renders inside a persistent **chrome** shell that the daemon does not know about:
+
+- **Bottom strip** (always visible): the current app name (from `LayoutMessage.app`), a connection dot (live / reconnecting / disconnected), a `trackpad` button that swaps the main area for the trackpad view, and a `settings` placeholder (T13).
+- **Right-side jogstrip** (always visible): a full-height scroll strip that works the same as the in-grid `jogstrip` widget. A layout can suppress it with `jogstrip: false` at the YAML top level — the daemon forwards this as `jogstrip_enabled` on every `LayoutMessage`.
+
+Layout widget coordinates are relative to the chrome-excluded area; the client computes cell sizes from whatever space remains after the strips are subtracted.
+
+### Trackpad mode
+
+Tap the `trackpad` button in the bottom chrome and the layout area is replaced by a full-surface trackpad. All gesture recognition is client-side; the daemon receives high-level events over WebSocket and maps them to `REL_X` / `REL_Y` + `BTN_LEFT` / `BTN_RIGHT` events on the same uinput device that handles keys and scroll.
+
+| Gesture | Action |
+|---|---|
+| One-finger drag | Move the desktop cursor (relative motion, like a laptop trackpad) |
+| Quick tap (< 250ms, < 10px) | Left click |
+| Two-finger tap (both down, both up together) | Right click |
+| Tap-and-a-half (tap, then touch again within 400ms and drag) | Left button held during the drag; release on finger lift |
+
+Chrome stays visible in trackpad mode — the right-side jogstrip is still available for scrolling while you're pointing. Tap the `trackpad` button again to return to the app layout.
 
 ### Scroll tuning
 
@@ -237,21 +266,24 @@ deckctl layout default      # force the default layout
 
 ## Configuration
 
-A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Each widget has an `id`, `kind` (`button`, `jogstrip`; `trackpad` is declared in the schema but unsupported in the spike), a `grid: [x, y, w, h]` placement, and an optional `action`. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. A layout may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `LayoutMessage`. Action primitives:
+A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Shipped layouts today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), a `grid: [x, y, w, h]` placement, and an optional `action`. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. A layout may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `LayoutMessage`. Action primitives:
 
 - `shell: "..."` — run a subprocess (fire-and-forget; stdout/stderr discarded).
+- `terminal: true` or `terminal: "foot"` — launch a terminal emulator. `true` resolves via `$TERMINAL` then a candidate list (`foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`); a string names a specific one.
 - `key: "ctrl+t"` — fire the keystroke through uinput as a single combo.
 - `dbus: "service:path org.Interface.Method arg1 arg2"` — call a D-Bus method via `dbus-fast`. The bus is inferred from the interface name (`org.freedesktop.login1.*`, `systemd1.*`, `timedate1.*`, `locale1.*`, etc. → system bus; everything else → session bus). Errors are logged, not surfaced to the client. With the `service:path` prefix omitted, the daemon derives them from the first two / three segments of the interface name.
-- `page: "<name>"` — switch the client to another page in the same layout.
 
-## What the spikes prove
+## What works today
 
-- WebSocket wire protocol in both directions (layout push, `press`, `jog`, and `jog_end` events).
-- YAML config → Pydantic → `Widget` graph → action dispatch.
-- Jogstrip scroll plumbing from browser pointer movement to daemon-side uinput, including release momentum.
-- Active-window detection via GNOME Shell extension + session D-Bus (`app_id`, `wm_class`, `title`, `pid`).
-- Reconnecting client (`useDeckdSocket` exponential backoff).
-- Build output is plain static files — `client/dist/` — served by the daemon.
+- **Wire protocol** in both directions: `LayoutMessage` (with `jogstrip_enabled` + optional `error`) and `press` / `jog` / `jog_end` / `pad` / `pad_tap` / `pad_drag` events.
+- **YAML config → Pydantic → `Widget` graph → action dispatch** for `shell`, `terminal`, `key`, `dbus` primitives.
+- **Jogstrip** scroll plumbing from browser pointer movement to daemon-side uinput, including release momentum.
+- **Trackpad mode**: `REL_X` / `REL_Y` motion plus `BTN_LEFT` / `BTN_RIGHT` / `BTN_MIDDLE` on the same uinput device, with client-side gesture recognition (tap / two-finger tap / tap-and-a-half drag lock).
+- **Active-window detection** via GNOME Shell extension + session D-Bus (`app_id`, `wm_class`, `title`, `pid`).
+- **Persistent client chrome** — bottom strip (app name + connection dot + trackpad button) and right-side jogstrip — layered above every layout with zero daemon involvement.
+- **Layout hot-reload** — the daemon watches `layouts/*.yaml` and re-pushes on any edit; bad YAML surfaces as a diagnostic on the client without crashing the daemon.
+- **Reconnecting client** (`useDeckdSocket` exponential backoff).
+- **Build output** is plain static files — `client/dist/` — served by the daemon.
 
 ## Why a venv, not a Nix shell?
 
