@@ -40,13 +40,6 @@ class KeySink(Protocol):
         """Release any OS resources held by the sink."""
 
 
-MOUSE_BUTTON_CODES: dict[str, int] = {
-    "left": 0x110,   # BTN_LEFT
-    "right": 0x111,  # BTN_RIGHT
-    "middle": 0x112, # BTN_MIDDLE
-}
-
-
 # ---------------------------------------------------------------------------
 # Key name → Linux input event code (evdev keycodes)
 # ---------------------------------------------------------------------------
@@ -187,6 +180,11 @@ class UinputSink:
                 return None
 
         self._ecodes = ecodes
+        self._mouse_buttons: dict[str, int] = {
+            "left": ecodes.BTN_LEFT,
+            "right": ecodes.BTN_RIGHT,
+            "middle": ecodes.BTN_MIDDLE,
+        }
         capabilities: dict[int, Sequence[int]] = {
             ecodes.EV_REL: [
                 ecodes.REL_WHEEL,
@@ -195,7 +193,7 @@ class UinputSink:
                 ecodes.REL_Y,
             ],
             ecodes.EV_KEY: (
-                ALL_REGISTERED_KEYCODES + list(MOUSE_BUTTON_CODES.values())
+                ALL_REGISTERED_KEYCODES + list(self._mouse_buttons.values())
             ),
         }
         self._device = WriteOnlyUInput(capabilities, name="deckd")
@@ -243,7 +241,7 @@ class UinputSink:
         log.debug("[pointer] dx=%s dy=%s", dx, dy)
 
     def emit_click(self, button: str, pressed: bool) -> None:
-        code = MOUSE_BUTTON_CODES.get(button)
+        code = self._mouse_buttons.get(button)
         if code is None:
             log.warning("[click] unknown button %r", button)
             return

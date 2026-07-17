@@ -120,7 +120,9 @@ export function Trackpad({ onPad, onTap, onDrag }: Props) {
           e.timeStamp - p.startT < TAP_MAX_MS && !p.moved;
 
         if (pointers.current.size === 0) {
-          if (isTap && maxFingers.current >= 2) {
+          // Exactly two: right-click. Three-or-more is a stray fifth-finger
+          // touch during a gesture and should not fire anything.
+          if (isTap && maxFingers.current === 2) {
             onTap(2);
           } else if (isTap && maxFingers.current === 1) {
             onTap(1);
@@ -138,7 +140,12 @@ export function Trackpad({ onPad, onTap, onDrag }: Props) {
           dragPointerId.current = null;
           onDrag("end");
         }
-        if (pointers.current.size === 0) resetGesture();
+        if (pointers.current.size === 0) {
+          // Cancel invalidates any pending tap-and-a-half promotion so a
+          // subsequent touch doesn't accidentally drag-lock.
+          lastTapAt.current = 0;
+          resetGesture();
+        }
       }}
     >
       <span className="trackpad-hint">trackpad</span>
