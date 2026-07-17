@@ -165,18 +165,23 @@ Tap the `trackpad` button in the bottom chrome and the layout area is replaced b
 
 Chrome stays visible in trackpad mode — the right-side jogstrip is still available for scrolling while you're pointing. Tap the `trackpad` button again to return to the app layout.
 
-### Scroll tuning
+### Client tuning
 
-Tap the `settings` button in the bottom chrome to reveal a **Scroll** panel with a stepper for scale (1–10, default 3) and an invert toggle. Values persist per-device to `localStorage` — closing and reopening the client keeps your tuning. The persistent right-side jogstrip stays live inside the settings view so you can feel each change immediately.
+Tap the `settings` button in the bottom chrome for a control panel:
+
+- **Scroll scale** (slider, integer 1–10, default 3) — high-resolution wheel units per CSS pixel.
+- **Scroll invert** (toggle) — flip vertical scroll direction.
+- **Trackpad sensitivity** (slider, float 0.5×–3.0×, default 1.0×) — multiplier applied to raw pointer deltas before they're sent to the daemon.
+
+Values persist per-device to `localStorage` — closing and reopening the client keeps your tuning. The persistent right-side jogstrip stays live inside the settings view so you can feel scale/invert changes immediately.
 
 URL query params still work as a one-shot dev override (won't touch `localStorage`):
 
 ```text
 http://<host>:5173/?scrollScale=2
 http://<host>:5173/?scrollScale=4&scrollInvert=1
+http://<host>:5173/?padSensitivity=1.5
 ```
-
-`scrollScale` is high-resolution wheel units per CSS pixel. `scrollInvert=1` flips the direction.
 
 Daemon-side flick momentum can be tuned with CLI flags:
 

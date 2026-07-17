@@ -324,7 +324,7 @@ button {
 
 .settings-control {
   display: grid;
-  grid-template-columns: minmax(80px, 20%) auto 1fr;
+  grid-template-columns: minmax(100px, 25%) 1fr auto;
   align-items: center;
   gap: 12px;
 }
@@ -335,56 +335,48 @@ button {
   letter-spacing: 0.04em;
 }
 
-.settings-control-hint {
-  font-size: 11px;
-  color: #6b7785;
-  letter-spacing: 0.02em;
-}
-
-.stepper {
-  display: inline-flex;
-  align-items: stretch;
-  border: 1px solid #2a333d;
-  border-radius: 10px;
-  overflow: hidden;
-  background: #1b222a;
-  touch-action: manipulation;
-}
-
-.stepper-btn {
-  width: 40px;
-  height: 34px;
-  font-size: 20px;
-  font-weight: 600;
-  color: #e6e9ef;
-  background: transparent;
-  border: 0;
-  cursor: pointer;
-  transition: background 80ms ease, transform 80ms ease;
-}
-.stepper-btn:active {
-  transform: scale(0.94);
-  background: #2a333d;
-}
-.stepper-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.stepper-value {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 44px;
-  padding: 0 8px;
+.settings-control-value {
+  min-width: 48px;
+  text-align: right;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 700;
   color: #7dd3fc;
-  border-left: 1px solid #2a333d;
-  border-right: 1px solid #2a333d;
-  background: #11161b;
 }
+
+.slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #14364a, #2a333d);
+  outline: none;
+  touch-action: pan-x;
+  cursor: pointer;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #7dd3fc;
+  border: 2px solid #101418;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  cursor: grab;
+}
+.slider::-webkit-slider-thumb:active { cursor: grabbing; }
+.slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #7dd3fc;
+  border: 2px solid #101418;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  cursor: grab;
+}
+.slider::-moz-range-thumb:active { cursor: grabbing; }
 
 .toggle {
   position: relative;

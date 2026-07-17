@@ -4,7 +4,7 @@ import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
 import { Trackpad } from "./Trackpad";
 import { Settings } from "./Settings";
-import { useScrollSettings } from "./settings-store";
+import { useScrollSettings, useTrackpadSettings } from "./settings-store";
 import type { JogHandle } from "./JogStrip";
 import type { ServerLayout } from "./protocol";
 
@@ -31,6 +31,7 @@ export function App() {
   const onLayout = useCallback((m: ServerLayout) => setLayout(m), []);
   const { status, send } = useDeckdSocket(onLayout);
   const scroll = useScrollSettings();
+  const trackpad = useTrackpadSettings();
 
   const press = (id: string) => send({ type: "press", id });
   const jog = (id: string, delta: number) => send({ type: "jog", id, delta });
@@ -48,7 +49,12 @@ export function App() {
       <div className="chrome-page">
         <main className="surface">
           {view === "trackpad" ? (
-            <Trackpad onPad={pad} onTap={padTap} onDrag={padDrag} />
+            <Trackpad
+              onPad={pad}
+              onTap={padTap}
+              onDrag={padDrag}
+              sensitivity={trackpad.sensitivity}
+            />
           ) : view === "settings" ? (
             <Settings
               layout={layout}
@@ -57,6 +63,8 @@ export function App() {
               scrollInvert={scroll.invert}
               onScrollScaleChange={scroll.setScale}
               onScrollInvertChange={scroll.setInvert}
+              trackpadSensitivity={trackpad.sensitivity}
+              onTrackpadSensitivityChange={trackpad.setSensitivity}
             />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">

@@ -4,6 +4,9 @@ type Props = {
   onPad: (dx: number, dy: number) => void;
   onTap: (fingers: number) => void;
   onDrag: (state: "start" | "end") => void;
+  /** Multiplier applied to raw pointer deltas before they're accumulated
+   * and sent to the daemon. 1.0 is raw (1 CSS pixel = 1 uinput unit). */
+  sensitivity: number;
 };
 
 const TAP_MAX_MS = 250;
@@ -32,7 +35,11 @@ type PointerState = {
  * path (see INCEPTION.md §5.2). Pointer capture is set per-pointer so a
  * finger sliding off the trackpad still reports moves.
  */
-export function Trackpad({ onPad, onTap, onDrag }: Props) {
+export function Trackpad({ onPad, onTap, onDrag, sensitivity }: Props) {
+  // Snapshot into a ref so mid-gesture setting changes take effect on the
+  // next pointermove without stale-closure risk (same pattern as JogStrip).
+  const sensRef = useRef(sensitivity);
+  sensRef.current = sensitivity;
   const pointers = useRef<Map<number, PointerState>>(new Map());
   const maxFingers = useRef(0);
   const lastTapAt = useRef(0);
@@ -116,8 +123,8 @@ export function Trackpad({ onPad, onTap, onDrag }: Props) {
             ? e.pointerId === dragPointerId.current
             : pointers.current.size === 1;
         if (routeMove) {
-          pendingDx.current += dx;
-          pendingDy.current += dy;
+          pendingDx.current += dx * sensRef.current;
+          pendingDy.current += dy * sensRef.current;
           flushPad();
         }
       }}

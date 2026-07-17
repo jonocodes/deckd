@@ -14,14 +14,32 @@ import { useCallback, useState } from "react";
 
 const SCALE_KEY = "deckd.scrollScale";
 const INVERT_KEY = "deckd.scrollInvert";
+const PAD_SENS_KEY = "deckd.trackpadSensitivity";
 
 export const SCROLL_SCALE_MIN = 1;
 export const SCROLL_SCALE_MAX = 10;
 export const SCROLL_SCALE_DEFAULT = 3;
 
+// Trackpad sensitivity is a floating multiplier: 1.0 = raw (1 CSS pixel of
+// finger travel = 1 uinput REL_X/Y unit), 0.5 = slower, 3.0 = fast. Range
+// is set for phone-thumb-in-hand comfort — feet-away media-room use might
+// want higher, we'll widen if someone asks.
+export const PAD_SENS_MIN = 0.5;
+export const PAD_SENS_MAX = 3.0;
+export const PAD_SENS_STEP = 0.1;
+export const PAD_SENS_DEFAULT = 1.0;
+
 export function clampScale(n: number): number {
   if (!Number.isFinite(n)) return SCROLL_SCALE_DEFAULT;
   return Math.max(SCROLL_SCALE_MIN, Math.min(SCROLL_SCALE_MAX, Math.round(n)));
+}
+
+export function clampPadSensitivity(n: number): number {
+  if (!Number.isFinite(n)) return PAD_SENS_DEFAULT;
+  const clamped = Math.max(PAD_SENS_MIN, Math.min(PAD_SENS_MAX, n));
+  // Round to the slider step so the persisted value stays representable
+  // when the user tunes with the discrete slider stops.
+  return Math.round(clamped / PAD_SENS_STEP) * PAD_SENS_STEP;
 }
 
 function readBoolQuery(name: string): boolean | null {
@@ -55,6 +73,18 @@ function readInitialInvert(): boolean {
   return false;
 }
 
+function readInitialPadSensitivity(): number {
+  try {
+    const url = new URLSearchParams(window.location.search).get("padSensitivity");
+    if (url !== null) return clampPadSensitivity(Number(url));
+    const stored = localStorage.getItem(PAD_SENS_KEY);
+    if (stored !== null) return clampPadSensitivity(Number(stored));
+  } catch {
+    // see readInitialScale.
+  }
+  return PAD_SENS_DEFAULT;
+}
+
 function safeSet(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
@@ -66,7 +96,7 @@ function safeSet(key: string, value: string): void {
 
 /** Scroll tuning shared between the JogStrip widgets and the Settings
  * view. State lives in this hook so a single source of truth drives both
- * the live behaviour and the stepper UI. */
+ * the live behaviour and the slider UI. */
 export function useScrollSettings() {
   const [scale, setScaleState] = useState<number>(readInitialScale);
   const [invert, setInvertState] = useState<boolean>(readInitialInvert);
@@ -83,4 +113,18 @@ export function useScrollSettings() {
   }, []);
 
   return { scale, invert, setScale, setInvert };
+}
+
+/** Trackpad sensitivity for the pointer-move path. Same URL / localStorage
+ * / default read precedence as the scroll settings. */
+export function useTrackpadSettings() {
+  const [sensitivity, setSensitivityState] = useState<number>(readInitialPadSensitivity);
+
+  const setSensitivity = useCallback((n: number) => {
+    const clamped = clampPadSensitivity(n);
+    setSensitivityState(clamped);
+    safeSet(PAD_SENS_KEY, String(clamped));
+  }, []);
+
+  return { sensitivity, setSensitivity };
 }

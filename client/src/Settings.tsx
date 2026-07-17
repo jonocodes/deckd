@@ -1,6 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useOrientation } from "./orientation";
-import { SCROLL_SCALE_MAX, SCROLL_SCALE_MIN } from "./settings-store";
+import {
+  PAD_SENS_MAX,
+  PAD_SENS_MIN,
+  PAD_SENS_STEP,
+  SCROLL_SCALE_MAX,
+  SCROLL_SCALE_MIN,
+} from "./settings-store";
 import type { ServerLayout } from "./protocol";
 
 type SocketStatus = "connecting" | "open" | "closed";
@@ -12,6 +18,8 @@ type Props = {
   scrollInvert: boolean;
   onScrollScaleChange: (n: number) => void;
   onScrollInvertChange: (v: boolean) => void;
+  trackpadSensitivity: number;
+  onTrackpadSensitivityChange: (n: number) => void;
 };
 
 type Health = {
@@ -30,6 +38,8 @@ export function Settings({
   scrollInvert,
   onScrollScaleChange,
   onScrollInvertChange,
+  trackpadSensitivity,
+  onTrackpadSensitivityChange,
 }: Props) {
   const orientation = useOrientation();
   const standalone = useStandaloneMode();
@@ -61,28 +71,19 @@ export function Settings({
       <div className="settings-controls">
         <div className="settings-control">
           <span className="settings-control-label">Scale</span>
-          <div className="stepper" role="group" aria-label="Scroll scale">
-            <button
-              type="button"
-              className="stepper-btn"
-              aria-label="Decrease scroll scale"
-              disabled={scrollScale <= SCROLL_SCALE_MIN}
-              onClick={() => onScrollScaleChange(scrollScale - 1)}
-            >
-              −
-            </button>
-            <span className="stepper-value" aria-live="polite">{scrollScale}</span>
-            <button
-              type="button"
-              className="stepper-btn"
-              aria-label="Increase scroll scale"
-              disabled={scrollScale >= SCROLL_SCALE_MAX}
-              onClick={() => onScrollScaleChange(scrollScale + 1)}
-            >
-              +
-            </button>
-          </div>
-          <span className="settings-control-hint">wheel units per pixel</span>
+          <input
+            type="range"
+            className="slider"
+            aria-label="Scroll scale"
+            min={SCROLL_SCALE_MIN}
+            max={SCROLL_SCALE_MAX}
+            step={1}
+            value={scrollScale}
+            onChange={(e) => onScrollScaleChange(Number(e.target.value))}
+          />
+          <span className="settings-control-value" aria-live="polite">
+            {scrollScale}
+          </span>
         </div>
         <div className="settings-control">
           <span className="settings-control-label">Invert</span>
@@ -96,8 +97,28 @@ export function Settings({
             <span className="toggle-track" />
             <span className="toggle-thumb" />
           </button>
-          <span className="settings-control-hint">
-            {scrollInvert ? "reversed" : "default"}
+          <span className="settings-control-value">
+            {scrollInvert ? "on" : "off"}
+          </span>
+        </div>
+      </div>
+
+      <h2 className="settings-title settings-title-sub">Trackpad</h2>
+      <div className="settings-controls">
+        <div className="settings-control">
+          <span className="settings-control-label">Sensitivity</span>
+          <input
+            type="range"
+            className="slider"
+            aria-label="Trackpad sensitivity"
+            min={PAD_SENS_MIN}
+            max={PAD_SENS_MAX}
+            step={PAD_SENS_STEP}
+            value={trackpadSensitivity}
+            onChange={(e) => onTrackpadSensitivityChange(Number(e.target.value))}
+          />
+          <span className="settings-control-value" aria-live="polite">
+            {trackpadSensitivity.toFixed(1)}×
           </span>
         </div>
       </div>
