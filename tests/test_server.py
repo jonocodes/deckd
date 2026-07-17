@@ -76,12 +76,51 @@ async def test_press_shell(srv: ServerHandle) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_press_terminal_auto(srv: ServerHandle) -> None:
-    async with ws_connected(srv) as (ws, _):
-        await ws.send(json.dumps({"type": "press", "id": "open-terminal"}))
-        await asyncio.sleep(SIDE_EFFECT_WAIT)
+async def test_press_terminal_auto(monkeypatch, tmp_path: Path) -> None:
+    """``terminal: true`` dispatches to the terminal action (auto-detect)."""
+    import deckd.actions as actions_mod
+    from aiohttp.test_utils import TestServer
+    from conftest import make_test_server
 
-    assert any(kind == "terminal" for kind, _ in srv.called)
+    called: list[tuple[str, str]] = []
+
+    async def fake_shell(cmd: str) -> None:
+        called.append(("shell", cmd))
+
+    async def fake_terminal(target: bool | str = True) -> None:
+        called.append(("terminal", str(target)))
+
+    monkeypatch.setattr(actions_mod, "_run_shell", fake_shell)
+    monkeypatch.setattr(actions_mod, "run_terminal", fake_terminal)
+
+    (tmp_path / "default.yaml").write_text(
+        """
+match:
+  - default
+widgets:
+  - id: open-terminal
+    kind: button
+    label: Open terminal
+    grid: [0, 0, 1, 1]
+    action:
+      terminal: true
+"""
+    )
+
+    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
+    ts = TestServer(server.app, host="127.0.0.1")
+    await ts.start_server()
+    port = ts.port or 0
+    try:
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            await asyncio.wait_for(ws.recv(), timeout=2)  # initial layout
+            await ws.send(json.dumps({"type": "press", "id": "open-terminal"}))
+            await asyncio.sleep(SIDE_EFFECT_WAIT)
+    finally:
+        await ts.close()
+        await server.scroll.close()
+
+    assert any(kind == "terminal" for kind, _ in called)
 
 
 async def test_press_terminal_explicit(srv: ServerHandle) -> None:
@@ -146,7 +185,7 @@ async def test_press_key(srv: ServerHandle) -> None:
 
 async def test_press_dbus(srv: ServerHandle) -> None:
     async with ws_connected(srv) as (ws, _):
-        await ws.send(json.dumps({"type": "press", "id": "mpris-toggle"}))
+        await ws.send(json.dumps({"type": "press", "id": "audio-toggle"}))
         await asyncio.sleep(SIDE_EFFECT_WAIT)
 
     assert len(srv.dbus_calls) == 1
