@@ -30,3 +30,10 @@ widgets:
     grid: [3, 0, 1, 1]
     action:
       key: "ctrl+tab"
+  - id: close-terminal
+    kind: button
+    label: Close term
+    icon: close
+    grid: [0, 1, 1, 1]
+    action:
+      key: "ctrl+shift+w"
