@@ -20,6 +20,8 @@ type Props = {
   onScrollInvertChange: (v: boolean) => void;
   trackpadSensitivity: number;
   onTrackpadSensitivityChange: (n: number) => void;
+  wakeLockEnabled: boolean;
+  onWakeLockChange: (v: boolean) => void;
 };
 
 type Health = {
@@ -40,6 +42,8 @@ export function Settings({
   onScrollInvertChange,
   trackpadSensitivity,
   onTrackpadSensitivityChange,
+  wakeLockEnabled,
+  onWakeLockChange,
 }: Props) {
   const orientation = useOrientation();
   const standalone = useStandaloneMode();
@@ -62,6 +66,7 @@ export function Settings({
     ["WebSocket URL", currentWsUrl()],
     ["Origin", window.location.origin],
     ["Secure context", String(window.isSecureContext)],
+    ["Wake lock supported", "wakeLock" in navigator ? "yes" : "no"],
     ["User agent", navigator.userAgent],
   ];
 
@@ -119,6 +124,26 @@ export function Settings({
           />
           <span className="settings-control-value" aria-live="polite">
             {trackpadSensitivity.toFixed(1)}×
+          </span>
+        </div>
+      </div>
+
+      <h2 className="settings-title settings-title-sub">Display</h2>
+      <div className="settings-controls">
+        <div className="settings-control">
+          <span className="settings-control-label">Keep screen awake</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={wakeLockEnabled}
+            className={`toggle${wakeLockEnabled ? " toggle-on" : ""}`}
+            onClick={() => onWakeLockChange(!wakeLockEnabled)}
+          >
+            <span className="toggle-track" />
+            <span className="toggle-thumb" />
+          </button>
+          <span className="settings-control-value">
+            {wakeLockEnabled ? "on" : "off"}
           </span>
         </div>
       </div>

@@ -4,7 +4,12 @@ import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
 import { Trackpad } from "./Trackpad";
 import { Settings } from "./Settings";
-import { useScrollSettings, useTrackpadSettings } from "./settings-store";
+import {
+  useScrollSettings,
+  useTrackpadSettings,
+  useWakeLockSetting,
+} from "./settings-store";
+import { useWakeLock } from "./wake-lock";
 import type { JogHandle } from "./JogStrip";
 import type { ServerLayout } from "./protocol";
 
@@ -32,6 +37,11 @@ export function App() {
   const { status, send } = useDeckdSocket(onLayout);
   const scroll = useScrollSettings();
   const trackpad = useTrackpadSettings();
+  const wakeLock = useWakeLockSetting();
+  // Hold the wake lock while the user wants it AND the socket is live;
+  // a stale surface with no daemon behind it has no reason to keep the
+  // screen on. Visibility is handled inside the hook.
+  useWakeLock(wakeLock.enabled && status === "open");
 
   const press = (id: string) => send({ type: "press", id });
   const jog = (id: string, delta: number) => send({ type: "jog", id, delta });
@@ -65,6 +75,8 @@ export function App() {
               onScrollInvertChange={scroll.setInvert}
               trackpadSensitivity={trackpad.sensitivity}
               onTrackpadSensitivityChange={trackpad.setSensitivity}
+              wakeLockEnabled={wakeLock.enabled}
+              onWakeLockChange={wakeLock.setEnabled}
             />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">

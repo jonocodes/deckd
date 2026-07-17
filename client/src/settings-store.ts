@@ -15,6 +15,9 @@ import { useCallback, useState } from "react";
 const SCALE_KEY = "deckd.scrollScale";
 const INVERT_KEY = "deckd.scrollInvert";
 const PAD_SENS_KEY = "deckd.trackpadSensitivity";
+const WAKE_LOCK_KEY = "deckd.wakeLock";
+
+export const WAKE_LOCK_DEFAULT = true;
 
 export const SCROLL_SCALE_MIN = 1;
 export const SCROLL_SCALE_MAX = 10;
@@ -85,6 +88,18 @@ function readInitialPadSensitivity(): number {
   return PAD_SENS_DEFAULT;
 }
 
+function readInitialWakeLock(): boolean {
+  try {
+    const fromUrl = readBoolQuery("wakeLock");
+    if (fromUrl !== null) return fromUrl;
+    const stored = localStorage.getItem(WAKE_LOCK_KEY);
+    if (stored !== null) return stored === "true";
+  } catch {
+    // see readInitialScale.
+  }
+  return WAKE_LOCK_DEFAULT;
+}
+
 function safeSet(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
@@ -127,4 +142,18 @@ export function useTrackpadSettings() {
   }, []);
 
   return { sensitivity, setSensitivity };
+}
+
+/** User preference for the Screen Wake Lock. Defaults to true (spec:
+ * acquire unconditionally); the toggle in the settings view lets a user
+ * opt out if their device battery policy prefers it. */
+export function useWakeLockSetting() {
+  const [enabled, setEnabledState] = useState<boolean>(readInitialWakeLock);
+
+  const setEnabled = useCallback((v: boolean) => {
+    setEnabledState(v);
+    safeSet(WAKE_LOCK_KEY, String(v));
+  }, []);
+
+  return { enabled, setEnabled };
 }
