@@ -264,3 +264,41 @@ button {
   height: 100%;
   color: #6b7785;
 }
+
+/* ---------------------------------------------------------------------------
+ * Layout error state: shown in place of the grid when the daemon fails to
+ * load layouts (bad YAML, schema violation). Restored automatically on the
+ * next successful reload.
+ * ------------------------------------------------------------------------- */
+
+.layout-error {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  padding: 20px;
+  border: 2px solid #f87171;
+  border-radius: 16px;
+  background: #1a1113;
+  color: #fca5a5;
+  overflow: auto;
+}
+
+.layout-error-title {
+  font-size: clamp(16px, 3vw, 22px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f87171;
+}
+
+.layout-error-body {
+  margin: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: clamp(11px, 1.8vw, 14px);
+  line-height: 1.4;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: #fecaca;
+}

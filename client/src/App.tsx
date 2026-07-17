@@ -42,6 +42,11 @@ export function App() {
             <div className="trackpad-placeholder">
               <span className="trackpad-hint">trackpad</span>
             </div>
+          ) : layout?.error ? (
+            <div className="layout-error" role="alert">
+              <span className="layout-error-title">Layout error</span>
+              <pre className="layout-error-body">{layout.error}</pre>
+            </div>
           ) : layout ? (
             <ButtonGrid widgets={layout.widgets} onPress={press} onJog={jog} onJogEnd={jogEnd} />
           ) : (

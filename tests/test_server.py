@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import AsyncIterator
 
 import aiohttp
@@ -318,3 +319,170 @@ widgets:
         await server.scroll.close()
 
     assert layout["jogstrip_enabled"] is True
+
+
+# ---------------------------------------------------------------------------
+# Layouts hot-reload: watcher + error-tolerant reload.
+#
+# Layouts are user configuration, so the daemon watches ``layouts/*.y[a]ml``
+# and reloads on change. A parse/schema error keeps the last-good layouts
+# live but pushes a ``LayoutMessage`` with ``error`` set so the client can
+# render a diagnostic in place of the widget grid.
+# ---------------------------------------------------------------------------
+
+
+VALID_DEFAULT = """
+match:
+  - default
+widgets:
+  - id: home
+    kind: button
+    label: Home
+    grid: [0, 0, 1, 1]
+"""
+
+VALID_DEFAULT_V2 = """
+match:
+  - default
+widgets:
+  - id: home-v2
+    kind: button
+    label: Home v2
+    grid: [0, 0, 1, 1]
+"""
+
+INVALID_YAML = """
+match:
+  - default
+widgets:
+  - id: broken
+    kind: button
+    grid: [0, 0, 1, 1]
+    action:
+      key: 42  # wrong type; schema says str
+      unknown_field: nope
+"""
+
+
+@asynccontextmanager
+async def _serve(monkeypatch, tmp_path: Path) -> AsyncIterator[tuple[int, "Server"]]:
+    """Boot a server against ``tmp_path`` with the layout watcher running."""
+    import deckd.actions as actions_mod
+    from aiohttp.test_utils import TestServer
+    from conftest import make_test_server
+
+    async def _fake_shell(cmd: str) -> None:
+        return None
+
+    monkeypatch.setattr(actions_mod, "_run_shell", _fake_shell)
+
+    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
+    server.start_layouts_watcher()
+    ts = TestServer(server.app, host="127.0.0.1")
+    await ts.start_server()
+    try:
+        yield ts.port or 0, server
+    finally:
+        await server.stop()
+        await ts.close()
+
+
+async def _next_layout(ws, timeout: float = 3.0) -> dict:
+    return json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
+
+
+async def test_reload_with_bad_yaml_keeps_daemon_alive_and_pushes_error(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """POST /reload with broken YAML must not raise; error travels on the WS."""
+    (tmp_path / "default.yaml").write_text(VALID_DEFAULT)
+
+    async with _serve(monkeypatch, tmp_path) as (port, _server):
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            initial = await _next_layout(ws)
+            assert initial["widgets"][0]["id"] == "home"
+            assert initial.get("error") in (None, "")
+
+            (tmp_path / "default.yaml").write_text(INVALID_YAML)
+
+            async with aiohttp.ClientSession() as http:
+                async with http.post(f"http://127.0.0.1:{port}/reload") as r:
+                    body = await r.json()
+                    # 400 signals bad config; daemon is still up.
+                    assert r.status == 400
+                    assert body["ok"] is False
+                    assert "error" in body
+
+            pushed = await _next_layout(ws)
+            assert pushed["type"] == "layout"
+            assert pushed["error"]
+            assert pushed["widgets"] == []
+
+
+async def test_reload_after_fixing_yaml_clears_error(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Once the YAML is valid again, the next reload restores the grid."""
+    (tmp_path / "default.yaml").write_text(VALID_DEFAULT)
+
+    async with _serve(monkeypatch, tmp_path) as (port, _server):
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            await _next_layout(ws)  # initial
+
+            (tmp_path / "default.yaml").write_text(INVALID_YAML)
+            async with aiohttp.ClientSession() as http:
+                async with http.post(f"http://127.0.0.1:{port}/reload") as r:
+                    assert r.status == 400
+            broken = await _next_layout(ws)
+            assert broken["error"]
+
+            (tmp_path / "default.yaml").write_text(VALID_DEFAULT_V2)
+            async with aiohttp.ClientSession() as http:
+                async with http.post(f"http://127.0.0.1:{port}/reload") as r:
+                    assert r.status == 200
+
+            fixed = await _next_layout(ws)
+            assert fixed.get("error") in (None, "")
+            assert fixed["widgets"][0]["id"] == "home-v2"
+
+
+async def test_layouts_watcher_reloads_on_yaml_edit(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """Editing a YAML file in the layouts dir triggers an auto-push."""
+    (tmp_path / "default.yaml").write_text(VALID_DEFAULT)
+
+    async with _serve(monkeypatch, tmp_path) as (port, _server):
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            initial = await _next_layout(ws)
+            assert initial["widgets"][0]["id"] == "home"
+
+            (tmp_path / "default.yaml").write_text(VALID_DEFAULT_V2)
+
+            # The watcher polls; give it real time to react before failing.
+            pushed = await _next_layout(ws, timeout=5.0)
+            assert pushed["type"] == "layout"
+            assert pushed.get("error") in (None, "")
+            assert pushed["widgets"][0]["id"] == "home-v2"
+
+
+async def test_layouts_watcher_bad_edit_pushes_error_not_crash(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A broken save on disk pushes the error state; daemon keeps serving."""
+    (tmp_path / "default.yaml").write_text(VALID_DEFAULT)
+
+    async with _serve(monkeypatch, tmp_path) as (port, _server):
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            await _next_layout(ws)  # initial
+
+            (tmp_path / "default.yaml").write_text(INVALID_YAML)
+            pushed = await _next_layout(ws, timeout=5.0)
+            assert pushed["error"]
+            assert pushed["widgets"] == []
+
+            # Fixing the file drives the client back to a good grid.
+            (tmp_path / "default.yaml").write_text(VALID_DEFAULT_V2)
+            recovered = await _next_layout(ws, timeout=5.0)
+            assert recovered.get("error") in (None, "")
+            assert recovered["widgets"][0]["id"] == "home-v2"

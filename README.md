@@ -157,26 +157,17 @@ On NixOS, import `packaging/nixos/deckd-spike.nix` and enable the spike service:
 
 Run `just setup` and `just build-client` in the checkout before starting the user service.
 
-### Dev mode (Vite HMR)
+### Live reload
 
-Two terminals:
+Layout YAML is watched by the daemon itself — any edit under `layouts/` is picked up automatically and pushed to every connected client. No manual `deckctl reload` needed. A broken save (bad YAML, schema violation) is trapped: the daemon keeps the last-good layouts live and sends a `LayoutMessage` with `error: "<parse error>"` so the client shows a diagnostic in place of the grid until the next successful save.
 
-```sh
-# Terminal 1: daemon (no --client-dist; vite handles the UI)
-just run-daemon-dev
-
-# Terminal 2: vite dev server, proxies /ws to the daemon
-just dev-client
-# open http://127.0.0.1:5173
-```
-
-For phone/tablet testing with Vite HMR, both the daemon and Vite need LAN bindings:
+Python changes need a daemon restart. `just dev-daemon` runs a supervisor that watches `daemon/**/*.py` and restarts the child on save:
 
 ```sh
 # Terminal 1
-just run-daemon-dev-lan
+just dev-daemon           # daemon under a Python-file-restart supervisor
 
-# Terminal 2
+# Terminal 2 (LAN so a phone can hit it)
 just dev-client-lan
 ```
 

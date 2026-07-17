@@ -12,6 +12,10 @@ class LayoutMessage(BaseModel):
     app: str = "default"
     widgets: list[dict]
     jogstrip_enabled: bool = True
+    # Non-null when the on-disk layouts failed to load. The client renders the
+    # message in place of the widget grid; the daemon keeps the last-good
+    # layouts live so a fix on disk restores service without a restart.
+    error: str | None = None
 
 
 class StateMessage(BaseModel):

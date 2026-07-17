@@ -8,6 +8,7 @@ dependencies = [
     "pyyaml>=6.0",
     "pydantic>=2.6",
     "dbus-fast>=5",
+    "watchfiles>=1.0",
 ]
 
 [project.optional-dependencies]
@@ -18,7 +19,6 @@ dev = [
     "websockets>=13",
     "pytest>=8",
     "pytest-asyncio>=0.23",
-    "watchfiles>=1.0",
 ]
 
 [project.scripts]

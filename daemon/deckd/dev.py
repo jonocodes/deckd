@@ -1,9 +1,10 @@
-"""Dev supervisor: runs the daemon as a child and auto-reloads/restarts on edits.
+"""Dev supervisor: runs the daemon as a child and restarts it on Python edits.
 
-Watches `layouts/*.yaml` for live reload (POSTs /reload to the running daemon) and
-`daemon/**/*.py` for full daemon restart. Layout edits do not restart the daemon
-because the daemon already supports /reload; Python edits require a fresh process
-because Python doesn't hot-reload itself.
+Layout YAML is watched by the daemon itself (see
+``Server.run_layouts_watcher``) so live-config editing works regardless of
+whether this supervisor is running. This process exists solely because
+Python doesn't hot-reload itself — any edit under ``daemon/**/*.py``
+requires spawning a fresh process.
 
 Run with: python -m deckd.dev  (or `deckd-dev` once installed)
 """
@@ -17,7 +18,6 @@ import sys
 from contextlib import suppress
 from pathlib import Path
 
-import aiohttp
 from watchfiles import Change, awatch
 
 log = logging.getLogger("deckd.dev")
@@ -44,56 +44,29 @@ async def _start_daemon(port: int) -> asyncio.subprocess.Process:
     )
 
 
-async def _post_reload(port: int) -> None:
-    try:
-        async with aiohttp.ClientSession() as http:
-            async with http.post(
-                f"http://127.0.0.1:{port}/reload",
-                timeout=aiohttp.ClientTimeout(total=2),
-            ) as r:
-                await r.read()
-                log.info("layout reload sent (status=%s)", r.status)
-    except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
-        log.warning("layout reload failed: %s", exc)
-
-
-def _classify(change: Change, path: str) -> str:
+def _is_daemon_source(change: Change, path: str) -> bool:
     p = Path(path)
-    if p.suffix in {".yaml", ".yml"} and LAYOUTS_DIR in p.parents:
-        return "layout"
-    if p.suffix == ".py" and DAEMON_DIR in p.parents:
-        return "daemon"
-    return ""
+    return p.suffix == ".py" and DAEMON_DIR in p.parents
 
 
-def _wait_for_port(port: int, timeout_s: float = 5.0) -> None:
-    import socket
+async def _wait_for_bind(port: int, timeout_s: float = 5.0) -> None:
     deadline = asyncio.get_event_loop().time() + timeout_s
     while True:
         try:
-            with socket.create_connection(("127.0.0.1", port), timeout=0.1):
-                return
+            reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            writer.close()
+            await writer.wait_closed()
+            return
         except OSError:
             if asyncio.get_event_loop().time() > deadline:
                 raise SystemExit(f"daemon did not bind port {port} within {timeout_s}s")
-            asyncio.get_event_loop().run_until_complete(asyncio.sleep(0.1))
+            await asyncio.sleep(0.1)
 
 
 async def supervise(port: int = DEFAULT_PORT) -> None:
     proc = await _start_daemon(port)
     log.info("daemon started (pid=%s) — waiting for port…", proc.pid)
-    for _ in range(50):
-        if proc.returncode is not None:
-            raise SystemExit(f"daemon exited rc={proc.returncode} before binding port {port}")
-        try:
-            reader, writer = await asyncio.open_connection("127.0.0.1", port)
-            writer.close()
-            await writer.wait_closed()
-            break
-        except OSError:
-            await asyncio.sleep(0.1)
-    else:
-        raise SystemExit(f"daemon did not bind port {port} within 5s")
+    await _wait_for_bind(port)
     log.info("daemon listening on :%d", port)
 
     stop = asyncio.Event()
@@ -107,32 +80,22 @@ async def supervise(port: int = DEFAULT_PORT) -> None:
             loop.add_signal_handler(sig, _on_signal)
 
     try:
-        async for changes in awatch(REPO_ROOT, stop_event=stop, step=200):
+        async for changes in awatch(DAEMON_DIR, stop_event=stop, step=200):
             if stop.is_set():
                 break
-            kinds = {_classify(c, p) for c, p in changes}
-            if "layout" in kinds:
-                log.info("layout changed -> /reload")
-                await _post_reload(port)
-            if "daemon" in kinds:
-                log.info("daemon code changed -> restart")
-                if proc.returncode is None:
-                    proc.terminate()
-                    with suppress(asyncio.TimeoutError):
-                        await asyncio.wait_for(proc.wait(), timeout=3)
-                if proc.returncode is None:
-                    proc.kill()
-                    await proc.wait()
-                proc = await _start_daemon(port)
-                for _ in range(50):
-                    try:
-                        reader, writer = await asyncio.open_connection("127.0.0.1", port)
-                        writer.close()
-                        await writer.wait_closed()
-                        log.info("daemon restarted (pid=%s)", proc.pid)
-                        break
-                    except OSError:
-                        await asyncio.sleep(0.1)
+            if not any(_is_daemon_source(c, p) for c, p in changes):
+                continue
+            log.info("daemon code changed -> restart")
+            if proc.returncode is None:
+                proc.terminate()
+                with suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(proc.wait(), timeout=3)
+            if proc.returncode is None:
+                proc.kill()
+                await proc.wait()
+            proc = await _start_daemon(port)
+            await _wait_for_bind(port)
+            log.info("daemon restarted (pid=%s)", proc.pid)
     finally:
         if proc.returncode is None:
             with suppress(ProcessLookupError):
@@ -146,7 +109,6 @@ async def supervise(port: int = DEFAULT_PORT) -> None:
 
 
 def main() -> None:
-    import sys
     port = int(os.environ.get("DECKD_PORT", str(DEFAULT_PORT)))
     logging.basicConfig(
         level=logging.INFO,

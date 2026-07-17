@@ -19,13 +19,11 @@ run-daemon:
 run-daemon-lan:
     .venv/bin/deckd --host 0.0.0.0 --layouts-dir layouts --verbose
 
-# # Run the daemon without a built client (use dev-client for HMR).
-# run-daemon-dev:
-#     .venv/bin/deckd --layouts-dir layouts --verbose
-
-# # Vite dev server (proxies /ws to the daemon).
-# dev-client:
-#     cd client && npm run dev -- --strictPort
+# Run the daemon under a supervisor that restarts it when daemon/**/*.py
+# changes. Layout YAML hot-reload is built into the daemon itself; this is
+# only useful when editing Python.
+dev-daemon:
+    .venv/bin/deckd-dev
 
 # Vite dev server on the LAN, with WS pointed at this host's LAN IP.
 dev-client-lan:

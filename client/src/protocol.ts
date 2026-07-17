@@ -12,6 +12,9 @@ export type ServerLayout = {
   app: string;
   widgets: Widget[];
   jogstrip_enabled: boolean;
+  /** Non-null when the daemon failed to load layouts; the client renders this
+   * in place of the grid until the on-disk config is fixed. */
+  error?: string | null;
 };
 
 export type ServerState = { type: "state"; locked: boolean };

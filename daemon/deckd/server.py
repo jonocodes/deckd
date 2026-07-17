@@ -41,13 +41,25 @@ class Session:
 
     async def push_current(self) -> None:
         layout = self.server.current_layout
-        widgets = [w.model_dump() for w in layout.widgets]
-        msg = p.LayoutMessage(
-            type="layout",
-            app=self.server.current_app_id,
-            widgets=widgets,
-            jogstrip_enabled=layout.jogstrip,
-        )
+        error = self.server.current_error
+        if error is not None:
+            # Bad on-disk config: send widgets=[] plus the error text so the
+            # client swaps the grid for a diagnostic message.
+            msg = p.LayoutMessage(
+                type="layout",
+                app=self.server.current_app_id,
+                widgets=[],
+                jogstrip_enabled=layout.jogstrip,
+                error=error,
+            )
+        else:
+            widgets = [w.model_dump() for w in layout.widgets]
+            msg = p.LayoutMessage(
+                type="layout",
+                app=self.server.current_app_id,
+                widgets=widgets,
+                jogstrip_enabled=layout.jogstrip,
+            )
         await self.send(msg)
 
 
@@ -77,6 +89,8 @@ class Server:
         self.dbus_bus_factory = dbus_bus_factory
         self.focus_backend = focus_backend
         self._focus_task: asyncio.Task[None] | None = None
+        self._layouts_task: asyncio.Task[None] | None = None
+        self._current_error: str | None = None
 
     # -- layout state --------------------------------------------------------
 
@@ -88,20 +102,35 @@ class Server:
     def current_app_id(self) -> str:
         return self._current_app_id
 
+    @property
+    def current_error(self) -> str | None:
+        return self._current_error
+
     def reload_layouts(self) -> None:
         """Re-read every layout YAML in ``layouts_dir``.
 
-        Keeps the current app_id if it still resolves to a known layout;
-        otherwise falls back to default. The new layout (if different) is
-        pushed to all live sessions.
+        On success: rebuild the store, keep the current app_id if it still
+        resolves, else fall back to default, and clear any prior error.
+
+        On failure (bad YAML, schema violation): keep the previous store and
+        current layout intact, but record the error on ``current_error`` so
+        the next push tells the client to render an error state instead of
+        the grid. Callers should not have to catch anything.
         """
-        self.layouts = load_layouts(self.layouts_dir)
+        try:
+            new_store = load_layouts(self.layouts_dir)
+        except SystemExit as exc:
+            self._current_error = str(exc)
+            log.error("layout reload failed (keeping last-good): %s", exc)
+            return
+        self.layouts = new_store
         try:
             new_layout = self.layouts[self._current_app_id]
         except KeyError:
             self._current_app_id = DEFAULT_APP_ID
             new_layout = self.layouts.default()
         self._current_layout = new_layout
+        self._current_error = None
         log.info("reloaded layouts from %s", self.layouts_dir)
 
     async def _push_to_all(self) -> None:
@@ -182,6 +211,41 @@ class Server:
         self._focus_task = asyncio.create_task(self.run_focus_watcher())
         return self._focus_task
 
+    # -- layouts-dir watcher -------------------------------------------------
+
+    async def run_layouts_watcher(self) -> None:
+        """Long-running task: reload layouts when a YAML file in the layouts
+        directory is created, edited, or removed.
+
+        Layouts are user configuration, not just a dev-only artifact —
+        watching them is on by default so a user can iterate on their YAML
+        while the daemon is running. Bad edits do not crash the daemon
+        (``reload_layouts`` traps parse errors and surfaces them via
+        ``current_error``).
+        """
+        try:
+            from watchfiles import awatch
+        except ImportError:
+            log.warning("watchfiles not installed; layouts hot-reload disabled")
+            return
+        yaml_suffixes = {".yaml", ".yml"}
+        async for changes in awatch(self.layouts_dir):
+            if not any(Path(p).suffix in yaml_suffixes for _, p in changes):
+                continue
+            log.info("layouts dir changed -> reload")
+            try:
+                await self.reload_and_push()
+            except Exception as exc:
+                # reload_layouts already traps parse errors; anything reaching
+                # here is a bug we want to see but not kill the watcher for.
+                log.exception("unexpected reload failure: %s", exc)
+
+    def start_layouts_watcher(self) -> asyncio.Task[None] | None:
+        if self._layouts_task is not None:
+            return None
+        self._layouts_task = asyncio.create_task(self.run_layouts_watcher())
+        return self._layouts_task
+
     # -- routes / lifecycle --------------------------------------------------
 
     def _setup_routes(self) -> None:
@@ -196,13 +260,15 @@ class Server:
         )
 
     async def _reload(self, _req: web.Request) -> web.Response:
-        try:
-            await self.reload_and_push()
-        except SystemExit as exc:
-            return web.json_response({"ok": False, "error": str(exc)}, status=400)
-        return web.json_response(
-            {"ok": True, "sessions": len(self._sessions), "app": self._current_app_id}
-        )
+        await self.reload_and_push()
+        body: dict = {
+            "ok": self._current_error is None,
+            "sessions": len(self._sessions),
+            "app": self._current_app_id,
+        }
+        if self._current_error is not None:
+            body["error"] = self._current_error
+        return web.json_response(body, status=200 if self._current_error is None else 400)
 
     async def _set_layout(self, req: web.Request) -> web.Response:
         layout_id = req.match_info["layout_id"]
@@ -296,16 +362,18 @@ class Server:
         await site.start()
         log.info("listening on http://%s:%d (ws=%s/ws)", self.host, self.port, self.host)
         self._runner = runner
+        self.start_layouts_watcher()
         while True:
             await asyncio.sleep(3600)
 
     async def stop(self) -> None:
-        if self._focus_task is not None:
-            self._focus_task.cancel()
-            try:
-                await self._focus_task
-            except (asyncio.CancelledError, Exception):
-                pass
+        for task in (self._focus_task, self._layouts_task):
+            if task is not None:
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
         runner = getattr(self, "_runner", None)
         if runner is not None:
             await runner.cleanup()
