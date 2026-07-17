@@ -1,0 +1,32 @@
+match:
+  - com.gexperts.Tilix
+  - Tilix
+widgets:
+  - id: split-right
+    kind: button
+    label: Split right
+    icon: columns
+    grid: [0, 0, 1, 1]
+    action:
+      key: "ctrl+alt+r"
+  - id: split-down
+    kind: button
+    label: Split down
+    icon: rows
+    grid: [1, 0, 1, 1]
+    action:
+      key: "ctrl+alt+d"
+  - id: new-window
+    kind: button
+    label: New window
+    icon: window
+    grid: [2, 0, 1, 1]
+    action:
+      key: "ctrl+shift+n"
+  - id: next-terminal
+    kind: button
+    label: Next term
+    icon: arrow-right
+    grid: [3, 0, 1, 1]
+    action:
+      key: "ctrl+tab"
