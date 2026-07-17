@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import type { Widget } from "./protocol";
 import { JogStrip } from "./JogStrip";
+import { transposeWidgets, useOrientation } from "./orientation";
 
 type Props = {
   widgets: Widget[];
@@ -29,9 +30,13 @@ function deriveDims(widgets: Widget[]): [number, number] {
 }
 
 export function ButtonGrid({ widgets, onPress, onJog, onJogEnd }: Props) {
-  const [COLS, ROWS] = deriveDims(widgets);
+  const orientation = useOrientation();
+  // In portrait, transpose so a landscape-authored grid keeps sensibly-sized
+  // cells (a 4x2 firefox layout becomes 2x4 with taller buttons).
+  const laid = orientation === "portrait" ? transposeWidgets(widgets) : widgets;
+  const [COLS, ROWS] = deriveDims(laid);
   const filled = Array.from({ length: ROWS }, () => Array(COLS).fill(null) as (Widget | null)[]);
-  for (const w of widgets) {
+  for (const w of laid) {
     const [x, y, wCols, wRows] = w.grid;
     for (let dy = 0; dy < wRows; dy++) {
       for (let dx = 0; dx < wCols; dx++) {
@@ -47,6 +52,7 @@ export function ButtonGrid({ widgets, onPress, onJog, onJogEnd }: Props) {
     >
       {filled.flatMap((row, y) =>
         row.map((w, x) => {
+          // ``w.grid`` here already reflects any transpose applied above.
           if (!w) return <div key={`${x}-${y}`} className="cell cell-empty" />;
           const [gx, gy, gw, gh] = w.grid;
           const isOrigin = gx === x && gy === y;

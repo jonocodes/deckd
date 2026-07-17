@@ -102,6 +102,30 @@ hostname -I
 
 Open `http://<desktop-lan-ip>:8765` on the phone, for example `http://192.168.30.117:8765`. The client connects its WebSocket back to the same host automatically, so no separate `VITE_DECKD_WS` setting is needed for this built-client path.
 
+### PWA install over HTTPS (Tailscale)
+
+"Add to Home Screen" on Android Chrome / Edge only prompts over a **secure context** (`localhost` or HTTPS). Plain `http://<lan-ip>:8765` from a phone doesn't qualify, so the install banner never shows. iOS Safari is looser and accepts HTTP LAN, so it's Chrome/Edge that need help.
+
+If both devices are on a [Tailscale](https://tailscale.com/) tailnet, front deckd with Tailscale's built-in HTTPS reverse proxy:
+
+```sh
+# One-time: enable HTTPS certs for your tailnet in the admin console
+# https://login.tailscale.com/admin/dns  →  "Enable HTTPS"
+
+# One-time per host: provision the Let's-Encrypt cert
+sudo tailscale cert "$(tailscale status --self --json | jq -r .Self.DNSName | sed s:\\.$::)"
+
+# Run deckd on localhost as usual:
+just run-daemon
+
+# Proxy tailnet HTTPS (:443) -> deckd (:8765):
+tailscale serve --bg 8765
+```
+
+Open `https://<hostname>.<tailnet>.ts.net/` on the phone (Tailscale prints the URL when `serve` starts). Chrome's install banner should appear and "Add to Home Screen" installs deckd fullscreen. Full CLI reference: <https://tailscale.com/kb/1312/serve>.
+
+Stop the proxy with `tailscale serve --https=443 off`.
+
 ### Client chrome
 
 Every layout renders inside a persistent **chrome** shell that the daemon does not know about:
@@ -109,7 +133,7 @@ Every layout renders inside a persistent **chrome** shell that the daemon does n
 - **Bottom strip** (always visible): the current app name (from `LayoutMessage.app`), a connection dot (live / reconnecting / disconnected), a `trackpad` button that swaps the main area for the trackpad view, and a `settings` placeholder (T13).
 - **Right-side jogstrip** (always visible): a full-height scroll strip that works the same as the in-grid `jogstrip` widget. A layout can suppress it with `jogstrip: false` at the YAML top level — the daemon forwards this as `jogstrip_enabled` on every `LayoutMessage`.
 
-Layout widget coordinates are relative to the chrome-excluded area; the client computes cell sizes from whatever space remains after the strips are subtracted.
+Layout widget coordinates are relative to the chrome-excluded area; the client computes cell sizes from whatever space remains after the strips are subtracted. Layouts are authored in **landscape** orientation. When the viewport is portrait, the client automatically transposes each widget's grid (`[x, y, w, h] → [y, x, h, w]`) so a 4×2 landscape layout renders as 2×4 in portrait — same buttons, same relative arrangement, cells sized for the taller surface (ADR-0004).
 
 ### Trackpad mode
 
