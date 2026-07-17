@@ -93,13 +93,12 @@ Open `http://127.0.0.1:8765` in any browser. You should see the active layout's 
 
 ### macOS
 
-The daemon runs on macOS via `daemon/deckd/platform_macos.py` — focus + key injection work out of the box, mouse clicks + relative pointer motion need `cliclick`, and the jogstrip needs `pyobjc-framework-Quartz`. The GNOME Shell focus extension is Linux-only.
+The daemon runs on macOS via `daemon/deckd/platform_macos.py` — focus + key injection work out of the box, and the jogstrip + trackpad need `pyobjc-framework-Quartz` (pulled in via the `[macos]` extra). The GNOME Shell focus extension is Linux-only.
 
 Setup (no `uv`/uinput bits):
 
 ```sh
 just setup            # auto-picks setup-macos on Mac, setup-linux elsewhere
-                      # (setup-macos also runs `brew install cliclick`)
 just build-client
 just run-daemon       # listens on http://127.0.0.1:8765
 ```
@@ -117,7 +116,7 @@ What works / doesn't on macOS:
 | `key:` action (non-printable)       | partial (HID-code map covers the common ones — arrows, esc, tab, enter, F-keys) |
 | `shell:` / `terminal:` actions      | yes                              |
 | `dbus:` action                      | no (macOS D-Bus exists but GNOME services don't) |
-| trackpad pointer + clicks           | only with `cliclick` (`brew install cliclick`) |
+| trackpad pointer + clicks + drag    | yes (PyObjC Quartz `CGEventCreateMouseEvent`) |
 | jogstrip scroll                     | yes (PyObjC Quartz `CGEventCreateScrollWheelEvent` — pulled in via the `[macos]` extra) |
 
 ### Phone/tablet testing

@@ -13,20 +13,12 @@ setup-linux:
     uv pip install -e ".[dev,uinput]"
     cd client && npm install
 
-# macOS dev: [dev] only + cliclick via Homebrew for the trackpad +
-# PyObjC Quartz for synthetic wheel events on the jogstrip.
+# macOS dev: [dev] + [macos] (PyObjC Quartz covers scroll, pointer, click,
+# and held-button drag for the trackpad).
 setup-macos:
     uv venv --python 3.12 --allow-existing
     uv pip install -e ".[dev,macos]"
     cd client && npm install
-    @if command -v cliclick >/dev/null 2>&1; then \
-        echo "cliclick already installed: $(command -v cliclick)"; \
-    elif command -v brew >/dev/null 2>&1; then \
-        echo "Installing cliclick via Homebrew..."; \
-        brew install cliclick; \
-    else \
-        echo "Homebrew not found; install cliclick manually from https://github.com/BlueM/cliclick" >&2; exit 1; \
-    fi
 
 # Dispatch: picks setup-linux on Linux, setup-macos on macOS. flox users
 # don't need this -- flox activate handles its own venv.

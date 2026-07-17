@@ -13,21 +13,23 @@ Capability matrix (sketch):
   | key injection (printable)   | yes    | osascript ``keystroke``      |
   | key injection (non-print)   | partial| osascript ``key code`` (map) |
   | combo modifiers             | yes    | ``using {command down}``     |
-  | mouse click (left/right)    | yes    | cliclick ``c:``/``rc:``      |
-  | mouse relative motion       | yes    | cliclick ``dx:``/``dy:``     |
+  | mouse click (left/right)    | yes    | PyObjC Quartz CG mouse event |
+  | mouse relative motion       | yes    | PyObjC Quartz CG mouse event |
+  | mouse drag (held-button)    | yes    | PyObjC Quartz LeftMouseDragged |
   | high-res wheel scroll       | yes    | PyObjC ``Quartz.CGEvent-     |
   |                             |        | CreateScrollWheelEvent``     |
   +-----------------------------+--------+------------------------------+
 
 The Linux ``UinputSink`` covers the same wire protocol but emits Linux evdev
-events. This module emits nothing locally -- it shells out to ``osascript``
-and ``cliclick`` so the events reach real apps.
+events. This module shells out to ``osascript`` for keys + focus and uses
+PyObjC ``Quartz`` for scroll + pointer + click. cliclick was the earlier
+choice for pointer / click but couldn't do held-button drags, which the
+trackpad's tap-and-a-half gesture needs.
 """
 
 from __future__ import annotations
 
 import logging
-import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -157,19 +159,34 @@ def _build_keystroke_script(keycodes: Sequence[int]) -> str | None:
 
 
 class MacKeySink(KeySink):
-    """Emit keys via osascript. Pointer + clicks delegate to ``cliclick``
-    when it's on PATH, log a warning otherwise.
+    """Emit keys via osascript. Pointer + click + drag via PyObjC Quartz.
+
+    Quartz is needed (over the simpler cliclick path) because the
+    trackpad's tap-and-a-half gesture requires a held-button drag --
+    cliclick only knows ``click`` (down+up in one shot) and ``move``,
+    so it can't model the "press, move with button held, then release"
+    sequence the wire protocol demands. Quartz's CGEvent lets us split
+    those into ``LeftMouseDown`` / ``LeftMouseDragged`` / ``LeftMouseUp``.
     """
 
     def __init__(self) -> None:
-        self._cliclick = shutil.which("cliclick")
-        if self._cliclick is None:
+        try:
+            import Quartz  # type: ignore
+
+            self._Q = Quartz
+            self._has_quartz = True
+        except ImportError:
+            self._Q = None
+            self._has_quartz = False
             log.warning(
-                "[mac key] cliclick not found on PATH; "
-                "trackpad pointer + clicks will log only "
-                "(install with: brew install cliclick)"
+                "[mac key] PyObjC Quartz not available; "
+                "trackpad pointer / clicks will log only "
+                "(install with: pip install pyobjc-framework-Quartz)"
             )
-        self._warned_no_cliclick = False
+        # Track the held-button state so emit_pointer emits
+        # ``LeftMouseDragged`` (not ``MouseMoved``) while the user is
+        # mid-drag. The server drives this via pad_drag start/end.
+        self._dragging_left = False
 
     # -- key -----------------------------------------------------------------
 
@@ -187,37 +204,48 @@ class MacKeySink(KeySink):
         )
         log.debug("[mac key] %s", script)
 
-    # -- pointer / click (cliclick) -----------------------------------------
+    # -- pointer / click (Quartz) -------------------------------------------
 
     def emit_pointer(self, dx: int, dy: int) -> None:
-        if self._cliclick is None:
-            if not self._warned_no_cliclick:
-                log.warning("[mac pointer] skipping dx=%s dy=%s (no cliclick)", dx, dy)
-                self._warned_no_cliclick = True
+        if not self._has_quartz:
+            log.info("[mac pointer log] dx=%s dy=%s (no Quartz)", dx, dy)
             return
-        subprocess.Popen(
-            [self._cliclick, f"dx:{dx}", f"dy:{dy}"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+        if dx == 0 and dy == 0:
+            return
+        Q = self._Q
+        # ``LeftMouseDragged`` keeps the left button logically held in the
+        # event stream; ``MouseMoved`` is plain cursor motion with no
+        # button. Picking the right one is what makes the tap-and-a-half
+        # drag-lock feel native (selections / windows actually drag).
+        event_type = Q.kCGEventLeftMouseDragged if self._dragging_left else Q.kCGEventMouseMoved
+        event = Q.CGEventCreateMouseEvent(
+            None, event_type, Q.CGPoint(0, 0), Q.kCGMouseButtonLeft
         )
-        log.debug("[mac pointer] dx=%s dy=%s", dx, dy)
+        Q.CGEventSetIntegerValueField(event, Q.kCGMouseEventDeltaX, dx)
+        Q.CGEventSetIntegerValueField(event, Q.kCGMouseEventDeltaY, dy)
+        Q.CGEventPost(Q.kCGHIDEventTap, event)
+        log.debug("[mac pointer] dx=%s dy=%s (drag=%s)", dx, dy, self._dragging_left)
 
     def emit_click(self, button: str, pressed: bool) -> None:
-        # Only emit on press -- the matching release would just re-click.
-        if not pressed:
+        if not self._has_quartz:
+            log.info("[mac click log] button=%s pressed=%s (no Quartz)", button, pressed)
             return
-        if self._cliclick is None:
-            if not self._warned_no_cliclick:
-                log.warning("[mac click] skipping button=%s (no cliclick)", button)
-                self._warned_no_cliclick = True
+        Q = self._Q
+        if button == "left":
+            down_type, up_type = Q.kCGEventLeftMouseDown, Q.kCGEventLeftMouseUp
+            button_code = Q.kCGMouseButtonLeft
+        elif button == "right":
+            down_type, up_type = Q.kCGEventRightMouseDown, Q.kCGEventRightMouseUp
+            button_code = Q.kCGMouseButtonRight
+        else:
+            log.warning("[mac click] unknown button %r", button)
             return
-        verb = "rc:." if button == "right" else "c:."
-        subprocess.Popen(
-            [self._cliclick, verb],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        log.debug("[mac click] button=%s", button)
+        event_type = down_type if pressed else up_type
+        event = Q.CGEventCreateMouseEvent(None, event_type, Q.CGPoint(0, 0), button_code)
+        Q.CGEventPost(Q.kCGHIDEventTap, event)
+        if button == "left":
+            self._dragging_left = pressed
+        log.debug("[mac click] button=%s pressed=%s", button, pressed)
 
     def close(self) -> None:
         pass
