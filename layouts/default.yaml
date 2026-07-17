@@ -5,41 +5,41 @@ widgets:
     kind: button
     label: Open example.com
     icon: globe
-    grid: [0, 0, 2, 1]
+    grid: [0, 0, 1, 1]
     action:
       shell: "xdg-open https://example.com"
   - id: open-terminal
     kind: button
     label: Open terminal
     icon: terminal
-    grid: [2, 0, 2, 1]
+    grid: [1, 0, 1, 1]
     action:
       terminal: true
   - id: xterm
     kind: button
     label: xterm
     icon: terminal
-    grid: [0, 1, 2, 1]
+    grid: [2, 0, 1, 1]
     action:
       terminal: "xterm"
   - id: tilix
     kind: button
     label: tilix
     icon: terminal
-    grid: [2, 1, 2, 1]
+    grid: [3, 0, 1, 1]
     action:
       terminal: "tilix"
   - id: send-key
     kind: button
     label: Send Ctrl+T
     icon: keyboard
-    grid: [0, 2, 2, 1]
+    grid: [0, 1, 1, 1]
     action:
       key: "ctrl+t"
   - id: mpris-toggle
     kind: button
     label: Play / Pause
     icon: media-play
-    grid: [2, 2, 2, 1]
+    grid: [1, 1, 1, 1]
     action:
       dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
