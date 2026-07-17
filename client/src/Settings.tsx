@@ -90,22 +90,11 @@ export function Settings({
             {scrollScale}
           </span>
         </div>
-        <div className="settings-control">
-          <span className="settings-control-label">Invert</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={scrollInvert}
-            className={`toggle${scrollInvert ? " toggle-on" : ""}`}
-            onClick={() => onScrollInvertChange(!scrollInvert)}
-          >
-            <span className="toggle-track" />
-            <span className="toggle-thumb" />
-          </button>
-          <span className="settings-control-value">
-            {scrollInvert ? "on" : "off"}
-          </span>
-        </div>
+        <SettingToggle
+          label="Invert"
+          value={scrollInvert}
+          onChange={onScrollInvertChange}
+        />
       </div>
 
       <h2 className="settings-title settings-title-sub">Trackpad</h2>
@@ -130,22 +119,11 @@ export function Settings({
 
       <h2 className="settings-title settings-title-sub">Display</h2>
       <div className="settings-controls">
-        <div className="settings-control">
-          <span className="settings-control-label">Keep screen awake</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={wakeLockEnabled}
-            className={`toggle${wakeLockEnabled ? " toggle-on" : ""}`}
-            onClick={() => onWakeLockChange(!wakeLockEnabled)}
-          >
-            <span className="toggle-track" />
-            <span className="toggle-thumb" />
-          </button>
-          <span className="settings-control-value">
-            {wakeLockEnabled ? "on" : "off"}
-          </span>
-        </div>
+        <SettingToggle
+          label="Keep screen awake"
+          value={wakeLockEnabled}
+          onChange={onWakeLockChange}
+        />
       </div>
 
       <h2 className="settings-title settings-title-sub">Diagnostics</h2>
@@ -157,6 +135,34 @@ export function Settings({
           </div>
         ))}
       </dl>
+    </div>
+  );
+}
+
+function SettingToggle({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  return (
+    <div className="settings-control">
+      <span className="settings-control-label">{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        aria-label={label}
+        className={`toggle${value ? " toggle-on" : ""}`}
+        onClick={() => onChange(!value)}
+      >
+        <span className="toggle-track" />
+        <span className="toggle-thumb" />
+      </button>
+      <span className="settings-control-value">{value ? "on" : "off"}</span>
     </div>
   );
 }

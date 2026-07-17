@@ -15,7 +15,7 @@ export function useWakeLock(enabled: boolean): void {
 
   useEffect(() => {
     if (!enabled) {
-      release();
+      dropSentinel();
       return;
     }
     if (typeof navigator === "undefined" || !navigator.wakeLock) {
@@ -52,9 +52,10 @@ export function useWakeLock(enabled: boolean): void {
 
     const onVisibility = () => {
       if (document.hidden) {
-        // Browser will auto-release; drop our ref so acquire() below
-        // sees the slot as free.
-        sentinelRef.current = null;
+        // Browsers auto-release on hidden anyway, but call release()
+        // explicitly so the spec's "released on hidden" wording holds
+        // even on any non-conforming implementation.
+        dropSentinel();
       } else {
         void acquire();
       }
@@ -66,10 +67,10 @@ export function useWakeLock(enabled: boolean): void {
     return () => {
       cancelled = true;
       document.removeEventListener("visibilitychange", onVisibility);
-      release();
+      dropSentinel();
     };
 
-    function release() {
+    function dropSentinel() {
       const s = sentinelRef.current;
       if (!s) return;
       sentinelRef.current = null;

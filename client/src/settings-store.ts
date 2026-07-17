@@ -17,7 +17,7 @@ const INVERT_KEY = "deckd.scrollInvert";
 const PAD_SENS_KEY = "deckd.trackpadSensitivity";
 const WAKE_LOCK_KEY = "deckd.wakeLock";
 
-export const WAKE_LOCK_DEFAULT = true;
+const WAKE_LOCK_DEFAULT = true;
 
 export const SCROLL_SCALE_MIN = 1;
 export const SCROLL_SCALE_MAX = 10;
@@ -64,16 +64,20 @@ function readInitialScale(): number {
   return SCROLL_SCALE_DEFAULT;
 }
 
-function readInitialInvert(): boolean {
+function readInitialBool(
+  queryName: string,
+  storageKey: string,
+  fallback: boolean,
+): boolean {
   try {
-    const fromUrl = readBoolQuery("scrollInvert");
+    const fromUrl = readBoolQuery(queryName);
     if (fromUrl !== null) return fromUrl;
-    const stored = localStorage.getItem(INVERT_KEY);
+    const stored = localStorage.getItem(storageKey);
     if (stored !== null) return stored === "true";
   } catch {
     // see readInitialScale.
   }
-  return false;
+  return fallback;
 }
 
 function readInitialPadSensitivity(): number {
@@ -88,17 +92,6 @@ function readInitialPadSensitivity(): number {
   return PAD_SENS_DEFAULT;
 }
 
-function readInitialWakeLock(): boolean {
-  try {
-    const fromUrl = readBoolQuery("wakeLock");
-    if (fromUrl !== null) return fromUrl;
-    const stored = localStorage.getItem(WAKE_LOCK_KEY);
-    if (stored !== null) return stored === "true";
-  } catch {
-    // see readInitialScale.
-  }
-  return WAKE_LOCK_DEFAULT;
-}
 
 function safeSet(key: string, value: string): void {
   try {
@@ -114,7 +107,9 @@ function safeSet(key: string, value: string): void {
  * the live behaviour and the slider UI. */
 export function useScrollSettings() {
   const [scale, setScaleState] = useState<number>(readInitialScale);
-  const [invert, setInvertState] = useState<boolean>(readInitialInvert);
+  const [invert, setInvertState] = useState<boolean>(() =>
+    readInitialBool("scrollInvert", INVERT_KEY, false),
+  );
 
   const setScale = useCallback((n: number) => {
     const clamped = clampScale(n);
@@ -148,7 +143,9 @@ export function useTrackpadSettings() {
  * acquire unconditionally); the toggle in the settings view lets a user
  * opt out if their device battery policy prefers it. */
 export function useWakeLockSetting() {
-  const [enabled, setEnabledState] = useState<boolean>(readInitialWakeLock);
+  const [enabled, setEnabledState] = useState<boolean>(() =>
+    readInitialBool("wakeLock", WAKE_LOCK_KEY, WAKE_LOCK_DEFAULT),
+  );
 
   const setEnabled = useCallback((v: boolean) => {
     setEnabledState(v);
