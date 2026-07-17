@@ -407,3 +407,52 @@ widgets:
     store = load_layouts(base, overlay)
     assert "Safari" in store
     assert "default" in store
+
+
+# ---------------------------------------------------------------------------
+# Overlay directory discovery (__main__._overlay_dir_for)
+#
+# The daemon auto-discovers ``<layouts-dir>.<platform-suffix>`` next to
+# the base dir. The suffix is ``macos`` on Darwin, ``linux`` elsewhere.
+# Pure path math, tested by monkeypatching sys.platform.
+# ---------------------------------------------------------------------------
+
+
+def test_overlay_dir_for_darwin(monkeypatch, tmp_path: Path) -> None:
+    """On macOS the overlay path is ``<layouts>.macos``."""
+    monkeypatch.setattr("deckd.__main__.sys.platform", "darwin")
+    from deckd.__main__ import _overlay_dir_for
+
+    base = tmp_path / "layouts"
+    assert _overlay_dir_for(base) == tmp_path / "layouts.macos"
+
+
+def test_overlay_dir_for_linux(monkeypatch, tmp_path: Path) -> None:
+    """On Linux (or any non-darwin sys.platform) the suffix is ``linux``."""
+    monkeypatch.setattr("deckd.__main__.sys.platform", "linux")
+    from deckd.__main__ import _overlay_dir_for
+
+    base = tmp_path / "layouts"
+    assert _overlay_dir_for(base) == tmp_path / "layouts.linux"
+
+
+def test_overlay_dir_for_unknown_platform_defaults_to_linux(monkeypatch, tmp_path: Path) -> None:
+    """An unmapped sys.platform (e.g. ``freebsd``) falls back to ``linux``
+    suffix -- unknown platforms behave like Linux for overlay purposes."""
+    monkeypatch.setattr("deckd.__main__.sys.platform", "freebsd")
+    from deckd.__main__ import _overlay_dir_for
+
+    base = tmp_path / "layouts"
+    assert _overlay_dir_for(base) == tmp_path / "layouts.linux"
+
+
+def test_overlay_dir_preserves_arbitrary_base_name(monkeypatch, tmp_path: Path) -> None:
+    """The base dir can be named anything; only ``<name>.<suffix>`` is
+    computed. Useful for users who keep their layouts in
+    ``~/.config/deckd/layouts`` or similar."""
+    monkeypatch.setattr("deckd.__main__.sys.platform", "darwin")
+    from deckd.__main__ import _overlay_dir_for
+
+    base = tmp_path / "my-configs" / "deckd-layouts"
+    base.parent.mkdir()
+    assert _overlay_dir_for(base) == base.parent / "deckd-layouts.macos"
