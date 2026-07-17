@@ -9,10 +9,27 @@ type Props = {
   onJogEnd: (id: string, velocity: number) => void;
 };
 
-const COLS = 4;
-const ROWS = 4;
+const FALLBACK_DIM = 4;
+
+/** Derive grid dimensions from the layout's widget extents so cells fill the
+ * chrome-excluded area rather than leaving empty 1fr rows/columns when a
+ * layout doesn't use the full 4x4 space (ADR-0003: the client computes
+ * cell sizes from available screen space). Falls back to 4x4 when there
+ * are no widgets to size against. */
+function deriveDims(widgets: Widget[]): [number, number] {
+  if (widgets.length === 0) return [FALLBACK_DIM, FALLBACK_DIM];
+  let cols = 0;
+  let rows = 0;
+  for (const w of widgets) {
+    const [x, y, wCols, wRows] = w.grid;
+    cols = Math.max(cols, x + wCols);
+    rows = Math.max(rows, y + wRows);
+  }
+  return [Math.max(cols, 1), Math.max(rows, 1)];
+}
 
 export function ButtonGrid({ widgets, onPress, onJog, onJogEnd }: Props) {
+  const [COLS, ROWS] = deriveDims(widgets);
   const filled = Array.from({ length: ROWS }, () => Array(COLS).fill(null) as (Widget | null)[]);
   for (const w of widgets) {
     const [x, y, wCols, wRows] = w.grid;
