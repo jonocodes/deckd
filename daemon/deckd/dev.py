@@ -6,13 +6,17 @@ whether this supervisor is running. This process exists solely because
 Python doesn't hot-reload itself — any edit under ``daemon/**/*.py``
 requires spawning a fresh process.
 
+Any CLI args this supervisor doesn't recognise are forwarded verbatim to
+the child, so ``deckd-dev --host 0.0.0.0 --verbose`` works the same as
+``deckd --host 0.0.0.0 --verbose`` (plus the restart-on-edit behaviour).
+
 Run with: python -m deckd.dev  (or `deckd-dev` once installed)
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import logging
-import os
 import signal
 import sys
 from contextlib import suppress
@@ -28,7 +32,7 @@ LAYOUTS_DIR = REPO_ROOT / "layouts"
 DEFAULT_PORT = 8765
 
 
-async def _start_daemon(port: int) -> asyncio.subprocess.Process:
+async def _start_daemon(port: int, child_args: list[str]) -> asyncio.subprocess.Process:
     return await asyncio.create_subprocess_exec(
         sys.executable,
         "-u",
@@ -38,6 +42,7 @@ async def _start_daemon(port: int) -> asyncio.subprocess.Process:
         str(LAYOUTS_DIR),
         "--port",
         str(port),
+        *child_args,
         cwd=str(REPO_ROOT),
         stdout=None,
         stderr=None,
@@ -63,8 +68,9 @@ async def _wait_for_bind(port: int, timeout_s: float = 5.0) -> None:
             await asyncio.sleep(0.1)
 
 
-async def supervise(port: int = DEFAULT_PORT) -> None:
-    proc = await _start_daemon(port)
+async def supervise(port: int = DEFAULT_PORT, child_args: list[str] | None = None) -> None:
+    args = child_args or []
+    proc = await _start_daemon(port, args)
     log.info("daemon started (pid=%s) — waiting for port…", proc.pid)
     await _wait_for_bind(port)
     log.info("daemon listening on :%d", port)
@@ -93,7 +99,7 @@ async def supervise(port: int = DEFAULT_PORT) -> None:
             if proc.returncode is None:
                 proc.kill()
                 await proc.wait()
-            proc = await _start_daemon(port)
+            proc = await _start_daemon(port, args)
             await _wait_for_bind(port)
             log.info("daemon restarted (pid=%s)", proc.pid)
     finally:
@@ -109,12 +115,24 @@ async def supervise(port: int = DEFAULT_PORT) -> None:
 
 
 def main() -> None:
-    port = int(os.environ.get("DECKD_PORT", str(DEFAULT_PORT)))
+    parser = argparse.ArgumentParser(
+        prog="deckd-dev",
+        description="Run deckd under a Python-file-restart supervisor.",
+        epilog="Any unrecognised args are forwarded to the deckd child process.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=DEFAULT_PORT,
+        help="daemon port (also forwarded to the child)",
+    )
+    args, forward = parser.parse_known_args()
+
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
-    asyncio.run(supervise(port=port))
+    asyncio.run(supervise(port=args.port, child_args=forward))
 
 
 if __name__ == "__main__":

@@ -23,7 +23,13 @@ run-daemon-lan:
 # changes. Layout YAML hot-reload is built into the daemon itself; this is
 # only useful when editing Python.
 dev-daemon:
-    .venv/bin/deckd-dev
+    .venv/bin/deckd-dev --verbose
+
+# Same, but bind the daemon to all interfaces so a phone on the LAN
+# (or Tailscale) can reach it. deckd-dev forwards unknown args to the
+# child, so --host and --verbose end up on the deckd process.
+dev-daemon-lan:
+    .venv/bin/deckd-dev --host 0.0.0.0 --verbose
 
 # Vite dev server on the LAN, with WS pointed at this host's LAN IP.
 dev-client-lan:
