@@ -45,8 +45,8 @@ export function JogStrip({
   // value without stale-closure risk if React re-renders mid-gesture.
   const scaleRef = useRef(scale);
   scaleRef.current = scale;
-  const dirRef = useRef(invert ? -1 : 1);
-  dirRef.current = invert ? -1 : 1;
+  const signRef = useRef(invert ? -1 : 1);
+  signRef.current = invert ? -1 : 1;
 
   const flush = () => {
     raf.current = null;
@@ -87,7 +87,7 @@ export function JogStrip({
         if (activePointer.current !== e.pointerId) return;
         e.preventDefault();
         const dt = Math.max((e.timeStamp - lastT.current) / 1000, 0.001);
-        const delta = (lastY.current - e.clientY) * scaleRef.current * dirRef.current;
+        const delta = (lastY.current - e.clientY) * scaleRef.current * signRef.current;
         pending.current += delta;
         velocity.current = delta / dt;
         lastY.current = e.clientY;

@@ -67,10 +67,7 @@ export function Settings({
               className="stepper-btn"
               aria-label="Decrease scroll scale"
               disabled={scrollScale <= SCROLL_SCALE_MIN}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                onScrollScaleChange(scrollScale - 1);
-              }}
+              onClick={() => onScrollScaleChange(scrollScale - 1)}
             >
               −
             </button>
@@ -80,15 +77,12 @@ export function Settings({
               className="stepper-btn"
               aria-label="Increase scroll scale"
               disabled={scrollScale >= SCROLL_SCALE_MAX}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                onScrollScaleChange(scrollScale + 1);
-              }}
+              onClick={() => onScrollScaleChange(scrollScale + 1)}
             >
               +
             </button>
           </div>
-          <span className="settings-control-hint">px per wheel unit</span>
+          <span className="settings-control-hint">wheel units per pixel</span>
         </div>
         <div className="settings-control">
           <span className="settings-control-label">Invert</span>
@@ -97,10 +91,7 @@ export function Settings({
             role="switch"
             aria-checked={scrollInvert}
             className={`toggle${scrollInvert ? " toggle-on" : ""}`}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              onScrollInvertChange(!scrollInvert);
-            }}
+            onClick={() => onScrollInvertChange(!scrollInvert)}
           >
             <span className="toggle-track" />
             <span className="toggle-thumb" />

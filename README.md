@@ -172,8 +172,8 @@ Tap the `settings` button in the bottom chrome to reveal a **Scroll** panel with
 URL query params still work as a one-shot dev override (won't touch `localStorage`):
 
 ```text
-https://lute.wolf-typhon.ts.net:5173/?scrollScale=2
-https://lute.wolf-typhon.ts.net:5173/?scrollScale=4&scrollInvert=1
+http://<host>:5173/?scrollScale=2
+http://<host>:5173/?scrollScale=4&scrollInvert=1
 ```
 
 `scrollScale` is high-resolution wheel units per CSS pixel. `scrollInvert=1` flips the direction.
