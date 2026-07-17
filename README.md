@@ -127,6 +127,18 @@ On first run the recipe writes `<host>.crt` / `<host>.key` under `client/.tls/` 
 
 Cert files last ~3 months (Let's Encrypt); delete `client/.tls/*` and rerun the recipe to renew.
 
+**What Tailscale is (and isn't) doing.** This flow uses Tailscale for three lightweight things, and nothing else:
+
+1. **DNS.** `<host>.<tailnet>.ts.net` resolves to the desktop's tailnet IP.
+2. **Routing.** The phone (on the tailnet) can reach that IP.
+3. **The cert.** `tailscale cert` mints a Let's Encrypt cert for the hostname and drops the `.crt` / `.key` files where Vite reads them.
+
+Tailscale is **not** running an application proxy — `tailscale serve status` will show nothing when this is set up, and that's correct. Vite binds `0.0.0.0:5173` directly with HTTPS, terminates TLS with the cert itself, and proxies `/ws` internally to the daemon at `127.0.0.1:8765`. The phone's connection lands on Vite; the daemon only ever sees localhost traffic.
+
+That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws` (Vite's port), not `:8765` (daemon's port).
+
+**Contrast: `tailscale serve` (persistent URL, no dev server).** If you want an installable PWA at `https://<host>.<tailnet>.ts.net/` (no port, works without any process running on the desktop besides the daemon), that's a different setup — `just build-client` + `just run-daemon` + `tailscale serve --bg 8765`. Tailscale proxies `:443 → 127.0.0.1:8765`, the daemon serves the built `client/dist/`. You lose HMR but gain a URL that survives closing your dev terminals. Not covered by any `just` recipe yet — file an issue if you want one.
+
 ### Client chrome
 
 Every layout renders inside a persistent **chrome** shell that the daemon does not know about:
