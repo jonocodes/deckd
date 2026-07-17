@@ -297,3 +297,162 @@ widgets:
     _write(tmp_path, "default.yaml", body)
     store = load_layouts(tmp_path)
     assert store["default"].jogstrip is False
+
+
+# ---------------------------------------------------------------------------
+# Platform overlay
+#
+# The daemon accepts an optional ``overlay_dir`` next to the base layouts
+# dir. Overlay entries load first so they shadow base entries with the
+# same id; this is the "platform overrides shared" semantic.
+# ---------------------------------------------------------------------------
+
+
+def test_overlay_dir_is_optional(tmp_path: Path) -> None:
+    _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)
+    # No overlay_dir arg at all -> unchanged single-dir behavior.
+    store = load_layouts(tmp_path)
+    assert "default" in store
+
+
+def test_missing_overlay_dir_is_fine(tmp_path: Path) -> None:
+    _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)
+    overlay = tmp_path / "does-not-exist"
+    store = load_layouts(tmp_path, overlay)
+    assert "default" in store
+
+
+def test_overlay_replaces_same_id_base_entry(tmp_path: Path) -> None:
+    base = tmp_path / "base"
+    overlay = tmp_path / "overlay"
+    base.mkdir()
+    overlay.mkdir()
+    _write(base, "firefox.yaml", FIREFOX_LAYOUT)  # id=firefox, key=alt+Left
+    _write(
+        overlay,
+        "firefox.yaml",
+        """
+match:
+  - firefox
+widgets:
+  - id: new-tab
+    kind: button
+    label: New tab
+    grid: [0, 0, 1, 1]
+    action:
+      key: "super+t"
+""",
+    )
+    _write(base, "default.yaml", DEFAULT_LAYOUT)
+
+    store = load_layouts(base, overlay)
+    firefox_layouts = [l for l in store.layouts if l.id == "firefox"]
+    # Overlay replaces base entirely -- no duplicate id left in the store.
+    assert len(firefox_layouts) == 1
+    # And it's the overlay's action that survives.
+    assert firefox_layouts[0].widgets[0].action.key == "super+t"
+
+
+def test_overlay_wins_on_match_conflict_with_different_filename(tmp_path: Path) -> None:
+    """When an overlay entry matches the same app as a base entry but has
+    a different filename (so different ``id``), first-match-wins within
+    the combined list resolves it: overlay entries load first, so the
+    overlay wins."""
+    base = tmp_path / "base"
+    overlay = tmp_path / "overlay"
+    base.mkdir()
+    overlay.mkdir()
+    _write(base, "firefox.yaml", FIREFOX_LAYOUT)  # id=firefox, match=[firefox]
+    _write(
+        overlay,
+        "macos-firefox.yaml",
+        """
+match:
+  - firefox
+widgets:
+  - id: new-tab
+    kind: button
+    label: New tab
+    grid: [0, 0, 1, 1]
+    action:
+      key: "super+t"
+""",
+    )
+
+    store = load_layouts(base, overlay)
+    app = AppInfo(app_id="firefox", wm_class="firefox")
+    layout = resolve_layout(store, app)
+    assert layout.widgets[0].action.key == "super+t"
+
+
+def test_overlay_can_add_new_layouts(tmp_path: Path) -> None:
+    """An overlay file for an app the base doesn't cover is additive."""
+    base = tmp_path / "base"
+    overlay = tmp_path / "overlay"
+    base.mkdir()
+    overlay.mkdir()
+    _write(base, "default.yaml", DEFAULT_LAYOUT)
+    _write(overlay, "safari.yaml", """
+match:
+  - Safari
+widgets:
+  - id: new-tab
+    kind: button
+    label: New tab
+    grid: [0, 0, 1, 1]
+    action:
+      key: "super+t"
+""")
+
+    store = load_layouts(base, overlay)
+    assert "Safari" in store
+    assert "default" in store
+
+
+# ---------------------------------------------------------------------------
+# Overlay directory discovery (__main__._overlay_dir_for)
+#
+# The daemon auto-discovers ``<layouts-dir>.<platform-suffix>`` next to
+# the base dir. The suffix is ``macos`` on Darwin, ``linux`` elsewhere.
+# Pure path math, tested by monkeypatching sys.platform.
+# ---------------------------------------------------------------------------
+
+
+def test_overlay_dir_for_darwin(monkeypatch, tmp_path: Path) -> None:
+    """On macOS the overlay path is ``<layouts>.macos``."""
+    monkeypatch.setattr("deckd.__main__.sys.platform", "darwin")
+    from deckd.__main__ import _overlay_dir_for
+
+    base = tmp_path / "layouts"
+    assert _overlay_dir_for(base) == tmp_path / "layouts.macos"
+
+
+def test_overlay_dir_for_linux(monkeypatch, tmp_path: Path) -> None:
+    """On Linux (or any non-darwin sys.platform) the suffix is ``linux``."""
+    monkeypatch.setattr("deckd.__main__.sys.platform", "linux")
+    from deckd.__main__ import _overlay_dir_for
+
+    base = tmp_path / "layouts"
+    assert _overlay_dir_for(base) == tmp_path / "layouts.linux"
+
+
+def test_overlay_dir_for_unknown_platform_defaults_to_linux(monkeypatch, tmp_path: Path) -> None:
+    """An unmapped sys.platform (e.g. ``freebsd``) falls back to ``linux``
+    suffix -- unknown platforms behave like Linux for overlay purposes."""
+    monkeypatch.setattr("deckd.__main__.sys.platform", "freebsd")
+    from deckd.__main__ import _overlay_dir_for
+
+    base = tmp_path / "layouts"
+    assert _overlay_dir_for(base) == tmp_path / "layouts.linux"
+
+
+def test_overlay_dir_preserves_arbitrary_base_name(monkeypatch, tmp_path: Path) -> None:
+    """The base dir can be named anything; only ``<name>.<suffix>`` is
+    computed. Useful for users who keep their layouts in
+    ``~/.config/deckd/layouts`` or similar."""
+    monkeypatch.setattr("deckd.__main__.sys.platform", "darwin")
+    from deckd.__main__ import _overlay_dir_for
+
+    base = tmp_path / "my-configs" / "deckd-layouts"
+    base.parent.mkdir()
+    assert _overlay_dir_for(base) == base.parent / "deckd-layouts.macos"

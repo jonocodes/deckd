@@ -127,6 +127,40 @@ def parse_key_combo(key_string: str) -> list[int]:
     return keycodes
 
 
+def name_from_keycode(keycode: int) -> str | None:
+    """Reverse of :data:`MODIFIER_MAP` + :data:`_SINGLE_KEY_MAP`.
+
+    Returns the canonical (lowercase) name for an evdev keycode, or ``None``
+    if the code isn't in either table. Used by backends (e.g. macOS) that
+    receive a keycode list and need to translate to their own event names.
+
+    When a code has multiple names (e.g. ``[`` and ``leftbrace`` both map to
+    26), the single-character form is preferred — macOS's ``keystroke``
+    translates printable literals directly, so ``"["`` round-trips through
+    AppleScript without needing an HID-code lookup.
+    """
+    candidates = _NAMES_BY_KEYCODE.get(keycode)
+    if not candidates:
+        return None
+    for name in candidates:
+        if len(name) == 1:
+            return name
+    return candidates[0]
+
+
+# Multiple names can share a keycode (``[`` and ``leftbrace`` both map
+# to 26, ``super`` and ``meta`` to 125). Preserve them all in insertion
+# order so callers can see every alias; ``name_from_keycode`` then
+# prefers the single-char form because AppleScript's ``keystroke "<x>"``
+# takes printable literals directly without an HID-code lookup.
+_NAMES_BY_KEYCODE: dict[int, list[str]] = {}
+for _name, _kc in (
+    *MODIFIER_MAP.items(),
+    *_SINGLE_KEY_MAP.items(),
+):
+    _NAMES_BY_KEYCODE.setdefault(_kc, []).append(_name)
+
+
 # ---------------------------------------------------------------------------
 # Fallback / logging sinks
 # ---------------------------------------------------------------------------

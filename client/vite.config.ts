@@ -26,7 +26,7 @@ export default defineConfig({
   server: {
     port: 5173,
     // Match any tailnet hostname so `<host>.<tailnet>.ts.net` isn't rejected.
-    allowedHosts: ["lute", ".ts.net"],
+    allowedHosts: ["lute", "jonodot-1", ".ts.net"],
     ...(https ? { https } : {}),
     // Same-origin proxy so the client never has to know the daemon's URL:
     // /ws, /health, /reload all appear at the Vite origin and are forwarded

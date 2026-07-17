@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import logging
 import signal
+import sys
 from pathlib import Path
 
 from .input import LoggingKeySink, LoggingScrollSink, ScrollController, UinputSink
@@ -27,6 +28,17 @@ async def _run(server: Server) -> None:
         await server.stop()
 
 
+def _overlay_dir_for(layouts_dir: Path) -> Path:
+    """Pick a per-platform overlay dir next to ``layouts_dir``.
+
+    Convention: ``<name>.linux`` or ``<name>.macos``. The path is
+    always returned; whether it actually exists is the caller's
+    concern (``Server`` treats a missing overlay as a no-op).
+    """
+    suffix = {"darwin": "macos"}.get(sys.platform, "linux")
+    return layouts_dir.parent / f"{layouts_dir.name}.{suffix}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="deckd")
     parser.add_argument("--host", default="127.0.0.1")
@@ -36,6 +48,11 @@ def main() -> None:
         type=Path,
         default=Path("layouts"),
         help="Directory of per-app YAML layouts (one file per app + default.yaml)",
+    )
+    parser.add_argument(
+        "--no-overlay",
+        action="store_true",
+        help="Skip the per-platform overlay (layouts.<platform>) even if present",
     )
     parser.add_argument(
         "--no-focus",
@@ -72,17 +89,35 @@ def main() -> None:
     )
 
     try:
-        sink = UinputSink()
+        if sys.platform == "darwin":
+            from .platform_macos import MacKeySink, MacScrollSink
+
+            sink = MacKeySink()
+            scroll_sink = MacScrollSink()
+            key_sink = sink
+        else:
+            sink = UinputSink()
+            scroll_sink = sink
+            key_sink = sink
     except Exception as exc:
         logging.getLogger("deckd").warning(
-            "uinput unavailable; falling back to logging only: %s", exc
+            "platform sink unavailable; falling back to logging only: %s", exc
         )
         sink = None
-
-    scroll_sink = sink if sink is not None else LoggingScrollSink()
-    key_sink = sink if sink is not None else LoggingKeySink()
+        scroll_sink = LoggingScrollSink()
+        key_sink = LoggingKeySink()
 
     focus_backend = None if args.no_focus else default_backend()
+    if focus_backend is not None:
+        logging.getLogger("deckd").info(
+            "focus backend: %s (sys.platform=%s)",
+            type(focus_backend).__name__,
+            sys.platform,
+        )
+
+    overlay_dir = None if args.no_overlay else _overlay_dir_for(args.layouts_dir)
+    if overlay_dir is not None and overlay_dir.is_dir():
+        logging.getLogger("deckd").info("loading layouts overlay from %s", overlay_dir)
 
     def dbus_bus_factory(bus_type):
         from dbus_fast.aio import MessageBus
@@ -101,6 +136,7 @@ def main() -> None:
         key_sink=key_sink,
         dbus_bus_factory=dbus_bus_factory,
         focus_backend=focus_backend,
+        overlay_dir=overlay_dir,
     )
 
     if args.client_dist is not None:

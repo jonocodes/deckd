@@ -91,6 +91,38 @@ just run-daemon
 
 Open `http://127.0.0.1:8765` in any browser. You should see the active layout's buttons filling the main area, an always-on jogstrip pinned to the right edge, and a chrome bottom strip with the app name, a connection status dot, and a `trackpad` button. Drag or flick vertically on the right-side jogstrip to emit `REL_WHEEL_HI_RES` deltas through uinput (log-only when uinput is unavailable). Tap the `trackpad` button to swap the button grid for a full-area trackpad surface — see the [Trackpad mode](#trackpad-mode) section for the gesture list.
 
+### macOS
+
+The daemon runs on macOS via `daemon/deckd/platform_macos.py` — focus + key injection work out of the box, and the jogstrip + trackpad need `pyobjc-framework-Quartz` (pulled in via the `[macos]` extra). The GNOME Shell focus extension is Linux-only.
+
+Setup (no `uv`/uinput bits):
+
+```sh
+just setup            # auto-picks setup-macos on Mac, setup-linux elsewhere
+just build-client
+just dev-daemon       # listens on http://127.0.0.1:8765, auto-restarts on Python edits
+```
+
+`just dev-daemon` wraps the daemon in the `deckd-dev` supervisor so Python edits hot-reload (YAML hot-reloads either way). For a one-shot `deckd` invocation use `just run-daemon`.
+
+To force a specific platform's setup (e.g. on a CI box): `just setup-linux` or `just setup-macos`.
+
+First time you focus a non-default window, **System Events** will pop a TCC prompt asking you to allow the controlling terminal/iTerm/whatever wraps Python. Accept it once and the focus watcher runs forever after. The focus backend uses the process name as `app_id`, so layouts match by process name — `firefox`, `Terminal`, `kitty`, `code` etc. work as-is. The GNOME-specific per-app YAMLs (`org.gnome.Console`, `foot`, `konsole`…) won't match on macOS unless you rename them to the Mac process name.
+
+What works / doesn't on macOS:
+
+| capability                          | macOS                            |
+| ----------------------------------- | -------------------------------- |
+| focus detection                     | yes (osascript + System Events)  |
+| `key:` action (printable + combos)  | yes (osascript `keystroke`)      |
+| `key:` action (non-printable)       | partial (HID-code map covers the common ones — arrows, esc, tab, enter, F-keys) |
+| `shell:` / `terminal:` actions      | yes                              |
+| `dbus:` action                      | no (macOS D-Bus exists but GNOME services don't) |
+| trackpad pointer + clicks + drag    | yes (PyObjC Quartz `CGEventCreateMouseEvent`) |
+| jogstrip scroll                     | yes (PyObjC Quartz `CGEventCreateScrollWheelEvent` — pulled in via the `[macos]` extra) |
+
+When the layout doesn't switch as expected, run `python scripts/check_focus_macos.py` for a one-shot diagnostic: it prints what `osascript` reports for the frontmost app, whether the auto-ignore rule would hold, and which layout `resolve_layout` would pick. Saves reading the daemon log for the common cases (TCC denied, stale daemon, wrong app_id).
+
 ### Phone/tablet testing
 
 The phone must load the web client from a daemon address it can reach. Build the client, run the daemon on all interfaces, then open the desktop's LAN IP from the phone:
@@ -323,6 +355,12 @@ A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` f
 - `terminal: true` or `terminal: "foot"` — launch a terminal emulator. `true` resolves via `$TERMINAL` then a candidate list (`foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`); a string names a specific one.
 - `key: "ctrl+t"` — fire the keystroke through uinput as a single combo.
 - `dbus: "service:path org.Interface.Method arg1 arg2"` — call a D-Bus method via `dbus-fast`. The bus is inferred from the interface name (`org.freedesktop.login1.*`, `systemd1.*`, `timedate1.*`, `locale1.*`, etc. → system bus; everything else → session bus). Errors are logged, not surfaced to the client. With the `service:path` prefix omitted, the daemon derives them from the first two / three segments of the interface name.
+
+### Per-platform overlay
+
+The daemon also loads a sibling directory next to `--layouts-dir` whose name is suffixed with the current platform: `layouts.macos/` on macOS, `layouts.linux/` on Linux. A missing overlay is fine (the most common case). Overlay entries load first and **replace** any base entry with the same `id` — so `layouts.macos/firefox.yaml` overrides `layouts/firefox.yaml` on Mac without you touching the shared base. The watcher also watches the overlay dir, so edits reload live. Pass `--no-overlay` to skip the overlay even when it exists (debugging, cross-platform checkout debugging, etc.).
+
+This is how `layouts.macos/firefox.yaml` carries the `super+t` / `super+[` / `super+]` shortcuts without forking the rest of `firefox.yaml` for every Linux user who pulls the repo.
 
 ## What works today
 
