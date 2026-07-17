@@ -252,7 +252,13 @@ class MacKeySink(KeySink):
             log.warning("[mac click] unknown button %r", button)
             return
         event_type = down_type if pressed else up_type
-        event = Q.CGEventCreateMouseEvent(None, event_type, Q.CGPoint(0, 0), button_code)
+        # Use the current cursor position, not (0, 0). Same trap as
+        # emit_pointer: a (0, 0) position warps the cursor to the top-left
+        # before the down / up registers, so taps feel like the cursor
+        # snapped away. The user's last emit_pointer already placed the
+        # cursor where they want the click; reuse that.
+        current = Q.CGEventGetLocation(Q.CGEventCreate(None))
+        event = Q.CGEventCreateMouseEvent(None, event_type, current, button_code)
         Q.CGEventPost(Q.kCGHIDEventTap, event)
         if button == "left":
             self._dragging_left = pressed
