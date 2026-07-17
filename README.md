@@ -100,8 +100,10 @@ Setup (no `uv`/uinput bits):
 ```sh
 just setup            # auto-picks setup-macos on Mac, setup-linux elsewhere
 just build-client
-just run-daemon       # listens on http://127.0.0.1:8765
+just dev-daemon       # listens on http://127.0.0.1:8765, auto-restarts on Python edits
 ```
+
+`just dev-daemon` wraps the daemon in the `deckd-dev` supervisor so Python edits hot-reload (YAML hot-reloads either way). For a one-shot `deckd` invocation use `just run-daemon`.
 
 To force a specific platform's setup (e.g. on a CI box): `just setup-linux` or `just setup-macos`.
 
@@ -118,6 +120,8 @@ What works / doesn't on macOS:
 | `dbus:` action                      | no (macOS D-Bus exists but GNOME services don't) |
 | trackpad pointer + clicks + drag    | yes (PyObjC Quartz `CGEventCreateMouseEvent`) |
 | jogstrip scroll                     | yes (PyObjC Quartz `CGEventCreateScrollWheelEvent` — pulled in via the `[macos]` extra) |
+
+When the layout doesn't switch as expected, run `python scripts/check_focus_macos.py` for a one-shot diagnostic: it prints what `osascript` reports for the frontmost app, whether the auto-ignore rule would hold, and which layout `resolve_layout` would pick. Saves reading the daemon log for the common cases (TCC denied, stale daemon, wrong app_id).
 
 ### Phone/tablet testing
 
