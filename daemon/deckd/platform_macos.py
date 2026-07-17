@@ -1,8 +1,11 @@
 """macOS backend: focus detection + key/pointer/scroll sinks.
 
-Cheap shim over AppleScript (``osascript``) and, when present, ``cliclick``.
-No new native deps, no kernel extensions. TCC will prompt the first time
-osascript asks System Events to do something on the daemon's behalf.
+No new native deps, no kernel extensions. Keys + focus shell out to
+``osascript`` (AppleScript); scroll + pointer + click go through
+PyObjC ``Quartz`` so we can do held-button drags the trackpad's
+tap-and-a-half gesture needs. cliclick was an earlier choice for
+pointer / click but couldn't model a held button across multiple
+moves -- Quartz's ``LeftMouseDragged`` is.
 
 Capability matrix (sketch):
 
@@ -20,24 +23,36 @@ Capability matrix (sketch):
   |                             |        | CreateScrollWheelEvent``     |
   +-----------------------------+--------+------------------------------+
 
-The Linux ``UinputSink`` covers the same wire protocol but emits Linux evdev
-events. This module shells out to ``osascript`` for keys + focus and uses
-PyObjC ``Quartz`` for scroll + pointer + click. cliclick was the earlier
-choice for pointer / click but couldn't do held-button drags, which the
-trackpad's tap-and-a-half gesture needs.
+The Linux ``UinputSink`` covers the same wire protocol but emits Linux
+evdev events.
 """
 
 from __future__ import annotations
 
 import logging
 import subprocess
-import sys
 from collections.abc import Sequence
+from types import ModuleType
 
 from .input import MODIFIER_MAP, KeySink, ScrollSink, name_from_keycode
 from .platform import AppInfo, PlatformBackend, _run
 
 log = logging.getLogger("deckd.platform_macos")
+
+
+def _load_quartz() -> tuple[ModuleType | None, bool]:
+    """Lazy import of ``pyobjc-framework-Quartz``. Returns ``(module, available)``.
+
+    Both sinks (pointer / click and scroll) need the same module;
+    centralising the try / except avoids the duplicated boilerplate and
+    gives one place to log the install hint.
+    """
+    try:
+        import Quartz  # type: ignore
+
+        return Quartz, True
+    except ImportError:
+        return None, False
 
 # ---------------------------------------------------------------------------
 # Focus
@@ -170,14 +185,8 @@ class MacKeySink(KeySink):
     """
 
     def __init__(self) -> None:
-        try:
-            import Quartz  # type: ignore
-
-            self._Q = Quartz
-            self._has_quartz = True
-        except ImportError:
-            self._Q = None
-            self._has_quartz = False
+        self._Q, self._has_quartz = _load_quartz()
+        if not self._has_quartz:
             log.warning(
                 "[mac key] PyObjC Quartz not available; "
                 "trackpad pointer / clicks will log only "
@@ -229,7 +238,7 @@ class MacKeySink(KeySink):
         # Quartz mouse-event coordinates use top-left origin with Y down,
         # same as CSS / iOS / Windows -- so dy from the wire (screen-down)
         # maps directly to positive Y on the cursor.
-        current = Q.CGEventGetLocation(Q.CGEventCreate(None))
+        current = _cursor_pos(Q)
         new_pos = Q.CGPoint(current.x + dx, current.y + dy)
         event = Q.CGEventCreateMouseEvent(
             None, event_type, new_pos, Q.kCGMouseButtonLeft
@@ -257,7 +266,7 @@ class MacKeySink(KeySink):
         # before the down / up registers, so taps feel like the cursor
         # snapped away. The user's last emit_pointer already placed the
         # cursor where they want the click; reuse that.
-        current = Q.CGEventGetLocation(Q.CGEventCreate(None))
+        current = _cursor_pos(Q)
         event = Q.CGEventCreateMouseEvent(None, event_type, current, button_code)
         Q.CGEventPost(Q.kCGHIDEventTap, event)
         if button == "left":
@@ -268,6 +277,12 @@ class MacKeySink(KeySink):
         pass
 
 
+def _cursor_pos(Q: ModuleType):
+    """Read the current cursor position. Wraps the CGEventCreate + CGEventGetLocation
+    pair so emit_pointer / emit_click don't repeat the dance."""
+    return Q.CGEventGetLocation(Q.CGEventCreate(None))
+
+
 # ---------------------------------------------------------------------------
 # Scroll sink
 # ---------------------------------------------------------------------------
@@ -276,12 +291,11 @@ class MacKeySink(KeySink):
 class MacScrollSink(ScrollSink):
     """Synthetic-wheel sink via PyObjC + Quartz.
 
-    macOS doesn't expose wheel injection through AppleScript or any
-    open-source tool I trust to keep working (cliclick, Hammerspoon
-    aside). Quartz's ``CGEventCreateScrollWheelEvent`` is the only path
-    that reaches the focused window's scroll view the same way a real
-    trackpad or mouse wheel does. Requires ``pyobjc-framework-Quartz``;
-    the sink falls back to log-only if it's not importable.
+    macOS doesn't expose wheel injection through AppleScript. Quartz's
+    ``CGEventCreateScrollWheelEvent`` is the only path that reaches the
+    focused window's scroll view the same way a real trackpad or mouse
+    wheel does. Requires ``pyobjc-framework-Quartz``; the sink falls
+    back to log-only if it's not importable.
 
     The wire protocol emits ``REL_WHEEL_HI_RES`` deltas (1/120 of a
     wheel detent). We accumulate them and emit one ``kCGScrollEventUnitLine``
@@ -292,15 +306,10 @@ class MacScrollSink(ScrollSink):
     DETENT = 120
 
     def __init__(self) -> None:
-        try:
-            import Quartz  # type: ignore
-
-            self._Quartz = Quartz
-            self._available = True
+        self._Quartz, self._available = _load_quartz()
+        if self._available:
             log.info("[mac scroll] Quartz loaded; wheel events will be injected")
-        except ImportError:
-            self._Quartz = None
-            self._available = False
+        else:
             log.warning(
                 "[mac scroll] PyObjC Quartz not available; "
                 "jogstrip will log only "
@@ -331,12 +340,3 @@ class MacScrollSink(ScrollSink):
 
     def close(self) -> None:
         pass
-
-
-# ---------------------------------------------------------------------------
-# Re-export so __main__.py can ask ``platform_macos.is_macos()`` cleanly.
-# ---------------------------------------------------------------------------
-
-
-def is_macos() -> bool:
-    return sys.platform == "darwin"

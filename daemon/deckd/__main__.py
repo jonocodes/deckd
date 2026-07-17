@@ -28,12 +28,12 @@ async def _run(server: Server) -> None:
         await server.stop()
 
 
-def _overlay_dir_for(layouts_dir: Path) -> Path | None:
+def _overlay_dir_for(layouts_dir: Path) -> Path:
     """Pick a per-platform overlay dir next to ``layouts_dir``.
 
-    Convention: ``<name>.linux`` or ``<name>.macos``. Missing directories
-    are fine — the most common case (Linux dev, no overlay yet) just
-    returns None and the daemon loads only the base.
+    Convention: ``<name>.linux`` or ``<name>.macos``. The path is
+    always returned; whether it actually exists is the caller's
+    concern (``Server`` treats a missing overlay as a no-op).
     """
     suffix = {"darwin": "macos"}.get(sys.platform, "linux")
     return layouts_dir.parent / f"{layouts_dir.name}.{suffix}"

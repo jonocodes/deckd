@@ -14,18 +14,20 @@ Requires the flox environment (or any venv with ``pip install -e .``).
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import sys
 from pathlib import Path
 
 
-async def _probe() -> None:
+async def _probe(port: int, layouts_dir: Path) -> int:
     from deckd.layouts import LayoutStore, load_layouts, resolve_layout
     from deckd.platform import AppInfo
     from deckd.platform_macos import MacFocusBackend
 
-    base = Path("layouts")
-    overlay = Path("layouts.macos") if Path("layouts.macos").is_dir() else None
+    overlay = layouts_dir.parent / f"{layouts_dir.name}.macos"
+    if not overlay.is_dir():
+        overlay = None
 
     backend = MacFocusBackend()
     try:
@@ -35,35 +37,55 @@ async def _probe() -> None:
         print("On macOS this is almost always a TCC permission issue --")
         print("grant Automation permission to the parent shell (Terminal / iTerm / cmux)")
         print("under System Settings -> Privacy & Security -> Automation, then re-run.")
-        sys.exit(2)
+        return 2
 
     print(f"osascript sees: app_id={app.app_id!r}  title={app.title!r}")
 
-    store: LayoutStore = load_layouts(base, overlay)
+    store: LayoutStore = load_layouts(layouts_dir, overlay)
     resolved = resolve_layout(store, app)
 
     # Reproduce the auto-ignore check exactly as Server._is_deckd_window does.
     title = (app.title or "").strip()
-    port = 8765
     port_match = bool(port) and str(port) in title
     exact_match = title.lower() == "deckd"
-    auto_ignore = port_match or exact_match
-    print(f"auto-ignore:    port_in_title={port_match}  exact_title_match={exact_match}  -> holds={auto_ignore}")
+    print(
+        f"auto-ignore:    port_in_title={port_match}  "
+        f"exact_title_match={exact_match}  -> holds={port_match or exact_match}"
+    )
     print(f"would resolve to layout: {resolved.id!r}")
 
-    if resolved.id in {l.id for l in store.layouts if l.id == "default"}:
-        # Add a hint if the user's app_id is something we'd expect to see
-        # a layout for but don't.
-        if app.app_id and app.app_id.lower() in {"firefox", "safari", "chrome"}:
-            print(f"hint: {app.app_id!r} has no specific layout in this checkout,")
-            print("      so the default fallback is correct.")
+    if (
+        resolved.id == "default"
+        and app.app_id
+        and app.app_id.lower() in {"firefox", "safari", "chrome"}
+    ):
+        print(f"hint: {app.app_id!r} has no specific layout in this checkout,")
+        print("      so the default fallback is correct.")
+
+    return 0
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="daemon port (matched against the focused window's title by the auto-ignore check)",
+    )
+    parser.add_argument(
+        "--layouts-dir",
+        type=Path,
+        default=Path("layouts"),
+        help="base layouts directory (overlay is auto-discovered as <name>.macos next to it)",
+    )
+    args = parser.parse_args()
+
     try:
-        asyncio.run(_probe())
+        rc = asyncio.run(_probe(args.port, args.layouts_dir))
     except KeyboardInterrupt:
-        sys.exit(130)
+        rc = 130
+    sys.exit(rc)
 
 
 if __name__ == "__main__":
