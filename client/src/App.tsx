@@ -3,10 +3,11 @@ import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
 import { Trackpad } from "./Trackpad";
+import { Settings } from "./Settings";
 import type { JogHandle } from "./JogStrip";
 import type { ServerLayout } from "./protocol";
 
-type View = "layout" | "trackpad";
+type View = "layout" | "trackpad" | "settings";
 type SocketStatus = "connecting" | "open" | "closed";
 
 /** Sentinel ids for the always-on chrome widgets. The daemon's pad / jog
@@ -46,6 +47,8 @@ export function App() {
         <main className="surface">
           {view === "trackpad" ? (
             <Trackpad onPad={pad} onTap={padTap} onDrag={padDrag} />
+          ) : view === "settings" ? (
+            <Settings layout={layout} status={status} />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">
               <span className="layout-error-title">Layout error</span>
@@ -83,7 +86,13 @@ export function App() {
         >
           trackpad
         </button>
-        <button className="chrome-btn" disabled>
+        <button
+          className={`chrome-btn${view === "settings" ? " chrome-btn-active" : ""}`}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            setView(view === "settings" ? "layout" : "settings");
+          }}
+        >
           settings
         </button>
       </footer>

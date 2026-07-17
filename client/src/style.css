@@ -284,6 +284,60 @@ button {
 }
 
 /* ---------------------------------------------------------------------------
+ * Settings / diagnostics view: read-only key/value list shown in place of
+ * the grid when the chrome settings button is toggled on.
+ * ------------------------------------------------------------------------- */
+
+.settings {
+  width: 100%;
+  height: 100%;
+  padding: 20px 16px;
+  border: 1px solid #2a333d;
+  border-radius: 16px;
+  background: #11161b;
+  color: #e6e9ef;
+  overflow: auto;
+}
+
+.settings-title {
+  margin: 0 0 14px 0;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #7dd3fc;
+}
+
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 32%) 1fr;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid #1b222a;
+}
+
+.settings-row dt {
+  font-size: 12px;
+  color: #8a96a3;
+  letter-spacing: 0.04em;
+}
+
+.settings-row dd {
+  margin: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #e6e9ef;
+  word-break: break-all;
+}
+
+/* ---------------------------------------------------------------------------
  * Layout error state: shown in place of the grid when the daemon fails to
  * load layouts (bad YAML, schema violation). Restored automatically on the
  * next successful reload.
