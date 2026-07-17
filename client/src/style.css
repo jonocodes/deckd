@@ -186,7 +186,9 @@ button {
 
 .cell-button:active {
   transform: scale(0.97);
-  background: #2a333d;
+  /* Darken via filter so the press feedback still fires when a widget
+     sets its own background color via ``color:`` in the YAML. */
+  filter: brightness(0.8);
 }
 
 .cell-button .label {

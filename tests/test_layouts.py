@@ -251,6 +251,38 @@ def test_layout_defaults_jogstrip_enabled_to_true(tmp_path: Path) -> None:
     assert store["default"].jogstrip is True
 
 
+def test_widget_color_field_round_trips(tmp_path: Path) -> None:
+    """Optional ``color`` on a widget survives YAML -> Widget -> dump."""
+    _write(
+        tmp_path,
+        "default.yaml",
+        """
+match:
+  - default
+widgets:
+  - id: back
+    kind: button
+    label: Back
+    color: "#1e3a8a"
+    grid: [0, 0, 1, 1]
+    action:
+      key: "alt+Left"
+""",
+    )
+    store = load_layouts(tmp_path)
+    widget = store["default"].widgets[0]
+    assert widget.color == "#1e3a8a"
+    # And the dumped shape (what the daemon serialises to the client) keeps it.
+    assert widget.model_dump()["color"] == "#1e3a8a"
+
+
+def test_widget_color_defaults_to_none_when_omitted(tmp_path: Path) -> None:
+    _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)
+    store = load_layouts(tmp_path)
+    widget = store["default"].widgets[0]
+    assert widget.color is None
+
+
 def test_layout_with_jogstrip_false_parses(tmp_path: Path) -> None:
     body = """
 match:

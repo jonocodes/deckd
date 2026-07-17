@@ -16,6 +16,11 @@ class Widget(BaseModel):
     label: str | None = None
     icon: str | None = None
     grid: list[int] = Field(min_length=4, max_length=4)
+    # Optional CSS colour string applied as the button's background. Any
+    # value the browser accepts is fine ("#1e3a8a", "rebeccapurple",
+    # "hsl(...)"). Client trust: layouts are user-owned config, not user
+    # input, so no sanitisation is needed.
+    color: str | None = None
     action: "Action | None" = None
 
 

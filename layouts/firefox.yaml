@@ -19,6 +19,7 @@ widgets:
     kind: button
     label: Back
     icon: arrow-left
+    color: "#1e3a8a"
     grid: [2, 0, 1, 1]
     action:
       key: "alt+Left"
@@ -26,6 +27,7 @@ widgets:
     kind: button
     label: Forward
     icon: arrow-right
+    color: "#1e3a8a"
     grid: [3, 0, 1, 1]
     action:
       key: "alt+Right"

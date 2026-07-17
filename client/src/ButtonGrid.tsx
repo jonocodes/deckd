@@ -63,11 +63,14 @@ export function ButtonGrid({ widgets, onPress, onJog, onJogEnd }: Props) {
               />
             );
           }
+          const buttonStyle: CSSProperties = w.color
+            ? { ...style, backgroundColor: w.color }
+            : style;
           return (
             <button
               key={w.id}
               className="cell cell-button"
-              style={style}
+              style={buttonStyle}
               onPointerDown={(e) => {
                 e.preventDefault();
                 onPress(w.id);

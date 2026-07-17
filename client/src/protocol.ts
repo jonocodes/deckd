@@ -4,6 +4,8 @@ export type Widget = {
   label?: string | null;
   icon?: string | null;
   grid: [number, number, number, number];
+  /** Optional CSS colour string; applied as the button's background. */
+  color?: string | null;
   action?: Record<string, unknown> | null;
 };
 
