@@ -26,6 +26,11 @@ button {
   display: flex;
   flex-direction: column;
   height: 100%;
+  /* Standalone PWAs on iOS / Android may sit under the status bar,
+     notch, or home indicator. Insets keep chrome away from those edges;
+     zero on browsers without the env() function. */
+  padding-top: env(safe-area-inset-top);
+  padding-left: env(safe-area-inset-left);
 }
 
 /* ---------------------------------------------------------------------------
@@ -52,6 +57,9 @@ button {
   flex: 0 0 auto;
   width: clamp(56px, 12vw, 88px);
   padding: 8px 8px 8px 0;
+  /* In landscape a notch/camera-cutout on the right side would eat into
+     the strip; pad it out so the touch target stays clear. */
+  padding-right: max(8px, env(safe-area-inset-right));
   min-height: 0;
 }
 
@@ -79,6 +87,10 @@ button {
   align-items: center;
   gap: 10px;
   padding: 10px 14px;
+  /* Extend the bar into the iOS home-indicator area so the background
+     colour still reaches the screen edge; the extra space is added
+     below the flex row via padding-bottom, not layout gap. */
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
   background: #161b21;
   border-top: 1px solid #232a32;
   font-size: 13px;
