@@ -226,10 +226,11 @@ class MacKeySink(KeySink):
         # event instead of moving relative to where it was. Posting at
         # ``current + delta`` is the reliable path.
         #
-        # The wire's dy is screen-down (CSS convention). Quartz screen
-        # coordinates have origin at bottom-left, Y up, so we invert.
+        # Quartz mouse-event coordinates use top-left origin with Y down,
+        # same as CSS / iOS / Windows -- so dy from the wire (screen-down)
+        # maps directly to positive Y on the cursor.
         current = Q.CGEventGetLocation(Q.CGEventCreate(None))
-        new_pos = Q.CGPoint(current.x + dx, current.y - dy)
+        new_pos = Q.CGPoint(current.x + dx, current.y + dy)
         event = Q.CGEventCreateMouseEvent(
             None, event_type, new_pos, Q.kCGMouseButtonLeft
         )
