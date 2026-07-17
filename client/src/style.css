@@ -28,28 +28,121 @@ button {
   height: 100%;
 }
 
-.topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 14px;
-  background: #161b21;
-  font-size: 13px;
-  letter-spacing: 0.04em;
-  border-bottom: 1px solid #232a32;
-}
+/* ---------------------------------------------------------------------------
+ * Chrome page: layout area (left) + persistent right-side jogstrip.
+ * The bottom strip lives outside this row.
+ * ------------------------------------------------------------------------- */
 
-.brand { font-weight: 700; }
-.meta { color: #8a96a3; font-variant-numeric: tabular-nums; }
-.status-open { color: #4ade80; }
-.status-connecting { color: #f59e0b; }
-.status-closed { color: #f87171; }
+.chrome-page {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+  min-width: 0;
+}
 
 .surface {
   flex: 1;
   padding: 10px;
   min-height: 0;
+  min-width: 0;
 }
+
+.chrome-jogstrip {
+  flex: 0 0 auto;
+  width: clamp(56px, 12vw, 88px);
+  padding: 8px 8px 8px 0;
+  min-height: 0;
+}
+
+.chrome-jogstrip .cell-jogstrip {
+  height: 100%;
+  width: 100%;
+  border-radius: 14px;
+}
+
+/* The chrome strip shows only a texture mark; suppress the label/hint pill. */
+.chrome-jogstrip .chrome-jogstrip-hint {
+  color: #7dd3fc;
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  opacity: 0.5;
+}
+
+/* ---------------------------------------------------------------------------
+ * Bottom chrome strip: app name + connection dot + trackpad + settings.
+ * ------------------------------------------------------------------------- */
+
+.chrome-bottom {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #161b21;
+  border-top: 1px solid #232a32;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  flex: 0 0 auto;
+}
+
+.app-name {
+  flex: 1;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.connection {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #8a96a3;
+  font-variant-numeric: tabular-nums;
+}
+
+.connection-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #6b7785;
+}
+
+.connection-open .connection-dot { background: #4ade80; }
+.connection-open { color: #4ade80; }
+.connection-connecting .connection-dot { background: #f59e0b; animation: connection-pulse 1.1s ease-in-out infinite; }
+.connection-connecting { color: #f59e0b; }
+.connection-closed .connection-dot { background: #f87171; }
+.connection-closed { color: #f87171; }
+
+@keyframes connection-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.chrome-btn {
+  padding: 8px 12px;
+  border-radius: 9px;
+  background: #1b222a;
+  border: 1px solid #2a333d;
+  color: #e6e9ef;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  touch-action: manipulation;
+  transition: background 80ms ease, transform 80ms ease;
+}
+
+.chrome-btn:active { transform: scale(0.97); background: #2a333d; }
+.chrome-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.chrome-btn-active { background: #2a333d; border-color: #3fb1d8; color: #7dd3fc; }
+
+/* ---------------------------------------------------------------------------
+ * Layout grid area (chrome-excluded)
+ * ------------------------------------------------------------------------- */
 
 .grid {
   display: grid;
@@ -131,6 +224,38 @@ button {
 .cell-jogstrip .hint {
   color: #8a96a3;
   font-size: 12px;
+}
+
+/* Hide the redundant "||" texture when the chrome strip already shows a
+   text label, so the chrome gutter stays visually quiet. */
+.chrome-jogstrip .cell-jogstrip::before {
+  content: "";
+}
+
+/* ---------------------------------------------------------------------------
+ * Trackpad placeholder view (T8 wires the real widget)
+ * ------------------------------------------------------------------------- */
+
+.trackpad-placeholder {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 2px dashed #2a333d;
+  border-radius: 16px;
+  color: #6b7785;
+  background: #11161b;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.trackpad-hint {
+  font-size: clamp(20px, 4vw, 30px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .empty {

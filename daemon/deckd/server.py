@@ -43,7 +43,10 @@ class Session:
         layout = self.server.current_layout
         widgets = [w.model_dump() for w in layout.widgets]
         msg = p.LayoutMessage(
-            type="layout", app=self.server.current_app_id, widgets=widgets
+            type="layout",
+            app=self.server.current_app_id,
+            widgets=widgets,
+            jogstrip_enabled=layout.jogstrip,
         )
         await self.send(msg)
 

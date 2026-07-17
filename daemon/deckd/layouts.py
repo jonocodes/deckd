@@ -34,6 +34,7 @@ class Layout(BaseModel):
     id: str = ""
     match: list[str] = Field(default_factory=list)
     widgets: list[Widget] = Field(default_factory=list)
+    jogstrip: bool = True
 
     def matches(self, app: AppInfo) -> bool:
         """True if this layout's ``match`` list covers the given app.

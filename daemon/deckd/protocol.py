@@ -11,6 +11,7 @@ class LayoutMessage(BaseModel):
     type: Literal["layout"]
     app: str = "default"
     widgets: list[dict]
+    jogstrip_enabled: bool = True
 
 
 class StateMessage(BaseModel):

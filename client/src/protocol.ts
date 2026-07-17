@@ -11,6 +11,7 @@ export type ServerLayout = {
   type: "layout";
   app: string;
   widgets: Widget[];
+  jogstrip_enabled: boolean;
 };
 
 export type ServerState = { type: "state"; locked: boolean };

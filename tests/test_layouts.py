@@ -234,3 +234,34 @@ widgets:
     assert "code" in store
     assert store["code"].id == "code"
     assert store["code"].match == ["code", "code-insiders"]
+
+
+# ---------------------------------------------------------------------------
+# Persistent jogstrip flag (T6/issue #12)
+#
+# Each layout may suppress the client's persistent right-side jogstrip with
+# ``jogstrip: false``. Absent, the flag defaults to True so chrome renders
+# the always-on scroll strip by default.
+# ---------------------------------------------------------------------------
+
+
+def test_layout_defaults_jogstrip_enabled_to_true(tmp_path: Path) -> None:
+    _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)
+    store = load_layouts(tmp_path)
+    assert store["default"].jogstrip is True
+
+
+def test_layout_with_jogstrip_false_parses(tmp_path: Path) -> None:
+    body = """
+match:
+  - default
+jogstrip: false
+widgets:
+  - id: home
+    kind: button
+    label: Home
+    grid: [0, 0, 1, 1]
+"""
+    _write(tmp_path, "default.yaml", body)
+    store = load_layouts(tmp_path)
+    assert store["default"].jogstrip is False

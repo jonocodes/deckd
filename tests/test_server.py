@@ -203,3 +203,118 @@ async def test_layout_override_unknown_name_returns_error(srv: ServerHandle) -> 
 
     assert body["ok"] is False
     assert "nonexistent" in body["error"]
+
+
+# ---------------------------------------------------------------------------
+# Persistent jogstrip flag in LayoutMessage (T6/issue #12)
+#
+# The daemon adds ``jogstrip_enabled`` to every LayoutMessage: True by
+# default, False when the active layout's YAML declares ``jogstrip: false``.
+# The client chrome uses this to hide the always-on right-side strip.
+# ---------------------------------------------------------------------------
+
+
+async def test_layout_message_defaults_jogstrip_enabled_true(
+    srv: ServerHandle,
+) -> None:
+    """Repo default layout omits ``jogstrip``; the message must carry True."""
+    async with ws_connected(srv) as (_, layout):
+        assert layout["jogstrip_enabled"] is True
+
+
+async def test_layout_message_carries_jogstrip_enabled_false_when_suppressed(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A layout with ``jogstrip: false`` pushes ``jogstrip_enabled: False``."""
+    import deckd.actions as actions_mod
+    from aiohttp.test_utils import TestServer
+    from conftest import make_test_server
+
+    async def fake_shell(cmd: str) -> None:
+        return None
+
+    monkeypatch.setattr(actions_mod, "_run_shell", fake_shell)
+
+    (tmp_path / "default.yaml").write_text(
+        """
+match:
+  - default
+widgets:
+  - id: home
+    kind: button
+    label: Home
+    grid: [0, 0, 1, 1]
+"""
+    )
+    (tmp_path / "nochrome.yaml").write_text(
+        """
+match:
+  - nochrome
+jogstrip: false
+widgets:
+  - id: scroll-own
+    kind: button
+    label: Scroll own
+    grid: [0, 0, 1, 1]
+"""
+    )
+
+    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
+    test_server = TestServer(server.app, host="127.0.0.1")
+    await test_server.start_server()
+    port = test_server.port or 0
+    try:
+        # Force-switch to the chrome-suppressed layout.
+        async with aiohttp.ClientSession() as http:
+            async with http.post(f"http://127.0.0.1:{port}/layout/nochrome") as r:
+                assert r.status == 200
+
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+    finally:
+        await test_server.close()
+        await server.scroll.close()
+
+    assert layout["type"] == "layout"
+    assert layout["app"] == "nochrome"
+    assert layout["jogstrip_enabled"] is False
+
+
+async def test_layout_message_carries_jogstrip_enabled_true_when_explicit(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """A layout that explicitly sets ``jogstrip: true`` also reports True."""
+    import deckd.actions as actions_mod
+    from aiohttp.test_utils import TestServer
+    from conftest import make_test_server
+
+    async def fake_shell(cmd: str) -> None:
+        return None
+
+    monkeypatch.setattr(actions_mod, "_run_shell", fake_shell)
+
+    (tmp_path / "default.yaml").write_text(
+        """
+match:
+  - default
+jogstrip: true
+widgets:
+  - id: home
+    kind: button
+    label: Home
+    grid: [0, 0, 1, 1]
+"""
+    )
+
+    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
+    test_server = TestServer(server.app, host="127.0.0.1")
+    await test_server.start_server()
+    port = test_server.port or 0
+    try:
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+    finally:
+        await test_server.close()
+        await server.scroll.close()
+
+    assert layout["jogstrip_enabled"] is True
