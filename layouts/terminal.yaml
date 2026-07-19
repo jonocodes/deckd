@@ -9,28 +9,36 @@ widgets:
   - id: copy
     kind: button
     label: Copy
-    icon: clipboard
+    icon:
+      source: lucide
+      name: clipboard
     grid: [0, 0, 1, 1]
     action:
       key: "ctrl+shift+c"
   - id: paste
     kind: button
     label: Paste
-    icon: paste
+    icon:
+      source: lucide
+      name: paste
     grid: [1, 0, 1, 1]
     action:
       key: "ctrl+shift+v"
   - id: new-tab
     kind: button
     label: New tab
-    icon: plus
+    icon:
+      source: lucide
+      name: plus
     grid: [2, 0, 1, 1]
     action:
       key: "ctrl+shift+t"
   - id: find
     kind: button
     label: Find
-    icon: search
+    icon:
+      source: lucide
+      name: search
     grid: [3, 0, 1, 1]
     action:
       key: "ctrl+shift+f"

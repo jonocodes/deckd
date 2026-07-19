@@ -87,7 +87,10 @@ export function ButtonGrid({ widgets, onPress, onJog, onJogEnd, scrollScale, scr
               }}
             >
               <span className="label">{w.label ?? w.id}</span>
-              {w.icon ? <span className="icon">{w.icon}</span> : null}
+              {/* Interim: render the icon name as text. The {source, name}
+                  dispatch to real glyphs (Lucide / Simple Icons) lands with
+                  the icon-renderer work in #21. */}
+              {w.icon ? <span className="icon">{w.icon.name}</span> : null}
             </button>
           );
         }),

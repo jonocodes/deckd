@@ -11,13 +11,26 @@ from .platform import AppInfo
 log = logging.getLogger("deckd.layouts")
 
 
+class Icon(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # ``source`` selects a client-side renderer (e.g. "lucide",
+    # "simple-icons"); ``name`` is looked up within it. The daemon relays
+    # both opaquely (ADR-0006): it validates only that they are non-empty
+    # strings and never enumerates the valid sources -- that registry lives
+    # in the client, which renders a visible placeholder for an unknown
+    # source rather than failing to load.
+    source: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+
+
 class Widget(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
     kind: str
     label: str | None = None
-    icon: str | None = None
+    icon: Icon | None = None
     grid: list[int] = Field(min_length=4, max_length=4)
     # Optional CSS colour string applied as the button's background. Any
     # value the browser accepts is fine ("#1e3a8a", "rebeccapurple",

@@ -5,35 +5,45 @@ widgets:
   - id: split-right
     kind: button
     label: Split right
-    icon: columns
+    icon:
+      source: lucide
+      name: columns
     grid: [0, 0, 1, 1]
     action:
       key: "ctrl+alt+r"
   - id: split-down
     kind: button
     label: Split down
-    icon: rows
+    icon:
+      source: lucide
+      name: rows
     grid: [1, 0, 1, 1]
     action:
       key: "ctrl+alt+d"
   - id: new-window
     kind: button
     label: New window
-    icon: window
+    icon:
+      source: lucide
+      name: window
     grid: [2, 0, 1, 1]
     action:
       key: "ctrl+shift+n"
   - id: next-terminal
     kind: button
     label: Next term
-    icon: arrow-right
+    icon:
+      source: lucide
+      name: arrow-right
     grid: [3, 0, 1, 1]
     action:
       key: "ctrl+tab"
   - id: close-terminal
     kind: button
     label: Close term
-    icon: close
+    icon:
+      source: lucide
+      name: close
     grid: [0, 1, 1, 1]
     action:
       key: "ctrl+shift+w"

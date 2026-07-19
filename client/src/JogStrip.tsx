@@ -7,7 +7,6 @@ import type { CSSProperties } from "react";
 export type JogHandle = {
   id: string;
   label?: string | null;
-  icon?: string | null;
 };
 
 export type JogStripProps = {
