@@ -20,7 +20,7 @@ widgets:
     label: Paste
     icon:
       source: lucide
-      name: paste
+      name: clipboard-paste
     grid: [1, 0, 1, 1]
     action:
       key: "ctrl+shift+v"

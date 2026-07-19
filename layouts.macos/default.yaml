@@ -22,7 +22,7 @@ widgets:
     label: Close
     icon:
       source: lucide
-      name: close
+      name: x
     grid: [1, 0, 1, 1]
     action:
       key: "super+w"
@@ -40,7 +40,7 @@ widgets:
     label: New window
     icon:
       source: lucide
-      name: window
+      name: app-window
     grid: [3, 0, 1, 1]
     action:
       key: "super+n"

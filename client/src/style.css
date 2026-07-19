@@ -198,11 +198,26 @@ button {
   word-break: break-word;
 }
 
+/* Icon glyph (Lucide / Simple Icons), rendered above the label. Sized in
+   viewport units so it scales with the cell; inherits the fixed light
+   foreground via ``currentColor``. */
 .cell-button .icon {
-  font-size: 12px;
-  opacity: 0.6;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: currentColor;
+}
+
+.cell-button .icon svg {
+  width: clamp(20px, 5.5vw, 32px);
+  height: clamp(20px, 5.5vw, 32px);
+}
+
+/* Unresolved / unknown-source icon: a dashed placeholder box so the miss is
+   visible in the layout. */
+.cell-button .icon[data-icon-missing] {
+  font-size: clamp(18px, 5vw, 28px);
+  opacity: 0.45;
 }
 
 .cell-jogstrip {
@@ -223,11 +238,12 @@ button {
   min-width: 0;
 }
 
-.cell-jogstrip::before {
-  content: "||";
+/* Scroll-affordance glyph (Lucide chevrons-up-down) — the jogstrip's
+   surface-identity mark, replacing the earlier "||" placeholder. */
+.cell-jogstrip .jog-mark {
   color: #7dd3fc;
-  font-size: clamp(22px, 5vw, 34px);
-  line-height: 1;
+  width: clamp(22px, 5vw, 34px);
+  height: clamp(22px, 5vw, 34px);
 }
 
 .cell-jogstrip .label {
@@ -240,10 +256,12 @@ button {
   font-size: 12px;
 }
 
-/* Hide the redundant "||" texture when the chrome strip already shows a
-   text label, so the chrome gutter stays visually quiet. */
-.chrome-jogstrip .cell-jogstrip::before {
-  content: "";
+/* The chrome strip is narrow; keep its scroll glyph a touch smaller so it
+   sits quietly above the "scroll" hint. */
+.chrome-jogstrip .cell-jogstrip .jog-mark {
+  width: clamp(18px, 4vw, 26px);
+  height: clamp(18px, 4vw, 26px);
+  opacity: 0.6;
 }
 
 /* ---------------------------------------------------------------------------

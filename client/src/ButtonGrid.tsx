@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { Widget } from "./protocol";
+import { Icon } from "./Icon";
 import { JogStrip } from "./JogStrip";
 import { transposeWidgets, useOrientation } from "./orientation";
 
@@ -86,11 +87,8 @@ export function ButtonGrid({ widgets, onPress, onJog, onJogEnd, scrollScale, scr
                 onPress(w.id);
               }}
             >
+              {w.icon ? <Icon icon={w.icon} className="icon" /> : null}
               <span className="label">{w.label ?? w.id}</span>
-              {/* Interim: render the icon name as text. The {source, name}
-                  dispatch to real glyphs (Lucide / Simple Icons) lands with
-                  the icon-renderer work in #21. */}
-              {w.icon ? <span className="icon">{w.icon.name}</span> : null}
             </button>
           );
         }),

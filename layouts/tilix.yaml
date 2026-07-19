@@ -7,7 +7,7 @@ widgets:
     label: Split right
     icon:
       source: lucide
-      name: columns
+      name: columns-2
     grid: [0, 0, 1, 1]
     action:
       key: "ctrl+alt+r"
@@ -16,7 +16,7 @@ widgets:
     label: Split down
     icon:
       source: lucide
-      name: rows
+      name: rows-2
     grid: [1, 0, 1, 1]
     action:
       key: "ctrl+alt+d"
@@ -25,7 +25,7 @@ widgets:
     label: New window
     icon:
       source: lucide
-      name: window
+      name: app-window
     grid: [2, 0, 1, 1]
     action:
       key: "ctrl+shift+n"
@@ -43,7 +43,7 @@ widgets:
     label: Close term
     icon:
       source: lucide
-      name: close
+      name: x
     grid: [0, 1, 1, 1]
     action:
       key: "ctrl+shift+w"

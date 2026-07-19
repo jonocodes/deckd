@@ -15,7 +15,7 @@ widgets:
     label: New window
     icon:
       source: lucide
-      name: window
+      name: app-window
     grid: [1, 0, 1, 1]
     action:
       key: "ctrl+n"
@@ -44,7 +44,7 @@ widgets:
     label: Reload
     icon:
       source: lucide
-      name: refresh
+      name: refresh-cw
     grid: [0, 1, 1, 1]
     action:
       key: "ctrl+r"
@@ -71,7 +71,7 @@ widgets:
     label: Close tab
     icon:
       source: lucide
-      name: close
+      name: x
     grid: [3, 1, 1, 1]
     action:
       key: "ctrl+w"

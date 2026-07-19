@@ -56,15 +56,28 @@ sources a client-only change.
 
 ### Bundled sets: Lucide (UI glyphs) + Simple Icons (brand logos)
 
-The client bundles two complementary sets, whole:
+The client bundles two complementary sets:
 
 - **Lucide** (`source: lucide`) — regular UI glyphs (arrows, search, media).
 - **Simple Icons** (`source: simple-icons`) — brand/app logos (Firefox, …).
 
-Both are monochrome and inherit the fixed foreground colour. Whole sets are
-bundled (not subset to referenced icons) so adding an icon to a layout is a
-YAML edit with no client rebuild. Combined transfer is ~0.4–0.5 MB gzipped,
-cached once by the PWA service worker.
+Both are monochrome and inherit the fixed foreground colour. Neither is
+subset to referenced icons, so adding an icon to a layout is a YAML edit with
+no client rebuild — any name in either set resolves at runtime.
+
+**Loading is asymmetric, because the sets differ ~10× in weight.** Measured:
+Lucide whole is ~198 KB gzipped; Simple Icons whole is ~2.1 MB gzipped (3450
+brand paths). So:
+
+- **Lucide is bundled into the main chunk** (renders synchronously — its
+  glyphs are on most buttons, and 198 KB in the initial load is fine).
+- **Simple Icons is a lazy on-demand chunk**, imported the first time a
+  layout references a brand logo. Its 2.1 MB is never fetched unless a brand
+  icon is actually used, and is cached by the PWA service worker thereafter.
+
+(The earlier ~0.5 MB "bundle both whole" estimate was wrong — whole-bundling
+Simple Icons pushed the initial payload to ~2.4 MB gzipped. Lazy-loading it
+keeps the initial load at ~198 KB while preserving no-rebuild authoring.)
 
 This mirrors the category norm (Elgato Stream Deck, MacroDeck, Touch Portal):
 a baseline bundled set, later joined by per-icon uploads and installable

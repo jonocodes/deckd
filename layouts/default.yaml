@@ -15,7 +15,7 @@ widgets:
     label: VLC Play/Pause
     icon:
       source: lucide
-      name: media-play
+      name: play
     grid: [1, 0, 1, 1]
     action:
       dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
