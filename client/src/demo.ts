@@ -59,6 +59,12 @@ const DEMOS: Record<string, ServerLayout> = {
   showcase: SHOWCASE,
 };
 
+/** The demo fixtures, keyed by name — for the gallery and Ladle stories. */
+export const DEMO_LAYOUTS = DEMOS;
+
+/** Names of the available demo fixtures, for the demo gallery selector. */
+export const DEMO_NAMES = Object.keys(DEMOS);
+
 /** Returns the demo layout named by the ``?demo=`` URL param, or ``null``
  * when the param is absent/unknown (normal daemon-backed operation). */
 export function getDemoLayout(): ServerLayout | null {
