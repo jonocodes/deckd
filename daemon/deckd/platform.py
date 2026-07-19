@@ -62,11 +62,55 @@ class GnomeShellFocusBackend(PlatformBackend):
         )
 
 
+class FocusBackendUnavailable(RuntimeError):
+    """Raised by a focus backend when its underlying mechanism (a shell-out
+    binary, a D-Bus service, etc.) isn't usable.
+
+    Subclasses ``RuntimeError`` so the daemon's broad
+    ``except Exception`` in ``run_focus_watcher`` keeps catching it
+    unchanged. Carries a ``hint`` string the CLI / scripts can print to
+    point the user at the install / grant step.
+    """
+
+    def __init__(self, message: str, *, hint: str = "") -> None:
+        super().__init__(message)
+        self.hint = hint
+
+
 class X11FocusBackend(PlatformBackend):
+    """Active-window via ``xdotool``. Supported on any X11 session — no
+    platform extension, no D-Bus service, no permissions beyond
+    ``xdotool`` on ``$PATH``. Surfaces ``FocusBackendUnavailable`` with
+    an install hint when ``xdotool`` is missing or cannot reach the
+    display, so the daemon and CLI log something actionable instead of
+    a raw ``[Errno 2]``.
+    """
+
+    X11_INSTALL_HINT = (
+        "xdotool is required for focus detection on X11 — "
+        "install it with your distro's package manager "
+        "(apt / dnf / pacman)."
+    )
+    X11_RUNTIME_HINT = (
+        "check that an X session is active (DISPLAY set, X server "
+        "reachable); on a headless box the focus watcher is unavailable."
+    )
+
     async def get_active_app(self) -> AppInfo:
-        window_id = (await _run("xdotool", "getactivewindow")).strip()
-        wm_class = (await _run("xdotool", "getwindowclassname", window_id)).strip() or None
-        title = (await _run("xdotool", "getwindowname", window_id)).strip() or None
+        try:
+            window_id = (await _run("xdotool", "getactivewindow")).strip()
+            wm_class = (await _run("xdotool", "getwindowclassname", window_id)).strip() or None
+            title = (await _run("xdotool", "getwindowname", window_id)).strip() or None
+        except FileNotFoundError as exc:
+            raise FocusBackendUnavailable(
+                f"xdotool not found: {exc}",
+                hint=self.X11_INSTALL_HINT,
+            ) from exc
+        except RuntimeError as exc:
+            raise FocusBackendUnavailable(
+                f"xdotool focus query failed: {exc}",
+                hint=self.X11_RUNTIME_HINT,
+            ) from exc
         return AppInfo(app_id=None, wm_class=wm_class, title=title)
 
 

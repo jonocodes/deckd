@@ -49,25 +49,27 @@ Owner context: solo project, planning-first workflow. Spikes come first because 
 
 ## Spike #2 — GNOME-Wayland active-window detection (issue #2)
 
-**Status:** done (X11 unsupported).
+**Status:** done; X11 promoted to a supported target (#29), KDE-Wayland investigation underway (#30).
 
 **Goal:** resolve the highest-uncertainty design question (INCEPTION.md §4.1) and ship a working `PlatformBackend.watch_active_app()`.
 
 ### Decision
 - Chose (a): tiny GNOME Shell extension over session D-Bus.
-- X11 fallback exists in daemon code but is not a supported target; no testing or ongoing maintenance planned for X11.
+- X11 (`xdotool`) is a supported target — `X11FocusBackend` works on any X11 session (XFCE, MATE, Cinnamon, LXQt, KDE-X11, standalone WMs). No extension needed; only `xdotool` on `$PATH`. Failures (`xdotool` missing, no display) surface as `FocusBackendUnavailable` with an install hint. Promoted in #29.
 - (b) `org.gnome.Shell.Introspect` was ruled out — returns `AccessDenied` on this machine.
+- KDE-Wayland / other wlroots compositors are out of scope for this spike; investigation tracked by #30, implementation by #31.
 
 ### Scope
 - Tiny GNOME Shell extension over session D-Bus.
 - `PlatformBackend.watch_active_app() -> AsyncIterator[AppInfo]` over the GNOME/Wayland split (`echo $XDG_SESSION_TYPE`).
 - Daemon side: stub that prints focused `app_id` / `WM_CLASS` changes to stdout. No layout switching yet — just prove we can see focus changes.
+- X11 promotion (#29): `X11FocusBackend` failure paths now raise `FocusBackendUnavailable` with install hints; covered by `tests/test_platform.py`.
 
 ### Definition of done
 - [x] Focused-window changes printed within ~200ms of alt-tab.
 - [x] Both `app_id` (Wayland-native) and `WM_CLASS` (XWayland) appear correctly.
 - [x] Behavior documented for the GNOME version this machine runs (Shell 50.1).
-- [ ] ~~X11 fallback~~ — unsupported.
+- [x] X11 supported: `xdotool` path covered by tests, documented in README, install hint surfaced on failure.
 
 ### Progress
 - **2026-07-15** — Spike #2 kickoff:
@@ -84,6 +86,12 @@ Owner context: solo project, planning-first workflow. Spikes come first because 
   - `gdbus call org.deckd.Focus.GetActiveWindow` returns correct `app_id`, `wm_class`, `title`, `pid`.
   - `just watch-focus` polls at 100ms and prints focus changes on alt-tab.
   - Native Wayland apps report `app_id`; XWayland apps report `wm_class`.
+- **2026-07-18** — X11 promotion (#29):
+  - `X11FocusBackend.get_active_app` now wraps `FileNotFoundError` (`xdotool` missing) and `RuntimeError` (`xdotool` failure, no display) into `FocusBackendUnavailable` with an install / diagnostic hint.
+  - New `tests/test_platform.py` covers the happy path, the `.strip() or None` empties handling, both failure modes, and `default_backend()` X11 dispatch — including a non-GNOME-X11 audit case (`XDG_CURRENT_DESKTOP=XFCE` still picks `X11FocusBackend`).
+  - `scripts/watch_focus.py` surfaces `FocusBackendUnavailable.hint` in the failure message instead of always printing the GNOME-extension hint.
+  - `daemon/deckd/server.py:run_focus_watcher` logs the `.hint` on the initial focus query when the backend carries one.
+  - README **Focus watcher** section: dropped the "X11 fallback … not a supported target" disclaimer, added an X11 subsection, and updated the architecture diagram.
 
 ---
 

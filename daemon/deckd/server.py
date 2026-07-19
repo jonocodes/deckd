@@ -239,7 +239,11 @@ class Server:
         try:
             initial = await backend.get_active_app()
         except Exception as exc:
-            log.warning("initial focus query failed: %s", exc)
+            hint = getattr(exc, "hint", "")
+            if hint:
+                log.warning("initial focus query failed: %s (hint: %s)", exc, hint)
+            else:
+                log.warning("initial focus query failed: %s", exc)
             initial = None
         if initial is not None:
             await self._on_focus(initial)

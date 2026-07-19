@@ -50,9 +50,9 @@ What works today: focus a window on the desktop and the phone's browser flips to
                           │                    │
               scroll + keys + pointer  ┌───────┴───────┐
                           │            │               │
-                     /dev/uinput   GNOME Shell     (X11 fallback
-                                   Extension        xdotool —
-                                  deckd-focus      unsupported)
+                     /dev/uinput   GNOME Shell     (xdotool —
+                                   Extension        any X11 DE)
+                                  deckd-focus
                                    @local
 ```
 
@@ -311,7 +311,29 @@ app_id='org.gnome.Console' wm_class='org.gnome.Console' pid=1234 title='Terminal
 app_id=None wm_class='firefox' pid=188566 title='YouTube — Mozilla Firefox'
 ```
 
-X11 (`xdotool`) fallback exists in `daemon/deckd/platform.py` but is not a supported target.
+#### X11 sessions (any desktop environment)
+
+On any X11 session — XFCE, MATE, Cinnamon, Budgie, LXQt, KDE-X11, GNOME-X11, standalone i3/openbox, etc. — the focus watcher uses [`xdotool`](https://manpages.ubuntu.com/manpages/xdotool) directly. No GNOME extension is needed; no D-Bus service is required. The daemon picks `X11FocusBackend` automatically when `XDG_SESSION_TYPE=x11`.
+
+Make sure `xdotool` is on `$PATH`:
+
+```sh
+# Debian / Ubuntu
+sudo apt install xdotool
+# Fedora
+sudo dnf install xdotool
+# Arch
+sudo pacman -S xdotool
+```
+
+Then verify the same way:
+
+```sh
+just watch-focus           # app_id=None, wm_class=<class>, title=<title>
+just watch-focus-once
+```
+
+On X11 there is no `app_id` analogue (no Wayland / Flatpak app id), so `app_id` is always `None` and layouts match on `wm_class` only. If `xdotool` is missing or cannot reach the display, `watch-focus` and the daemon both print an install hint instead of crashing.
 
 ### Dev UX: auto-ignore + layout override
 
