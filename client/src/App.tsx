@@ -10,6 +10,7 @@ import {
   useWakeLockSetting,
 } from "./settings-store";
 import { useWakeLock } from "./wake-lock";
+import { getDemoLayout } from "./demo";
 import type { JogHandle } from "./JogStrip";
 import type { ServerLayout } from "./protocol";
 
@@ -31,10 +32,14 @@ const STATUS_LABEL: Record<SocketStatus, string> = {
 };
 
 export function App() {
-  const [layout, setLayout] = useState<ServerLayout | null>(null);
+  // Demo mode (``?demo=<name>``): render a fixture layout with the socket
+  // disabled, so the client can be viewed without a daemon. Null in normal
+  // daemon-backed operation.
+  const demoLayout = getDemoLayout();
+  const [layout, setLayout] = useState<ServerLayout | null>(demoLayout);
   const [view, setView] = useState<View>("layout");
   const onLayout = useCallback((m: ServerLayout) => setLayout(m), []);
-  const { status, send } = useDeckdSocket(onLayout);
+  const { status, send } = useDeckdSocket(onLayout, { enabled: !demoLayout });
   const scroll = useScrollSettings();
   const trackpad = useTrackpadSettings();
   const wakeLock = useWakeLockSetting();

@@ -44,5 +44,21 @@ export default defineConfig({
   build: {
     outDir: "dist",
     emptyOutDir: true,
+    // Two vendor chunks are intentionally large (ADR-0006): ``lucide`` is
+    // the whole UI-glyph set, bundled eagerly (~198 KB gzipped); and
+    // ``simple-icons`` is the whole brand-logo set (~2.1 MB gzipped) split
+    // into its own *lazy* chunk that is only fetched the first time a layout
+    // references a brand logo. Name them so the build output is legible, and
+    // lift the size warning above them so it stays meaningful signal rather
+    // than a permanent false alarm.
+    chunkSizeWarningLimit: 6000,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes("node_modules/simple-icons")) return "simple-icons";
+          if (id.includes("node_modules/lucide-react")) return "lucide";
+        },
+      },
+    },
   },
 });
