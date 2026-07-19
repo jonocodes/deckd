@@ -61,34 +61,37 @@ function MissingIcon({ icon, className }: { icon: IconRef; className?: string })
  * empty box while the chunk loads, and the miss placeholder if the slug is
  * unknown once loaded. */
 function SimpleBrandIcon({ icon, className }: { icon: IconRef; className?: string }) {
-  const [path, setPath] = useState<string | null>(null);
-  const [missing, setMissing] = useState(false);
+  // Resolution is keyed by the name it was resolved for, so a name change is
+  // detectable as "not yet resolved" without a synchronous reset in the
+  // effect (which would trigger a cascading render). ``path: null`` once
+  // resolved means the slug is unknown.
+  const [resolved, setResolved] = useState<{ name: string; path: string | null } | null>(null);
 
   useEffect(() => {
     let alive = true;
-    setPath(null);
-    setMissing(false);
     loadSimpleIcons().then((bySlug) => {
       if (!alive) return;
       const si = bySlug.get(icon.name);
-      if (si) setPath(si.path);
-      else setMissing(true);
+      setResolved({ name: icon.name, path: si ? si.path : null });
     });
     return () => {
       alive = false;
     };
   }, [icon.name]);
 
-  if (path) {
+  // Loading, or resolving a newly-changed name: reserve the slot without a
+  // flash of the previous logo or the placeholder.
+  if (!resolved || resolved.name !== icon.name) {
+    return <span className={className} aria-hidden />;
+  }
+  if (resolved.path) {
     return (
       <svg className={className} viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-        <path d={path} />
+        <path d={resolved.path} />
       </svg>
     );
   }
-  if (missing) return <MissingIcon icon={icon} className={className} />;
-  // Loading: reserve the slot without a flash of the placeholder glyph.
-  return <span className={className} aria-hidden />;
+  return <MissingIcon icon={icon} className={className} />;
 }
 
 export function Icon({ icon, className }: { icon: IconRef; className?: string }) {

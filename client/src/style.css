@@ -198,25 +198,24 @@ button {
   word-break: break-word;
 }
 
-/* Icon glyph (Lucide / Simple Icons), rendered above the label. Sized in
-   viewport units so it scales with the cell; inherits the fixed light
-   foreground via ``currentColor``. */
+/* Icon glyph (Lucide / Simple Icons), rendered above the label. The glyph is
+   an ``<svg class="icon">`` itself, so size it directly — one fixed box for
+   every source regardless of the set's intrinsic viewBox, so icons read at a
+   single consistent size. Inherits the fixed light foreground via
+   ``currentColor``. */
 .cell-button .icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  width: clamp(22px, 6vw, 34px);
+  height: clamp(22px, 6vw, 34px);
   color: currentColor;
 }
 
-.cell-button .icon svg {
-  width: clamp(20px, 5.5vw, 32px);
-  height: clamp(20px, 5.5vw, 32px);
-}
-
-/* Unresolved / unknown-source icon: a dashed placeholder box so the miss is
-   visible in the layout. */
+/* Unresolved / unknown-source icon: a dashed placeholder box (a <span>, not an
+   svg) so the miss is visible in the layout. */
 .cell-button .icon[data-icon-missing] {
-  font-size: clamp(18px, 5vw, 28px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(20px, 5.5vw, 30px);
   opacity: 0.45;
 }
 
