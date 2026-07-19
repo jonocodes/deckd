@@ -54,6 +54,14 @@ What works today: focus a window on the desktop and the phone's browser flips to
                                    Extension        any X11 DE)
                                   deckd-focus
                                    @local
+
+                            ┌──────────────────┐
+                            │  Focus watchers   │
+                            └──────────────────┘
+                              GNOME Shell ext.   (Wayland, GNOME)
+                              KWin script        (Wayland, KDE Plasma)
+                              xdotool           (any X11 session)
+                              osascript          (macOS)
 ```
 
 ## Layout
@@ -334,6 +342,43 @@ just watch-focus-once
 ```
 
 On X11 there is no `app_id` analogue (no Wayland / Flatpak app id), so `app_id` is always `None` and layouts match on `wm_class` only. If `xdotool` is missing or cannot reach the display, `watch-focus` and the daemon both print an install hint instead of crashing.
+
+#### KDE Plasma Wayland sessions
+
+KDE Plasma Wayland does not export the active window to outside clients over a documented D-Bus interface (the spike in `docs/spike-kde-wayland-focus.md` ruled out every Wayland-protocol and `org.kde.KWin` session-bus path). Instead deckd ships a tiny **KWin script** that runs inside the compositor and `callDBus`-pushes the focused window snapshot into the daemon's own `org.deckd.Focus` cache over the session bus. The wire shape on the consumer side is byte-identical to the GNOME extension, so the daemon's `KdeFocusBackend` reads from the same in-process cache the GNOME backend polls via `gdbus`.
+
+Install + enable + hot-start in one go (Plasma 6, requires `kpackagetool6` / `kwriteconfig6` / `qdbus` on `$PATH` — stock Plasma dev installs):
+
+```sh
+just install-focus-kwin
+```
+
+That recipe:
+
+1. Installs the KWin Script package into `~/.local/share/kwin/scripts/deckd-focus/` via `kpackagetool6 -u`.
+2. Persists `deckd-focusEnabled=true` in `kwinrc` so the script survives relogin.
+3. `qdbus org.kde.KWin /KWin reconfigure` applies the enable flag without a relogin.
+4. Hot-starts the script via `org.kde.kwin.Scripting.loadScript`, which fires the script's initial `push(workspace.activeWindow)` against the running daemon's `org.deckd.Focus` cache so the layout switches to the currently focused app immediately instead of waiting for the next alt-tab.
+
+Verify:
+
+```sh
+just watch-focus           # polls and prints focus changes
+just watch-focus-once      # single snapshot
+```
+
+Expected output:
+
+```text
+app_id='org.kde.dolphin' wm_class='dolphin' pid=4242 title='Dolphin — Home'
+app_id=None wm_class='firefox' pid=188566 title='YouTube — Mozilla Firefox'
+```
+
+If the KBin script isn't installed or the daemon couldn't own `org.deckd.Focus`, `watch-focus` and the daemon both print the `install-focus-kwin` hint and keep running on the default layout (the same graceful-failure stance the X11 backend takes when `xdotool` is missing).
+
+**Lifecycle note.** The daemon owns `org.deckd.Focus` only on KDE Plasma Wayland sessions (`XDG_CURRENT_DESKTOP=KDE` + `XDG_SESSION_TYPE=wayland`), so the GNOME extension and the KDE daemon-side cache never fight over the same bus name. KDE-X11 falls back to the `xdotool` path documented above.
+
+**Cold-start ordering.** Because KWin scripts can only `callDBus` outbound (they can't own a D-Bus name — see spike), the script's initial `push(workspace.activeWindow)` lands *nowhere* if the daemon isn't yet running. The cache stays empty until the next window activation, or until you re-run `just install-focus-kwin` (which hot-reloads the script and re-fires the initial push against the now-running daemon). Long-running sessions with the script enabled in `kwinrc` automatically re-fire the initial push on the next KWin restart, so day-to-day use doesn't require re-running the recipe.
 
 ### Dev UX: auto-ignore + layout override
 

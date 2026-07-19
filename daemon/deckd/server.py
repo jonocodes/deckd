@@ -232,10 +232,27 @@ class Server:
         starts with the correct layout instead of ``default``. Errors
         from the backend on any single iteration are logged but do not
         stop the watcher.
+
+        Backends that own a session-bus name (the KDE KWin-script
+        backend, issue #31) override ``PlatformBackend.start``; we
+        await it before the first poll so the KWin push target
+        (``org.deckd.Focus``) is up before the script's initial
+        ``push(workspace.activeWindow)`` arrives. A start failure
+        surfaces as ``FocusBackendUnavailable`` and we keep the daemon
+        alive on the default layout rather than crashing.
         """
         if self.focus_backend is None:
             return
         backend = self.focus_backend
+        try:
+            await backend.start()
+        except Exception as exc:
+            hint = getattr(exc, "hint", "")
+            if hint:
+                log.warning("focus backend start failed: %s (hint: %s)", exc, hint)
+            else:
+                log.warning("focus backend start failed: %s", exc)
+            return
         try:
             initial = await backend.get_active_app()
         except Exception as exc:
@@ -455,6 +472,11 @@ class Server:
                     await task
                 except (asyncio.CancelledError, Exception):
                     pass
+        if self.focus_backend is not None:
+            try:
+                await self.focus_backend.stop()
+            except Exception as exc:
+                log.debug("focus backend stop failed: %s", exc)
         runner = getattr(self, "_runner", None)
         if runner is not None:
             await runner.cleanup()

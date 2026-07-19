@@ -91,6 +91,39 @@ check-uinput:
 install-focus-extension:
     tmpdir="$(mktemp -d)"; gnome-extensions pack -f -o "$tmpdir" packaging/gnome-shell/deckd-focus@local; gnome-extensions install --force --print-uuid "$tmpdir/deckd-focus@local.shell-extension.zip"; rm -rf "$tmpdir"; if gnome-extensions list | grep -qx deckd-focus@local; then gnome-extensions enable deckd-focus@local; else echo "Installed deckd-focus@local. Log out/in, then run: gnome-extensions enable deckd-focus@local"; fi
 
+# Install and enable the deckd-focus KWin script for KDE Plasma Wayland (#31).
+#
+# Mirrors install-focus-extension: installs the script package into
+# ~/.local/share/kwin/scripts/, persists the kwinrc enable flag so it
+# survives relogin, applies the change with reconfigure, and hot-starts
+# the script via org.kde.kwin.Scripting.loadScript so focus events flow
+# immediately without a relogin. Re-run anytime to reload the in-process
+# script (e.g. after editing main.js, or after the daemon restarts later
+# than the script's initial push).
+#
+# Requires: kpackagetool6, kwriteconfig6, qdbus6 (qdbus) on $PATH —
+# stock Plasma 6 dev packages.
+install-focus-kwin:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    pkg="packaging/kwin-script/deckd-focus"
+    script_id="deckd-focus"
+    script_path="$HOME/.local/share/kwin/scripts/${script_id}/contents/code/main.js"
+    # 1. Install (or upgrade) the KWin script package into the user dir.
+    kpackagetool6 --type=KWin/Script -u "$pkg"
+    # 2. Persist enable across relogins (kwinrc [Plugins] deckd-focusEnabled=true).
+    kwriteconfig6 --file kwinrc --group Plugins --key "${script_id}Enabled" true
+    # 3. Apply kwinrc changes so a KWin restart picks the script up automatically.
+    qdbus org.kde.KWin /KWin org.kde.KWin.reconfigure >/dev/null
+    # 4. Hot-start: unload any in-process copy so we never get duplicate
+    #    handlers, then loadScript fires the script's initial
+    #    push(workspace.activeWindow) against the running daemon's
+    #    org.deckd.Focus cache.
+    qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.unloadScript "${script_id}" >/dev/null 2>&1 || true
+    qdbus org.kde.KWin /Scripting org.kde.kwin.Scripting.loadScript "${script_path}" "${script_id}" >/dev/null
+    echo "deckd-focus KWin script installed, enabled, and hot-started."
+    echo "Run 'just watch-focus' to confirm focus events land."
+
 # Print active app/window changes for Spike #2.
 watch-focus:
     python -u scripts/watch_focus.py

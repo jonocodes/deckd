@@ -49,7 +49,7 @@ Owner context: solo project, planning-first workflow. Spikes come first because 
 
 ## Spike #2 — GNOME-Wayland active-window detection (issue #2)
 
-**Status:** done; X11 promoted to a supported target (#29), KDE-Wayland investigation underway (#30).
+**Status:** done; X11 promoted to a supported target (#29), KDE-Wayland implemented in #31 / spike #3.
 
 **Goal:** resolve the highest-uncertainty design question (INCEPTION.md §4.1) and ship a working `PlatformBackend.watch_active_app()`.
 
@@ -97,9 +97,36 @@ Owner context: solo project, planning-first workflow. Spikes come first because 
 
 ## Spike #3 — KDE-Wayland active-window detection (issue #30)
 
-**Status:** done — investigation only, no daemon code changes. Findings in [`docs/spike-kde-wayland-focus.md`](spike-kde-wayland-focus.md). Implementation deferred to #31.
+**Status:** done; implementation delivered in #31. Findings in [`docs/spike-kde-wayland-focus.md`](spike-kde-wayland-focus.md).
 
 **Goal:** pick the most stable mechanism for getting the focused window on KDE Plasma Wayland, parallel to spike #2 — concrete enough that #31 can implement `KdeFocusBackend` without re-investigation.
+
+### Implementation delivery (#31)
+
+The recommendation landed as shipped. `daemon/deckd/platform.py` now holds `KdeFocusBackend` + `DeckdFocusDBusService` + `DeckdFocusCache`:
+
+- `DeckdFocusCache` — in-process JSON snapshot; the daemon reads it directly on every poll (no `gdbus` round-trip into our own bus name).
+- `DeckdFocusDBusService` — `dbus_fast.service.ServiceInterface` owning `org.deckd.Focus` at `/org/deckd/Focus`, serving `GetActiveWindow() -> s` (byte-identical wire shape to the GNOME extension) and `UpdateActiveWindow(s)` (the KWin script's `callDBus` push target).
+- `KdeFocusBackend(PlatformBackend)` — owns the bus name during `start()` (gated to KDE+Wayland via `default_backend()`), reads the cache on `get_active_app()`, surfaces `FocusBackendUnavailable` with an install hint on bus / name-ownership failure. New `PlatformBackend.start()` / `stop()` hooks default to no-ops so GNOME / X11 / macOS backends are unchanged.
+- `default_backend()` dispatches to `KdeFocusBackend` when `XDG_CURRENT_DESKTOP` (colon-split, case-insensitive) contains `KDE` and `XDG_SESSION_TYPE=wayland`. KDE-X11 keeps using the xdotool path; other Wayland compositors stay on the historical GNOME default until a separate wlroots-IPC backend lands.
+
+`scripts/watch_focus.py` awaits `backend.start()` so the KWin push target is up before the first poll — same lifecycle the daemon's `Server.run_focus_watcher` now takes.
+
+`just install-focus-kwin` installs the KWin Script package (`kpackagetool6 -u`), persists `deckd-focusEnabled=true` in `kwinrc`, applies with `reconfigure`, and hot-starts via `org.kde.kwin.Scripting.loadScript` so the script's initial `push(workspace.activeWindow)` lands against the running daemon without a relogin.
+
+KWin script hardened under `packaging/kwin-script/deckd-focus/contents/code/main.js` (try/catch around `callDBus`, alignment comments, lifecycle notes); `metadata.json` already declares `KPackageStructure: KWin/Script` + `X-Plasma-API: javascript`.
+
+Tests cover the cache, the `dbus_fast` interface shape, the backend's start/stop/poll paths against a `FakeKdeBus` (no real session bus touched), and `default_backend()`'s KDE-Wayland / KDE-X11 / KDE-non-Wayland / multi-element-`XDG_CURRENT_DESKTOP` / case-insensitive dispatch matrix (`tests/test_platform_kde.py`). A `test_focus.py` end-to-end test pins the run_focus_watcher start-failure path (the daemon survives on the default layout when the KDE backend can't own `org.deckd.Focus`).
+
+### Spike open questions -> #31 resolutions
+
+1. **Bus-name coexistence.** Picked option (a) — daemon only owns `org.deckd.Focus` when `default_backend()` dispatch is KDE+Wayland, so the GNOME extension and the KDE daemon-side service never run on the same session bus.
+2. **`app_id` fallback rule.** Confirmed mirror: KWin script sends `desktopFileName || null`, KDE daemon reads `app_id` first then `AppInfo.identity` falls back to `wm_class`, identical to GNOME's behaviour for the same Firefox-on-XWayland case.
+3. **Daemon-driven vs. documented install.** Picked document-driven (matches X11 backend's stance). `just install-focus-kwin` is the canonical install; the daemon does not shell out to `kpackagetool6` automatically.
+4. **Hot-start vs. reconfigure.** `install-focus-kwin` does both: `kwriteconfig6` persists, `reconfigure` applies, `loadScript` hot-starts.
+5. **Window delete / unmapped state.** Mirrored GNOME — cache left pointing at the dead window until the next `windowActivated` fires.
+6. **Title-only updates.** Deferred — `captionChanged` is not wired into the push path; the 100ms poll interval makes a stale caption imperceptible. Revisit if a user-perceptible lag shows up.
+7. **wlroots family backend.** Not delivered here; separate `WlrIpcFocusBackend` ticket for Hyprland / Sway remains open.
 
 ### Decision
 - **Recommended path:** KWin script (QJS, runs inside the compositor) reads `workspace.activeWindow` + the `workspace.windowActivated` signal and `callDBus`-pushes the snapshot into a daemon-owned `org.deckd.Focus.UpdateActiveWindow(s)` cache. The existing `GnomeShellFocusBackend` polls `org.deckd.Focus.GetActiveWindow` unchanged — wire shape byte-identical to GNOME.

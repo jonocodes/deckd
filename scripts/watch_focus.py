@@ -17,6 +17,10 @@ from deckd.platform import FocusBackendUnavailable, default_backend
 
 async def watch(*, once: bool, interval_s: float) -> None:
     backend = default_backend()
+    # KDE-Wayland backend owns the org.deckd.Focus session-bus name on
+    # start so the KWin push script has somewhere to land; for the
+    # other backends (GNOME, X11, macOS) ``start`` is a default no-op.
+    await backend.start()
     if once:
         app = await backend.get_active_app()
         print_app(app)

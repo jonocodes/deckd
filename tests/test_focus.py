@@ -315,6 +315,65 @@ async def test_no_focus_backend_serves_default_layout(
     assert server.current_app_id == "default"
 
 
+# ---------------------------------------------------------------------------
+# Backend start() failure (issue #31): when the focus backend's start
+# raises FocusBackendUnavailable, the daemon logs + survives on the
+# default layout rather than crashing.
+# ---------------------------------------------------------------------------
+
+
+async def test_start_failure_keeps_daemon_alive_on_default_layout(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    """A backend that cannot own its D-Bus name (the KDE backend's
+    session-bus failure path) must not abort the watcher task. The
+    daemon stays on the default layout, only logs a warning."""
+    import deckd.actions as actions_mod
+    from aiohttp.test_utils import TestServer
+    from conftest import make_test_server
+
+    called: list[tuple[str, str]] = []
+    monkeypatch.setattr(actions_mod, "_run_shell", lambda cmd: called.append(("shell", cmd)))
+
+    from deckd.platform import FocusBackendUnavailable
+
+    class CantStartBackend:
+        async def start(self) -> None:
+            raise FocusBackendUnavailable(
+                "test failure: cannot own bus", hint="install the KWin script"
+            )
+
+        async def stop(self) -> None:
+            pass
+
+        async def watch_active_app(self, *, interval_s: float = 0.1):
+            return
+            yield  # pragma: no cover — never reached; start raised
+
+    server, _scroll, _key, _dbus = make_test_server(
+        layouts_dir=focus_layouts_dir, focus_backend=CantStartBackend()
+    )
+    test_server = TestServer(server.app, host="127.0.0.1")
+    await test_server.start_server()
+    port = test_server.port
+    watcher = asyncio.create_task(server.run_focus_watcher())
+    try:
+        # Give the watcher a tick to log the start failure + return.
+        await asyncio.sleep(0)
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            layout = await _recv_layout(ws)
+        assert layout["app"] == "default"
+        assert server.current_app_id == "default"
+    finally:
+        watcher.cancel()
+        try:
+            await watcher
+        except (asyncio.CancelledError, Exception):
+            pass
+        await test_server.close()
+        await server.scroll.close()
+
+
 async def test_reload_picks_up_new_layout_files(
     monkeypatch, focus_layouts_dir: Path
 ) -> None:

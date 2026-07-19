@@ -68,10 +68,21 @@ class FakeFocusBackend:
 
         backend = FakeFocusBackend()
         await backend.push(AppInfo(app_id="firefox", wm_class="firefox"))
+
+    Duck-types ``PlatformBackend``: implements ``start`` / ``stop`` as
+    no-ops so the daemon's run_focus_watcher — which now awaits
+    ``backend.start()`` before the first poll (issue #31, KDE backend
+    owns a session-bus name there) — works against this fake unchanged.
     """
 
     def __init__(self) -> None:
         self._queue: asyncio.Queue[AppInfo] = asyncio.Queue()
+
+    async def start(self) -> None:  # mirror PlatformBackend.start no-op
+        pass
+
+    async def stop(self) -> None:  # mirror PlatformBackend.stop no-op
+        pass
 
     async def push(self, app_info: AppInfo) -> None:
         await self._queue.put(app_info)
