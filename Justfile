@@ -7,10 +7,24 @@ default:
 # Per-platform setup recipes. `setup` auto-picks the right one; use the
 # explicit recipe when you want to override (e.g. cross-checking on a CI box).
 
-# Linux/GNOME dev: [dev,uinput] (evdev-binary is Linux-only).
+# Linux/GNOME/KDE dev: [dev,uinput] gives the evdev-backed uinput sink used
+# for key injection (browser buttons etc.). On x86_64 that's the prebuilt
+# evdev-binary wheel; on aarch64 (no evdev-binary wheel) we install [dev]
+# then source-build python-evdev via scripts/install_evdev_source.sh, which
+# needs a C compiler (the `gcc` flox package). If that build is skipped the
+# uinput backend degrades gracefully (input.py imports evdev lazily, no-ops).
 setup-linux:
+    #!/usr/bin/env bash
+    set -euo pipefail
     uv venv --python 3.12 --allow-existing
-    uv pip install -e ".[dev,uinput]"
+    if [ "$(uname -m)" = x86_64 ]; then
+        uv pip install -e ".[dev,uinput]"
+    else
+        echo "note: $(uname -m) has no evdev-binary wheel; source-building python-evdev." >&2
+        uv pip install -e ".[dev]"
+        PYTHON=".venv/bin/python" bash scripts/install_evdev_source.sh \
+            || echo "warn: evdev source build failed; uinput key injection will no-op." >&2
+    fi
     cd client && npm install
 
 # macOS dev: [dev] + [macos] (PyObjC Quartz covers scroll, pointer, click,
@@ -110,7 +124,10 @@ install-focus-kwin:
     script_id="deckd-focus"
     script_path="$HOME/.local/share/kwin/scripts/${script_id}/contents/code/main.js"
     # 1. Install (or upgrade) the KWin script package into the user dir.
-    kpackagetool6 --type=KWin/Script -u "$pkg"
+    #    -u fails on a first run ("Plugin deckd-focus is not installed"),
+    #    so install first and fall back to upgrade when it already exists.
+    kpackagetool6 --type=KWin/Script -i "$pkg" 2>/dev/null \
+        || kpackagetool6 --type=KWin/Script -u "$pkg"
     # 2. Persist enable across relogins (kwinrc [Plugins] deckd-focusEnabled=true).
     kwriteconfig6 --file kwinrc --group Plugins --key "${script_id}Enabled" true
     # 3. Apply kwinrc changes so a KWin restart picks the script up automatically.
