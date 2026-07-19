@@ -13,7 +13,13 @@ dependencies = [
 
 [project.optional-dependencies]
 uinput = [
-    "evdev-binary>=1.9",
+    # x86_64 gets the prebuilt evdev-binary wheel. Other arches (notably
+    # aarch64) have no evdev-binary wheel, so fall back to the sdist `evdev`,
+    # which builds from source -- needs a C compiler + kernel headers. On a
+    # stock distro `pip install .[uinput]` handles that; on Nix/flox use
+    # scripts/install_evdev_source.sh (it locates and passes the header paths).
+    "evdev-binary>=1.9; platform_machine == 'x86_64'",
+    "evdev>=1.9; platform_machine != 'x86_64'",
 ]
 dev = [
     "websockets>=13",

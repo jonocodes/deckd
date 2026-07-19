@@ -85,7 +85,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # 2. Create the venv and install deps
 uv venv --python 3.12
-uv pip install -e ".[dev,uinput]"
+uv pip install -e ".[dev,uinput]"   # aarch64: source-builds python-evdev — see note below
 
 # 3. Install JS client deps (once)
 cd client && npm install && cd ..
@@ -98,6 +98,8 @@ just run-daemon
 ```
 
 Open `http://127.0.0.1:8765` in any browser. You should see the active layout's buttons filling the main area, an always-on jogstrip pinned to the right edge, and a chrome bottom strip with the app name, a connection status dot, and a `trackpad` button. Drag or flick vertically on the right-side jogstrip to emit `REL_WHEEL_HI_RES` deltas through uinput (log-only when uinput is unavailable). Tap the `trackpad` button to swap the button grid for a full-area trackpad surface — see the [Trackpad mode](#trackpad-mode) section for the gesture list.
+
+> **aarch64 Linux (e.g. Asahi):** `evdev-binary` publishes x86_64 wheels only, so it can't cover aarch64. Instead `just setup-linux` source-builds `python-evdev` via `scripts/install_evdev_source.sh` (the `uinput` extra also declares plain `evdev` on non-x86_64 via a `platform_machine` marker). The source build needs a C compiler and kernel headers — the flox dev env pins `gcc` for exactly this (Nix hides the headers from evdev's `build_ecodes`, so the script locates them via the compiler and passes them explicitly). With that plus `/dev/uinput` write access (see [uinput permissions](#uinput-permissions)), scroll/key/trackpad injection works natively on aarch64, **including KDE Plasma Wayland** — keys are injected at the kernel evdev layer, so the compositor routes them to the focused window. If the build is skipped the sink degrades gracefully to log-only.
 
 ### macOS
 
@@ -130,6 +132,49 @@ What works / doesn't on macOS:
 | jogstrip scroll                     | yes (PyObjC Quartz `CGEventCreateScrollWheelEvent` — pulled in via the `[macos]` extra) |
 
 When the layout doesn't switch as expected, run `python scripts/check_focus_macos.py` for a one-shot diagnostic: it prints what `osascript` reports for the frontmost app, whether the auto-ignore rule would hold, and which layout `resolve_layout` would pick. Saves reading the daemon log for the common cases (TCC denied, stale daemon, wrong app_id).
+
+### KDE Plasma Wayland
+
+Two KDE-specific pieces on top of the base setup: a **KWin script** for focus-based layout switching, and **`/dev/uinput` access** so button/scroll/trackpad injection actually reaches apps. This walkthrough is distro-neutral; Nix/flox users get the extra CLI tools automatically (see the [Tooling note](#kde-plasma-wayland-sessions) under the focus watcher) and can skip the package-install hints.
+
+**0. Check the KDE CLI tools are present.** These ship with a standard Plasma 6 desktop; run this to spot any gaps:
+
+```sh
+for t in kpackagetool6 kwriteconfig6 qdbus gdbus; do command -v "$t" >/dev/null || echo "missing: $t"; done
+```
+
+If something is missing, install it from your distro: `kpackagetool6`/`kwriteconfig6` come with **KDE Frameworks 6** (KPackage / KConfig tools), `qdbus` with **Qt 6 tools**, and `gdbus` with **glib** (Debian/Ubuntu `libglib2.0-bin`, Fedora `glib2`, Arch `glib2`). The daemon shells out to `gdbus` on every focus poll, so it's not optional.
+
+**1. Install deps and build the client.**
+
+```sh
+just setup          # venv + Python/JS deps incl. the uinput sink (auto-picks setup-linux)
+just build-client
+```
+
+On **x86_64** the `uinput` extra installs the prebuilt `evdev-binary` wheel. On **aarch64** (e.g. Asahi) there is no such wheel, so `just setup-linux` source-builds `python-evdev` instead — that needs a C compiler and kernel headers:
+
+```sh
+# Debian/Ubuntu
+sudo apt install build-essential linux-libc-dev
+# Fedora
+sudo dnf install gcc kernel-headers
+# Arch
+sudo pacman -S base-devel linux-api-headers
+```
+
+**2. Grant `/dev/uinput` write access.** Without it, keys/scroll/trackpad are silently no-ops (the daemon logs `platform sink unavailable` at startup). Follow [uinput permissions](#uinput-permissions) — the udev rule plus adding yourself to the `input` group, then log out and back in. `just check-uinput` confirms it.
+
+**3. Run the daemon**, then install the focus KWin script:
+
+```sh
+just run-daemon                 # owns org.deckd.Focus; serves the client at :8765
+just install-focus-kwin         # installs + enables + hot-starts the KWin focus script
+```
+
+Order matters slightly: the script pushes focus to the *running* daemon, so start the daemon first (or just re-run `install-focus-kwin` afterwards — see [Cold-start ordering](#kde-plasma-wayland-sessions)). Details and verification are in [KDE Plasma Wayland sessions](#kde-plasma-wayland-sessions) under the focus watcher.
+
+**4. Verify.** Open `http://127.0.0.1:8765`, focus different apps and watch the layout follow (`just watch-focus`), and press a browser button — it should fire the keystroke in the focused window. If buttons do nothing, it's almost always step 2 (`just check-uinput`).
 
 ### Phone/tablet testing
 
@@ -243,7 +288,13 @@ sleep 2 && .venv/bin/python -u scripts/send_scroll.py --velocity 1200
 
 ### uinput permissions
 
-For real scroll injection, deckd needs write access to `/dev/uinput`. Current-session ACLs may work temporarily, but the reproducible setup is to install the udev rule and add the daemon user to `input`:
+Any real injection — scroll, **keys (browser buttons etc.)**, or trackpad — needs write access to `/dev/uinput`; without it the daemon logs `platform sink unavailable` at startup and every press is a no-op logged as `[key log]`. For a quick one-session test you can grant it with an ACL (reverts on reboot):
+
+```sh
+sudo setfacl -m u:"$USER":rw /dev/uinput
+```
+
+The reproducible setup is the udev rule plus membership in `input`:
 
 ```sh
 sudo install -m 0644 packaging/udev/70-deckd-uinput.rules /etc/udev/rules.d/
@@ -251,6 +302,8 @@ sudo udevadm control --reload-rules
 sudo udevadm trigger --subsystem-match=misc --sysname-match=uinput
 sudo usermod -aG input "$USER"
 ```
+
+On **NixOS**, don't do the above by hand — `packaging/nixos/deckd-spike.nix` already loads the `uinput` module, installs the same udev rule, creates the `input` group, and adds the daemon user to it (see the NixOS block below). Enable it (or lift those lines into your config) and relog.
 
 Log out and back in, then check:
 
@@ -347,15 +400,17 @@ On X11 there is no `app_id` analogue (no Wayland / Flatpak app id), so `app_id` 
 
 KDE Plasma Wayland does not export the active window to outside clients over a documented D-Bus interface (the spike in `docs/spike-kde-wayland-focus.md` ruled out every Wayland-protocol and `org.kde.KWin` session-bus path). Instead deckd ships a tiny **KWin script** that runs inside the compositor and `callDBus`-pushes the focused window snapshot into the daemon's own `org.deckd.Focus` cache over the session bus. The wire shape on the consumer side is byte-identical to the GNOME extension, so the daemon's `KdeFocusBackend` reads from the same in-process cache the GNOME backend polls via `gdbus`.
 
-Install + enable + hot-start in one go (Plasma 6, requires `kpackagetool6` / `kwriteconfig6` / `qdbus` on `$PATH` — stock Plasma dev installs):
+Install + enable + hot-start in one go:
 
 ```sh
 just install-focus-kwin
 ```
 
+**Tooling.** The recipe needs `kpackagetool6`, `kwriteconfig6`, and `qdbus` on `$PATH`, and the daemon itself shells out to `gdbus` (from glib) on every focus poll. On a stock Plasma 6 install these all come with the desktop. The flox dev env additionally pins `glib` (→ `gdbus`) and `kdePackages.kconfig` (→ `kwriteconfig6` / `kreadconfig6`) so `flox activate` covers the two tools NixOS doesn't put in the system profile — see the comments in `.flox/env/manifest.toml`. (`kconfig` is pinned to 6.26.0 there because 6.27+ moves those binaries into a `devtools` output flox's catalog resolver can't select.)
+
 That recipe:
 
-1. Installs the KWin Script package into `~/.local/share/kwin/scripts/deckd-focus/` via `kpackagetool6 -u`.
+1. Installs the KWin Script package into `~/.local/share/kwin/scripts/deckd-focus/` via `kpackagetool6 -i` (falling back to `-u` when a copy is already installed).
 2. Persists `deckd-focusEnabled=true` in `kwinrc` so the script survives relogin.
 3. `qdbus org.kde.KWin /KWin reconfigure` applies the enable flag without a relogin.
 4. Hot-starts the script via `org.kde.kwin.Scripting.loadScript`, which fires the script's initial `push(workspace.activeWindow)` against the running daemon's `org.deckd.Focus` cache so the layout switches to the currently focused app immediately instead of waiting for the next alt-tab.
@@ -374,7 +429,7 @@ app_id='org.kde.dolphin' wm_class='dolphin' pid=4242 title='Dolphin — Home'
 app_id=None wm_class='firefox' pid=188566 title='YouTube — Mozilla Firefox'
 ```
 
-If the KBin script isn't installed or the daemon couldn't own `org.deckd.Focus`, `watch-focus` and the daemon both print the `install-focus-kwin` hint and keep running on the default layout (the same graceful-failure stance the X11 backend takes when `xdotool` is missing).
+If the KWin script isn't installed or the daemon couldn't own `org.deckd.Focus`, `watch-focus` and the daemon both print the `install-focus-kwin` hint and keep running on the default layout (the same graceful-failure stance the X11 backend takes when `xdotool` is missing).
 
 **Lifecycle note.** The daemon owns `org.deckd.Focus` only on KDE Plasma Wayland sessions (`XDG_CURRENT_DESKTOP=KDE` + `XDG_SESSION_TYPE=wayland`), so the GNOME extension and the KDE daemon-side cache never fight over the same bus name. KDE-X11 falls back to the `xdotool` path documented above.
 
