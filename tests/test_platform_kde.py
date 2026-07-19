@@ -173,68 +173,88 @@ def test_dbus_service_update_writes_through_to_shared_cache() -> None:
 
 
 # ---------------------------------------------------------------------------
-# KdeFocusBackend — polling (cache read) side
+# KdeFocusBackend — the gdbus poll path is inherited from
+# GnomeShellFocusBackend; we pin it against a fake `_run` the same way
+# ``test_x11_backend_happy_path`` pins the X11 backend. This is the
+# "mirrors the GNOME backend's test shape" the issue's acceptance
+# criterion asks for — the KDE-specific surface the backend ADDS over
+# GNOME (owning the bus name + exporting the cache service) is pinned
+# by the start / stop tests below.
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
-async def test_kde_backend_get_active_app_reads_default_cache_before_any_push() -> None:
-    backend = KdeFocusBackend()
-    assert await backend.get_active_app() == AppInfo(
-        app_id=None, wm_class=None, title=None, pid=None
-    )
+async def test_kde_backend_get_active_app_polls_org_deckd_focus_via_gdbus(
+    monkeypatch,
+) -> None:
+    """The KDE backend inherits ``get_active_app`` verbatim from
+    ``GnomeShellFocusBackend``: ``gdbus call --session --dest
+    org.deckd.Focus --object-path /org/deckd/Focus --method
+    org.deckd.Focus.GetActiveWindow`` returns a single-string tuple
+    wrapping the cache's JSON. Pin the wire-shape contract by faking
+    ``_run`` (the same seam the X11 happy-path test uses)."""
+    calls: list[str] = [""]
 
-
-@pytest.mark.asyncio
-async def test_kde_backend_get_active_app_reflects_latest_push() -> None:
-    # Drive the backend through the same cache the D-Bus service uses,
-    # so this mirrors the "KWin script pushed a new window" sequence
-    # without a real bus.
-    backend = KdeFocusBackend()
-    backend.cache.update(
-        json.dumps(
+    async def fake_run(*args: str) -> str:
+        calls[0] = " ".join(args)
+        # gdbus returns a single-string tuple; _parse_single_string_tuple
+        # unwraps the outer parens with ast.literal_eval, then json.loads
+        # the inner string. Build the payload as a real Python tuple
+        # repr (ast parses it back) — keeps the test free of nested
+        # quote-escape puzzles.
+        payload = json.dumps(
             {
-                "app_id": "org.kde.okular",
-                "wm_class": "okular",
-                "title": "doc.pdf — Okular",
-                "pid": 7777,
+                "app_id": "org.kde.dolphin",
+                "wm_class": "dolphin",
+                "title": "Dolphin\u2014Home",
+                "pid": 4242,
             }
         )
+        return repr((payload,))
+
+    monkeypatch.setattr(plat, "_run", fake_run)
+    app = await KdeFocusBackend().get_active_app()
+    assert app == AppInfo(
+        app_id="org.kde.dolphin",
+        wm_class="dolphin",
+        title="Dolphin\u2014Home",
+        pid=4242,
     )
-    app = await backend.get_active_app()
-    assert app.app_id == "org.kde.okular"
-    assert app.pid == 7777
+    assert "gdbus" in calls[0]
+    assert "org.deckd.Focus" in calls[0]
+    assert "/org/deckd/Focus" in calls[0]
+    assert "GetActiveWindow" in calls[0]
 
 
 @pytest.mark.asyncio
-async def test_kde_backend_watch_yields_on_change_only() -> None:
-    backend = KdeFocusBackend()
+async def test_kde_backend_get_active_app_default_cache_round_trips_all_none(
+    monkeypatch,
+) -> None:
+    """Before any KWin push lands, ``GetActiveWindow`` returns the
+    cache's empty default (all-nulls JSON); the inherited gdbus-poll
+    parse maps that back to a fully-null ``AppInfo`` so the daemon
+    starts on the default layout without surprises."""
 
-    async def push_after(data: dict) -> None:
-        await asyncio.sleep(0)
-        backend.cache.update(json.dumps(data))
+    async def fake_run(*args: str) -> str:
+        return repr((DeckdFocusCache.EMPTY_PAYLOAD,))
 
-    # Drain the first yielded value (default cache -> AppInfo(None,...)),
-    # then push a focus change and expect the next yielded value.
-    consumer = backend.watch_active_app(interval_s=0.001)
-    first = await consumer.__anext__()
-    assert first == AppInfo(None, None, None, None)
-
-    await push_after({"app_id": "kcalc", "wm_class": "kcalc"})
-    while True:
-        nxt = await consumer.__anext__()
-        if nxt != first:
-            break
-    assert nxt.app_id == "kcalc"
-    await consumer.aclose()
+    monkeypatch.setattr(plat, "_run", fake_run)
+    app = await KdeFocusBackend().get_active_app()
+    assert app == AppInfo(None, None, None, None)
 
 
 @pytest.mark.asyncio
 async def test_kde_backend_is_a_platform_backend_for_dispatch_compat() -> None:
     assert isinstance(KdeFocusBackend(), PlatformBackend)
-    # start / stop are default no-ops on the base class; KDE overrides them.
+    # Subclasses GnomeShellFocusBackend unchanged for the poll path —
+    # the wire-shape symmetry spike #30 mandated.
+    assert issubclass(KdeFocusBackend, GnomeShellFocusBackend)
+    # start / stop are the new KDE-specific overrides; the base no-ops
+    # are still the GNOME backend's defaults.
     assert KdeFocusBackend.start is not PlatformBackend.start
     assert KdeFocusBackend.stop is not PlatformBackend.stop
+    # get_active_app is inherited from GNOME verbatim — no override.
+    assert KdeFocusBackend.get_active_app is GnomeShellFocusBackend.get_active_app
 
 
 # ---------------------------------------------------------------------------
@@ -346,6 +366,27 @@ async def test_kde_backend_stop_releases_name_and_disconnects() -> None:
 async def test_kde_backend_stop_is_safe_when_never_started() -> None:
     backend = KdeFocusBackend(bus_factory=lambda: FakeKdeBus())
     await backend.stop()  # nothing to release; should not raise
+
+
+@pytest.mark.asyncio
+async def test_kde_backend_start_logs_install_hint_on_success(caplog) -> None:
+    """Acceptance criterion 3 of issue #31: when the KWin focus source is
+    missing the backend must log a clear install hint and not crash the
+    daemon. KDE doesn't have the GNOME failure mode (the daemon owns
+    the org.deckd.Focus name itself, so ``gdbus call`` doesn't fail
+    with "service unknown" when the script is absent). Instead the
+    backend logs the install hint proactively on successful start so a
+    user who forgot to run ``install-focus-kwin`` sees the remedy
+    even though the bus ownership itself succeeded."""
+    import logging
+
+    bus = FakeKdeBus()
+    backend = KdeFocusBackend(bus_factory=lambda: bus)
+    with caplog.at_level(logging.INFO, logger="deckd.platform"):
+        await backend.start()
+    hint_records = [r for r in caplog.records if "install-focus-kwin" in r.getMessage()]
+    assert hint_records, "expected the install-focus-kwin hint to be logged on start"
+    assert hint_records[0].levelno == logging.INFO
 
 
 # ---------------------------------------------------------------------------

@@ -73,12 +73,7 @@ class GnomeShellFocusBackend(PlatformBackend):
         )
         payload = _parse_single_string_tuple(out)
         data = json.loads(payload)
-        return AppInfo(
-            app_id=data.get("app_id"),
-            wm_class=data.get("wm_class"),
-            title=data.get("title"),
-            pid=data.get("pid"),
-        )
+        return _app_info_from_payload(data)
 
 
 class FocusBackendUnavailable(RuntimeError):
@@ -105,24 +100,46 @@ class FocusBackendUnavailable(RuntimeError):
 # pull model inverts for KDE. The daemon owns ``org.deckd.Focus`` on the
 # session bus, exposes ``UpdateActiveWindow(s)`` as the KWin script's
 # push target, and exposes ``GetActiveWindow() -> s`` so the wire shape
-# stays byte-identical to the GNOME extension (every external consumer —
-# ``scripts/watch_focus.py``, ``gdbus`` probes, the test suite — calls
-# the same interface). Internally the KDE backend reads the shared
-# cache directly instead of looping back through ``gdbus``, which keeps
-# the poll cost to a ``json.loads`` of an in-process string.
+# stays byte-identical to the GNOME extension.
+#
+# The KDE backend subclasses :class:`GnomeShellFocusBackend` unchanged
+# for the poll path (``gdbus call org.deckd.Focus.GetActiveWindow``) so
+# the published ``org.deckd.Focus`` interface is exercised on the
+# production path, by both the daemon's focus watcher AND
+# ``scripts/watch_focus.py`` on KDE. The KDE-specific overrides are
+# only ``start`` / ``stop`` which own the bus name and export the
+# cache-feeding service. Paying one ``gdbus`` fork per 100ms poll is
+# the same precedent the X11 backend sets with its three-``xdotool``
+# poll — acceptable on a desktop daemon.
 #
 # See docs/spike-kde-wayland-focus.md for the full architecture.
 # ---------------------------------------------------------------------------
 
 
+def _app_info_from_payload(data: dict) -> AppInfo:
+    """Build an :class:`AppInfo` from the parsed JSON payload the
+    ``org.deckd.Focus`` wire shape publishes. Two call sites share this
+    (the GNOME backend's gdbus-poll path; the KDE cache's inspection
+    hook) so the "ignore unknown keys via ``data.get(...)``" rule stays
+    pinned in one place — the KWin script's diagnostic ``uuid`` field
+    never desynchronizes from the consumer."""
+    return AppInfo(
+        app_id=data.get("app_id"),
+        wm_class=data.get("wm_class"),
+        title=data.get("title"),
+        pid=data.get("pid"),
+    )
+
+
 class DeckdFocusCache:
     """In-memory snapshot of the KWin script's last pushed window.
 
-    The cache lives in the daemon process; both the
+    The cache lives in the daemon process and the
     :class:`DeckdFocusDBusService` (which receives KWin pushes via
-    ``UpdateActiveWindow``) and the :class:`KdeFocusBackend` (which the
-    focus watcher polls) reference the same instance so the poller never
-    round-trips through the bus.
+    ``UpdateActiveWindow``) writes through to the same instance the
+    ``GetActiveWindow`` D-Bus method reads from, so external ``gdbus``
+    callers — including the :class:`KdeFocusBackend`'s inherited
+    ``gdbus`` poll path — see every push.
     """
 
     EMPTY_PAYLOAD = json.dumps(
@@ -136,20 +153,22 @@ class DeckdFocusCache:
         """Store a new JSON payload. Validates JSON so a malformed KWin
         push (e.g. truncated ``callDBus`` arg) cannot poison the
         last-good snapshot — on parse failure the previous payload is
-        preserved and the error propagates to the caller (the
-        ``deckd.focus`` D-Bus method handler logs it but does not
-        crash)."""
+        preserved and the error propagates to the D-Bus method
+        handler, which ``dbus_fast`` turns into an error reply to the
+        KWin script. The daemon keeps running; the script's
+        ``try/catch`` around ``callDBus`` logs the rejected push and
+        the cache holds its prior value until the next focus change.
+        """
         json.loads(payload)  # raises json.JSONDecodeError on bad input
         self.payload = payload
 
     def to_app_info(self) -> AppInfo:
-        data = json.loads(self.payload)
-        return AppInfo(
-            app_id=data.get("app_id"),
-            wm_class=data.get("wm_class"),
-            title=data.get("title"),
-            pid=data.get("pid"),
-        )
+        """Inspection helper for tests / diagnostics. The production
+        poll path goes through :class:`GnomeShellFocusBackend`'s
+        ``gdbus`` call (inherited unchanged on KDE) which re-derives
+        ``AppInfo`` from the wire reply, so this method is not on the
+        hot path."""
+        return _app_info_from_payload(json.loads(self.payload))
 
 
 class DeckdFocusDBusService:
@@ -212,29 +231,31 @@ class DeckdFocusDBusService:
         return self._interface
 
 
-class KdeFocusBackend(PlatformBackend):
+class KdeFocusBackend(GnomeShellFocusBackend):
     """KDE Plasma Wayland focus backend.
 
-    Owns ``org.deckd.Focus`` on the session bus (the GNOME extension
-    owns it on GNOME; on KDE no script can own a bus name, so the daemon
-    does — see spike #30), exposes the cache-updating D-Bus surface, and
-    reads the cache directly when the focus watcher polls.
+    Subclasses :class:`GnomeShellFocusBackend` unchanged for the poll
+    path so the daemon's focus watcher and ``scripts/watch_focus.py``
+    both exercise the published ``org.deckd.Focus.GetActiveWindow``
+    method (the wire-shape symmetry spike #30 explicitly mandated).
+    The KDE-specific overrides are only the ``start`` / ``stop`` pair:
 
-    Lifecycle:
+    * ``start`` connects to the session bus, requests the
+      ``org.deckd.Focus`` name with ``NameFlag.REPLACE_EXISTING``, and
+      exports the :class:`DeckdFocusDBusService` at ``/org/deckd/Focus``
+      so the KWin script has a push target. Failures (no session bus,
+      name already owned, ``dbus_fast`` errors) surface as
+      :class:`FocusBackendUnavailable` carrying the install hint — the
+      daemon keeps running on the default layout rather than crashing.
+    * ``stop`` releases the name and disconnects. Safe to call after a
+      failed start.
 
-    * ``await backend.start()`` connects to the session bus, exports
-      the service at ``/org/deckd/Focus``, and requests
-      ``org.deckd.Focus``. Failures (no session bus, name already
-      owned) surface as :class:`FocusBackendUnavailable` carrying the
-      install hint.
-    * ``await backend.stop()`` releases the name and disconnects.
-    * ``await backend.get_active_app()`` reads the in-memory cache and
-      parses its JSON into a fresh :class:`AppInfo`. Returns the
-      all-``None`` default until the first KWin push lands.
+    ``get_active_app`` is inherited from :class:`GnomeShellFocusBackend`
+    and shells out to ``gdbus`` on every poll, exactly as the GNOME
+    backend does. The cost (one ``gdbus`` fork per 100ms) is comparable
+    to the X11 backend's three ``xdotool`` forks per poll — accepted for
+    wire-shape parity.
     """
-
-    BUS_NAME = "org.deckd.Focus"
-    OBJECT_PATH = "/org/deckd/Focus"
 
     KDE_INSTALL_HINT = (
         "On KDE Plasma Wayland, the deckd daemon owns the org.deckd.Focus "
@@ -251,6 +272,8 @@ class KdeFocusBackend(PlatformBackend):
         cache: DeckdFocusCache | None = None,
         bus_factory: "Callable[[], MessageBus] | None" = None,
     ) -> None:
+        # GnomeShellFocusBackend has no __init__ of its own, so no
+        # super().__init__() dispatch is needed here.
         self._cache = cache or DeckdFocusCache()
         self._bus_factory = bus_factory
         self._service: DeckdFocusDBusService | None = None
@@ -259,8 +282,10 @@ class KdeFocusBackend(PlatformBackend):
 
     @property
     def cache(self) -> DeckdFocusCache:
-        """The shared window cache. Tests and the KWin D-Bus push path
-        both write through here; ``get_active_app`` reads from it."""
+        """The shared window cache. The KWin script's
+        ``UpdateActiveWindow`` pushes write through here; the published
+        ``GetActiveWindow`` method reads from it (and so does the KDE
+        backend's inherited ``gdbus`` poll path, via the bus)."""
         return self._cache
 
     async def start(self) -> None:
@@ -268,9 +293,15 @@ class KdeFocusBackend(PlatformBackend):
 
         Idempotent: a second call after a successful start is a no-op
         (avoids double-registration on retry paths). Wrapped in
-        ``FocusBackendUnavailable`` so the daemon's broad
+        :class:`FocusBackendUnavailable` so the daemon's broad
         ``except Exception`` handler in ``run_focus_watcher`` surfaces
-        the hint instead of an opaque ``dbus_fast`` traceback.
+        the install hint instead of an opaque ``dbus_fast`` traceback.
+        On success, logs a one-shot hint pointing at the
+        ``install-focus-kwin`` recipe — analogous to the GNOME backend's
+        failure-mode log (which fires when ``org.deckd.Focus`` isn't
+        owned because the extension isn't installed): KDE doesn't have
+        that failure mode (the daemon owns the name itself), so the
+        hint is logged proactively the first time the bus is owned.
         """
         if self._started:
             return
@@ -290,6 +321,13 @@ class KdeFocusBackend(PlatformBackend):
         self._bus = bus
         self._service = service
         self._started = True
+        log.info(
+            "KDE focus backend: owning %s at %s; "
+            "waiting for KWin script pushes. "
+            "hint: run `just install-focus-kwin` if no focus events arrive.",
+            self.BUS_NAME,
+            self.OBJECT_PATH,
+        )
 
     async def _connect_bus(self) -> "MessageBus":
         if self._bus_factory is not None:
@@ -318,9 +356,6 @@ class KdeFocusBackend(PlatformBackend):
         self._bus = None
         self._service = None
         self._started = False
-
-    async def get_active_app(self) -> AppInfo:
-        return self._cache.to_app_info()
 
 
 class X11FocusBackend(PlatformBackend):
