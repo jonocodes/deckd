@@ -95,6 +95,41 @@ Owner context: solo project, planning-first workflow. Spikes come first because 
 
 ---
 
+## Spike #3 — KDE-Wayland active-window detection (issue #30)
+
+**Status:** done — investigation only, no daemon code changes. Findings in [`docs/spike-kde-wayland-focus.md`](spike-kde-wayland-focus.md). Implementation deferred to #31.
+
+**Goal:** pick the most stable mechanism for getting the focused window on KDE Plasma Wayland, parallel to spike #2 — concrete enough that #31 can implement `KdeFocusBackend` without re-investigation.
+
+### Decision
+- **Recommended path:** KWin script (QJS, runs inside the compositor) reads `workspace.activeWindow` + the `workspace.windowActivated` signal and `callDBus`-pushes the snapshot into a daemon-owned `org.deckd.Focus.UpdateActiveWindow(s)` cache. The existing `GnomeShellFocusBackend` polls `org.deckd.Focus.GetActiveWindow` unchanged — wire shape byte-identical to GNOME.
+- **KWin scripts can only `callDBus` outbound** (they cannot own a D-Bus name or expose inbound method slots — verified against `src/scripting/scripting.cpp`). So the GNOME pull-model cannot be mirrored exactly; we invert to push-into-cache. The polled consumer (`KdeFocusBackend`) is just `GnomeShellFocusBackend` against the same `org.deckd.Focus` name.
+- **`org.kde.KWin` D-Bus** exists but exposes only `queryWindowInfo` (interactive, requires user click — unusable for 100ms polling) and `getWindowInfo(uuid)` (needs the active UUID, which KWin doesn't expose non-interactively). Partial — useful only as a fallback field source; the KWin script path wins.
+- **`org_kde_plasma_window_management` Wayland protocol** exposes `app_id` + `pid` + an `active` state bit, but the protocol XML forbids binding it from "regular clients" — plasmashell's task manager holds the single allowed bind. Rejected.
+- **`wlr-foreign-toplevel-management-v1` and `ext-foreign-toplevel-list-v1`** — Wayland Explorer claims KWin 6.6 implements both; **KWin source contradicts this** (`src/wayland/CMakeLists.txt` does not list either; no `foreign_toplevel` tokens appear in `src/`). Rejected.
+- **KWindowSystem / NETWinInfo** — X11-only on Wayland (same wall the GNOME `org.gnome.Shell.Introspect` API hit).
+- **Portals (GlobalShortcuts / RemoteDesktop / ScreenCast)** — none leak the active-window identity. Rejected.
+- **Hyprland (`hyprctl activewindow`) / Sway (`i3ipc`)** — both viable and have `pid` + `wm_class`; recommend a separate `WlrIpcFocusBackend` ticket for after #31.
+
+### Scope
+- Investigation only — no daemon code changed in #30.
+- Committed a KWin script scaffold under `packaging/kwin-script/deckd-focus/` (metadata.json + a `main.js` sketch) for #31 to harden.
+
+### Definition of done
+- [x] Each candidate evaluated and recorded as viable / rejected with a one-line reason (findings §"Candidates evaluated").
+- [x] A clear recommendation reached with the daemon-side `gDBus` call shape noted (findings §"Recommended path").
+- [x] Findings written to `docs/spike-kde-wayland-focus.md` (parallel to spike #2's style, linked here).
+- [x] Throwaway KWin script + `metadata.json` committed under `packaging/kwin-script/deckd-focus/` for #31 to harden.
+
+### Open questions for #31
+1. **Bus-name coexistence.** Daemon should own `org.deckd.Focus` only when `XDG_CURRENT_DESKTOP == "KDE"` (recommended) — see findings §"Open questions".
+2. **Daemon-driven vs. documented install** of the KWin script (auto `kpackagetool6`/`kwriteconfig6`/`loadScript` vs. install-hint only — mirror the X11 backend).
+3. **Hot-start + persist:** `qdbus org.kde.kwin.Scripting.loadScript` for instant gratification, plus `kwriteconfig6` + `reconfigure` to survive relogin.
+4. **Live `qdbus org.kde.KWin /KWin` introspection** on a Plasma 6 box before locking the API surface into #31.
+5. **wlroots family backend** — separate `WlrIpcFocusBackend` ticket for Hyprland / Sway. Cross-reference from the supported-targets table in spike #2.
+
+---
+
 ## Implementation Plan
 
 _To be drafted after spike #1 and spike #2 resolve. The plan will consume their outputs and lay out milestones 3–7 (daemon skeleton, client polish, trackpad widget, lifecycle)._

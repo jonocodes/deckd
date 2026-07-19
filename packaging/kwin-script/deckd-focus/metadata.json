@@ -1,0 +1,11 @@
+{
+  "KPlugin": {
+    "Name": "deckd focus bridge",
+    "Id": "deckd-focus",
+    "Version": "1.0",
+    "License": "GPLv3+"
+  },
+  "X-Plasma-API": "javascript",
+  "X-Plasma-MainScript": "code/main.js",
+  "KPackageStructure": "KWin/Script"
+}
