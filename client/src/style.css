@@ -74,13 +74,15 @@ button {
   border-radius: 14px;
 }
 
-/* The chrome strip shows only a texture mark; suppress the label/hint pill. */
+/* The chrome strip shows only a texture mark; suppress the label/hint pill.
+   The "scroll" hint reads vertically down the tall, narrow strip. */
 .chrome-jogstrip .chrome-jogstrip-hint {
   color: #7dd3fc;
   font-size: 10px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   opacity: 0.5;
+  writing-mode: vertical-rl;
 }
 
 /* ---------------------------------------------------------------------------
@@ -200,7 +202,7 @@ button {
 }
 
 .cell-button .label {
-  font-size: calc(clamp(11px, 2vw, 15px) * var(--content-scale));
+  font-size: calc(clamp(9px, 1.5vw, 12px) * var(--content-scale));
   font-weight: 600;
   line-height: 1.2;
   word-break: break-word;
