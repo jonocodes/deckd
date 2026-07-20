@@ -3,12 +3,19 @@ import type { ClientMessage, ServerMessage } from "./protocol";
 
 type Status = "connecting" | "open" | "closed";
 
-export function useDeckdSocket(onLayout: (m: Extract<ServerMessage, { type: "layout" }>) => void) {
-  const [status, setStatus] = useState<Status>("connecting");
+export function useDeckdSocket(
+  onLayout: (m: Extract<ServerMessage, { type: "layout" }>) => void,
+  options: { enabled?: boolean } = {},
+) {
+  const { enabled = true } = options;
+  // In demo mode the socket is disabled and reported as ``open`` so the
+  // chrome connection indicator reads "live" against a fixture layout.
+  const [status, setStatus] = useState<Status>(enabled ? "connecting" : "open");
   const wsRef = useRef<WebSocket | null>(null);
   const backoffRef = useRef(500);
 
   useEffect(() => {
+    if (!enabled) return;
     let stopped = false;
     let timer: number | undefined;
 
@@ -63,7 +70,7 @@ export function useDeckdSocket(onLayout: (m: Extract<ServerMessage, { type: "lay
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onLayout]);
+  }, [onLayout, enabled]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;

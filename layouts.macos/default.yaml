@@ -11,56 +11,72 @@ widgets:
   - id: new-tab
     kind: button
     label: New tab
-    icon: plus
+    icon:
+      source: lucide
+      name: plus
     grid: [0, 0, 1, 1]
     action:
       key: "super+t"
   - id: close-tab
     kind: button
     label: Close
-    icon: close
+    icon:
+      source: lucide
+      name: x
     grid: [1, 0, 1, 1]
     action:
       key: "super+w"
   - id: find
     kind: button
     label: Find
-    icon: search
+    icon:
+      source: lucide
+      name: search
     grid: [2, 0, 1, 1]
     action:
       key: "super+f"
   - id: new-window
     kind: button
     label: New window
-    icon: window
+    icon:
+      source: lucide
+      name: app-window
     grid: [3, 0, 1, 1]
     action:
       key: "super+n"
   - id: open-url
     kind: button
     label: Open example.com
-    icon: globe
+    icon:
+      source: lucide
+      name: globe
     grid: [0, 1, 1, 1]
     action:
       shell: "open https://example.com"
   - id: launch-iterm
     kind: button
     label: iTerm
-    icon: terminal
+    icon:
+      source: lucide
+      name: terminal
     grid: [1, 1, 1, 1]
     action:
       shell: "open -a iTerm"
   - id: launch-terminal
     kind: button
     label: Terminal
-    icon: terminal
+    icon:
+      source: lucide
+      name: terminal
     grid: [2, 1, 1, 1]
     action:
       shell: "open -a Terminal"
   - id: system-settings
     kind: button
     label: Settings
-    icon: cog
+    icon:
+      source: lucide
+      name: cog
     grid: [3, 1, 1, 1]
     action:
       shell: "open -a \"System Settings\""

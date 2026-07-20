@@ -1,8 +1,12 @@
 # deckd
 
-App-aware touch control surface for the Linux desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a trackpad mode, rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps layouts automatically.
+App-aware touch control surface for your desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a trackpad mode, rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps layouts automatically.
 
-See `[docs/INCEPTION.md](docs/INCEPTION.md)` for the full design.
+Not Linux-only: deckd runs on **GNOME** (Wayland), **KDE Plasma** (Wayland), any **X11** session, and **macOS** — each with its own focus watcher and input backend (see [Running deckd](#running-deckd)).
+
+![screenshot](docs/screenshot-firefox.png)
+
+(deckd rendering a Firefox layout — buttons with icons and colors, plus the persistent scroll strip)
 
 ## Status
 
@@ -21,7 +25,7 @@ Pre-alpha, but the v1 milestone spine is landing. Both design-doc spikes are res
 - **T13** settings page (scroll + trackpad sliders, invert, localStorage) — *done*
 - **T14** Screen Wake Lock (client stays awake while daemon is live) — *done*
 
-What works today: focus a window on the desktop and the phone's browser flips to that app's layout automatically. Tap layout buttons to fire `shell`, `terminal`, `key`, or `dbus` actions. Drag the always-on right-side jogstrip to scroll the focused window through `REL_WHEEL_HI_RES`. Tap the chrome trackpad button and the phone becomes a mouse — drag to move the cursor, tap to click, two-finger tap to right-click, tap-and-a-half to drag. Edit any `layouts/*.yaml` file on the desktop and every connected client re-renders; a broken save shows an error diagnostic in place of the grid without killing the daemon.
+What works today: focus a window on the desktop and the phone's browser flips to that app's layout automatically. Tap layout buttons to fire `shell`, `terminal`, `key`, or `dbus` actions. Drag the always-on right-side jogstrip to scroll the focused window through `REL_WHEEL_HI_RES`. Tap the chrome trackpad button and the phone becomes a mouse — drag to move the cursor, tap to click, two-finger tap to right-click, tap-and-a-half to drag. Edit any `layouts/*.yaml` file on the desktop and every connected client re-renders; a broken save shows an error diagnostic in place of the grid without killing the daemon. Buttons render with bundled icons (Lucide glyphs + Simple Icons brand logos, referenced as `icon: {source, name}`) and optional per-button background colours, and a **Content size** slider scales the deck for phone-vs-tablet readability.
 
 ```
                         ┌──────────┐
@@ -56,7 +60,7 @@ What works today: focus a window on the desktop and the phone's browser flips to
                                    @local
 
                             ┌──────────────────┐
-                            │  Focus watchers   │
+                            │  Focus watchers  │
                             └──────────────────┘
                               GNOME Shell ext.   (Wayland, GNOME)
                               KWin script        (Wayland, KDE Plasma)
@@ -190,6 +194,15 @@ hostname -I
 
 Open `http://<desktop-lan-ip>:8765` on the phone, for example `http://192.168.30.117:8765`. The client connects its WebSocket back to the same host automatically, so no separate `VITE_DECKD_WS` setting is needed for this built-client path.
 
+### Design tooling (no daemon required)
+
+The client can be viewed and design-iterated without a running daemon:
+
+- **Demo mode** — append `?demo=<name>` to the client URL (`firefox`, `default`, or `showcase`) to render a fixture layout with the WebSocket disabled. The `showcase` fixture exercises every icon path (Lucide glyphs, Simple Icons brand logos, per-button colour, a no-icon button, and the unknown-icon placeholder). Dev-only; adds no cost when the param is absent.
+- **Responsive gallery** — `cd client && npm run dev`, then open `/gallery.html`. Renders the real client in phone / large-phone / 7" / 10"-tablet iframes at once, with layout and orientation selectors — for checking how a layout reads across screen sizes. Dev-only entry, not in the production build.
+- **Ladle** (component workbench) — `cd client && npm run ladle`. Browse `ButtonGrid` / `Icon` / `JogStrip` stories in isolation with width/theme controls, plus `Surface → Device sizes` stories that render the grid in fixed phone/tablet frames (size + orientation) for a quick per-component resolution check. Stories live in `src/*.stories.tsx` (Storybook-compatible CSF).
+- **Lint** — `cd client && npm run lint` (ESLint flat config; `npm run build` still runs `tsc --noEmit`).
+
 ### PWA install over HTTPS (Tailscale)
 
 "Add to Home Screen" on Android Chrome / Edge only prompts over a **secure context** (`localhost` or HTTPS). Plain `http://<lan-ip>:8765` from a phone doesn't qualify, so the install banner never shows. iOS Safari is looser and accepts HTTP LAN, so it's Chrome/Edge that need help.
@@ -258,6 +271,7 @@ Tap the `settings` button in the bottom chrome for a control panel:
 - **Scroll scale** (slider, integer 1–10, default 3) — high-resolution wheel units per CSS pixel.
 - **Scroll invert** (toggle) — flip vertical scroll direction.
 - **Trackpad sensitivity** (slider, float 0.5×–3.0×, default 1.0×) — multiplier applied to raw pointer deltas before they're sent to the daemon.
+- **Content size** (slider, float 0.75×–2.5×, default 1.0×) — multiplier for grid content (button icon + label, in-grid jogstrip) on top of the responsive base, so the deck stays readable across phone and tablet screens. The persistent chrome is unaffected.
 - **Keep screen awake** (toggle, default on) — holds a Screen Wake Lock while the socket is open and the tab is visible, so a phone acting as the surface doesn't sleep mid-use. Released on tab hidden / socket disconnect; re-acquired on visible / reconnect. Unsupported browsers or denied permissions are logged and swallowed.
 
 Values persist per-device to `localStorage` — closing and reopening the client keeps your tuning. The persistent right-side jogstrip stays live inside the settings view so you can feel scale/invert changes immediately.
@@ -268,6 +282,7 @@ URL query params still work as a one-shot dev override (won't touch `localStorag
 http://<host>:5173/?scrollScale=2
 http://<host>:5173/?scrollScale=4&scrollInvert=1
 http://<host>:5173/?padSensitivity=1.5
+http://<host>:5173/?contentScale=1.5
 http://<host>:5173/?wakeLock=0
 ```
 
@@ -471,7 +486,7 @@ deckctl layout default      # force the default layout
 
 ## Configuration
 
-A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Shipped layouts today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), a `grid: [x, y, w, h]` placement, an optional `label` / `icon`, an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background), and an optional `action`. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. A layout may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `LayoutMessage`. Action primitives:
+A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Shipped layouts today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), a `grid: [x, y, w, h]` placement, an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. A layout may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `LayoutMessage`. Action primitives:
 
 - `shell: "..."` — run a subprocess (fire-and-forget; stdout/stderr discarded).
 - `terminal: true` or `terminal: "foot"` — launch a terminal emulator. `true` resolves via `$TERMINAL` then a candidate list (`foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`); a string names a specific one.

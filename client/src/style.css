@@ -1,8 +1,13 @@
 :root {
   color-scheme: dark;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: #0e1115;
   color: #e6e9ef;
+  /* Multiplier for grid content (buttons + in-grid jogstrip). App sets this
+     on the layout area (.surface) from the user's Button-size setting; the
+     default of 1 here keeps chrome — and any context that doesn't set it,
+     e.g. Ladle stories — at the responsive base size. */
+  --content-scale: 1;
 }
 
 * { box-sizing: border-box; }
@@ -69,13 +74,15 @@ button {
   border-radius: 14px;
 }
 
-/* The chrome strip shows only a texture mark; suppress the label/hint pill. */
+/* The chrome strip shows only a texture mark; suppress the label/hint pill.
+   The "scroll" hint reads vertically down the tall, narrow strip. */
 .chrome-jogstrip .chrome-jogstrip-hint {
   color: #7dd3fc;
   font-size: 10px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   opacity: 0.5;
+  writing-mode: vertical-rl;
 }
 
 /* ---------------------------------------------------------------------------
@@ -182,6 +189,9 @@ button {
   transition: transform 80ms ease, background 80ms ease;
   min-height: 0;
   min-width: 0;
+  /* Clip cleanly: at a high content scale on a dense layout, scaled-up
+     content stays inside the button rather than overflowing neighbours. */
+  overflow: hidden;
 }
 
 .cell-button:active {
@@ -192,17 +202,31 @@ button {
 }
 
 .cell-button .label {
-  font-size: clamp(13px, 2.4vw, 18px);
+  font-size: calc(clamp(9px, 1.5vw, 12px) * var(--content-scale));
   font-weight: 600;
   line-height: 1.2;
   word-break: break-word;
 }
 
+/* Icon glyph (Lucide / Simple Icons), rendered above the label. The glyph is
+   an ``<svg class="icon">`` itself, so size it directly — one fixed box for
+   every source regardless of the set's intrinsic viewBox, so icons read at a
+   single consistent size. Inherits the fixed light foreground via
+   ``currentColor``. */
 .cell-button .icon {
-  font-size: 12px;
-  opacity: 0.6;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  width: calc(clamp(22px, 6vw, 34px) * var(--content-scale));
+  height: calc(clamp(22px, 6vw, 34px) * var(--content-scale));
+  color: currentColor;
+}
+
+/* Unresolved / unknown-source icon: a dashed placeholder box (a <span>, not an
+   svg) so the miss is visible in the layout. */
+.cell-button .icon[data-icon-missing] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: calc(clamp(20px, 5.5vw, 30px) * var(--content-scale));
+  opacity: 0.45;
 }
 
 .cell-jogstrip {
@@ -221,29 +245,33 @@ button {
   text-align: center;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
-.cell-jogstrip::before {
-  content: "||";
+/* Scroll-affordance glyph (Lucide chevrons-up-down) — the jogstrip's
+   surface-identity mark, replacing the earlier "||" placeholder. */
+.cell-jogstrip .jog-mark {
   color: #7dd3fc;
-  font-size: clamp(22px, 5vw, 34px);
-  line-height: 1;
+  width: calc(clamp(22px, 5vw, 34px) * var(--content-scale));
+  height: calc(clamp(22px, 5vw, 34px) * var(--content-scale));
 }
 
 .cell-jogstrip .label {
-  font-size: clamp(13px, 2.4vw, 18px);
+  font-size: calc(clamp(13px, 2.4vw, 18px) * var(--content-scale));
   font-weight: 700;
 }
 
 .cell-jogstrip .hint {
   color: #8a96a3;
-  font-size: 12px;
+  font-size: calc(12px * var(--content-scale));
 }
 
-/* Hide the redundant "||" texture when the chrome strip already shows a
-   text label, so the chrome gutter stays visually quiet. */
-.chrome-jogstrip .cell-jogstrip::before {
-  content: "";
+/* The chrome strip is narrow; keep its scroll glyph a touch smaller so it
+   sits quietly above the "scroll" hint. */
+.chrome-jogstrip .cell-jogstrip .jog-mark {
+  width: clamp(18px, 4vw, 26px);
+  height: clamp(18px, 4vw, 26px);
+  opacity: 0.6;
 }
 
 /* ---------------------------------------------------------------------------

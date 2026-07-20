@@ -5,11 +5,14 @@ import { JogStrip } from "./JogStrip";
 import { Trackpad } from "./Trackpad";
 import { Settings } from "./Settings";
 import {
+  useContentScale,
   useScrollSettings,
   useTrackpadSettings,
   useWakeLockSetting,
 } from "./settings-store";
+import type { CSSProperties } from "react";
 import { useWakeLock } from "./wake-lock";
+import { getDemoLayout } from "./demo";
 import type { JogHandle } from "./JogStrip";
 import type { ServerLayout } from "./protocol";
 
@@ -31,13 +34,18 @@ const STATUS_LABEL: Record<SocketStatus, string> = {
 };
 
 export function App() {
-  const [layout, setLayout] = useState<ServerLayout | null>(null);
+  // Demo mode (``?demo=<name>``): render a fixture layout with the socket
+  // disabled, so the client can be viewed without a daemon. Null in normal
+  // daemon-backed operation.
+  const demoLayout = getDemoLayout();
+  const [layout, setLayout] = useState<ServerLayout | null>(demoLayout);
   const [view, setView] = useState<View>("layout");
   const onLayout = useCallback((m: ServerLayout) => setLayout(m), []);
-  const { status, send } = useDeckdSocket(onLayout);
+  const { status, send } = useDeckdSocket(onLayout, { enabled: !demoLayout });
   const scroll = useScrollSettings();
   const trackpad = useTrackpadSettings();
   const wakeLock = useWakeLockSetting();
+  const contentScale = useContentScale();
   // Hold the wake lock while the user wants it AND the socket is live;
   // a stale surface with no daemon behind it has no reason to keep the
   // screen on. Visibility is handled inside the hook.
@@ -57,7 +65,13 @@ export function App() {
   return (
     <div className="app">
       <div className="chrome-page">
-        <main className="surface">
+        {/* The content-scale var is set here on the layout area only, so grid
+            content (buttons + in-grid jogstrip) scales while the persistent
+            chrome — the sibling jogstrip and the bottom bar — stays fixed. */}
+        <main
+          className="surface"
+          style={{ "--content-scale": contentScale.scale } as CSSProperties}
+        >
           {view === "trackpad" ? (
             <Trackpad
               onPad={pad}
@@ -77,6 +91,8 @@ export function App() {
               onTrackpadSensitivityChange={trackpad.setSensitivity}
               wakeLockEnabled={wakeLock.enabled}
               onWakeLockChange={wakeLock.setEnabled}
+              contentScale={contentScale.scale}
+              onContentScaleChange={contentScale.setScale}
             />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">

@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import type { CSSProperties } from "react";
+import { ChevronsUpDown } from "lucide-react";
 
 /** Minimal shape a JogStrip needs. Layout widgets satisfy this via the full
  * ``Widget`` type; the chrome strip supplies an ``id`` only, without the
@@ -7,7 +8,6 @@ import type { CSSProperties } from "react";
 export type JogHandle = {
   id: string;
   label?: string | null;
-  icon?: string | null;
 };
 
 export type JogStripProps = {
@@ -99,11 +99,15 @@ export function JogStrip({
     >
       {variant === "grid" ? (
         <>
+          <ChevronsUpDown className="jog-mark" aria-hidden />
           <span className="label">{widget.label ?? widget.id}</span>
           <span className="hint">scale {scale} · drag or flick vertically</span>
         </>
       ) : (
-        <span className="hint chrome-jogstrip-hint">scroll</span>
+        <>
+          <ChevronsUpDown className="jog-mark" aria-hidden />
+          <span className="hint chrome-jogstrip-hint">scroll</span>
+        </>
       )}
     </div>
   );

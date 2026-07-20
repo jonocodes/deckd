@@ -8,21 +8,27 @@ widgets:
   - id: new-tab
     kind: button
     label: New tab
-    icon: plus
+    icon:
+      source: lucide
+      name: plus
     grid: [0, 0, 1, 1]
     action:
       key: "super+t"
   - id: new-window
     kind: button
     label: New window
-    icon: window
+    icon:
+      source: lucide
+      name: app-window
     grid: [1, 0, 1, 1]
     action:
       key: "super+n"
   - id: back
     kind: button
     label: Back
-    icon: arrow-left
+    icon:
+      source: lucide
+      name: arrow-left
     color: "#1e3a8a"
     grid: [2, 0, 1, 1]
     action:
@@ -30,7 +36,9 @@ widgets:
   - id: forward
     kind: button
     label: Forward
-    icon: arrow-right
+    icon:
+      source: lucide
+      name: arrow-right
     color: "#1e3a8a"
     grid: [3, 0, 1, 1]
     action:
@@ -38,28 +46,36 @@ widgets:
   - id: reload
     kind: button
     label: Reload
-    icon: refresh
+    icon:
+      source: lucide
+      name: refresh-cw
     grid: [0, 1, 1, 1]
     action:
       key: "super+r"
   - id: focus-url
     kind: button
     label: URL bar
-    icon: link
+    icon:
+      source: lucide
+      name: link
     grid: [1, 1, 1, 1]
     action:
       key: "super+l"
   - id: find
     kind: button
     label: Find
-    icon: search
+    icon:
+      source: lucide
+      name: search
     grid: [2, 1, 1, 1]
     action:
       key: "super+f"
   - id: close-tab
     kind: button
     label: Close tab
-    icon: close
+    icon:
+      source: lucide
+      name: x
     grid: [3, 1, 1, 1]
     action:
       key: "super+w"

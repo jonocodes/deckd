@@ -1,8 +1,14 @@
+/** An icon reference: ``source`` picks a client-side renderer (e.g.
+ * "lucide", "simple-icons"), ``name`` is resolved within it. The daemon
+ * relays this opaquely (ADR-0006); the client owns the source registry and
+ * renders a placeholder for an unknown source. */
+export type Icon = { source: string; name: string };
+
 export type Widget = {
   id: string;
   kind: "button" | "jogstrip" | "trackpad";
   label?: string | null;
-  icon?: string | null;
+  icon?: Icon | null;
   grid: [number, number, number, number];
   /** Optional CSS colour string; applied as the button's background. */
   color?: string | null;

@@ -1,0 +1,78 @@
+.gallery {
+  min-height: 100vh;
+  background: #0a0d11;
+  color: #e6e9ef;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+.gallery-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 12px 18px;
+  background: #12171d;
+  border-bottom: 1px solid #232a32;
+}
+
+.gallery-title {
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-right: auto;
+}
+
+.gallery-group {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.gallery-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #1b222a;
+  border: 1px solid #2a333d;
+  color: #e6e9ef;
+  font: inherit;
+  font-size: 13px;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.gallery-btn.on {
+  background: #14364a;
+  border-color: #3fb1d8;
+  color: #7dd3fc;
+}
+
+.gallery-grid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 28px;
+  padding: 28px;
+}
+
+.frame {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+}
+
+.frame-box {
+  overflow: hidden;
+  border-radius: 12px;
+  border: 1px solid #2a333d;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  background: #0e1115;
+}
+
+.frame figcaption {
+  font-size: 12px;
+  color: #8a96a3;
+  font-variant-numeric: tabular-nums;
+}
