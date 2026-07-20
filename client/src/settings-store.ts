@@ -16,12 +16,22 @@ const SCALE_KEY = "deckd.scrollScale";
 const INVERT_KEY = "deckd.scrollInvert";
 const PAD_SENS_KEY = "deckd.trackpadSensitivity";
 const WAKE_LOCK_KEY = "deckd.wakeLock";
+const CONTENT_SCALE_KEY = "deckd.contentScale";
 
 const WAKE_LOCK_DEFAULT = true;
 
 export const SCROLL_SCALE_MIN = 1;
 export const SCROLL_SCALE_MAX = 10;
 export const SCROLL_SCALE_DEFAULT = 3;
+
+// Multiplier applied to grid content (button icon + label, in-grid jogstrip)
+// on top of the responsive base size, so the user can dial readability per
+// device. 1.0 reproduces the base look; range/step match the other sliders'
+// conventions. See issue #37 / ADR-0006 (client-side per-device visual prefs).
+export const CONTENT_SCALE_MIN = 0.75;
+export const CONTENT_SCALE_MAX = 2.5;
+export const CONTENT_SCALE_STEP = 0.1;
+export const CONTENT_SCALE_DEFAULT = 1.0;
 
 // Trackpad sensitivity is a floating multiplier: 1.0 = raw (1 CSS pixel of
 // finger travel = 1 uinput REL_X/Y unit), 0.5 = slower, 3.0 = fast. Range
@@ -43,6 +53,12 @@ export function clampPadSensitivity(n: number): number {
   // Round to the slider step so the persisted value stays representable
   // when the user tunes with the discrete slider stops.
   return Math.round(clamped / PAD_SENS_STEP) * PAD_SENS_STEP;
+}
+
+export function clampContentScale(n: number): number {
+  if (!Number.isFinite(n)) return CONTENT_SCALE_DEFAULT;
+  const clamped = Math.max(CONTENT_SCALE_MIN, Math.min(CONTENT_SCALE_MAX, n));
+  return Math.round(clamped / CONTENT_SCALE_STEP) * CONTENT_SCALE_STEP;
 }
 
 function readBoolQuery(name: string): boolean | null {
@@ -92,6 +108,18 @@ function readInitialPadSensitivity(): number {
   return PAD_SENS_DEFAULT;
 }
 
+function readInitialContentScale(): number {
+  try {
+    const url = new URLSearchParams(window.location.search).get("contentScale");
+    if (url !== null) return clampContentScale(Number(url));
+    const stored = localStorage.getItem(CONTENT_SCALE_KEY);
+    if (stored !== null) return clampContentScale(Number(stored));
+  } catch {
+    // see readInitialScale.
+  }
+  return CONTENT_SCALE_DEFAULT;
+}
+
 
 function safeSet(key: string, value: string): void {
   try {
@@ -137,6 +165,21 @@ export function useTrackpadSettings() {
   }, []);
 
   return { sensitivity, setSensitivity };
+}
+
+/** Content-size multiplier for grid content (buttons + in-grid jogstrip),
+ * applied on top of the responsive base via a ``--content-scale`` CSS var.
+ * Same URL / localStorage / default read precedence as the other settings. */
+export function useContentScale() {
+  const [scale, setScaleState] = useState<number>(readInitialContentScale);
+
+  const setScale = useCallback((n: number) => {
+    const clamped = clampContentScale(n);
+    setScaleState(clamped);
+    safeSet(CONTENT_SCALE_KEY, String(clamped));
+  }, []);
+
+  return { scale, setScale };
 }
 
 /** User preference for the Screen Wake Lock. Defaults to true (spec:

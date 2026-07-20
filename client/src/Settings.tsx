@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useOrientation } from "./orientation";
 import {
+  CONTENT_SCALE_MAX,
+  CONTENT_SCALE_MIN,
+  CONTENT_SCALE_STEP,
   PAD_SENS_MAX,
   PAD_SENS_MIN,
   PAD_SENS_STEP,
@@ -22,6 +25,8 @@ type Props = {
   onTrackpadSensitivityChange: (n: number) => void;
   wakeLockEnabled: boolean;
   onWakeLockChange: (v: boolean) => void;
+  contentScale: number;
+  onContentScaleChange: (n: number) => void;
 };
 
 type Health = {
@@ -44,6 +49,8 @@ export function Settings({
   onTrackpadSensitivityChange,
   wakeLockEnabled,
   onWakeLockChange,
+  contentScale,
+  onContentScaleChange,
 }: Props) {
   const orientation = useOrientation();
   const standalone = useStandaloneMode();
@@ -119,6 +126,22 @@ export function Settings({
 
       <h2 className="settings-title settings-title-sub">Display</h2>
       <div className="settings-controls">
+        <div className="settings-control">
+          <span className="settings-control-label">Content size</span>
+          <input
+            type="range"
+            className="slider"
+            aria-label="Content size"
+            min={CONTENT_SCALE_MIN}
+            max={CONTENT_SCALE_MAX}
+            step={CONTENT_SCALE_STEP}
+            value={contentScale}
+            onChange={(e) => onContentScaleChange(Number(e.target.value))}
+          />
+          <span className="settings-control-value" aria-live="polite">
+            {contentScale.toFixed(1)}×
+          </span>
+        </div>
         <SettingToggle
           label="Keep screen awake"
           value={wakeLockEnabled}

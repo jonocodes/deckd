@@ -3,6 +3,11 @@
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: #0e1115;
   color: #e6e9ef;
+  /* Multiplier for grid content (buttons + in-grid jogstrip). App sets this
+     on the layout area (.surface) from the user's Button-size setting; the
+     default of 1 here keeps chrome — and any context that doesn't set it,
+     e.g. Ladle stories — at the responsive base size. */
+  --content-scale: 1;
 }
 
 * { box-sizing: border-box; }
@@ -182,6 +187,9 @@ button {
   transition: transform 80ms ease, background 80ms ease;
   min-height: 0;
   min-width: 0;
+  /* Clip cleanly: at a high content scale on a dense layout, scaled-up
+     content stays inside the button rather than overflowing neighbours. */
+  overflow: hidden;
 }
 
 .cell-button:active {
@@ -192,7 +200,7 @@ button {
 }
 
 .cell-button .label {
-  font-size: clamp(13px, 2.4vw, 18px);
+  font-size: calc(clamp(13px, 2.4vw, 18px) * var(--content-scale));
   font-weight: 600;
   line-height: 1.2;
   word-break: break-word;
@@ -204,8 +212,8 @@ button {
    single consistent size. Inherits the fixed light foreground via
    ``currentColor``. */
 .cell-button .icon {
-  width: clamp(22px, 6vw, 34px);
-  height: clamp(22px, 6vw, 34px);
+  width: calc(clamp(22px, 6vw, 34px) * var(--content-scale));
+  height: calc(clamp(22px, 6vw, 34px) * var(--content-scale));
   color: currentColor;
 }
 
@@ -215,7 +223,7 @@ button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: clamp(20px, 5.5vw, 30px);
+  font-size: calc(clamp(20px, 5.5vw, 30px) * var(--content-scale));
   opacity: 0.45;
 }
 
@@ -235,24 +243,25 @@ button {
   text-align: center;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 /* Scroll-affordance glyph (Lucide chevrons-up-down) — the jogstrip's
    surface-identity mark, replacing the earlier "||" placeholder. */
 .cell-jogstrip .jog-mark {
   color: #7dd3fc;
-  width: clamp(22px, 5vw, 34px);
-  height: clamp(22px, 5vw, 34px);
+  width: calc(clamp(22px, 5vw, 34px) * var(--content-scale));
+  height: calc(clamp(22px, 5vw, 34px) * var(--content-scale));
 }
 
 .cell-jogstrip .label {
-  font-size: clamp(13px, 2.4vw, 18px);
+  font-size: calc(clamp(13px, 2.4vw, 18px) * var(--content-scale));
   font-weight: 700;
 }
 
 .cell-jogstrip .hint {
   color: #8a96a3;
-  font-size: 12px;
+  font-size: calc(12px * var(--content-scale));
 }
 
 /* The chrome strip is narrow; keep its scroll glyph a touch smaller so it
