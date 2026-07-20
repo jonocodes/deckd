@@ -200,7 +200,7 @@ button {
 }
 
 .cell-button .label {
-  font-size: calc(clamp(13px, 2.4vw, 18px) * var(--content-scale));
+  font-size: calc(clamp(11px, 2vw, 15px) * var(--content-scale));
   font-weight: 600;
   line-height: 1.2;
   word-break: break-word;
