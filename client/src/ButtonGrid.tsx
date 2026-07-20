@@ -88,7 +88,15 @@ export function ButtonGrid({ widgets, onPress, onJog, onJogEnd, scrollScale, scr
               }}
             >
               {w.icon ? <Icon icon={w.icon} className="icon" /> : null}
-              <span className="label">{w.label ?? w.id}</span>
+              {/* Text is opt-in per button: a widget with a ``label`` shows it,
+                  one without is icon-only. The id is only a last-resort
+                  fallback so a widget with neither label nor icon isn't a
+                  blank, unidentifiable button. */}
+              {w.label ? (
+                <span className="label">{w.label}</span>
+              ) : !w.icon ? (
+                <span className="label">{w.id}</span>
+              ) : null}
             </button>
           );
         }),
