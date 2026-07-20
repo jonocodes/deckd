@@ -1,6 +1,10 @@
 # deckd
 
-App-aware touch control surface for the Linux desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a trackpad mode, rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps layouts automatically.
+App-aware touch control surface for your desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a trackpad mode, rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps layouts automatically.
+
+Not Linux-only: deckd runs on **GNOME** (Wayland), **KDE Plasma** (Wayland), any **X11** session, and **macOS** — each with its own focus watcher and input backend (see [Running deckd](#running-deckd)).
+
+![deckd rendering a Firefox layout — buttons with icons and colours, plus the persistent scroll strip](docs/screenshot.png)
 
 See `[docs/INCEPTION.md](docs/INCEPTION.md)` for the full design.
 
@@ -21,7 +25,7 @@ Pre-alpha, but the v1 milestone spine is landing. Both design-doc spikes are res
 - **T13** settings page (scroll + trackpad sliders, invert, localStorage) — *done*
 - **T14** Screen Wake Lock (client stays awake while daemon is live) — *done*
 
-What works today: focus a window on the desktop and the phone's browser flips to that app's layout automatically. Tap layout buttons to fire `shell`, `terminal`, `key`, or `dbus` actions. Drag the always-on right-side jogstrip to scroll the focused window through `REL_WHEEL_HI_RES`. Tap the chrome trackpad button and the phone becomes a mouse — drag to move the cursor, tap to click, two-finger tap to right-click, tap-and-a-half to drag. Edit any `layouts/*.yaml` file on the desktop and every connected client re-renders; a broken save shows an error diagnostic in place of the grid without killing the daemon.
+What works today: focus a window on the desktop and the phone's browser flips to that app's layout automatically. Tap layout buttons to fire `shell`, `terminal`, `key`, or `dbus` actions. Drag the always-on right-side jogstrip to scroll the focused window through `REL_WHEEL_HI_RES`. Tap the chrome trackpad button and the phone becomes a mouse — drag to move the cursor, tap to click, two-finger tap to right-click, tap-and-a-half to drag. Edit any `layouts/*.yaml` file on the desktop and every connected client re-renders; a broken save shows an error diagnostic in place of the grid without killing the daemon. Buttons render with bundled icons (Lucide glyphs + Simple Icons brand logos, referenced as `icon: {source, name}`) and optional per-button background colours, and a **Content size** slider scales the deck for phone-vs-tablet readability.
 
 ```
                         ┌──────────┐
@@ -267,6 +271,7 @@ Tap the `settings` button in the bottom chrome for a control panel:
 - **Scroll scale** (slider, integer 1–10, default 3) — high-resolution wheel units per CSS pixel.
 - **Scroll invert** (toggle) — flip vertical scroll direction.
 - **Trackpad sensitivity** (slider, float 0.5×–3.0×, default 1.0×) — multiplier applied to raw pointer deltas before they're sent to the daemon.
+- **Content size** (slider, float 0.75×–2.5×, default 1.0×) — multiplier for grid content (button icon + label, in-grid jogstrip) on top of the responsive base, so the deck stays readable across phone and tablet screens. The persistent chrome is unaffected.
 - **Keep screen awake** (toggle, default on) — holds a Screen Wake Lock while the socket is open and the tab is visible, so a phone acting as the surface doesn't sleep mid-use. Released on tab hidden / socket disconnect; re-acquired on visible / reconnect. Unsupported browsers or denied permissions are logged and swallowed.
 
 Values persist per-device to `localStorage` — closing and reopening the client keeps your tuning. The persistent right-side jogstrip stays live inside the settings view so you can feel scale/invert changes immediately.
@@ -277,6 +282,7 @@ URL query params still work as a one-shot dev override (won't touch `localStorag
 http://<host>:5173/?scrollScale=2
 http://<host>:5173/?scrollScale=4&scrollInvert=1
 http://<host>:5173/?padSensitivity=1.5
+http://<host>:5173/?contentScale=1.5
 http://<host>:5173/?wakeLock=0
 ```
 
