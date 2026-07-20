@@ -4,9 +4,9 @@ App-aware touch control surface for your desktop. A Stream Deck-like deck of but
 
 Not Linux-only: deckd runs on **GNOME** (Wayland), **KDE Plasma** (Wayland), any **X11** session, and **macOS** — each with its own focus watcher and input backend (see [Running deckd](#running-deckd)).
 
-![deckd rendering a Firefox layout — buttons with icons and colours, plus the persistent scroll strip](docs/screenshot.png)
+![screenshot](docs/screenshot-firefox.png)
 
-See `[docs/INCEPTION.md](docs/INCEPTION.md)` for the full design.
+(deckd rendering a Firefox layout — buttons with icons and colors, plus the persistent scroll strip)
 
 ## Status
 
@@ -60,7 +60,7 @@ What works today: focus a window on the desktop and the phone's browser flips to
                                    @local
 
                             ┌──────────────────┐
-                            │  Focus watchers   │
+                            │  Focus watchers  │
                             └──────────────────┘
                               GNOME Shell ext.   (Wayland, GNOME)
                               KWin script        (Wayland, KDE Plasma)
