@@ -1,4 +1,5 @@
 import type { GlobalProvider } from "@ladle/react";
+import "../src/fonts";
 import "../src/style.css";
 
 /** Wrap every story in the app's dark surface so components render against

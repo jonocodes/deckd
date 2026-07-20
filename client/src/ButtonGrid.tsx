@@ -3,6 +3,7 @@ import type { Widget } from "./protocol";
 import { Icon } from "./Icon";
 import { JogStrip } from "./JogStrip";
 import { transposeWidgets, useOrientation } from "./orientation";
+import type { Orientation } from "./orientation";
 
 type Props = {
   widgets: Widget[];
@@ -11,6 +12,11 @@ type Props = {
   onJogEnd: (id: string, velocity: number) => void;
   scrollScale: number;
   scrollInvert: boolean;
+  /** Override the auto-detected orientation. The live app leaves this unset
+   * (orientation follows the viewport); fixed-size harnesses like the Ladle
+   * device stories pass it so the transpose matches the container's shape
+   * rather than the window's. */
+  orientation?: Orientation;
 };
 
 const FALLBACK_DIM = 4;
@@ -32,8 +38,17 @@ function deriveDims(widgets: Widget[]): [number, number] {
   return [Math.max(cols, 1), Math.max(rows, 1)];
 }
 
-export function ButtonGrid({ widgets, onPress, onJog, onJogEnd, scrollScale, scrollInvert }: Props) {
-  const orientation = useOrientation();
+export function ButtonGrid({
+  widgets,
+  onPress,
+  onJog,
+  onJogEnd,
+  scrollScale,
+  scrollInvert,
+  orientation: orientationOverride,
+}: Props) {
+  const autoOrientation = useOrientation();
+  const orientation = orientationOverride ?? autoOrientation;
   // In portrait, transpose so a landscape-authored grid keeps sensibly-sized
   // cells (a 4x2 firefox layout becomes 2x4 with taller buttons).
   const laid = orientation === "portrait" ? transposeWidgets(widgets) : widgets;
