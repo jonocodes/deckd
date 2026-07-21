@@ -6,6 +6,8 @@ dist/
 build/
 *.egg-info/
 
+.DS_Store
+
 # Vite/Node
 client/node_modules/
 client/dist/
