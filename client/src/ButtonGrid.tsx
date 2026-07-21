@@ -97,10 +97,7 @@ export function ButtonGrid({
               key={w.id}
               className="cell cell-button"
               style={buttonStyle}
-              onPointerDown={(e) => {
-                e.preventDefault();
-                onPress(w.id);
-              }}
+              onPointerDown={() => onPress(w.id)}
             >
               {w.icon ? <Icon icon={w.icon} className="icon" /> : null}
               {/* Text is opt-in per button: a widget with a ``label`` shows it,

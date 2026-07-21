@@ -25,7 +25,10 @@ button {
   background: none;
   border: 0;
   padding: 0;
+  -webkit-tap-highlight-color: transparent;
 }
+button:focus { outline: none; }
+button:focus-visible { outline: none; }
 
 .app {
   display: flex;

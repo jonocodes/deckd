@@ -133,19 +133,13 @@ export function App() {
         </span>
         <button
           className={`chrome-btn${view === "trackpad" ? " chrome-btn-active" : ""}`}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            setView(view === "trackpad" ? "layout" : "trackpad");
-          }}
+          onPointerDown={() => setView(view === "trackpad" ? "layout" : "trackpad")}
         >
           trackpad
         </button>
         <button
           className={`chrome-btn${view === "settings" ? " chrome-btn-active" : ""}`}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            setView(view === "settings" ? "layout" : "settings");
-          }}
+          onPointerDown={() => setView(view === "settings" ? "layout" : "settings")}
         >
           settings
         </button>
