@@ -1,0 +1,62 @@
+name: Deploy Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one deploy at a time; in-flight runs get cancelled.
+concurrency:
+  group: deploy-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - run: npm ci
+        working-directory: client
+
+      # Project Pages live at jonocodes.github.io/deckd/, so the client
+      # builds with base=/deckd/. Local dev keeps the default base=/.
+      # ``npm run build`` already runs ``tsc --noEmit`` so type errors
+      # fail the deploy before a broken bundle ships.
+      - run: npm run build
+        env:
+          VITE_BASE_PATH: /deckd/
+        working-directory: client
+
+      # Ladle is built on Vite too; give it its own base + output dir
+      # under the client bundle so the Pages site serves one tree. Ladle
+      # won't create the outDir, so mkdir first.
+      - run: mkdir -p dist/ladle
+        working-directory: client
+      - run: npm run ladle:build -- --base /deckd/ladle/ --outDir dist/ladle
+        working-directory: client
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: client/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

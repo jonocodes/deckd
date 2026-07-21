@@ -31,7 +31,7 @@ function Frame({ device, demo, orientation }: { device: Device; demo: string; or
       <div className="frame-box" style={{ width: w * scale, height: h * scale }}>
         <iframe
           title={`${device.label} ${orientation}`}
-          src={`/?demo=${demo}`}
+          src={`${import.meta.env.BASE_URL}?demo=${demo}`}
           style={{
             width: w,
             height: h,

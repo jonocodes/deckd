@@ -22,6 +22,10 @@ const daemonUpstream = process.env.DECKD_UPSTREAM ?? "http://127.0.0.1:8765";
 const https = readTlsConfig();
 
 export default defineConfig({
+  // Project Pages live at jonocodes.github.io/deckd/. Set
+  // ``VITE_BASE_PATH=/deckd/`` for the deploy build; local dev leaves
+  // ``base`` at the default ``/`` so dev URLs stay root-relative.
+  base: process.env.VITE_BASE_PATH ?? "/",
   plugins: [react()],
   server: {
     port: 5173,
@@ -53,6 +57,15 @@ export default defineConfig({
     // than a permanent false alarm.
     chunkSizeWarningLimit: 6000,
     rollupOptions: {
+      // Multi-page build: ship ``index.html`` (the live client) and
+      // ``gallery.html`` (the responsive dev gallery) as separate Vite
+      // entries so the deploy serves both. Without explicit inputs Vite
+      // only builds ``index.html``.
+      //
+      // Ladle reuses this vite config but supplies its own stories entry,
+      // so guard on ``VITE_LADLE_APP_ID`` (set by the ladle CLI) to avoid
+      // clobbering Ladle's input and ending up with 0 stories built.
+      ...(process.env.VITE_LADLE_APP_ID ? {} : { input: ["index.html", "gallery.html"] }),
       output: {
         manualChunks(id) {
           if (id.includes("node_modules/simple-icons")) return "simple-icons";

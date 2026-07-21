@@ -89,6 +89,18 @@ dev-client-tailscale:
 build-client:
     cd client && npm run build
 
+# Build the client and Ladle with the GitHub Pages base paths
+# (jonocodes.github.io/deckd/) so the deploy-pages workflow can be
+# repro'd locally. Output: client/dist/ (index.html, gallery.html,
+# ladle/). Use `npx serve client/dist` to browse before pushing.
+build-pages:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd client
+    VITE_BASE_PATH=/deckd/ npm run build
+    mkdir -p dist/ladle
+    npm run ladle:build -- --base /deckd/ladle/ --outDir dist/ladle
+
 # Run the test suite.
 test:
     pytest
