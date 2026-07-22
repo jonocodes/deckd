@@ -30,3 +30,6 @@ client/.tls/
 .direnv/
 
 .flox
+
+# shotput workspace-copy (image-inline clients only; not needed on OpenCode web)
+.shots/
