@@ -114,8 +114,7 @@ button:focus-visible { outline: none; }
    optionally tinted by the layout's ``theme`` colour. A layout that
    declares neither a theme nor an icon falls back to the un-themed
    ``app-name`` (bold text, no pill) so existing layouts look identical. */
-.app-name,
-.app-badge {
+.app-name {
   flex: 1;
   display: inline-flex;
   align-items: center;
@@ -129,10 +128,26 @@ button:focus-visible { outline: none; }
 }
 
 .app-badge {
+  /* The themed pill hugs its content (icon + name) instead of stretching
+     across the strip, so the border reads as wrapping the app identity
+     rather than the whole chrome. ``margin-right: auto`` keeps the
+     connection dot / trackpad / settings buttons pushed to the right
+     edge, matching the un-themed ``.app-name`` layout. */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  margin-right: auto;
   padding: 4px 12px 4px 4px;
   border-radius: 999px;
   background: #1b222a;
   border: 1px solid #2a333d;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .app-badge-icon {
