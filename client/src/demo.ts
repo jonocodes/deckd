@@ -9,6 +9,9 @@ import type { ServerLayout } from "./protocol";
 const FIREFOX: ServerLayout = {
   type: "layout",
   app: "Firefox (demo)",
+  display_name: "Firefox",
+  theme: "#ff7139",
+  icon: { source: "simple-icons", name: "firefox" },
   jogstrip_enabled: true,
   widgets: [
     { id: "new-tab", kind: "button", label: "New tab", icon: { source: "lucide", name: "plus" }, grid: [0, 0, 1, 1] },
@@ -40,6 +43,10 @@ const DEFAULT: ServerLayout = {
 const SHOWCASE: ServerLayout = {
   type: "layout",
   app: "showcase (demo)",
+  display_name: "Showcase",
+  // A non-brand theme colour so the chrome badge reads themed even without
+  // a brand logo, exercising the no-icon themed-badge path.
+  theme: "#6d28d9",
   jogstrip_enabled: true,
   widgets: [
     { id: "firefox", kind: "button", label: "Firefox", icon: { source: "simple-icons", name: "firefox" }, color: "#b5651d", grid: [0, 0, 1, 1] },

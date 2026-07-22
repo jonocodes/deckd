@@ -5,6 +5,11 @@ match:
   - gnome-terminal
   - konsole
   - alacritty
+display_name: Terminal
+theme: "#2d333b"
+icon:
+  source: lucide
+  name: terminal
 widgets:
   - id: copy
     kind: button

@@ -78,24 +78,26 @@ class Session:
     async def push_current(self) -> None:
         layout = self.server.current_layout
         error = self.server.current_error
+        # Chrome app badge fields are relayed from the active layout even in
+        # the error path: the bottom chrome remains the chrome, and a branded
+        # badge is more useful than a bare match token while the user fixes
+        # on-disk YAML. ``app`` still carries the match token so the chrome
+        # can fall back to it when ``display_name`` is None.
+        icon = p.Icon.model_validate(layout.icon.model_dump()) if layout.icon else None
+        common = dict(
+            app=self.server.current_app_id,
+            jogstrip_enabled=layout.jogstrip,
+            display_name=layout.display_name,
+            theme=layout.theme,
+            icon=icon,
+        )
         if error is not None:
             # Bad on-disk config: send widgets=[] plus the error text so the
             # client swaps the grid for a diagnostic message.
-            msg = p.LayoutMessage(
-                type="layout",
-                app=self.server.current_app_id,
-                widgets=[],
-                jogstrip_enabled=layout.jogstrip,
-                error=error,
-            )
+            msg = p.LayoutMessage(type="layout", widgets=[], error=error, **common)
         else:
             widgets = [w.model_dump() for w in layout.widgets]
-            msg = p.LayoutMessage(
-                type="layout",
-                app=self.server.current_app_id,
-                widgets=widgets,
-                jogstrip_enabled=layout.jogstrip,
-            )
+            msg = p.LayoutMessage(type="layout", widgets=widgets, **common)
         await self.send(msg)
 
 

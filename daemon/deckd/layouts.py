@@ -56,6 +56,17 @@ class Layout(BaseModel):
     match: list[str] = Field(default_factory=list)
     widgets: list[Widget] = Field(default_factory=list)
     jogstrip: bool = True
+    # Chrome app-identity presentation relayed opaquely to the client
+    # (ADR-0007). The client renders these in the always-on bottom strip:
+    # ``display_name`` replaces the raw match token, ``theme`` tints the
+    # badge (a CSS colour string the browser accepts, exactly like the
+    # per-widget ``color``), and ``icon`` is the same ``{source, name}``
+    # dispatch widgets use (ADR-0006). All three are optional and default
+    # to ``None``; the daemon never interprets them, mirroring the
+    # per-widget presentation relay.
+    display_name: str | None = None
+    theme: str | None = None
+    icon: Icon | None = None
 
     def matches(self, app: AppInfo) -> bool:
         """True if this layout's ``match`` list covers the given app.

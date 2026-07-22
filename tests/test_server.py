@@ -325,6 +325,95 @@ widgets:
     assert layout["jogstrip_enabled"] is False
 
 
+# ---------------------------------------------------------------------------
+# Chrome app badge (issue #41 / ADR-0007)
+#
+# A layout's optional ``display_name`` / ``theme`` / ``icon`` top-level
+# attributes are relayed verbatim on every ``LayoutMessage`` so the
+# client can render a branded app badge in the always-on bottom chrome.
+# The daemon never interprets them; when the active layout omits them
+# the fields are ``null`` (JSON ``null``, not absent) so the client has
+# a stable shape to destructure.
+# ---------------------------------------------------------------------------
+
+
+async def test_layout_message_relays_app_badge_when_set(
+    monkeypatch, tmp_path: Path
+) -> None:
+    """``display_name`` / ``theme`` / ``icon`` round-trip onto the wire."""
+    import deckd.actions as actions_mod
+    from aiohttp.test_utils import TestServer
+    from conftest import make_test_server
+
+    async def fake_shell(cmd: str) -> None:
+        return None
+
+    monkeypatch.setattr(actions_mod, "_run_shell", fake_shell)
+
+    (tmp_path / "default.yaml").write_text(
+        """
+match:
+  - default
+widgets:
+  - id: home
+    kind: button
+    grid: [0, 0, 1, 1]
+"""
+    )
+    (tmp_path / "firefox.yaml").write_text(
+        """
+match:
+  - firefox
+display_name: Mozilla Firefox
+theme: "#ff7139"
+icon:
+  source: simple-icons
+  name: firefox
+widgets:
+  - id: back
+    kind: button
+    grid: [0, 0, 1, 1]
+"""
+    )
+
+    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
+    test_server = TestServer(server.app, host="127.0.0.1")
+    await test_server.start_server()
+    port = test_server.port or 0
+    try:
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            initial = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            # The default layout carries no chrome presentation -> all ``None``.
+            assert initial["app"] == "default"
+            assert initial["display_name"] is None
+            assert initial["theme"] is None
+            assert initial["icon"] is None
+
+            async with aiohttp.ClientSession() as http:
+                async with http.post(f"http://127.0.0.1:{port}/layout/firefox") as r:
+                    assert r.status == 200
+
+            pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            assert pushed["app"] == "firefox"
+            assert pushed["display_name"] == "Mozilla Firefox"
+            assert pushed["theme"] == "#ff7139"
+            assert pushed["icon"] == {"source": "simple-icons", "name": "firefox"}
+    finally:
+        await test_server.close()
+        await server.scroll.close()
+
+
+async def test_layout_message_app_badge_null_when_omitted(
+    srv: ServerHandle,
+) -> None:
+    """Repo default layout omits the chrome fields; the message carries
+    explicit ``null`` for each so the client has a stable shape."""
+    async with ws_connected(srv) as (_, layout):
+        assert "display_name" in layout and layout["display_name"] is None
+        assert "theme" in layout and layout["theme"] is None
+        assert "icon" in layout and layout["icon"] is None
+
+
 async def test_layout_message_carries_jogstrip_enabled_true_when_explicit(
     monkeypatch, tmp_path: Path
 ) -> None:

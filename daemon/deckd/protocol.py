@@ -4,6 +4,8 @@ from typing import Annotated, Literal, Union
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from .layouts import Icon
+
 
 class LayoutMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -12,6 +14,14 @@ class LayoutMessage(BaseModel):
     app: str = "default"
     widgets: list[dict]
     jogstrip_enabled: bool = True
+    # Chrome app badge (ADR-0007), relayed opaquely. The client renders a
+    # branded pill in the always-on bottom strip from these three:
+    # ``display_name`` replaces the raw ``app`` match token, ``theme`` tints
+    # the badge, ``icon`` is the ``{source, name}`` dispatch widgets use.
+    # The daemon never interprets them.
+    display_name: str | None = None
+    theme: str | None = None
+    icon: Icon | None = None
     # Non-null when the on-disk layouts failed to load. The client renders the
     # message in place of the widget grid; the daemon keeps the last-good
     # layouts live so a fix on disk restores service without a restart.

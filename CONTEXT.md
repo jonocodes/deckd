@@ -19,8 +19,12 @@ The `[x, y, w, h]` coordinates that position a widget within a page's grid. Colu
 _Avoid_: position, slot, cell
 
 **Chrome**:
-The persistent UI shell that surrounds every layout. Consists of a bottom strip (app name, connection indicator, trackpad mode button, settings button) and a right-side jogstrip. Chrome is always visible; layouts render in the remaining space. The right-side jogstrip can be disabled per-layout with `jogstrip: false`.
+The persistent UI shell that surrounds every layout. Consists of a bottom strip (app badge, connection indicator, trackpad mode button, settings button) and a right-side jogstrip. Chrome is always visible; layouts render in the remaining space. The right-side jogstrip can be disabled per-layout with `jogstrip: false`. The bottom strip's app badge optionally carries a `display_name`, a `theme` colour, and an `icon` (ADR-0007) the daemon relays opaquely from the active layout.
 _Avoid_: global bar, status bar, toolbar
+
+**App badge**:
+The branded app-identity pill in the bottom chrome: optional icon + human-readable display name, optionally tinted by a theme colour. Built from the layout's `display_name` / `theme` / `icon` top-level fields, relayed verbatim by the daemon (ADR-0007). Falls back to the raw match token (`app`) and an un-tinted pill when the layout omits them.
+_Avoid_: app label, app indicator, brand strip
 
 **Trackpad mode**:
 A global mode accessible from the chrome that replaces the layout area with a full-screen trackpad widget. Entered via the trackpad button in the bottom chrome; exited via a back button on the trackpad view. Not app-specific.

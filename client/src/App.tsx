@@ -13,8 +13,9 @@ import {
 import type { CSSProperties } from "react";
 import { useWakeLock } from "./wake-lock";
 import { getDemoLayout } from "./demo";
+import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
-import type { ServerLayout } from "./protocol";
+import type { Icon as IconRef, ServerLayout } from "./protocol";
 
 type View = "layout" | "trackpad" | "settings";
 type SocketStatus = "connecting" | "open" | "closed";
@@ -61,6 +62,23 @@ export function App() {
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
+
+  // Chrome app-identity badge (ADR-0007): the daemon relays an
+  // optional ``display_name`` / ``theme`` / ``icon`` per layout; the
+  // client renders a branded pill in the always-on bottom strip from
+  // them. The chrome keeps working with no schema present: an absent
+  // display_name falls back to the raw match token (``app``), and an
+  // absent theme leaves the badge on the default chrome treatment. A
+  // layout declaring neither an icon nor a theme renders the chrome
+  // unchanged (bold text, no pill) so existing layouts look identical.
+  const appName = layout ? (layout.display_name?.trim() || layout.app) : "deckd";
+  const appTheme = layout?.theme?.trim() || null;
+  const appIcon: IconRef | null = layout?.icon ?? null;
+  const hasBadge = appTheme !== null || appIcon !== null;
+  const badgeClass = hasBadge
+    ? `app-badge${appTheme ? " app-badge-themed" : ""}`
+    : "app-name";
+  const badgeVars = appTheme ? ({ "--badge-theme": appTheme } as CSSProperties) : undefined;
 
   return (
     <div className="app">
@@ -125,8 +143,14 @@ export function App() {
           </aside>
         )}
       </div>
-      <footer className="chrome-bottom">
-        <span className="app-name">{layout ? layout.app : "deckd"}</span>
+      <footer
+        className="chrome-bottom"
+        style={badgeVars}
+      >
+        <span className={badgeClass}>
+          {appIcon ? <Icon icon={appIcon} className="app-badge-icon" /> : null}
+          <span className="app-badge-name">{appName}</span>
+        </span>
         <span className={`connection connection-${status}`}>
           <span className="connection-dot" />
           <span className="connection-label">{statusLabel}</span>

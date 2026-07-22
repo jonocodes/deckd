@@ -254,7 +254,7 @@ That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws
 
 Every layout renders inside a persistent **chrome** shell that the daemon does not know about:
 
-- **Bottom strip** (always visible): the current app name (from `LayoutMessage.app`), a connection dot (live / reconnecting / disconnected), a `trackpad` button that swaps the main area for the trackpad view, and a `settings` placeholder (T13).
+- **Bottom strip** (always visible): the current app badge (from `LayoutMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the layout's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected), a `trackpad` button that swaps the main area for the trackpad view, and a `settings` placeholder (T13).
 - **Right-side jogstrip** (always visible): a full-height scroll strip that works the same as the in-grid `jogstrip` widget. A layout can suppress it with `jogstrip: false` at the YAML top level — the daemon forwards this as `jogstrip_enabled` on every `LayoutMessage`.
 
 Layout widget coordinates are relative to the chrome-excluded area; the client computes cell sizes from whatever space remains after the strips are subtracted. Layouts are authored in **landscape** orientation. When the viewport is portrait, the client automatically transposes each widget's grid (`[x, y, w, h] → [y, x, h, w]`) so a 4×2 landscape layout renders as 2×4 in portrait — same buttons, same relative arrangement, cells sized for the taller surface (ADR-0004).
@@ -273,6 +273,28 @@ Tap the `trackpad` button in the bottom chrome and the layout area is replaced b
 
 
 Chrome stays visible in trackpad mode — the right-side jogstrip is still available for scrolling while you're pointing. Tap the `trackpad` button again to return to the app layout.
+
+### Chrome app badge
+
+The bottom strip's app badge carries the focused app's brand identity, sourced from the active layout's YAML — three optional top-level fields the daemon relays opaquely to the client:
+
+- `display_name: Mozilla Firefox` — the human-readable label shown instead of the raw `match` token. Without it the badge falls back to the match token.
+- `theme: "#ff7139"` — any CSS colour string (hex, `hsl(...)`, named); tints the badge border and a thin accent stripe along the top edge of the bottom chrome, so the focused app reads at a glance from across the room.
+- `icon: { source: simple-icons, name: firefox }` — the same `{source, name}` dispatch widgets already use (ADR-0006); reuses the bundled Lucide + Simple Icons sets, so badging a new app is a YAML edit with no client/daemon rebuild.
+
+A layout with none of these keeps the chrome unchanged (the badge is just the bold app name). The daemon never resolves icons from `.desktop` files or the web — presentation stays in user-owned config, exactly like per-widget `color`. See ADR-0007 for the full rationale.
+
+```yaml
+match:
+  - firefox
+display_name: Firefox
+theme: "#ff7139"
+icon:
+  source: simple-icons
+  name: firefox
+widgets:
+  - ...
+```
 
 ### Client tuning
 
@@ -496,7 +518,7 @@ deckctl layout default      # force the default layout
 
 ## Configuration
 
-A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Shipped layouts today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), a `grid: [x, y, w, h]` placement, an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. A layout may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `LayoutMessage`. Action primitives:
+A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Shipped layouts today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), a `grid: [x, y, w, h]` placement, an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. A layout may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `LayoutMessage`. A layout may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:
 
 - `shell: "..."` — run a subprocess (fire-and-forget; stdout/stderr discarded).
 - `terminal: true` or `terminal: "foot"` — launch a terminal emulator. `true` resolves via `$TERMINAL` then a candidate list (`foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`); a string names a specific one.
@@ -516,7 +538,7 @@ This is how `layouts.macos/firefox.yaml` carries the `super+t` / `super+[` / `su
 - **Jogstrip** scroll plumbing from browser pointer movement to daemon-side uinput, including release momentum.
 - **Trackpad mode**: `REL_X` / `REL_Y` motion plus `BTN_LEFT` / `BTN_RIGHT` / `BTN_MIDDLE` on the same uinput device, with client-side gesture recognition (tap / two-finger tap / tap-and-a-half drag lock).
 - **Active-window detection** via GNOME Shell extension + session D-Bus (`app_id`, `wm_class`, `title`, `pid`).
-- **Persistent client chrome** — bottom strip (app name + connection dot + trackpad button) and right-side jogstrip — layered above every layout with zero daemon involvement.
+- **Persistent client chrome** — bottom strip (branded app badge + connection dot + trackpad button) and right-side jogstrip — layered above every layout with zero daemon involvement. The app badge optionally carries an icon, a theme colour, and a human-readable name the layout YAML declares (ADR-0007).
 - **Layout hot-reload** — the daemon watches `layouts/*.yaml` and re-pushes on any edit; bad YAML surfaces as a diagnostic on the client without crashing the daemon.
 - **Reconnecting client** (`useDeckdSocket` exponential backoff).
 - **Build output** is plain static files — `client/dist/` — served by the daemon.

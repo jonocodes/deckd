@@ -20,6 +20,17 @@ export type ServerLayout = {
   app: string;
   widgets: Widget[];
   jogstrip_enabled: boolean;
+  /** Human-readable name for the bottom-chrome app badge; falls back to
+   * ``app`` (the raw match token) when null. Relayed opaquely by the
+   * daemon (ADR-0007). */
+  display_name?: string | null;
+  /** CSS colour string the browser accepts (hex, ``hsl(...)``, named); the
+   * client tints the app badge with it. Opaque relay — same rule as the
+   * per-widget ``color`` (ADR-0006), applied to the chrome badge. */
+  theme?: string | null;
+  /** Optional brand icon rendered alongside the app name. Same
+   * ``{source, name}`` dispatch widgets use (ADR-0006). */
+  icon?: Icon | null;
   /** Non-null when the daemon failed to load layouts; the client renders this
    * in place of the grid until the on-disk config is fixed. */
   error?: string | null;

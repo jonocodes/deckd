@@ -1,5 +1,10 @@
 match:
   - firefox
+display_name: Firefox
+theme: "#ff7139"
+icon:
+  source: simple-icons
+  name: firefox
 widgets:
   - id: new-tab
     kind: button

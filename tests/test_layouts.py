@@ -300,6 +300,97 @@ widgets:
 
 
 # ---------------------------------------------------------------------------
+# Chrome app badge (issue #41 / ADR-0007)
+#
+# A layout may carry top-level presentation attributes the daemon relays
+# opaquely to the client for the bottom-chrome app badge: a ``theme``
+# CSS colour, an ``icon`` (the same ``{source, name}`` dispatch widgets
+# use), and a ``display_name`` shown in place of the raw match token.
+# All three are optional and default to ``None``; the daemon never
+# interprets them, exactly like per-widget presentation (ADR-0006).
+# ---------------------------------------------------------------------------
+
+
+def test_layout_defaults_app_badge_fields_to_none(tmp_path: Path) -> None:
+    """Omitted badge fields round-trip as ``None``."""
+    _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)
+    store = load_layouts(tmp_path)
+    layout = store["default"]
+    assert layout.theme is None
+    assert layout.icon is None
+    assert layout.display_name is None
+
+
+def test_layout_round_trips_app_badge_fields(tmp_path: Path) -> None:
+    """All three badge fields survive YAML -> Layout -> dump."""
+    body = """
+match:
+  - firefox
+display_name: Mozilla Firefox
+theme: "#ff7139"
+icon:
+  source: simple-icons
+  name: firefox
+widgets:
+  - id: back
+    kind: button
+    label: Back
+    grid: [0, 0, 1, 1]
+"""
+    _write(tmp_path, "firefox.yaml", body)
+    store = load_layouts(tmp_path)
+    layout = store["firefox"]
+    assert layout.display_name == "Mozilla Firefox"
+    assert layout.theme == "#ff7139"
+    assert layout.icon is not None
+    assert layout.icon.source == "simple-icons"
+    assert layout.icon.name == "firefox"
+    # The dumped shape (what the daemon serialises to the client) keeps each.
+    dumped = layout.model_dump()
+    assert dumped["display_name"] == "Mozilla Firefox"
+    assert dumped["theme"] == "#ff7139"
+    assert dumped["icon"] == {"source": "simple-icons", "name": "firefox"}
+
+
+def test_layout_icon_validates_source_and_name_non_empty(tmp_path: Path) -> None:
+    """The top-level ``icon`` reuses the widget ``Icon`` schema: empty
+    ``source`` / ``name`` is a schema violation, surfacing as SystemExit
+    so a bad layout file is reported at load time (consistent with
+    every other invalid-layout case)."""
+    body = """
+match:
+  - firefox
+icon:
+  source: ""
+  name: firefox
+widgets:
+  - id: back
+    kind: button
+    grid: [0, 0, 1, 1]
+"""
+    _write(tmp_path, "firefox.yaml", body)
+    with pytest.raises(SystemExit):
+        load_layouts(tmp_path)
+
+
+def test_layout_rejects_unknown_top_level_field(tmp_path: Path) -> None:
+    """``extra="forbid"`` keeps the schema open for the sanctioned
+    chrome fields and rejects typos like ``themes`` or ``displayname``."""
+    body = """
+match:
+  - default
+themes: "#ff7139"
+widgets:
+  - id: home
+    kind: button
+    grid: [0, 0, 1, 1]
+"""
+    _write(tmp_path, "default.yaml", body)
+    with pytest.raises(SystemExit):
+        load_layouts(tmp_path)
+
+
+# ---------------------------------------------------------------------------
 # Platform overlay
 #
 # The daemon accepts an optional ``overlay_dir`` next to the base layouts

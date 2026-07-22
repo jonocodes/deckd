@@ -89,7 +89,8 @@ button:focus-visible { outline: none; }
 }
 
 /* ---------------------------------------------------------------------------
- * Bottom chrome strip: app name + connection dot + trackpad + settings.
+ * Bottom chrome strip: app badge (icon + name, optionally themed) +
+ * connection dot + trackpad + settings.
  * ------------------------------------------------------------------------- */
 
 .chrome-bottom {
@@ -108,12 +109,66 @@ button:focus-visible { outline: none; }
   flex: 0 0 auto;
 }
 
-.app-name {
+/* Chrome app badge (ADR-0007): a compact pill in the bottom strip that
+   carries the focused app's brand identity — optional icon + display name,
+   optionally tinted by the layout's ``theme`` colour. A layout that
+   declares neither a theme nor an icon falls back to the un-themed
+   ``app-name`` (bold text, no pill) so existing layouts look identical. */
+.app-name,
+.app-badge {
   flex: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.app-badge {
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  background: #1b222a;
+  border: 1px solid #2a333d;
+}
+
+.app-badge-icon {
+  width: clamp(18px, 4vw, 24px);
+  height: clamp(18px, 4vw, 24px);
+  flex: 0 0 auto;
+  color: #e6e9ef;
+}
+
+/* A brand glyph sits in a colored disc when the layout sets a ``theme``;
+   otherwise the icon uses the default chrome foreground. The disc lets a
+   monochrome brand logo read against any age of theme. */
+.app-badge-themed .app-badge-icon {
+  box-sizing: border-box;
+  padding: 4px;
+  border-radius: 50%;
+  background: var(--badge-theme);
+  color: #fff;
+}
+
+.app-badge-name {
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+/* A theme colour tints the badge border + a thin accent stripe along the
+   top edge of the bottom chrome, so the focused app reads at a glance from
+   across the room even when the badge itself is off-screen in landscape
+   pan. ``color-mix`` halves the theme so it doesn't fight the chrome
+   treatment on bright brand colours. */
+.app-badge-themed {
+  border-color: color-mix(in srgb, var(--badge-theme) 65%, #2a333d);
+}
+
+.chrome-bottom:has(.app-badge-themed) {
+  box-shadow: inset 0 2px 0 0 color-mix(in srgb, var(--badge-theme) 70%, transparent);
 }
 
 .connection {
