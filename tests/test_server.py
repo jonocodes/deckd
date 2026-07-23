@@ -532,6 +532,59 @@ async def test_pad_drag_full_sequence(srv: ServerHandle) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Kbd mode (issue #23). The phone's IME forwards literal text as ``type``
+# messages; named keys (strip + IME control keys) ride as ``key`` combos
+# through the T2 parser. The daemon turns each glyph into one keystroke
+# on the uinput sink. Client-side IME plumbing is out of scope; these
+# tests exercise only the WS boundary.
+# ---------------------------------------------------------------------------
+
+
+async def test_type_message_emits_per_char_keystrokes(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "type", "text": "aB!"}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    keys = [e for e in srv.key_sink.events if e["type"] == "key"]
+    assert keys == [
+        {"type": "key", "keycodes": [30]},  # a
+        {"type": "key", "keycodes": [42, 48]},  # B = Shift+b
+        {"type": "key", "keycodes": [42, 2]},  # ! = Shift+1
+    ]
+
+
+async def test_type_message_drops_non_ascii(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "type", "text": "aéb"}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    keys = [e for e in srv.key_sink.events if e["type"] == "key"]
+    assert keys == [
+        {"type": "key", "keycodes": [30]},
+        {"type": "key", "keycodes": [48]},
+    ]
+
+
+async def test_key_message_emits_named_key(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (ws, _):
+        for combo in ("enter", "backspace", "tab", "esc", "up", "down", "left", "right"):
+            await ws.send(json.dumps({"type": "key", "combo": combo}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    keys = [e for e in srv.key_sink.events if e["type"] == "key"]
+    assert keys == [
+        {"type": "key", "keycodes": [28]},  # enter
+        {"type": "key", "keycodes": [14]},  # backspace
+        {"type": "key", "keycodes": [15]},  # tab
+        {"type": "key", "keycodes": [1]},  # esc
+        {"type": "key", "keycodes": [103]},  # up
+        {"type": "key", "keycodes": [108]},  # down
+        {"type": "key", "keycodes": [105]},  # left
+        {"type": "key", "keycodes": [106]},  # right
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Layouts hot-reload: watcher + error-tolerant reload.
 #
 # Layouts are user configuration, so the daemon watches ``layouts/*.y[a]ml``

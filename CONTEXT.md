@@ -19,7 +19,7 @@ The `[x, y, w, h]` coordinates that position a widget within a page's grid. Colu
 _Avoid_: position, slot, cell
 
 **Chrome**:
-The persistent UI shell that surrounds every layout. Consists of a bottom strip (app badge, connection indicator, trackpad mode button, settings button) and a right-side jogstrip. Chrome is always visible; layouts render in the remaining space. The right-side jogstrip can be disabled per-layout with `jogstrip: false`. The bottom strip's app badge optionally carries a `display_name`, a `theme` colour, and an `icon` (ADR-0007) the daemon relays opaquely from the active layout.
+The persistent UI shell that surrounds every layout. Consists of a bottom strip (app badge, connection indicator, trackpad mode button, keyboard mode button — touch devices only, settings button) and a right-side jogstrip. Chrome is always visible; layouts render in the remaining space. The right-side jogstrip can be disabled per-layout with `jogstrip: false`. The bottom strip's app badge optionally carries a `display_name`, a `theme` colour, and an `icon` (ADR-0007) the daemon relays opaquely from the active layout.
 _Avoid_: global bar, status bar, toolbar
 
 **App badge**:
@@ -29,6 +29,10 @@ _Avoid_: app label, app indicator, brand strip
 **Trackpad mode**:
 A global mode accessible from the chrome that replaces the layout area with a full-screen trackpad widget. Entered via the trackpad button in the bottom chrome; exited via a back button on the trackpad view. Not app-specific.
 _Avoid_: cursor mode, mouse mode
+
+**Keyboard mode** (kbd mode):
+A global chrome mode that replaces the layout area with a mostly-invisible text input that raises the phone's own IME, so the user types into the currently-focused desktop app with the OS soft keyboard — no rendered keyboard widget. Literal glyphs travel as `type` messages, named keys (the minimal Esc/Tab/arrows strip plus IME Enter/Backspace) as `key` messages. Injection is ASCII-only under a US-layout assumption, lands on whatever window holds desktop focus, and the daemon drops it while its own client window is focused (feedback-loop guard). Not app-specific; the chrome button hides on devices without a soft keyboard.
+_Avoid_: virtual keyboard, on-screen keyboard, IME forwarding
 
 ### Widget kinds
 

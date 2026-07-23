@@ -104,7 +104,21 @@ class PadDragMessage(BaseModel):
     state: Literal["start", "end"]
 
 
+class TypeMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["type"]
+    text: str
+
+
+class KeyMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["key"]
+    combo: str
+
+
 ClientMessage = Annotated[
-    Union[HelloMessage, PressMessage, JogMessage, JogEndMessage, PadMessage, PadTapMessage, PadDragMessage],
+    Union[HelloMessage, PressMessage, JogMessage, JogEndMessage, PadMessage, PadTapMessage, PadDragMessage, TypeMessage, KeyMessage],
     Field(discriminator="type"),
 ]

@@ -127,6 +127,33 @@ def parse_key_combo(key_string: str) -> list[int]:
     return keycodes
 
 
+_SHIFTED_CHAR_MAP: dict[str, str] = {
+    "!": "1", "@": "2", "#": "3", "$": "4", "%": "5",
+    "^": "6", "&": "7", "*": "8", "(": "9", ")": "0",
+    "_": "-", "+": "=", "{": "[", "}": "]", ":": ";",
+    '"': "'", "~": "`", "|": "\\", "<": ",", ">": ".", "?": "/",
+}
+
+_UNSHIFTED_PUNCT = "-=[];'`\\,./"
+
+
+def text_to_combos(text: str) -> list[list[int]]:
+    shift = MODIFIER_MAP["shift"]
+    combos: list[list[int]] = []
+    for ch in text:
+        if "a" <= ch <= "z" or "0" <= ch <= "9" or ch in _UNSHIFTED_PUNCT:
+            combos.append([_SINGLE_KEY_MAP[ch]])
+        elif ch == " ":
+            combos.append([_SINGLE_KEY_MAP["space"]])
+        elif "A" <= ch <= "Z":
+            combos.append([shift, _SINGLE_KEY_MAP[ch.lower()]])
+        elif ch in _SHIFTED_CHAR_MAP:
+            combos.append([shift, _SINGLE_KEY_MAP[_SHIFTED_CHAR_MAP[ch]]])
+        else:
+            log.warning("[text parse] no keycode for %r; dropping", ch)
+    return combos
+
+
 def name_from_keycode(keycode: int) -> str | None:
     """Reverse of :data:`MODIFIER_MAP` + :data:`_SINGLE_KEY_MAP`.
 

@@ -609,3 +609,43 @@ async def test_other_port_in_title_does_not_trigger_ignore(
             # default — i.e. the focus change propagated normally.
             pushed = await _recv_eventual_layout(ws)
             assert pushed["app"] == "default"
+
+
+# ---------------------------------------------------------------------------
+# Kbd-mode injection guard (issue #23) — drop type/key while the deckd
+# window holds focus; trackpad messages are untouched.
+# ---------------------------------------------------------------------------
+
+
+async def test_type_and_key_dropped_while_deckd_window_focused(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
+        async with websockets.connect(srv.ws_url) as ws:
+            await _recv_layout(ws)
+            await ws.send(json.dumps({"type": "type", "text": "a"}))
+            await asyncio.sleep(SIDE_EFFECT_WAIT)
+            keys = lambda: [e for e in srv.key_sink.events if e["type"] == "key"]
+            assert keys() == [{"type": "key", "keycodes": [30]}]
+
+            await focus.push(_deckd_window_app(srv))
+            await asyncio.sleep(SIDE_EFFECT_WAIT)
+            await ws.send(json.dumps({"type": "type", "text": "abc"}))
+            await ws.send(json.dumps({"type": "key", "combo": "enter"}))
+            await asyncio.sleep(SIDE_EFFECT_WAIT)
+            assert keys() == [{"type": "key", "keycodes": [30]}]
+
+            await ws.send(json.dumps({"type": "pad", "id": "trackpad", "dx": 1, "dy": 1}))
+            await asyncio.sleep(SIDE_EFFECT_WAIT)
+            assert any(e["type"] == "pointer" for e in srv.key_sink.events)
+
+            await focus.push(
+                AppInfo(app_id="firefox", wm_class="firefox", title="mozilla")
+            )
+            await asyncio.sleep(SIDE_EFFECT_WAIT)
+            await ws.send(json.dumps({"type": "type", "text": "b"}))
+            await asyncio.sleep(SIDE_EFFECT_WAIT)
+            assert keys() == [
+                {"type": "key", "keycodes": [30]},
+                {"type": "key", "keycodes": [48]},
+            ]

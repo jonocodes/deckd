@@ -13,7 +13,7 @@ from aiohttp import WSMsgType, web
 
 from . import protocol as p
 from .actions import ActionContext, execute as run_action
-from .input import ScrollController
+from .input import ScrollController, parse_key_combo, text_to_combos
 from .layouts import Layout, LayoutStore, load_layouts, resolve_layout
 
 if TYPE_CHECKING:
@@ -131,6 +131,7 @@ class Server:
         self._focus_task: asyncio.Task[None] | None = None
         self._layouts_task: asyncio.Task[None] | None = None
         self._current_error: str | None = None
+        self._deckd_window_focused = False
 
     # -- layout state --------------------------------------------------------
 
@@ -214,8 +215,10 @@ class Server:
 
     async def _on_focus(self, app: "AppInfo") -> None:
         if self._is_deckd_window(app):
+            self._deckd_window_focused = True
             log.debug("holding layout; deckd client window focused (%s)", app)
             return
+        self._deckd_window_focused = False
         # A genuine (non-deckd) focus change re-resolves the layout, so a
         # `deckctl layout` override never sticks past the next real switch.
         new_layout = resolve_layout(self.layouts, app)
@@ -432,6 +435,21 @@ class Server:
             if self.key_sink is not None:
                 self.key_sink.emit_click("left", drag.state == "start")
             return
+        if msg_type == "type":
+            tmsg = p.TypeMessage.model_validate(data)
+            if self._injection_blocked(tmsg.text):
+                return
+            if self.key_sink is not None:
+                for combo in text_to_combos(tmsg.text):
+                    self.key_sink.emit_key(combo)
+            return
+        if msg_type == "key":
+            kmsg = p.KeyMessage.model_validate(data)
+            if self._injection_blocked(kmsg.combo):
+                return
+            if self.key_sink is not None:
+                self.key_sink.emit_key(parse_key_combo(kmsg.combo))
+            return
         if msg_type != "press":
             log.debug("ignoring %s", msg_type)
             return
@@ -448,6 +466,12 @@ class Server:
             dbus_bus_factory=self.dbus_bus_factory,
         )
         await run_action(widget, ctx)
+
+    def _injection_blocked(self, what: str) -> bool:
+        if not self._deckd_window_focused:
+            return False
+        log.info("[guard] dropping %r; deckd window focused", what)
+        return True
 
     def _find_widget(self, widget_id: str) -> Widget | None:
         for w in self._current_layout.widgets:

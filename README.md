@@ -1,6 +1,6 @@
 # deckd
 
-App-aware touch control surface for your desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a trackpad mode, rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps layouts automatically.
+App-aware touch control surface for your desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, a trackpad mode, and a keyboard passthrough, rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps layouts automatically.
 
 Not Linux-only: deckd runs on **GNOME** (Wayland), **KDE Plasma** (Wayland), any **X11** session, and **macOS** — each with its own focus watcher and input backend (see [Running deckd](#running-deckd)).
 
@@ -24,6 +24,7 @@ Pre-alpha, but the v1 milestone spine is landing. Both design-doc spikes are res
 - **T8** trackpad mode (cursor + tap + drag-lock) — *done*
 - **T13** settings page (scroll + trackpad sliders, invert, localStorage) — *done*
 - **T14** Screen Wake Lock (client stays awake while daemon is live) — *done*
+- **#23** keyboard mode (phone IME passthrough) — *done* (stretch goal)
 
 What works today: focus a window on the desktop and the phone's browser flips to that app's layout automatically. Tap layout buttons to fire `shell`, `terminal`, `key`, or `dbus` actions. Drag the always-on right-side jogstrip to scroll the focused window through `REL_WHEEL_HI_RES`. Tap the chrome trackpad button and the phone becomes a mouse — drag to move the cursor, tap to click, two-finger tap to right-click, tap-and-a-half to drag. Edit any `layouts/*.yaml` file on the desktop and every connected client re-renders; a broken save shows an error diagnostic in place of the grid without killing the daemon. Buttons render with bundled icons (Lucide glyphs + Simple Icons brand logos, referenced as `icon: {source, name}`) and optional per-button background colours, and a **Content size** slider scales the deck for phone-vs-tablet readability.
 
@@ -254,7 +255,7 @@ That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws
 
 Every layout renders inside a persistent **chrome** shell that the daemon does not know about:
 
-- **Bottom strip** (always visible): the current app badge (from `LayoutMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the layout's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected), a `trackpad` button that swaps the main area for the trackpad view, and a `settings` placeholder (T13).
+- **Bottom strip** (always visible): the current app badge (from `LayoutMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the layout's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected), a `trackpad` button that swaps the main area for the trackpad view, a `keyboard` button (touch devices only) that swaps it for the keyboard input view, and a `settings` button (see [Client tuning](#client-tuning)).
 - **Right-side jogstrip** (always visible): a full-height scroll strip that works the same as the in-grid `jogstrip` widget. A layout can suppress it with `jogstrip: false` at the YAML top level — the daemon forwards this as `jogstrip_enabled` on every `LayoutMessage`.
 
 Layout widget coordinates are relative to the chrome-excluded area; the client computes cell sizes from whatever space remains after the strips are subtracted. Layouts are authored in **landscape** orientation. When the viewport is portrait, the client automatically transposes each widget's grid (`[x, y, w, h] → [y, x, h, w]`) so a 4×2 landscape layout renders as 2×4 in portrait — same buttons, same relative arrangement, cells sized for the taller surface (ADR-0004).
@@ -273,6 +274,18 @@ Tap the `trackpad` button in the bottom chrome and the layout area is replaced b
 
 
 Chrome stays visible in trackpad mode — the right-side jogstrip is still available for scrolling while you're pointing. Tap the `trackpad` button again to return to the app layout.
+
+### Keyboard mode
+
+Tap the `keyboard` button in the bottom chrome (touch devices only) and the layout area is replaced by a nearly invisible text input that raises the phone's **own soft keyboard**. Whatever you type is forwarded to the daemon and injected into the currently-focused desktop app via uinput — the same path layout `key` actions use. Keyboard mode covers the long tail layouts don't: URL bars, chat boxes, ad-hoc commands. Known per-app shortcuts stay in layouts as buttons.
+
+- **The IME does the typing.** Letters, symbols, autocorrect, swipe-typing — the client diffs the hidden field's contents on every input event and sends the delta (`type` message), so whatever the IME commits is what the desktop gets. Enter and Backspace travel as named `key` messages instead (Android: via `beforeinput` inputType inspection; iOS / physical keyboards: via `keydown`).
+- **Minimal strip.** Mobile keyboards have no Esc / Tab / arrow keys, so a small strip under the input sends those as named combos. There are deliberately no sticky Ctrl/Alt modifiers — combos belong in layouts.
+- **ASCII only, US layout.** Injected text is translated to evdev keycodes char-by-char; capitals and shifted symbols get an implicit Shift per the **US keyboard layout**. The desktop's own layout reinterprets keycodes, so exact fidelity requires the desktop to use US layout. Anything outside printable ASCII (accented characters, CJK, emoji) is logged and dropped.
+- **Focus guard.** Injected keystrokes land on whatever window has desktop focus. If that's the deckd client itself (say you opened the client in a desktop browser), the daemon drops `type` / `key` messages rather than feed the client's own input back into itself. This is also why the `keyboard` button hides on devices without a touchscreen: a desktop browser in keyboard mode could only ever target itself.
+- **Physical keyboards.** A Bluetooth keyboard paired to the phone works through the `keydown` path with no extra setup.
+
+> ⚠️ **Security: trusted networks only until token auth lands.** Keyboard mode is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. The WebSocket currently has no authentication, so only expose the daemon (`--host 0.0.0.0`) on a network you fully trust: a Tailscale tailnet counts, open LAN/WiFi does not. Token auth is tracked in [#16](https://github.com/jonocodes/deckd/issues/16).
 
 ### Chrome app badge
 
@@ -533,12 +546,13 @@ This is how `layouts.macos/firefox.yaml` carries the `super+t` / `super+[` / `su
 
 ## What works today
 
-- **Wire protocol** in both directions: `LayoutMessage` (with `jogstrip_enabled` + optional `error`) and `press` / `jog` / `jog_end` / `pad` / `pad_tap` / `pad_drag` events.
+- **Wire protocol** in both directions: `LayoutMessage` (with `jogstrip_enabled` + optional `error`) and `press` / `jog` / `jog_end` / `pad` / `pad_tap` / `pad_drag` / `type` / `key` events.
 - **YAML config → Pydantic → `Widget` graph → action dispatch** for `shell`, `terminal`, `key`, `dbus` primitives.
 - **Jogstrip** scroll plumbing from browser pointer movement to daemon-side uinput, including release momentum.
 - **Trackpad mode**: `REL_X` / `REL_Y` motion plus `BTN_LEFT` / `BTN_RIGHT` / `BTN_MIDDLE` on the same uinput device, with client-side gesture recognition (tap / two-finger tap / tap-and-a-half drag lock).
+- **Keyboard mode**: the phone's IME as a text-injection source — hidden-input diffing on Android, `keydown` on iOS/BT, `type` / `key` wire messages, ASCII+Shift→evdev translation, and a daemon-side focus guard against self-injection.
 - **Active-window detection** via GNOME Shell extension + session D-Bus (`app_id`, `wm_class`, `title`, `pid`).
-- **Persistent client chrome** — bottom strip (branded app badge + connection dot + trackpad button) and right-side jogstrip — layered above every layout with zero daemon involvement. The app badge optionally carries an icon, a theme colour, and a human-readable name the layout YAML declares (ADR-0007).
+- **Persistent client chrome** — bottom strip (branded app badge + connection dot + trackpad / keyboard buttons) and right-side jogstrip — layered above every layout with zero daemon involvement. The app badge optionally carries an icon, a theme colour, and a human-readable name the layout YAML declares (ADR-0007).
 - **Layout hot-reload** — the daemon watches `layouts/*.yaml` and re-pushes on any edit; bad YAML surfaces as a diagnostic on the client without crashing the daemon.
 - **Reconnecting client** (`useDeckdSocket` exponential backoff).
 - **Build output** is plain static files — `client/dist/` — served by the daemon.

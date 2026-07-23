@@ -3,6 +3,7 @@ import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
 import { Trackpad } from "./Trackpad";
+import { KbdMode } from "./KbdMode";
 import { Settings } from "./Settings";
 import {
   useContentScale,
@@ -17,8 +18,13 @@ import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
 import type { Icon as IconRef, ServerLayout } from "./protocol";
 
-type View = "layout" | "trackpad" | "settings";
+type View = "layout" | "trackpad" | "settings" | "kbd";
 type SocketStatus = "connecting" | "open" | "closed";
+
+const HAS_SOFT_KEYBOARD =
+  typeof window !== "undefined" &&
+  (navigator.maxTouchPoints > 0 ||
+    window.matchMedia("(pointer: coarse)").matches);
 
 /** Sentinel ids for the always-on chrome widgets. The daemon's pad / jog
  * paths ignore ids for emission (they're just book-keeping keys), so these
@@ -59,6 +65,8 @@ export function App() {
   const padTap = (fingers: number) => send({ type: "pad_tap", id: TRACKPAD_ID, fingers });
   const padDrag = (state: "start" | "end") =>
     send({ type: "pad_drag", id: TRACKPAD_ID, state });
+  const typeText = (text: string) => send({ type: "type", text });
+  const keyCombo = (combo: string) => send({ type: "key", combo });
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
@@ -97,6 +105,8 @@ export function App() {
               onDrag={padDrag}
               sensitivity={trackpad.sensitivity}
             />
+          ) : view === "kbd" ? (
+            <KbdMode onType={typeText} onKey={keyCombo} />
           ) : view === "settings" ? (
             <Settings
               layout={layout}
@@ -161,6 +171,17 @@ export function App() {
         >
           trackpad
         </button>
+        {HAS_SOFT_KEYBOARD && (
+          <button
+            className={`chrome-btn${view === "kbd" ? " chrome-btn-active" : ""}`}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              setView(view === "kbd" ? "layout" : "kbd");
+            }}
+          >
+            keyboard
+          </button>
+        )}
         <button
           className={`chrome-btn${view === "settings" ? " chrome-btn-active" : ""}`}
           onPointerDown={() => setView(view === "settings" ? "layout" : "settings")}

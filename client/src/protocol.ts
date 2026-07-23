@@ -47,6 +47,8 @@ export type ClientJogEnd = { type: "jog_end"; id: string; velocity: number };
 export type ClientPad = { type: "pad"; id: string; dx: number; dy: number };
 export type ClientPadTap = { type: "pad_tap"; id: string; fingers: number };
 export type ClientPadDrag = { type: "pad_drag"; id: string; state: "start" | "end" };
+export type ClientType = { type: "type"; text: string };
+export type ClientKey = { type: "key"; combo: string };
 export type ClientMessage =
   | ClientHello
   | ClientPress
@@ -54,4 +56,6 @@ export type ClientMessage =
   | ClientJogEnd
   | ClientPad
   | ClientPadTap
-  | ClientPadDrag;
+  | ClientPadDrag
+  | ClientType
+  | ClientKey;
