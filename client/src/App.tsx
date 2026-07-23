@@ -42,7 +42,7 @@ export function App() {
   const [layout, setLayout] = useState<ServerLayout | null>(demoLayout);
   const [view, setView] = useState<View>("layout");
   const onLayout = useCallback((m: ServerLayout) => setLayout(m), []);
-  const { status, send } = useDeckdSocket(onLayout, { enabled: !demoLayout });
+  const { status, send, sameMachine } = useDeckdSocket(onLayout, { enabled: !demoLayout });
   const scroll = useScrollSettings();
   const trackpad = useTrackpadSettings();
   const wakeLock = useWakeLockSetting();
@@ -100,6 +100,7 @@ export function App() {
               onType={typeText}
               onKey={keyCombo}
               sensitivity={trackpad.sensitivity}
+              sameMachine={sameMachine ?? undefined}
             />
           ) : view === "settings" ? (
             <Settings

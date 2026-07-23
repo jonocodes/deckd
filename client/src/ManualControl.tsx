@@ -11,6 +11,10 @@ type Props = {
   onDrag: (state: "start" | "end") => void;
   /** Trackpad sensitivity multiplier (px → uinput units). */
   sensitivity: number;
+  /** True when the daemon has reported that this client is on the same
+   * machine as the daemon (loopback IP). When undefined, the component
+   * falls back to a hostname-based heuristic while waiting for the hint. */
+  sameMachine?: boolean;
 };
 
 const KEYDOWN_COMBOS: Record<string, string> = {
@@ -46,6 +50,7 @@ export function ManualControl({
   onTap,
   onDrag,
   sensitivity,
+  sameMachine: sameMachineProp,
 }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const prevValue = useRef("");
@@ -93,7 +98,7 @@ export function ManualControl({
     }
   };
 
-  const sameMachine = isSameMachineClient();
+  const sameMachine = sameMachineProp ?? isSameMachineClient();
 
   return (
     <div className="manual-control">
@@ -169,7 +174,6 @@ export function ManualControl({
           }}
         />
       </div>
-      {!sameMachine && <span className="kbd-hint">manual</span>}
     </div>
   );
 }

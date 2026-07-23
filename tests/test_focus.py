@@ -80,8 +80,24 @@ def _seed_layouts(tmp_path: Path) -> Path:
 
 async def _recv_layout(ws) -> dict:
     msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=LAYOUT_TIMEOUT))
-    assert msg["type"] == "layout", f"expected layout, got {msg}"
+    while msg.get("type") != "layout":
+        msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=LAYOUT_TIMEOUT))
     return msg
+
+
+async def _drain_pending(ws) -> None:
+    """Consume any non-layout messages queued after connect (e.g. the
+    daemon's per-connection hint). The hint is sent right after the
+    initial layout, so it sits buffered until the next ``recv`` — tests
+    that assert silence need to drain it first. Drains at most one
+    message; returns when nothing is buffered."""
+    try:
+        raw = await asyncio.wait_for(ws.recv(), timeout=0.1)
+    except asyncio.TimeoutError:
+        return
+    msg = json.loads(raw)
+    if msg.get("type") == "layout":
+        raise AssertionError(f"unexpected layout after drain: {msg}")
 
 
 async def _recv_eventual_layout(ws) -> dict:
@@ -277,6 +293,7 @@ async def test_no_push_when_layout_unchanged(
 
             # The WS should be silent — the recv would block past the
             # timeout, which is exactly what we assert.
+            await _drain_pending(ws)
             with pytest.raises(asyncio.TimeoutError):
                 await asyncio.wait_for(ws.recv(), timeout=0.3)
 
@@ -514,6 +531,7 @@ async def test_layout_override_held_while_deckd_window_focused(
 
             # Focus the deckd client window: the held override layout must not change.
             await focus.push(_deckd_window_app(srv))
+            await _drain_pending(ws)
             with pytest.raises(asyncio.TimeoutError):
                 await asyncio.wait_for(ws.recv(), timeout=0.3)
             assert srv.server.current_app_id == "default"
@@ -555,6 +573,7 @@ async def test_deckd_window_focus_does_not_change_layout(
             await focus.push(_deckd_window_app(srv))
 
             # Layout must be unchanged — the WS stays silent.
+            await _drain_pending(ws)
             with pytest.raises(asyncio.TimeoutError):
                 await asyncio.wait_for(ws.recv(), timeout=0.3)
 
@@ -585,6 +604,7 @@ async def test_deckd_window_detection_matches_own_port(
                     title=f"http://127.0.0.1:{port}/",
                 )
             )
+            await _drain_pending(ws)
             with pytest.raises(asyncio.TimeoutError):
                 await asyncio.wait_for(ws.recv(), timeout=0.3)
 

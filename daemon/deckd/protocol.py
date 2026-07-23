@@ -42,8 +42,15 @@ class BrightnessMessage(BaseModel):
     value: int = Field(ge=0, le=255)
 
 
+class HintMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["hint"]
+    same_machine: bool
+
+
 ServerMessage = Annotated[
-    Union[LayoutMessage, StateMessage, BrightnessMessage],
+    Union[LayoutMessage, StateMessage, BrightnessMessage, HintMessage],
     Field(discriminator="type"),
 ]
 

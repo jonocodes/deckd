@@ -12,6 +12,7 @@ import pytest
 import websockets
 
 from conftest import ServerHandle
+from deckd.server import _is_loopback_host, _peer_is_loopback
 
 # Time to wait for a fire-and-forget side effect (shell dispatch, scroll emit).
 SIDE_EFFECT_WAIT = 0.05
@@ -21,7 +22,7 @@ SIDE_EFFECT_WAIT = 0.05
 async def ws_connected(srv: ServerHandle) -> AsyncIterator[tuple[websockets.WebSocketClientProtocol, dict]]:
     """Open a WS connection and yield (ws, initial_layout_message)."""
     async with websockets.connect(srv.ws_url) as ws:
-        layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        layout = await _next_layout(ws)
         yield ws, layout
 
 
@@ -156,7 +157,7 @@ async def test_reload_pushes_layout(srv: ServerHandle) -> None:
             async with http.post(f"{srv.http_url}/reload") as r:
                 result = await r.json()
 
-        pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        pushed = await _next_layout(ws)
 
     assert result["ok"] is True
     assert pushed["type"] == "layout"
@@ -217,7 +218,7 @@ async def test_layout_override_switches_clients_to_named_layout(
             async with http.post(f"{srv.http_url}/layout/firefox") as r:
                 result = await r.json()
 
-        pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        pushed = await _next_layout(ws)
 
     assert result["ok"] is True
     assert pushed["type"] == "layout"
@@ -233,7 +234,7 @@ async def test_layout_override_to_default(srv: ServerHandle) -> None:
             async with http.post(f"{srv.http_url}/layout/default") as r:
                 result = await r.json()
 
-        pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        pushed = await _next_layout(ws)
 
     assert result["ok"] is True
     assert pushed["app"] == "default"
@@ -315,7 +316,7 @@ widgets:
                 assert r.status == 200
 
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            layout = await _next_layout(ws)
     finally:
         await test_server.close()
         await server.scroll.close()
@@ -382,7 +383,7 @@ widgets:
     port = test_server.port or 0
     try:
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            initial = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            initial = await _next_layout(ws)
             # The default layout carries no chrome presentation -> all ``None``.
             assert initial["app"] == "default"
             assert initial["display_name"] is None
@@ -393,7 +394,7 @@ widgets:
                 async with http.post(f"http://127.0.0.1:{port}/layout/firefox") as r:
                     assert r.status == 200
 
-            pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            pushed = await _next_layout(ws)
             assert pushed["app"] == "firefox"
             assert pushed["display_name"] == "Mozilla Firefox"
             assert pushed["theme"] == "#ff7139"
@@ -446,7 +447,7 @@ widgets:
     port = test_server.port or 0
     try:
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            layout = await _next_layout(ws)
     finally:
         await test_server.close()
         await server.scroll.close()
@@ -585,6 +586,72 @@ async def test_key_message_emits_named_key(srv: ServerHandle) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Same-machine hint (issue #23): the daemon reports ``same_machine: true``
+# when the connecting WebSocket's peer address is loopback, so the client
+# knows whether the kbd-mode loop guard would drop its events.
+# ---------------------------------------------------------------------------
+
+
+def test_is_loopback_host_ipv4() -> None:
+    assert _is_loopback_host("127.0.0.1") is True
+
+
+def test_is_loopback_host_ipv6() -> None:
+    assert _is_loopback_host("::1") is True
+
+
+def test_is_loopback_host_localhost_string() -> None:
+    assert _is_loopback_host("localhost") is True
+
+
+def test_is_loopback_host_lan_ip() -> None:
+    assert _is_loopback_host("192.168.1.42") is False
+
+
+def test_is_loopback_host_tailscale_ip() -> None:
+    assert _is_loopback_host("100.64.0.1") is False
+
+
+def test_peer_is_loopback_extracts_host_from_request() -> None:
+    class FakeTransport:
+        def get_extra_info(self, key):
+            assert key == "peername"
+            return ("127.0.0.1", 54321, 0, 0)
+
+    class FakeRequest:
+        transport = FakeTransport()
+
+    assert _peer_is_loopback(FakeRequest()) is True
+
+
+def test_peer_is_loopback_false_for_remote_peer() -> None:
+    class FakeTransport:
+        def get_extra_info(self, key):
+            return ("100.64.0.7", 54321, 0, 0)
+
+    class FakeRequest:
+        transport = FakeTransport()
+
+    assert _peer_is_loopback(FakeRequest()) is False
+
+
+def test_peer_is_loopback_false_for_missing_peer() -> None:
+    class FakeRequest:
+        transport = None
+
+    assert _peer_is_loopback(FakeRequest()) is False
+
+
+async def test_hint_message_sent_after_initial_layout(srv: ServerHandle) -> None:
+    async with websockets.connect(srv.ws_url) as ws:
+        first = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        assert first["type"] == "layout"
+        second = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        assert second["type"] == "hint"
+        assert second["same_machine"] is True
+
+
+# ---------------------------------------------------------------------------
 # Layouts hot-reload: watcher + error-tolerant reload.
 #
 # Layouts are user configuration, so the daemon watches ``layouts/*.y[a]ml``
@@ -651,7 +718,14 @@ async def _serve(monkeypatch, tmp_path: Path) -> AsyncIterator[tuple[int, "Serve
 
 
 async def _next_layout(ws, timeout: float = 3.0) -> dict:
-    return json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
+    deadline = asyncio.get_event_loop().time() + timeout
+    while True:
+        remaining = deadline - asyncio.get_event_loop().time()
+        if remaining <= 0:
+            raise AssertionError("timed out waiting for a layout message")
+        msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=remaining))
+        if msg.get("type") == "layout":
+            return msg
 
 
 async def test_reload_with_bad_yaml_keeps_daemon_alive_and_pushes_error(

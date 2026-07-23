@@ -217,13 +217,12 @@ test.describe("manual control (issue #23 merge) — full pipeline against a logg
     await ctx.close();
   });
 
-  test("manual control shows a same-machine warning when the client origin is localhost", async ({
+  test("manual control shows a same-machine warning when the daemon tells us so", async ({
     page,
   }) => {
     await page.goto("/index.html", { waitUntil: "networkidle" });
     await enterManualControl(page);
     await expect(page.getByRole("status")).toContainText(/Same machine/i);
-    await expect(page.locator(".kbd-hint")).toHaveCount(0);
   });
 });
 

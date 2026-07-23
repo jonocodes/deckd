@@ -13,6 +13,52 @@ describe("ManualControl", () => {
     vi.restoreAllMocks();
   });
 
+  describe("same-machine banner", () => {
+    it("renders the banner when the daemon reports same_machine = true", () => {
+      render(
+        <ManualControl
+          onType={() => {}}
+          onKey={() => {}}
+          onPad={() => {}}
+          onTap={() => {}}
+          onDrag={() => {}}
+          sensitivity={1}
+          sameMachine
+        />,
+      );
+      expect(screen.getByRole("status").textContent).toMatch(/Same machine/i);
+    });
+
+    it("does not render the banner when same_machine = false", () => {
+      render(
+        <ManualControl
+          onType={() => {}}
+          onKey={() => {}}
+          onPad={() => {}}
+          onTap={() => {}}
+          onDrag={() => {}}
+          sensitivity={1}
+          sameMachine={false}
+        />,
+      );
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+
+    it("falls back to the hostname heuristic when sameMachine is undefined", () => {
+      render(
+        <ManualControl
+          onType={() => {}}
+          onKey={() => {}}
+          onPad={() => {}}
+          onTap={() => {}}
+          onDrag={() => {}}
+          sensitivity={1}
+        />,
+      );
+      expect(screen.getByRole("status").textContent).toMatch(/Same machine/i);
+    });
+  });
+
   describe("IME toggle (strip keyboard-icon button)", () => {
     it("renders the keyboard toggle button in the strip", () => {
       const noop = () => {};

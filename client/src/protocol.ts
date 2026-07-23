@@ -38,7 +38,14 @@ export type ServerLayout = {
 
 export type ServerState = { type: "state"; locked: boolean };
 export type ServerBrightness = { type: "brightness"; value: number };
-export type ServerMessage = ServerLayout | ServerState | ServerBrightness;
+/** Daemon → client: hints about the connection (issue #23 same-machine
+ * detection). Sent once per connection, right after the initial layout. */
+export type ServerHint = { type: "hint"; same_machine: boolean };
+export type ServerMessage =
+  | ServerLayout
+  | ServerState
+  | ServerBrightness
+  | ServerHint;
 
 export type ClientHello = { type: "hello"; client: "web"; token?: string };
 export type ClientPress = { type: "press"; id: string };
