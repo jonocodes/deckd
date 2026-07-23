@@ -19,15 +19,7 @@ async function enterKbdMode(page: Page) {
 }
 
 test.describe("kbd mode (issue #23) — full pipeline against a logging-sink daemon", () => {
-  test.beforeEach(async ({ context }) => {
-    await context.addInitScript(() => {
-      Object.defineProperty(Navigator.prototype, "maxTouchPoints", {
-        get: () => 1,
-      });
-    });
-  });
-
-  test("kbd chrome button is visible on touch devices", async ({ page }) => {
+  test("kbd chrome button is visible on every client (no touch gate)", async ({ page }) => {
     await page.goto("/index.html", { waitUntil: "networkidle" });
     await expect(page.locator("button", { hasText: "keyboard" })).toHaveCount(1);
   });
@@ -124,7 +116,7 @@ test.describe("kbd mode (issue #23) — full pipeline against a logging-sink dae
     expect(keyLogEntries(baseline)).toEqual([[KEY_A], [42, KEY_B], [42, 2]]);
   });
 
-  test("strip button tap → named combo (esc, tab, up, left)", async ({ page }) => {
+  test("strip button click → named combo (esc, tab, up, left)", async ({ page }) => {
     await page.goto("/index.html", { waitUntil: "networkidle" });
     const baseline = readDaemonLog().length;
     await enterKbdMode(page);
@@ -135,7 +127,7 @@ test.describe("kbd mode (issue #23) — full pipeline against a logging-sink dae
       ["↑", [KEY_UP]],
       ["←", [KEY_LEFT]],
     ] as const) {
-      await strip.filter({ hasText: label }).tap();
+      await strip.filter({ hasText: label }).click();
       await waitForKeyLog(expected, baseline);
     }
     expect(keyLogEntries(baseline)).toEqual([
@@ -164,17 +156,23 @@ test.describe("kbd mode (issue #23) — full pipeline against a logging-sink dae
     expect(await page.locator(".kbd-input").inputValue()).toBe("");
   });
 
-  test("desktop (no soft keyboard) hides the kbd button — guard via maxTouchPoints", async ({
+  test("desktop browser also shows the kbd button (the daemon-side guard prevents self-injection)", async ({
     browser,
   }) => {
-    const ctx = await browser.newContext({
-      viewport: { width: 420, height: 800 },
-      hasTouch: false,
-    });
+    const ctx = await browser.newContext({ viewport: { width: 420, height: 800 } });
     const page = await ctx.newPage();
     await page.goto("/index.html", { waitUntil: "networkidle" });
-    await expect(page.locator("button", { hasText: "keyboard" })).toHaveCount(0);
+    await expect(page.locator("button", { hasText: "keyboard" })).toHaveCount(1);
     await ctx.close();
+  });
+
+  test("kbmode shows a same-machine warning when the client origin is localhost", async ({
+    page,
+  }) => {
+    await page.goto("/index.html", { waitUntil: "networkidle" });
+    await enterKbdMode(page);
+    await expect(page.getByRole("status")).toContainText(/Same machine/i);
+    await expect(page.locator(".kbd-hint")).toHaveCount(0);
   });
 });
 

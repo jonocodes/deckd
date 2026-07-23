@@ -21,7 +21,6 @@ export default defineConfig({
       name: "chromium",
       use: {
         ...devices["Desktop Chrome"],
-        hasTouch: true,
         launchOptions: { executablePath: findChromiumExe() },
       },
     },

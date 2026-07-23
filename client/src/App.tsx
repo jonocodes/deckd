@@ -21,11 +21,6 @@ import type { Icon as IconRef, ServerLayout } from "./protocol";
 type View = "layout" | "trackpad" | "settings" | "kbd";
 type SocketStatus = "connecting" | "open" | "closed";
 
-const HAS_SOFT_KEYBOARD =
-  typeof window !== "undefined" &&
-  (navigator.maxTouchPoints > 0 ||
-    window.matchMedia("(pointer: coarse)").matches);
-
 /** Sentinel ids for the always-on chrome widgets. The daemon's pad / jog
  * paths ignore ids for emission (they're just book-keeping keys), so these
  * never collide with real layout widgets. */
@@ -171,17 +166,15 @@ export function App() {
         >
           trackpad
         </button>
-        {HAS_SOFT_KEYBOARD && (
-          <button
-            className={`chrome-btn${view === "kbd" ? " chrome-btn-active" : ""}`}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              setView(view === "kbd" ? "layout" : "kbd");
-            }}
-          >
-            keyboard
-          </button>
-        )}
+        <button
+          className={`chrome-btn${view === "kbd" ? " chrome-btn-active" : ""}`}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            setView(view === "kbd" ? "layout" : "kbd");
+          }}
+        >
+          keyboard
+        </button>
         <button
           className={`chrome-btn${view === "settings" ? " chrome-btn-active" : ""}`}
           onPointerDown={() => setView(view === "settings" ? "layout" : "settings")}

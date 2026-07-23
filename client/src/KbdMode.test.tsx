@@ -196,4 +196,49 @@ describe("KbdMode", () => {
       expect(ev.defaultPrevented).toBe(true);
     });
   });
+
+  describe("same-machine warning", () => {
+    function setHostname(value: string | null) {
+      Object.defineProperty(window, "location", {
+        configurable: true,
+        value: { ...window.location, hostname: value },
+      });
+    }
+
+    afterEach(() => {
+      setHostname("localhost");
+    });
+
+    it("renders the banner when the client is on the same machine (localhost)", () => {
+      setHostname("localhost");
+      render(<KbdMode onType={() => {}} onKey={() => {}} />);
+      const banner = screen.getByRole("status");
+      expect(banner.textContent).toMatch(/Same machine/i);
+    });
+
+    it("renders the banner for 127.0.0.1 too", () => {
+      setHostname("127.0.0.1");
+      render(<KbdMode onType={() => {}} onKey={() => {}} />);
+      const banner = screen.getByRole("status");
+      expect(banner.textContent).toMatch(/Same machine/i);
+    });
+
+    it("does not render the banner when the client is on a remote hostname", () => {
+      setHostname("lute.tail.ts.net");
+      render(<KbdMode onType={() => {}} onKey={() => {}} />);
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+
+    it("shows the keyboard hint only when remote (no banner present)", () => {
+      setHostname("lute.tail.ts.net");
+      render(<KbdMode onType={() => {}} onKey={() => {}} />);
+      expect(document.querySelector(".kbd-hint")).not.toBeNull();
+    });
+
+    it("hides the keyboard hint when the banner is present", () => {
+      setHostname("localhost");
+      render(<KbdMode onType={() => {}} onKey={() => {}} />);
+      expect(document.querySelector(".kbd-hint")).toBeNull();
+    });
+  });
 });

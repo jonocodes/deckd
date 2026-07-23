@@ -25,6 +25,12 @@ const STRIP_KEYS: Array<{ combo: string; label: string }> = [
   { combo: "right", label: "→" },
 ];
 
+function isSameMachineClient(): boolean {
+  if (typeof window === "undefined") return false;
+  const h = window.location.hostname;
+  return h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1";
+}
+
 export function KbdMode({ onType, onKey }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const prevValue = useRef("");
@@ -60,8 +66,32 @@ export function KbdMode({ onType, onKey }: Props) {
     if (inserted) onType(inserted);
   };
 
+  const sameMachine = isSameMachineClient();
+
   return (
     <div className="kbd" onPointerDown={() => inputRef.current?.focus()}>
+      {sameMachine && (
+        <div className="kbd-banner" role="status">
+          <strong>Same machine as the daemon.</strong> Text injection is
+          disabled here to prevent a self-loop. Click another desktop app
+          to type into it, or use this from a phone or remote browser.
+        </div>
+      )}
+      <div className="kbd-strip">
+        {STRIP_KEYS.map(({ combo, label }) => (
+          <button
+            key={combo}
+            className="chrome-btn kbd-strip-btn"
+            aria-label={combo}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onKey(combo);
+            }}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
       <input
         ref={inputRef}
         className="kbd-input"
@@ -96,22 +126,7 @@ export function KbdMode({ onType, onKey }: Props) {
           }
         }}
       />
-      <span className="kbd-hint">keyboard</span>
-      <div className="kbd-strip">
-        {STRIP_KEYS.map(({ combo, label }) => (
-          <button
-            key={combo}
-            className="chrome-btn kbd-strip-btn"
-            aria-label={combo}
-            onPointerDown={(e) => {
-              e.preventDefault();
-              onKey(combo);
-            }}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+      {!sameMachine && <span className="kbd-hint">keyboard</span>}
     </div>
   );
 }
