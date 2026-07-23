@@ -12,7 +12,7 @@ import pytest
 import websockets
 
 from conftest import ServerHandle
-from deckd.server import _is_loopback_host, _peer_is_loopback
+from deckd.server import _local_ips, _peer_is_same_machine
 
 # Time to wait for a fire-and-forget side effect (shell dispatch, scroll emit).
 SIDE_EFFECT_WAIT = 0.05
@@ -587,32 +587,18 @@ async def test_key_message_emits_named_key(srv: ServerHandle) -> None:
 
 # ---------------------------------------------------------------------------
 # Same-machine hint (issue #23): the daemon reports ``same_machine: true``
-# when the connecting WebSocket's peer address is loopback, so the client
-# knows whether the kbd-mode loop guard would drop its events.
+# when the connecting WebSocket's peer address is one of the daemon's
+# own local IPs (loopback, hostname addresses, default-route interface).
 # ---------------------------------------------------------------------------
 
 
-def test_is_loopback_host_ipv4() -> None:
-    assert _is_loopback_host("127.0.0.1") is True
+def test_local_ips_always_includes_loopback() -> None:
+    ips = _local_ips()
+    assert "127.0.0.1" in ips
+    assert "::1" in ips
 
 
-def test_is_loopback_host_ipv6() -> None:
-    assert _is_loopback_host("::1") is True
-
-
-def test_is_loopback_host_localhost_string() -> None:
-    assert _is_loopback_host("localhost") is True
-
-
-def test_is_loopback_host_lan_ip() -> None:
-    assert _is_loopback_host("192.168.1.42") is False
-
-
-def test_is_loopback_host_tailscale_ip() -> None:
-    assert _is_loopback_host("100.64.0.1") is False
-
-
-def test_peer_is_loopback_extracts_host_from_request() -> None:
+def test_peer_is_same_machine_for_loopback_peer() -> None:
     class FakeTransport:
         def get_extra_info(self, key):
             assert key == "peername"
@@ -621,25 +607,44 @@ def test_peer_is_loopback_extracts_host_from_request() -> None:
     class FakeRequest:
         transport = FakeTransport()
 
-    assert _peer_is_loopback(FakeRequest()) is True
+    assert _peer_is_same_machine(FakeRequest()) is True
 
 
-def test_peer_is_loopback_false_for_remote_peer() -> None:
+def test_peer_is_same_machine_for_hostname_peer() -> None:
+    """A peer whose IP matches one of the daemon's own local IPs (the
+    hostname resolved) is on the same machine — e.g. ``lute`` from a
+    browser on lute."""
+    host_ip = next(iter(_local_ips() - {"127.0.0.1", "::1"}), None)
+    if host_ip is None:
+        return  # this machine has no non-loopback IP — skip the case
+
     class FakeTransport:
         def get_extra_info(self, key):
-            return ("100.64.0.7", 54321, 0, 0)
+            assert key == "peername"
+            return (host_ip, 54321, 0, 0)
 
     class FakeRequest:
         transport = FakeTransport()
 
-    assert _peer_is_loopback(FakeRequest()) is False
+    assert _peer_is_same_machine(FakeRequest()) is True
 
 
-def test_peer_is_loopback_false_for_missing_peer() -> None:
+def test_peer_is_same_machine_false_for_remote_peer() -> None:
+    class FakeTransport:
+        def get_extra_info(self, key):
+            return ("198.51.100.42", 54321, 0, 0)
+
+    class FakeRequest:
+        transport = FakeTransport()
+
+    assert _peer_is_same_machine(FakeRequest()) is False
+
+
+def test_peer_is_same_machine_false_for_missing_peer() -> None:
     class FakeRequest:
         transport = None
 
-    assert _peer_is_loopback(FakeRequest()) is False
+    assert _peer_is_same_machine(FakeRequest()) is False
 
 
 async def test_hint_message_sent_after_initial_layout(srv: ServerHandle) -> None:
