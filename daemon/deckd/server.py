@@ -50,14 +50,7 @@ def _peer_is_same_machine(req: web.Request) -> bool:
     peer = req.transport.get_extra_info("peername") if req.transport else None
     if not peer:
         return False
-    peer_ip = peer[0]
-    if peer_ip not in _local_ips():
-        return False
-    forwarded = req.headers.get("X-Forwarded-For")
-    if forwarded:
-        origin = forwarded.split(",")[0].strip()
-        return origin in _local_ips()
-    return True
+    return peer[0] in _local_ips()
 
 
 # ---------------------------------------------------------------------------

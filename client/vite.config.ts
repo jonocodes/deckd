@@ -40,16 +40,6 @@ export default defineConfig({
         target: daemonUpstream.replace(/^http/, "ws"),
         ws: true,
         rewriteWsOrigin: true,
-        configure(proxy) {
-          proxy.on("proxyReq", (proxyReq, req) => {
-            const incoming = req.headers["x-forwarded-for"];
-            const client = req.socket.remoteAddress ?? "";
-            proxyReq.setHeader(
-              "X-Forwarded-For",
-              incoming ? `${incoming}, ${client}` : client,
-            );
-          });
-        },
       },
       "/health": daemonUpstream,
       "/reload": daemonUpstream,
