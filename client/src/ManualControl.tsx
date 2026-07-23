@@ -33,12 +33,6 @@ const STRIP_KEYS: Array<{ combo: string; label: string }> = [
   { combo: "right", label: "→" },
 ];
 
-function isSameMachineClient(): boolean {
-  if (typeof window === "undefined") return false;
-  const h = window.location.hostname;
-  return h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1";
-}
-
 export function ManualControl({
   onType,
   onKey,
@@ -93,17 +87,8 @@ export function ManualControl({
     }
   };
 
-  const sameMachine = isSameMachineClient();
-
   return (
     <div className="manual-control">
-      {sameMachine && (
-        <div className="kbd-banner" role="status">
-          <strong>Same machine as the daemon.</strong> Text injection is
-          disabled here to prevent a self-loop. Click another desktop app
-          to type into it, or use this from a phone or remote browser.
-        </div>
-      )}
       <div className="kbd-strip">
         {STRIP_KEYS.map(({ combo, label }) => (
           <button
@@ -169,7 +154,7 @@ export function ManualControl({
           }}
         />
       </div>
-      {!sameMachine && <span className="kbd-hint">manual</span>}
+      <span className="kbd-hint">manual</span>
     </div>
   );
 }

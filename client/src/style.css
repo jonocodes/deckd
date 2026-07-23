@@ -466,21 +466,6 @@ button:focus-visible { outline: none; }
   color: #7dd3fc;
 }
 
-.kbd-banner {
-  padding: 10px 12px;
-  margin-bottom: 8px;
-  border: 1px solid #b58a2a;
-  border-radius: 10px;
-  background: #2a2417;
-  color: #f5d68a;
-  font-size: 14px;
-  line-height: 1.4;
-}
-
-.kbd-banner strong {
-  color: #f5d68a;
-}
-
 .empty {
   display: grid;
   place-items: center;

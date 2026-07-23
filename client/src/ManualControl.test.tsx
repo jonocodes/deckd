@@ -357,47 +357,4 @@ describe("ManualControl", () => {
       expect(onKey).not.toHaveBeenCalled();
     });
   });
-
-  describe("same-machine warning", () => {
-    function setHostname(value: string) {
-      Object.defineProperty(window, "location", {
-        configurable: true,
-        value: { ...window.location, hostname: value },
-      });
-    }
-
-    afterEach(() => {
-      setHostname("localhost");
-    });
-
-    it("renders the banner when the client is on the same machine (localhost)", () => {
-      setHostname("localhost");
-      render(
-        <ManualControl
-          onType={() => {}}
-          onKey={() => {}}
-          onPad={() => {}}
-          onTap={() => {}}
-          onDrag={() => {}}
-          sensitivity={1}
-        />,
-      );
-      expect(screen.getByRole("status").textContent).toMatch(/Same machine/i);
-    });
-
-    it("does not render the banner when the client is on a remote hostname", () => {
-      setHostname("lute.tail.ts.net");
-      render(
-        <ManualControl
-          onType={() => {}}
-          onKey={() => {}}
-          onPad={() => {}}
-          onTap={() => {}}
-          onDrag={() => {}}
-          sensitivity={1}
-        />,
-      );
-      expect(screen.queryByRole("status")).toBeNull();
-    });
-  });
 });
