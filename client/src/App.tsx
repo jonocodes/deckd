@@ -5,6 +5,7 @@ import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
 import { ManualControl } from "./ManualControl";
+import { PasswordGate } from "./PasswordGate";
 import { Settings } from "./Settings";
 import {
   useBottomScale,
@@ -23,7 +24,7 @@ import type { JogHandle } from "./JogStrip";
 import type { Icon as IconRef, ServerLayout } from "./protocol";
 
 type View = "layout" | "trackpad" | "settings";
-type SocketStatus = "connecting" | "open" | "closed";
+type SocketStatus = "connecting" | "open" | "closed" | "unauthorized";
 
 /** Sentinel ids for the always-on chrome widgets. The daemon's pad / jog
  * paths ignore ids for emission (they're just book-keeping keys), so these
@@ -37,6 +38,7 @@ const STATUS_LABEL: Record<SocketStatus, string> = {
   open: "live",
   connecting: "reconnecting",
   closed: "disconnected",
+  unauthorized: "locked",
 };
 
 export function App() {
@@ -47,7 +49,13 @@ export function App() {
   const [layout, setLayout] = useState<ServerLayout | null>(demoLayout);
   const [view, setView] = useState<View>("layout");
   const onLayout = useCallback((m: ServerLayout) => setLayout(m), []);
-  const { status, send } = useDeckdSocket(onLayout, { enabled: !demoLayout });
+  const { status, send, authenticate } = useDeckdSocket(onLayout, {
+    enabled: !demoLayout,
+  });
+  // Track whether we've already handed the socket a password this session, so
+  // the gate can say "incorrect" on a repeat rejection rather than on first
+  // contact (where the stored password was simply empty).
+  const [attemptedAuth, setAttemptedAuth] = useState(false);
   const scroll = useScrollSettings();
   const trackpad = useTrackpadSettings();
   const wakeLock = useWakeLockSetting();
@@ -89,6 +97,18 @@ export function App() {
     "--bottom-scale": bottomScale.scale,
     ...(appTheme ? { "--badge-theme": appTheme } : {}),
   } as CSSProperties;
+
+  if (status === "unauthorized") {
+    return (
+      <PasswordGate
+        retry={attemptedAuth}
+        onSubmit={(password) => {
+          setAttemptedAuth(true);
+          authenticate(password);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="app">

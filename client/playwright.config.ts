@@ -27,7 +27,7 @@ export default defineConfig({
   ],
   webServer: {
     command:
-      'cd .. && rm -f client/e2e/.daemon.log && PYTHONUNBUFFERED=1 PYTHONPATH=scripts/no-evdev .venv/bin/deckd --layouts-dir layouts --client-dist client/dist --verbose > client/e2e/.daemon.log 2>&1',
+      'cd .. && rm -f client/e2e/.daemon.log && PYTHONUNBUFFERED=1 PYTHONPATH=scripts/no-evdev .venv/bin/deckd --layouts-dir layouts --client-dist client/dist --no-auth --verbose > client/e2e/.daemon.log 2>&1',
     cwd: __dirname,
     port: 8765,
     reuseExistingServer: false,

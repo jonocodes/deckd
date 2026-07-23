@@ -680,3 +680,64 @@ button:focus-visible { outline: none; }
   word-break: break-word;
   color: #fecaca;
 }
+
+/* ---------------------------------------------------------------------------
+ * Password gate (issue #16): full-surface landing shown when the daemon
+ * rejects a remote connection as unauthorized. A single password field.
+ * ------------------------------------------------------------------------- */
+
+.password-gate {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 24px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
+
+.password-gate-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 320px;
+}
+
+.password-gate-title {
+  margin: 0;
+  font-size: clamp(28px, 8vw, 40px);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  text-align: center;
+}
+
+.password-gate-hint {
+  margin: 0;
+  text-align: center;
+  font-size: 14px;
+  color: #9aa4b2;
+}
+
+.password-gate-input {
+  font: inherit;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid #2a333d;
+  background: #161b21;
+  color: #e6e9ef;
+}
+.password-gate-input:focus {
+  outline: none;
+  border-color: #4b91f1;
+}
+
+.password-gate-submit {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+}
+.password-gate-submit:disabled {
+  opacity: 0.5;
+}

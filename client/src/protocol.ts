@@ -38,9 +38,23 @@ export type ServerLayout = {
 
 export type ServerState = { type: "state"; locked: boolean };
 export type ServerBrightness = { type: "brightness"; value: number };
-export type ServerMessage = ServerLayout | ServerState | ServerBrightness;
+/** Sent by the daemon to a non-loopback client whose ``hello`` omitted or
+ * got the shared password wrong (issue #16); the socket is closed straight
+ * after. The client swaps in the password prompt. */
+export type ServerError = { type: "error"; reason: string };
+export type ServerMessage =
+  | ServerLayout
+  | ServerState
+  | ServerBrightness
+  | ServerError;
 
-export type ClientHello = { type: "hello"; client: "web"; token?: string };
+export type ClientHello = {
+  type: "hello";
+  client: "web";
+  token?: string;
+  /** Shared password for remote clients; omitted on loopback (issue #16). */
+  password?: string;
+};
 export type ClientPress = { type: "press"; id: string };
 export type ClientJog = { type: "jog"; id: string; delta: number };
 export type ClientJogEnd = { type: "jog_end"; id: string; velocity: number };

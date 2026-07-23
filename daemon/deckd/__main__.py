@@ -7,6 +7,7 @@ import signal
 import sys
 from pathlib import Path
 
+from .auth import PasswordError, default_password_path, load_or_create_password
 from .input import LoggingKeySink, LoggingScrollSink, ScrollController, UinputSink
 from .platform import default_backend
 from .server import Server
@@ -66,6 +67,21 @@ def main() -> None:
         help="Optional path to built client (served at /)",
     )
     parser.add_argument(
+        "--password-file",
+        type=Path,
+        default=None,
+        help=(
+            "Shared password for remote (non-loopback) clients. Defaults to "
+            "$XDG_CONFIG_HOME/deckd/password (~/.config/deckd/password); "
+            "generated on first start if absent. Loopback clients never need it."
+        ),
+    )
+    parser.add_argument(
+        "--no-auth",
+        action="store_true",
+        help="Disable remote-client password auth entirely (all connections allowed)",
+    )
+    parser.add_argument(
         "--scroll-momentum-friction",
         type=float,
         default=0.90,
@@ -119,6 +135,18 @@ def main() -> None:
     if overlay_dir is not None and overlay_dir.is_dir():
         logging.getLogger("deckd").info("loading layouts overlay from %s", overlay_dir)
 
+    if args.no_auth:
+        password = None
+        logging.getLogger("deckd").warning(
+            "remote-client auth disabled (--no-auth); all connections allowed"
+        )
+    else:
+        password_path = args.password_file or default_password_path()
+        try:
+            password = load_or_create_password(password_path)
+        except PasswordError as exc:
+            parser.error(str(exc))
+
     def dbus_bus_factory(bus_type):
         from dbus_fast.aio import MessageBus
 
@@ -137,6 +165,7 @@ def main() -> None:
         dbus_bus_factory=dbus_bus_factory,
         focus_backend=focus_backend,
         overlay_dir=overlay_dir,
+        password=password,
     )
 
     if args.client_dist is not None:

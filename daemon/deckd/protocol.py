@@ -54,6 +54,10 @@ class HelloMessage(BaseModel):
     type: Literal["hello"]
     client: str = "web"
     token: str | None = None
+    # Shared password for remote (non-loopback) clients (issue #16). Loopback
+    # connections may omit it. Validated by the server before the hello frame
+    # reaches ``_dispatch``.
+    password: str | None = None
 
 
 class PressMessage(BaseModel):

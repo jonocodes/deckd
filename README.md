@@ -42,11 +42,11 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
 - [x] **Keep screen awake** while the surface is in use.
 - [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
+- [x] **Password auth for remote clients** — remote (non-loopback) clients authenticate with a shared password; local (`127.0.0.1` / `::1`) connections stay password-free. See [Remote-client auth](#remote-client-auth).
 - [x] **Runs on GNOME (Wayland), KDE Plasma (Wayland), any X11 desktop, and macOS.**
 
 **Planned**
 
-- [ ] **Password/token auth for remote clients** — required before it's safe to expose beyond a trusted network.
 - [ ] **Screensaver & suspend sync** — dim/lock the surface when the desktop sleeps.
 - [ ] **One-step NixOS install** — a production module instead of the current spike.
 - [ ] **Multiple simultaneous clients** with per-device layouts and resolutions.
@@ -327,7 +327,7 @@ The right-side jogstrip stays available for scrolling while you're pointing.
 - **Focus guard.** Injected keystrokes land on whatever window has desktop focus. If that's the deckd client itself (you opened the client on the same machine as the daemon), the daemon drops `type` / `key` messages rather than feed the client's own input back into itself.
 - **Physical keyboards.** A Bluetooth keyboard paired to the phone works through the `keydown` path with no extra setup.
 
-> ⚠️ **Security: trusted networks only until token auth lands.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. The WebSocket currently has no authentication, so only expose the daemon (`--host 0.0.0.0`) on a network you fully trust: a Tailscale tailnet counts, open LAN/WiFi does not. Token auth is tracked in [#16](https://github.com/jonocodes/deckd/issues/16).
+> ⚠️ **Security.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. Remote (non-loopback) clients must authenticate with a shared password (see [Remote-client auth](#remote-client-auth)); local `127.0.0.1` / `::1` connections stay password-free. The password is a single shared secret over a plaintext WebSocket, not per-user auth or transport encryption — still expose the daemon (`--host 0.0.0.0`) only on a network you trust, ideally a Tailscale tailnet, and put TLS in front of it if the link isn't already private.
 
 
 
@@ -585,7 +585,13 @@ deckctl status              # hit /health
 deckctl reload              # POST /reload — re-read layout YAML and push
 deckctl layout firefox      # force all clients to the firefox layout (dev)
 deckctl layout default      # force the default layout
+
+# Against a remote daemon, pass the shared password (loopback needs none):
+deckctl --host desktop.tailnet.ts.net --password "$PW" status
+DECKD_PASSWORD="$PW" deckctl --host desktop.tailnet.ts.net reload
 ```
+
+`deckctl` talking to the default local daemon (`127.0.0.1`) needs no password — the loopback exemption covers it. For a remote daemon, supply the password with `--password` or the `DECKD_PASSWORD` env var; `deckctl` deliberately does **not** read the daemon's password file itself.
 
 
 
@@ -600,6 +606,18 @@ A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` f
 
 
 
+### Remote-client auth
+
+Remote (non-loopback) clients authenticate with a single shared password; local connections (`127.0.0.1` and `::1`, on both the WebSocket and the HTTP control endpoints) are exempt, so same-machine use and `deckctl` need no setup.
+
+- **Where it lives.** `~/.config/deckd/password` (`$XDG_CONFIG_HOME/deckd/password` if set), plaintext, mode `0640`. Override the location with `--password-file <path>`, or disable auth entirely with `--no-auth`.
+- **First start.** If the file is absent, the daemon generates a random 32-char password, writes it (mode `0640`), and logs it **once** at WARN with a `SAVE THIS — it won't be shown again` header. It's never logged again.
+- **Pre-existing file.** Respected verbatim. Set your own before first start with `pwgen 32 | tee ~/.config/deckd/password && chmod 640 ~/.config/deckd/password`. The daemon **refuses to start** if the file exists but is unreadable or more permissive than `0640`, logging the path and reason.
+- **On the phone.** A remote client that connects without (or with the wrong) password lands on a password screen; entering the password connects and the browser remembers it. There's no QR, token file, or URL query param.
+- **Rotation** is out of scope: edit the file and restart the daemon.
+
+The password is a shared secret over a plaintext WebSocket — it gates access, it does not encrypt the link. Keep the daemon on a trusted network (see the security note above).
+
 ### Per-platform overlay
 
 The daemon also loads a sibling directory next to `--layouts-dir` whose name is suffixed with the current platform: `layouts.macos/` on macOS, `layouts.linux/` on Linux. A missing overlay is fine (the most common case). Overlay entries load first and **replace** any base entry with the same `id` — so `layouts.macos/firefox.yaml` overrides `layouts/firefox.yaml` on Mac without you touching the shared base. The watcher also watches the overlay dir, so edits reload live. Pass `--no-overlay` to skip the overlay even when it exists (debugging, cross-platform checkout debugging, etc.).
@@ -610,7 +628,7 @@ This is how `layouts.macos/firefox.yaml` carries the `super+t` / `super+[` / `su
 
 The pieces behind the features above, for anyone reading the code:
 
-- **Wire protocol** in both directions: `LayoutMessage` (with `jogstrip_enabled` + optional `error`) and `press` / `jog` / `jog_end` / `pad` / `pad_tap` / `pad_drag` / `type` / `key` events.
+- **Wire protocol** in both directions: `LayoutMessage` (with `jogstrip_enabled` + optional `error`) and `hello` (with optional `password`) / `press` / `jog` / `jog_end` / `pad` / `pad_tap` / `pad_drag` / `type` / `key` events. A remote client that fails auth gets `{"type": "error", "reason": "unauthorized"}` and the socket is closed.
 - **YAML config → Pydantic →** `Widget` **graph → action dispatch** for `shell`, `terminal`, `key`, `dbus` primitives.
 - **Jogstrip** scroll plumbing from browser pointer movement to daemon-side uinput, including release momentum.
 - **Manual control mode**: combined trackpad (`REL_X` / `REL_Y` motion plus `BTN_LEFT` / `BTN_RIGHT` / `BTN_MIDDLE` on the same uinput device, with client-side gesture recognition: tap / two-finger tap / tap-and-a-half drag lock) and IME passthrough (`type` / `key` wire messages, ASCII+Shift→evdev translation, daemon-side focus guard against self-injection). Both live in one view; the strip's keyboard-icon toggle raises the soft keyboard.

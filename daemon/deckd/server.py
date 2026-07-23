@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import hmac
+import ipaddress
 import json
 import logging
 import os
@@ -23,9 +25,34 @@ if TYPE_CHECKING:
     from .input import KeySink
     from .platform import AppInfo, PlatformBackend
 
+from . import PASSWORD_HEADER
+
 log = logging.getLogger("deckd.server")
 
 DEFAULT_APP_ID = "default"
+
+# How long a non-loopback WebSocket has to send its authenticating ``hello``
+# before we drop it. Generous — a real client sends it immediately on open.
+WS_AUTH_TIMEOUT_S = 10.0
+
+
+def _is_loopback_addr(remote: str | None) -> bool:
+    """True if ``remote`` (aiohttp's ``request.remote``) is a loopback peer.
+
+    Covers IPv4 ``127.0.0.0/8``, IPv6 ``::1``, and the IPv4-mapped form
+    (``::ffff:127.0.0.1``) a dual-stack listener can report. A missing or
+    unparseable address is treated as non-loopback (fail closed).
+    """
+    if not remote:
+        return False
+    try:
+        addr = ipaddress.ip_address(remote)
+    except ValueError:
+        return False
+    mapped = getattr(addr, "ipv4_mapped", None)
+    if mapped is not None:
+        addr = mapped
+    return addr.is_loopback
 
 
 # ---------------------------------------------------------------------------
@@ -113,9 +140,13 @@ class Server:
         dbus_bus_factory: "Callable[[BusTypeT], MessageBus] | None" = None,
         focus_backend: "PlatformBackend | None" = None,
         overlay_dir: Path | None = None,
+        password: str | None = None,
     ) -> None:
         self.layouts_dir = layouts_dir
         self.overlay_dir = overlay_dir
+        # ``None``/empty disables auth entirely (every connection is treated
+        # as authorized). When set, non-loopback clients must present it.
+        self.password = password or None
         self.host = host
         self.port = port
         self.app = web.Application()
@@ -319,6 +350,48 @@ class Server:
         self._layouts_task = asyncio.create_task(self.run_layouts_watcher())
         return self._layouts_task
 
+    # -- auth ----------------------------------------------------------------
+
+    @property
+    def _auth_required(self) -> bool:
+        return self.password is not None
+
+    def _is_loopback(self, req: web.Request) -> bool:
+        """Loopback exemption check. A method (not a bare function) so tests
+        can force the non-loopback path without a real remote peer."""
+        return _is_loopback_addr(req.remote)
+
+    def _check_password(self, candidate: str | None) -> bool:
+        """Constant-time compare against the shared password. Always True
+        when auth is disabled; always False for a missing candidate."""
+        if not self._auth_required:
+            return True
+        if candidate is None:
+            return False
+        return hmac.compare_digest(candidate, self.password or "")
+
+    def _http_authorized(self, req: web.Request) -> bool:
+        if not self._auth_required or self._is_loopback(req):
+            return True
+        return self._check_password(req.headers.get(PASSWORD_HEADER))
+
+    async def _authenticate_ws(self, ws: web.WebSocketResponse) -> bool:
+        """Read the first frame off a non-loopback socket and require it to
+        be a ``hello`` carrying the correct password."""
+        try:
+            msg = await asyncio.wait_for(ws.receive(), timeout=WS_AUTH_TIMEOUT_S)
+        except (asyncio.TimeoutError, ConnectionError):
+            return False
+        if msg.type != WSMsgType.TEXT:
+            return False
+        try:
+            data = json.loads(msg.data)
+        except json.JSONDecodeError:
+            return False
+        if data.get("type") != "hello":
+            return False
+        return self._check_password(data.get("password"))
+
     # -- routes / lifecycle --------------------------------------------------
 
     def _setup_routes(self) -> None:
@@ -328,6 +401,13 @@ class Server:
         self.app.router.add_post("/layout/{layout_id}", self._set_layout)
 
     async def _health(self, _req: web.Request) -> web.Response:
+        # Intentionally NOT password-gated, even for remote clients: the web
+        # client's Settings panel fetches /health for host-identity
+        # diagnostics, and (unlike /reload and /layout) it neither mutates
+        # state nor injects input. Issue #16 enumerates the *control*
+        # endpoints as the ones to protect; the only exposure here is the
+        # hostname/OS/desktop/session-count already implied by connecting.
+        #
         # The web client fetches /health from the Settings panel to read
         # host identity. On the Vite dev path (:5173 -> :8765) that fetch
         # is cross-origin, so the browser needs an explicit allow header
@@ -345,7 +425,9 @@ class Server:
             headers={"Access-Control-Allow-Origin": "*"},
         )
 
-    async def _reload(self, _req: web.Request) -> web.Response:
+    async def _reload(self, req: web.Request) -> web.Response:
+        if not self._http_authorized(req):
+            return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
         await self.reload_and_push()
         body: dict = {
             "ok": self._current_error is None,
@@ -357,6 +439,8 @@ class Server:
         return web.json_response(body, status=200 if self._current_error is None else 400)
 
     async def _set_layout(self, req: web.Request) -> web.Response:
+        if not self._http_authorized(req):
+            return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
         layout_id = req.match_info["layout_id"]
         try:
             layout = self.layouts[layout_id]
@@ -384,6 +468,15 @@ class Server:
     async def _ws_handler(self, req: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse(heartbeat=30)
         await ws.prepare(req)
+        # Non-loopback clients must authenticate before we add the session or
+        # leak any layout. The authenticating ``hello`` frame is consumed
+        # here; subsequent frames flow through the normal dispatch loop.
+        if self._auth_required and not self._is_loopback(req):
+            if not await self._authenticate_ws(ws):
+                log.info("ws auth failed from %s; closing", req.remote)
+                await ws.send_json({"type": "error", "reason": "unauthorized"})
+                await ws.close()
+                return ws
         session = Session(ws, self)
         self._sessions.add(session)
         log.info(
