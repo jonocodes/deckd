@@ -105,6 +105,14 @@ build-pages:
 test:
     pytest
 
+# Run the client test suite (Vitest unit tests + Playwright e2e). The e2e
+# half boots the daemon with PYTHONPATH=scripts/no-evdev so its uinput sink
+# is shadowed to LoggingKeySink — keystrokes are logged, not injected into
+# the host desktop. See client/e2e/kbd-mode.spec.ts for the suite.
+test-client:
+    cd client && npm run test:unit
+    cd client && npm run test:e2e
+
 # End-to-end smoke test (boots daemon in-process, fires every action primitive).
 smoke:
     python -u scripts/smoke.py
