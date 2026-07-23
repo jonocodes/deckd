@@ -11,7 +11,6 @@ export function useDeckdSocket(
   // In demo mode the socket is disabled and reported as ``open`` so the
   // chrome connection indicator reads "live" against a fixture layout.
   const [status, setStatus] = useState<Status>(enabled ? "connecting" : "open");
-  const [sameMachine, setSameMachine] = useState<boolean | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const backoffRef = useRef(500);
 
@@ -47,7 +46,6 @@ export function useDeckdSocket(
         try {
           const msg = JSON.parse(ev.data) as ServerMessage;
           if (msg.type === "layout") onLayout(msg);
-          else if (msg.type === "hint") setSameMachine(msg.same_machine);
         } catch {
           // ignore malformed
         }
@@ -55,7 +53,6 @@ export function useDeckdSocket(
 
       ws.onclose = () => {
         setStatus("closed");
-        setSameMachine(null);
         if (stopped) return;
         const wait = Math.min(backoffRef.current, 8000);
         backoffRef.current = wait * 2;
@@ -80,7 +77,7 @@ export function useDeckdSocket(
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
   };
 
-  return { status, send, sameMachine };
+  return { status, send };
 }
 
 function resolve_ws_url(): string {

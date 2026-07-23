@@ -28,17 +28,6 @@ log = logging.getLogger("deckd.server")
 DEFAULT_APP_ID = "default"
 
 
-def _peer_is_loopback(req: web.Request) -> bool:
-    peer = req.transport.get_extra_info("peername") if req.transport else None
-    if not peer:
-        return False
-    return _is_loopback_host(peer[0])
-
-
-def _is_loopback_host(host: str) -> bool:
-    return host in ("127.0.0.1", "::1", "localhost")
-
-
 # ---------------------------------------------------------------------------
 # Host-identity helpers used by /health. Cheap to compute per-request; no
 # caching needed. Broken out so the tests can pin them via monkeypatch.
@@ -402,7 +391,6 @@ class Server:
         )
         try:
             await session.push_current()
-            await self._send_hint(ws, req)
             async for raw in ws:
                 if raw.type != WSMsgType.TEXT:
                     continue
@@ -484,11 +472,6 @@ class Server:
             return False
         log.info("[guard] dropping %r; deckd window focused", what)
         return True
-
-    async def _send_hint(self, ws: web.WebSocketResponse, req: web.Request) -> None:
-        await ws.send_json(
-            p.HintMessage(type="hint", same_machine=_peer_is_loopback(req)).model_dump()
-        )
 
     def _find_widget(self, widget_id: str) -> Widget | None:
         for w in self._current_layout.widgets:
