@@ -33,3 +33,8 @@ client/.tls/
 
 # shotput workspace-copy (image-inline clients only; not needed on OpenCode web)
 .shots/
+
+# Playwright e2e artifacts
+client/e2e/.daemon.log
+client/test-results/
+client/playwright-report/
