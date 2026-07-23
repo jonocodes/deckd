@@ -1,8 +1,16 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { Keyboard } from "lucide-react";
+
+import { Trackpad } from "./Trackpad";
 
 type Props = {
   onType: (text: string) => void;
   onKey: (combo: string) => void;
+  onPad: (dx: number, dy: number) => void;
+  onTap: (fingers: number) => void;
+  onDrag: (state: "start" | "end") => void;
+  /** Trackpad sensitivity multiplier (px → uinput units). */
+  sensitivity: number;
 };
 
 const KEYDOWN_COMBOS: Record<string, string> = {
@@ -31,13 +39,20 @@ function isSameMachineClient(): boolean {
   return h === "localhost" || h === "127.0.0.1" || h === "[::1]" || h === "::1";
 }
 
-export function KbdMode({ onType, onKey }: Props) {
+export function ManualControl({
+  onType,
+  onKey,
+  onPad,
+  onTap,
+  onDrag,
+  sensitivity,
+}: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const prevValue = useRef("");
   const composing = useRef(false);
+  const [imeOpen, setImeOpen] = useState(false);
 
   useEffect(() => {
-    inputRef.current?.focus();
     const el = inputRef.current;
     if (!el) return;
     const onBeforeInput = (ev: Event) => {
@@ -66,10 +81,22 @@ export function KbdMode({ onType, onKey }: Props) {
     if (inserted) onType(inserted);
   };
 
+  const toggleIme = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    if (document.activeElement === el) {
+      el.blur();
+      setImeOpen(false);
+    } else {
+      el.focus();
+      setImeOpen(true);
+    }
+  };
+
   const sameMachine = isSameMachineClient();
 
   return (
-    <div className="kbd" onPointerDown={() => inputRef.current?.focus()}>
+    <div className="manual-control">
       {sameMachine && (
         <div className="kbd-banner" role="status">
           <strong>Same machine as the daemon.</strong> Text injection is
@@ -91,42 +118,58 @@ export function KbdMode({ onType, onKey }: Props) {
             {label}
           </button>
         ))}
+        <button
+          className={`chrome-btn kbd-strip-btn kbd-strip-ime${imeOpen ? " kbd-strip-ime-open" : ""}`}
+          aria-label="keyboard"
+          aria-pressed={imeOpen}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            toggleIme();
+          }}
+        >
+          <Keyboard size={18} />
+        </button>
       </div>
-      <input
-        ref={inputRef}
-        className="kbd-input"
-        type="text"
-        autoFocus
-        autoComplete="off"
-        spellCheck={false}
-        enterKeyHint="enter"
-        aria-label="Remote keyboard"
-        onCompositionStart={() => {
-          composing.current = true;
-        }}
-        onCompositionEnd={() => {
-          composing.current = false;
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Unidentified") return;
-          const combo = KEYDOWN_COMBOS[e.key];
-          if (combo) {
-            e.preventDefault();
-            onKey(combo);
-          } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
-            e.preventDefault();
-            onType(e.key);
-          }
-        }}
-        onInput={(e) => {
-          sendDelta(e.currentTarget.value);
-          if (!composing.current) {
-            e.currentTarget.value = "";
-            prevValue.current = "";
-          }
-        }}
-      />
-      {!sameMachine && <span className="kbd-hint">keyboard</span>}
+      <div className="manual-surface">
+        <Trackpad onPad={onPad} onTap={onTap} onDrag={onDrag} sensitivity={sensitivity} />
+        <input
+          ref={inputRef}
+          className="kbd-input"
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          enterKeyHint="enter"
+          aria-label="Remote keyboard"
+          tabIndex={-1}
+          onFocus={() => setImeOpen(true)}
+          onBlur={() => setImeOpen(false)}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={() => {
+            composing.current = false;
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Unidentified") return;
+            const combo = KEYDOWN_COMBOS[e.key];
+            if (combo) {
+              e.preventDefault();
+              onKey(combo);
+            } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+              e.preventDefault();
+              onType(e.key);
+            }
+          }}
+          onInput={(e) => {
+            sendDelta(e.currentTarget.value);
+            if (!composing.current) {
+              e.currentTarget.value = "";
+              prevValue.current = "";
+            }
+          }}
+        />
+      </div>
+      {!sameMachine && <span className="kbd-hint">manual</span>}
     </div>
   );
 }

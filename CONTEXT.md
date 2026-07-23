@@ -19,20 +19,16 @@ The `[x, y, w, h]` coordinates that position a widget within a page's grid. Colu
 _Avoid_: position, slot, cell
 
 **Chrome**:
-The persistent UI shell that surrounds every layout. Consists of a bottom strip (app badge, connection indicator, trackpad mode button, keyboard mode button — touch devices only, settings button) and a right-side jogstrip. Chrome is always visible; layouts render in the remaining space. The right-side jogstrip can be disabled per-layout with `jogstrip: false`. The bottom strip's app badge optionally carries a `display_name`, a `theme` colour, and an `icon` (ADR-0007) the daemon relays opaquely from the active layout.
+The persistent UI shell that surrounds every layout. Consists of a bottom strip (app badge, connection indicator, manual control mode button, settings button) and a right-side jogstrip. Chrome is always visible; layouts render in the remaining space. The right-side jogstrip can be disabled per-layout with `jogstrip: false`. The bottom strip's app badge optionally carries a `display_name`, a `theme` colour, and an `icon` (ADR-0007) the daemon relays opaquely from the active layout.
 _Avoid_: global bar, status bar, toolbar
 
 **App badge**:
 The branded app-identity pill in the bottom chrome: optional icon + human-readable display name, optionally tinted by a theme colour. Built from the layout's `display_name` / `theme` / `icon` top-level fields, relayed verbatim by the daemon (ADR-0007). Falls back to the raw match token (`app`) and an un-tinted pill when the layout omits them.
 _Avoid_: app label, app indicator, brand strip
 
-**Trackpad mode**:
-A global mode accessible from the chrome that replaces the layout area with a full-screen trackpad widget. Entered via the trackpad button in the bottom chrome; exited via a back button on the trackpad view. Not app-specific.
-_Avoid_: cursor mode, mouse mode
-
-**Keyboard mode** (kbd mode):
-A global chrome mode that replaces the layout area with a mostly-invisible text input that raises the phone's own IME, so the user types into the currently-focused desktop app with the OS soft keyboard — no rendered keyboard widget. Literal glyphs travel as `type` messages, named keys (the minimal Esc/Tab/arrows strip plus IME Enter/Backspace) as `key` messages. Injection is ASCII-only under a US-layout assumption, lands on whatever window holds desktop focus, and the daemon drops it while its own client window is focused (feedback-loop guard). Not app-specific; the chrome button hides on devices without a soft keyboard.
-_Avoid_: virtual keyboard, on-screen keyboard, IME forwarding
+**Manual control mode**:
+A global chrome mode that replaces the layout area with a single combined surface — a trackpad for cursor movement plus a keyboard passthrough for typing into the currently-focused desktop app via the phone's own IME. Both live at the same time: dragging on the trackpad moves the cursor while the IME is open, and tapping the strip's keyboard-icon toggle raises/dismisses the soft keyboard. The strip at the top of the surface also hosts the few keys mobile IMEs can't produce (Esc, Tab, arrows). Literal glyphs travel as `type` messages, named keys as `key` messages. Injection is ASCII-only under a US-layout assumption, lands on whatever window holds desktop focus, and the daemon drops it while its own client window is focused (feedback-loop guard). Not app-specific; the daemon-side guard makes the mode safe on a desktop browser (where typing would otherwise self-loop).
+_Avoid_: cursor mode, mouse mode, virtual keyboard, on-screen keyboard, IME forwarding
 
 ### Widget kinds
 

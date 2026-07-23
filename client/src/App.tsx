@@ -2,8 +2,7 @@ import { useCallback, useState } from "react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
-import { Trackpad } from "./Trackpad";
-import { KbdMode } from "./KbdMode";
+import { ManualControl } from "./ManualControl";
 import { Settings } from "./Settings";
 import {
   useContentScale,
@@ -18,7 +17,7 @@ import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
 import type { Icon as IconRef, ServerLayout } from "./protocol";
 
-type View = "layout" | "trackpad" | "settings" | "kbd";
+type View = "layout" | "trackpad" | "settings";
 type SocketStatus = "connecting" | "open" | "closed";
 
 /** Sentinel ids for the always-on chrome widgets. The daemon's pad / jog
@@ -94,14 +93,14 @@ export function App() {
           style={{ "--content-scale": contentScale.scale } as CSSProperties}
         >
           {view === "trackpad" ? (
-            <Trackpad
+            <ManualControl
               onPad={pad}
               onTap={padTap}
               onDrag={padDrag}
+              onType={typeText}
+              onKey={keyCombo}
               sensitivity={trackpad.sensitivity}
             />
-          ) : view === "kbd" ? (
-            <KbdMode onType={typeText} onKey={keyCombo} />
           ) : view === "settings" ? (
             <Settings
               layout={layout}
@@ -164,16 +163,7 @@ export function App() {
           className={`chrome-btn${view === "trackpad" ? " chrome-btn-active" : ""}`}
           onPointerDown={() => setView(view === "trackpad" ? "layout" : "trackpad")}
         >
-          trackpad
-        </button>
-        <button
-          className={`chrome-btn${view === "kbd" ? " chrome-btn-active" : ""}`}
-          onPointerDown={(e) => {
-            e.preventDefault();
-            setView(view === "kbd" ? "layout" : "kbd");
-          }}
-        >
-          keyboard
+          manual control
         </button>
         <button
           className={`chrome-btn${view === "settings" ? " chrome-btn-active" : ""}`}
