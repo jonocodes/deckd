@@ -427,20 +427,6 @@ button:focus-visible { outline: none; }
   opacity: 0;
 }
 
-.kbd-hint {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  font-size: clamp(20px, 4vw, 30px);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #2a333d;
-  opacity: 0.6;
-  pointer-events: none;
-}
-
 .kbd-strip {
   display: flex;
   gap: 8px;

@@ -154,7 +154,6 @@ export function ManualControl({
           }}
         />
       </div>
-      <span className="kbd-hint">manual</span>
     </div>
   );
 }
