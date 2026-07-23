@@ -28,29 +28,15 @@ log = logging.getLogger("deckd.server")
 DEFAULT_APP_ID = "default"
 
 
-def _local_ips() -> set[str]:
-    ips: set[str] = {"127.0.0.1", "::1"}
-    hostname = socket.gethostname()
-    try:
-        for info in socket.getaddrinfo(hostname, None):
-            ips.add(info[4][0])
-    except socket.gaierror:
-        pass
-    try:
-        probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        probe.connect(("8.8.8.8", 80))
-        ips.add(probe.getsockname()[0])
-        probe.close()
-    except OSError:
-        pass
-    return ips
-
-
-def _peer_is_same_machine(req: web.Request) -> bool:
+def _peer_is_loopback(req: web.Request) -> bool:
     peer = req.transport.get_extra_info("peername") if req.transport else None
     if not peer:
         return False
-    return peer[0] in _local_ips()
+    return _is_loopback_host(peer[0])
+
+
+def _is_loopback_host(host: str) -> bool:
+    return host in ("127.0.0.1", "::1", "localhost")
 
 
 # ---------------------------------------------------------------------------
@@ -501,7 +487,7 @@ class Server:
 
     async def _send_hint(self, ws: web.WebSocketResponse, req: web.Request) -> None:
         await ws.send_json(
-            p.HintMessage(type="hint", same_machine=_peer_is_same_machine(req)).model_dump()
+            p.HintMessage(type="hint", same_machine=_peer_is_loopback(req)).model_dump()
         )
 
     def _find_widget(self, widget_id: str) -> Widget | None:
