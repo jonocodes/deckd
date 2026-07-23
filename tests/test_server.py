@@ -606,6 +606,7 @@ def test_peer_is_same_machine_for_loopback_peer() -> None:
 
     class FakeRequest:
         transport = FakeTransport()
+        headers = {}
 
     assert _peer_is_same_machine(FakeRequest()) is True
 
@@ -625,6 +626,7 @@ def test_peer_is_same_machine_for_hostname_peer() -> None:
 
     class FakeRequest:
         transport = FakeTransport()
+        headers = {}
 
     assert _peer_is_same_machine(FakeRequest()) is True
 
@@ -636,6 +638,7 @@ def test_peer_is_same_machine_false_for_remote_peer() -> None:
 
     class FakeRequest:
         transport = FakeTransport()
+        headers = {}
 
     assert _peer_is_same_machine(FakeRequest()) is False
 
@@ -643,6 +646,55 @@ def test_peer_is_same_machine_false_for_remote_peer() -> None:
 def test_peer_is_same_machine_false_for_missing_peer() -> None:
     class FakeRequest:
         transport = None
+        headers = {}
+
+    assert _peer_is_same_machine(FakeRequest()) is False
+
+
+def test_peer_is_same_machine_through_proxy_with_remote_origin() -> None:
+    """Vite-dev proxy: peername is the proxy's loopback (local), but
+    X-Forwarded-For carries the actual client's IP. If that IP is not
+    one of our own, the connection is from a remote device."""
+    class FakeTransport:
+        def get_extra_info(self, key):
+            return ("127.0.0.1", 54321, 0, 0)
+
+    class FakeRequest:
+        transport = FakeTransport()
+        headers = {"X-Forwarded-For": "100.64.0.42"}
+
+    assert _peer_is_same_machine(FakeRequest()) is False
+
+
+def test_peer_is_same_machine_through_proxy_with_local_origin() -> None:
+    """Same proxy, but the forwarded client is the user on lute itself
+    (desktop browser at lute.tail.ts.net:5173 → Vite → daemon)."""
+    local_ip = next(
+        (ip for ip in _local_ips() if ip not in {"127.0.0.1", "::1"}), None
+    )
+    if local_ip is None:
+        return
+
+    class FakeTransport:
+        def get_extra_info(self, key):
+            return ("127.0.0.1", 54321, 0, 0)
+
+    class FakeRequest:
+        transport = FakeTransport()
+        headers = {"X-Forwarded-For": local_ip}
+
+    assert _peer_is_same_machine(FakeRequest()) is True
+
+
+def test_peer_is_same_machine_through_proxy_with_chained_xff() -> None:
+    """Multiple proxies: the leftmost XFF entry is the original client."""
+    class FakeTransport:
+        def get_extra_info(self, key):
+            return ("127.0.0.1", 54321, 0, 0)
+
+    class FakeRequest:
+        transport = FakeTransport()
+        headers = {"X-Forwarded-For": "100.64.0.42, 10.0.0.1, 127.0.0.1"}
 
     assert _peer_is_same_machine(FakeRequest()) is False
 
