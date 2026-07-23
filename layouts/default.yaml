@@ -1,48 +1,93 @@
 match:
   - default
 widgets:
-  - id: open-url
+  - id: code
     kind: button
-    label: Open example.com
+    # label: Code
     icon:
       source: lucide
-      name: globe
+      name: file-code
+    color: "#1e328a"
     grid: [0, 0, 1, 1]
     action:
-      shell: "xdg-open https://example.com"
+      shell: code
+  - id: firefox
+    kind: button
+    # label: Firefox
+    icon:
+      source: simple-icons
+      name: firefox
+    color: "#b5641d"
+    grid: [1, 0, 1, 1]
+    action:
+      shell: "firefox"
+  - id: obsidian
+    kind: button
+    # label: Obsidian
+    icon:
+      source: simple-icons
+      name: obsidian
+    color: "#6d28c8"
+    grid: [2, 0, 1, 1]
+    action:
+      terminal: "xterm"
+  - id: thunderbird
+    kind: button
+    # label: Thunderbird
+    icon:
+      source: simple-icons
+      name: thunderbird
+    color: "#0A84FF"
+    grid: [3, 0, 1, 1]
+    action:
+      terminal: "Thunderbird"
+
+  - id: open-url
+    kind: button
+    # label: Open github.com
+    icon:
+      source: simple-icons
+      name: github
+    color: "black"
+    grid: [0, 1, 1, 1]
+    action:
+      shell: "xdg-open https://github.com"
+
+  - id: tilix
+    kind: button
+    # label: Tilix
+    icon:
+      source: lucide
+      name: square-terminal
+    color: "#2e0000"
+    grid: [1, 1, 1, 1]
+    action:
+      terminal: "xterm"
+  # - id: xterm
+  #   kind: button
+  #   label: xterm
+  #   icon:
+  #     source: lucide
+  #     name: terminal
+  #   color: "#5b5b5c"
+  #   grid: [1, 1, 1, 1]
+  #   action:
+  #     terminal: "xterm"
+  - id: send-key-tab
+    kind: button
+    label: Send Ctrl+T
+    icon:
+      source: lucide
+      name: keyboard
+    grid: [2, 1, 1, 1]
+    action:
+      key: "ctrl+t"
   - id: audio-toggle
     kind: button
     label: VLC Play/Pause
     icon:
       source: lucide
       name: play
-    grid: [1, 0, 1, 1]
+    grid: [3, 1, 1, 1]
     action:
       dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
-  - id: xterm
-    kind: button
-    label: xterm
-    icon:
-      source: lucide
-      name: terminal
-    grid: [2, 0, 1, 1]
-    action:
-      terminal: "xterm"
-  - id: tilix
-    kind: button
-    label: tilix
-    icon:
-      source: lucide
-      name: terminal
-    grid: [3, 0, 1, 1]
-    action:
-      terminal: "tilix"
-  - id: send-key
-    kind: button
-    label: Send Ctrl+T
-    icon:
-      source: lucide
-      name: keyboard
-    grid: [0, 1, 1, 1]
-    action:
-      key: "ctrl+t"

@@ -1,4 +1,6 @@
 import { useCallback, useState } from "react";
+import { Settings as SettingsIcon } from "lucide-react";
+import { PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
@@ -57,8 +59,7 @@ export function App() {
   const jogEnd = (id: string, velocity: number) => send({ type: "jog_end", id, velocity });
   const pad = (dx: number, dy: number) => send({ type: "pad", id: TRACKPAD_ID, dx, dy });
   const padTap = (fingers: number) => send({ type: "pad_tap", id: TRACKPAD_ID, fingers });
-  const padDrag = (state: "start" | "end") =>
-    send({ type: "pad_drag", id: TRACKPAD_ID, state });
+  const padDrag = (state: "start" | "end") => send({ type: "pad_drag", id: TRACKPAD_ID, state });
   const typeText = (text: string) => send({ type: "type", text });
   const keyCombo = (combo: string) => send({ type: "key", combo });
 
@@ -73,13 +74,11 @@ export function App() {
   // absent theme leaves the badge on the default chrome treatment. A
   // layout declaring neither an icon nor a theme renders the chrome
   // unchanged (bold text, no pill) so existing layouts look identical.
-  const appName = layout ? (layout.display_name?.trim() || layout.app) : "deckd";
+  const appName = layout ? layout.display_name?.trim() || layout.app : "deckd";
   const appTheme = layout?.theme?.trim() || null;
   const appIcon: IconRef | null = layout?.icon ?? null;
   const hasBadge = appTheme !== null || appIcon !== null;
-  const badgeClass = hasBadge
-    ? `app-badge${appTheme ? " app-badge-themed" : ""}`
-    : "app-name";
+  const badgeClass = hasBadge ? `app-badge${appTheme ? " app-badge-themed" : ""}` : "app-name";
   const badgeVars = appTheme ? ({ "--badge-theme": appTheme } as CSSProperties) : undefined;
 
   return (
@@ -147,10 +146,7 @@ export function App() {
           </aside>
         )}
       </div>
-      <footer
-        className="chrome-bottom"
-        style={badgeVars}
-      >
+      <footer className="chrome-bottom" style={badgeVars}>
         <span className={badgeClass}>
           {appIcon ? <Icon icon={appIcon} className="app-badge-icon" /> : null}
           <span className="app-badge-name">{appName}</span>
@@ -163,13 +159,14 @@ export function App() {
           className={`chrome-btn${view === "trackpad" ? " chrome-btn-active" : ""}`}
           onPointerDown={() => setView(view === "trackpad" ? "layout" : "trackpad")}
         >
-          manual control
+          <PointerIcon size={18} />
         </button>
         <button
           className={`chrome-btn${view === "settings" ? " chrome-btn-active" : ""}`}
+          aria-label="settings"
           onPointerDown={() => setView(view === "settings" ? "layout" : "settings")}
         >
-          settings
+          <SettingsIcon size={18} />
         </button>
       </footer>
     </div>

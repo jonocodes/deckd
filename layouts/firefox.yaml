@@ -6,13 +6,33 @@ icon:
   source: simple-icons
   name: firefox
 widgets:
+  - id: back
+    kind: button
+    # label: Back
+    icon:
+      source: lucide
+      name: arrow-left
+    color: "#1e3a8a"
+    grid: [0, 0, 1, 1]
+    action:
+      key: "alt+Left"
+  - id: forward
+    kind: button
+    # label: Forward
+    icon:
+      source: lucide
+      name: arrow-right
+    color: "#1e3a8a"
+    grid: [1, 0, 1, 1]
+    action:
+      key: "alt+Right"
   - id: new-tab
     kind: button
     label: New tab
     icon:
       source: lucide
       name: plus
-    grid: [0, 0, 1, 1]
+    grid: [0, 1, 1, 1]
     action:
       key: "ctrl+t"
   - id: new-window
@@ -21,36 +41,16 @@ widgets:
     icon:
       source: lucide
       name: app-window
-    grid: [1, 0, 1, 1]
+    grid: [1, 1, 1, 1]
     action:
       key: "ctrl+n"
-  - id: back
-    kind: button
-    label: Back
-    icon:
-      source: lucide
-      name: arrow-left
-    color: "#1e3a8a"
-    grid: [2, 0, 1, 1]
-    action:
-      key: "alt+Left"
-  - id: forward
-    kind: button
-    label: Forward
-    icon:
-      source: lucide
-      name: arrow-right
-    color: "#1e3a8a"
-    grid: [3, 0, 1, 1]
-    action:
-      key: "alt+Right"
   - id: reload
     kind: button
-    label: Reload
+    # label: Reload
     icon:
       source: lucide
       name: refresh-cw
-    grid: [0, 1, 1, 1]
+    grid: [2, 0, 1, 1]
     action:
       key: "ctrl+r"
   - id: focus-url
@@ -59,7 +59,7 @@ widgets:
     icon:
       source: lucide
       name: link
-    grid: [1, 1, 1, 1]
+    grid: [3, 1, 1, 1]
     action:
       key: "ctrl+l"
   - id: find
@@ -73,10 +73,10 @@ widgets:
       key: "ctrl+f"
   - id: close-tab
     kind: button
-    label: Close tab
+    # label: Close tab
     icon:
       source: lucide
       name: x
-    grid: [3, 1, 1, 1]
+    grid: [3, 0, 1, 1]
     action:
       key: "ctrl+w"

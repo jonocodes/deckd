@@ -47,3 +47,12 @@ widgets:
     grid: [0, 1, 1, 1]
     action:
       key: "ctrl+shift+w"
+  - id: find
+    kind: button
+    label: Find
+    icon:
+      source: lucide
+      name: search
+    grid: [1, 1, 1, 1]
+    action:
+      key: "ctrl+shift+f"
