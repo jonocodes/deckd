@@ -1,5 +1,6 @@
 match:
   - default
+display_name: Home
 widgets:
   - id: code
     kind: button
@@ -59,10 +60,10 @@ widgets:
     icon:
       source: lucide
       name: square-terminal
-    color: "#2e0000"
+    color: "#6b0101"
     grid: [1, 1, 1, 1]
     action:
-      terminal: "xterm"
+      terminal: "tilix"
   # - id: xterm
   #   kind: button
   #   label: xterm

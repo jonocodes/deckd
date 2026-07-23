@@ -17,6 +17,9 @@ const INVERT_KEY = "deckd.scrollInvert";
 const PAD_SENS_KEY = "deckd.trackpadSensitivity";
 const WAKE_LOCK_KEY = "deckd.wakeLock";
 const CONTENT_SCALE_KEY = "deckd.contentScale";
+const JOG_WIDTH_KEY = "deckd.jogWidth";
+const BOTTOM_SCALE_KEY = "deckd.bottomScale";
+const LABEL_SCALE_KEY = "deckd.labelScale";
 
 const WAKE_LOCK_DEFAULT = true;
 
@@ -32,6 +35,35 @@ export const CONTENT_SCALE_MIN = 0.75;
 export const CONTENT_SCALE_MAX = 2.5;
 export const CONTENT_SCALE_STEP = 0.1;
 export const CONTENT_SCALE_DEFAULT = 1.0;
+
+// Width multiplier for the persistent right-side scroll strip (the "scroll
+// bar"). Applied on top of its responsive base width via a ``--jog-width``
+// CSS var, so the user can make the strip narrower on a device where the
+// default reads as too wide. 1.0 is the base width; max is capped at 1.0
+// since the complaint the setting answers is "too wide", not "too narrow".
+export const JOG_WIDTH_MIN = 0.4;
+export const JOG_WIDTH_MAX = 1.0;
+export const JOG_WIDTH_STEP = 0.05;
+export const JOG_WIDTH_DEFAULT = 1.0;
+
+// Size multiplier for the persistent bottom chrome bar (app badge, connection
+// dot, trackpad + settings buttons). Applied on top of its base metrics via a
+// ``--bottom-scale`` CSS var, so the user can make the bar shorter on a device
+// where the default reads as too tall. 1.0 is the base size; capped at 1.0
+// since the complaint the setting answers is "too big", not "too small".
+export const BOTTOM_SCALE_MIN = 0.4;
+export const BOTTOM_SCALE_MAX = 1.0;
+export const BOTTOM_SCALE_STEP = 0.05;
+export const BOTTOM_SCALE_DEFAULT = 1.0;
+
+// Size multiplier for the button label (the text caption under each grid
+// icon), applied on top of the content scale via a ``--label-scale`` CSS var,
+// so the caption can be dialled down without shrinking the icon. 1.0 is the
+// base size; the range allows both shrinking and modest growth.
+export const LABEL_SCALE_MIN = 0.5;
+export const LABEL_SCALE_MAX = 1.5;
+export const LABEL_SCALE_STEP = 0.1;
+export const LABEL_SCALE_DEFAULT = 1.0;
 
 // Trackpad sensitivity is a floating multiplier: 1.0 = raw (1 CSS pixel of
 // finger travel = 1 uinput REL_X/Y unit), 0.5 = slower, 3.0 = fast. Range
@@ -59,6 +91,24 @@ export function clampContentScale(n: number): number {
   if (!Number.isFinite(n)) return CONTENT_SCALE_DEFAULT;
   const clamped = Math.max(CONTENT_SCALE_MIN, Math.min(CONTENT_SCALE_MAX, n));
   return Math.round(clamped / CONTENT_SCALE_STEP) * CONTENT_SCALE_STEP;
+}
+
+export function clampJogWidth(n: number): number {
+  if (!Number.isFinite(n)) return JOG_WIDTH_DEFAULT;
+  const clamped = Math.max(JOG_WIDTH_MIN, Math.min(JOG_WIDTH_MAX, n));
+  return Math.round(clamped / JOG_WIDTH_STEP) * JOG_WIDTH_STEP;
+}
+
+export function clampBottomScale(n: number): number {
+  if (!Number.isFinite(n)) return BOTTOM_SCALE_DEFAULT;
+  const clamped = Math.max(BOTTOM_SCALE_MIN, Math.min(BOTTOM_SCALE_MAX, n));
+  return Math.round(clamped / BOTTOM_SCALE_STEP) * BOTTOM_SCALE_STEP;
+}
+
+export function clampLabelScale(n: number): number {
+  if (!Number.isFinite(n)) return LABEL_SCALE_DEFAULT;
+  const clamped = Math.max(LABEL_SCALE_MIN, Math.min(LABEL_SCALE_MAX, n));
+  return Math.round(clamped / LABEL_SCALE_STEP) * LABEL_SCALE_STEP;
 }
 
 function readBoolQuery(name: string): boolean | null {
@@ -121,6 +171,43 @@ function readInitialContentScale(): number {
 }
 
 
+function readInitialJogWidth(): number {
+  try {
+    const url = new URLSearchParams(window.location.search).get("jogWidth");
+    if (url !== null) return clampJogWidth(Number(url));
+    const stored = localStorage.getItem(JOG_WIDTH_KEY);
+    if (stored !== null) return clampJogWidth(Number(stored));
+  } catch {
+    // see readInitialScale.
+  }
+  return JOG_WIDTH_DEFAULT;
+}
+
+function readInitialBottomScale(): number {
+  try {
+    const url = new URLSearchParams(window.location.search).get("bottomScale");
+    if (url !== null) return clampBottomScale(Number(url));
+    const stored = localStorage.getItem(BOTTOM_SCALE_KEY);
+    if (stored !== null) return clampBottomScale(Number(stored));
+  } catch {
+    // see readInitialScale.
+  }
+  return BOTTOM_SCALE_DEFAULT;
+}
+
+function readInitialLabelScale(): number {
+  try {
+    const url = new URLSearchParams(window.location.search).get("labelScale");
+    if (url !== null) return clampLabelScale(Number(url));
+    const stored = localStorage.getItem(LABEL_SCALE_KEY);
+    if (stored !== null) return clampLabelScale(Number(stored));
+  } catch {
+    // see readInitialScale.
+  }
+  return LABEL_SCALE_DEFAULT;
+}
+
+
 function safeSet(key: string, value: string): void {
   try {
     localStorage.setItem(key, value);
@@ -177,6 +264,51 @@ export function useContentScale() {
     const clamped = clampContentScale(n);
     setScaleState(clamped);
     safeSet(CONTENT_SCALE_KEY, String(clamped));
+  }, []);
+
+  return { scale, setScale };
+}
+
+/** Width multiplier for the persistent right-side scroll strip, applied on
+ * top of its responsive base width via a ``--jog-width`` CSS var. Same URL /
+ * localStorage / default read precedence as the other settings. */
+export function useJogWidth() {
+  const [width, setWidthState] = useState<number>(readInitialJogWidth);
+
+  const setWidth = useCallback((n: number) => {
+    const clamped = clampJogWidth(n);
+    setWidthState(clamped);
+    safeSet(JOG_WIDTH_KEY, String(clamped));
+  }, []);
+
+  return { width, setWidth };
+}
+
+/** Size multiplier for the persistent bottom chrome bar, applied on top of
+ * its base metrics via a ``--bottom-scale`` CSS var. Same URL / localStorage
+ * / default read precedence as the other settings. */
+export function useBottomScale() {
+  const [scale, setScaleState] = useState<number>(readInitialBottomScale);
+
+  const setScale = useCallback((n: number) => {
+    const clamped = clampBottomScale(n);
+    setScaleState(clamped);
+    safeSet(BOTTOM_SCALE_KEY, String(clamped));
+  }, []);
+
+  return { scale, setScale };
+}
+
+/** Size multiplier for the grid button label (the caption under each icon),
+ * applied on top of the content scale via a ``--label-scale`` CSS var. Same
+ * URL / localStorage / default read precedence as the other settings. */
+export function useLabelScale() {
+  const [scale, setScaleState] = useState<number>(readInitialLabelScale);
+
+  const setScale = useCallback((n: number) => {
+    const clamped = clampLabelScale(n);
+    setScaleState(clamped);
+    safeSet(LABEL_SCALE_KEY, String(clamped));
   }, []);
 
   return { scale, setScale };

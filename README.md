@@ -2,32 +2,61 @@
 
 App-aware touch control surface for your desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a manual control mode (a single combined trackpad + keyboard passthrough), rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps layouts automatically.
 
-Not Linux-only: deckd runs on **GNOME** (Wayland), **KDE Plasma** (Wayland), any **X11** session, and **macOS** — each with its own focus watcher and input backend (see [Running deckd](#running-deckd)).
+## Uses
 
-![screenshot](docs/screenshot-firefox.png)
+- Get custom controls for each app you are using
+- Expose hotkeys for launching apps, or keyboard shortcuts
+- Control multiple computers from one surface
+- Control your desktop from your laptop, phone, or tablet
+- Control slides/presentations
+- Use as a mouse, scrollbar, and keyboard controller
+- Voice typing
 
-(deckd rendering a Firefox layout — buttons with icons and colors, plus the persistent scroll strip)
+## Screenshots
+
+### Home launcher
+
+![home launcher](docs/screenshot-home.png)
+
+### Firefox
+
+![firefox mode](docs/screenshot-firefox.png)
+
+### Trackpad/keyboard
+
+![trackpad/keyboard](docs/screenshot-trackpad.png)
 
 ## Status
 
-Pre-alpha, but the v1 milestone spine is landing. Both design-doc spikes are resolved and the T-series milestones through T8 are shipped:
+Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's still planned — as features, not tickets.
 
-- **uinput scroll end-to-end** (spike #1) — *done*
-- **Focus watcher** (spike #2) — *done*
-- **T1** pytest suite + domain docs — *done*
-- **T2** keystroke injection — *done*
-- **T3** D-Bus action primitive — *done*
-- **T4** per-app layout switching from focus — *done*
-- **T5** dev UX (auto-ignore + `deckctl layout` override) — *done*
-- **T6** client chrome (bottom strip + persistent jogstrip) — *done*
-- **T7** PWA manifest + orientation-safe chrome — *done*
-- **T8** trackpad mode (cursor + tap + drag-lock) — *done*
-- **#23** manual control mode (trackpad + IME passthrough in one view) — *done* (stretch goal)
-- **T13** settings page (scroll + trackpad sliders, invert, localStorage) — *done*
-- **T14** Screen Wake Lock (client stays awake while daemon is live) — *done*
+**Working today**
 
+- [x] **Automatic per-app layouts** — focus a window on the desktop and the phone's browser flips to that app's buttons automatically.
+- [x] **Buttons** that fire keystrokes, shell commands, launch a terminal, or call D-Bus methods.
+- [x] **Button styling** — bundled icons (Lucide glyphs + Simple Icons brand logos) and per-button background colours, set in YAML.
+- [x] **Scroll strip** — an always-on right-side jogstrip to scroll the focused window, with release momentum.
+- [x] **Manual control mode** — the phone becomes a trackpad (move, tap, right-click, drag-lock) and a keyboard, so you can type into and point at the focused app for the things layouts don't cover (URL bars, chat boxes, ad-hoc commands).
+- [x] **App badge** — the focused app's name, icon, and accent colour show in the bottom bar so you can tell at a glance what you're controlling.
+- [x] **Live layout editing** — edit a layout file on the desktop and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
+- [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
+- [x] **Keep screen awake** while the surface is in use.
+- [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
+- [x] **Runs on GNOME (Wayland), KDE Plasma (Wayland), any X11 desktop, and macOS.**
 
-What works today: focus a window on the desktop and the phone's browser flips to that app's layout automatically. Tap layout buttons to fire `shell`, `terminal`, `key`, or `dbus` actions. Drag the always-on right-side jogstrip to scroll the focused window through `REL_WHEEL_HI_RES`. Tap the chrome manual-control button and the phone becomes both a mouse (drag, tap, two-finger tap, tap-and-a-half drag) and a soft-keyboard passthrough (tap the keyboard icon on the strip to raise the IME and type into the focused desktop app). Edit any `layouts/*.yaml` file on the desktop and every connected client re-renders; a broken save shows an error diagnostic in place of the grid without killing the daemon. Buttons render with bundled icons (Lucide glyphs + Simple Icons brand logos, referenced as `icon: {source, name}`) and optional per-button background colours, and a **Content size** slider scales the deck for phone-vs-tablet readability.
+**Planned**
+
+- [ ] **Password/token auth for remote clients** — required before it's safe to expose beyond a trusted network.
+- [ ] **Screensaver & suspend sync** — dim/lock the surface when the desktop sleeps.
+- [ ] **One-step NixOS install** — a production module instead of the current spike.
+- [ ] **Multiple simultaneous clients** with per-device layouts and resolutions.
+- [ ] **Dashboard widgets** — live readouts pushed from the desktop (CPU temp, media state, etc.).
+- [ ] **On-screen keyboard / custom widget kinds** — richer controls beyond buttons and strips.
+- [ ] **Soundboard** — trigger sound clips from the deck.
+- [ ] **Raise or switch to an already-running app** from the controller.
+- [ ] **Multi-daemon chooser** — pair and pick between several desktops.
+- [ ] **GUI layout editor** — build layouts without hand-editing YAML.
+- [ ] **Windows support.**
 
 ```
                         ┌──────────┐
@@ -70,6 +99,8 @@ What works today: focus a window on the desktop and the phone's browser flips to
                               osascript          (macOS)
 ```
 
+
+
 ## Layout
 
 ```
@@ -79,6 +110,8 @@ layouts/           Per-app YAML layouts (default.yaml + one per app)
 scripts/smoke.py   End-to-end test that boots the daemon over WS, clicks every button
 docs/INCEPTION.md  Full design doc — source of truth for *what* and *why*
 ```
+
+
 
 ## Running deckd
 
@@ -107,6 +140,8 @@ Open `http://127.0.0.1:8765` in any browser. You should see the active layout's 
 
 > **aarch64 Linux (e.g. Asahi):** `evdev-binary` publishes x86_64 wheels only, so it can't cover aarch64. Instead `just setup-linux` source-builds `python-evdev` via `scripts/install_evdev_source.sh` (the `uinput` extra also declares plain `evdev` on non-x86_64 via a `platform_machine` marker). The source build needs a C compiler and kernel headers — the flox dev env pins `gcc` for exactly this (Nix hides the headers from evdev's `build_ecodes`, so the script locates them via the compiler and passes them explicitly). With that plus `/dev/uinput` write access (see [uinput permissions](#uinput-permissions)), scroll/key/trackpad injection works natively on aarch64, **including KDE Plasma Wayland** — keys are injected at the kernel evdev layer, so the compositor routes them to the focused window. If the build is skipped the sink degrades gracefully to log-only.
 
+
+
 ### macOS
 
 The daemon runs on macOS via `daemon/deckd/platform_macos.py` — focus + key injection work out of the box, and the jogstrip + trackpad need `pyobjc-framework-Quartz` (pulled in via the `[macos]` extra). The GNOME Shell focus extension is Linux-only.
@@ -127,21 +162,23 @@ First time you focus a non-default window, **System Events** will pop a TCC prom
 
 What works / doesn't on macOS:
 
-| capability                          | macOS                            |
-| ----------------------------------- | -------------------------------- |
-| focus detection                     | yes (osascript + System Events)  |
-| `key:` action (printable + combos)  | yes (osascript `keystroke`)      |
-| `key:` action (non-printable)       | partial (HID-code map covers the common ones — arrows, esc, tab, enter, F-keys) |
-| `shell:` / `terminal:` actions      | yes                              |
-| `dbus:` action                      | no (macOS D-Bus exists but GNOME services don't) |
-| trackpad pointer + clicks + drag    | yes (PyObjC Quartz `CGEventCreateMouseEvent`) |
-| jogstrip scroll                     | yes (PyObjC Quartz `CGEventCreateScrollWheelEvent` — pulled in via the `[macos]` extra) |
+
+| capability                         | macOS                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------- |
+| focus detection                    | yes (osascript + System Events)                                                         |
+| `key:` action (printable + combos) | yes (osascript `keystroke`)                                                             |
+| `key:` action (non-printable)      | partial (HID-code map covers the common ones — arrows, esc, tab, enter, F-keys)         |
+| `shell:` / `terminal:` actions     | yes                                                                                     |
+| `dbus:` action                     | no (macOS D-Bus exists but GNOME services don't)                                        |
+| trackpad pointer + clicks + drag   | yes (PyObjC Quartz `CGEventCreateMouseEvent`)                                           |
+| jogstrip scroll                    | yes (PyObjC Quartz `CGEventCreateScrollWheelEvent` — pulled in via the `[macos]` extra) |
+
 
 When the layout doesn't switch as expected, run `python scripts/check_focus_macos.py` for a one-shot diagnostic: it prints what `osascript` reports for the frontmost app, whether the auto-ignore rule would hold, and which layout `resolve_layout` would pick. Saves reading the daemon log for the common cases (TCC denied, stale daemon, wrong app_id).
 
 ### KDE Plasma Wayland
 
-Two KDE-specific pieces on top of the base setup: a **KWin script** for focus-based layout switching, and **`/dev/uinput` access** so button/scroll/trackpad injection actually reaches apps. This walkthrough is distro-neutral; Nix/flox users get the extra CLI tools automatically (see the [Tooling note](#kde-plasma-wayland-sessions) under the focus watcher) and can skip the package-install hints.
+Two KDE-specific pieces on top of the base setup: a **KWin script** for focus-based layout switching, and `/dev/uinput` **access** so button/scroll/trackpad injection actually reaches apps. This walkthrough is distro-neutral; Nix/flox users get the extra CLI tools automatically (see the [Tooling note](#kde-plasma-wayland-sessions) under the focus watcher) and can skip the package-install hints.
 
 **0. Check the KDE CLI tools are present.** These ship with a standard Plasma 6 desktop; run this to spot any gaps:
 
@@ -169,7 +206,7 @@ sudo dnf install gcc kernel-headers
 sudo pacman -S base-devel linux-api-headers
 ```
 
-**2. Grant `/dev/uinput` write access.** Without it, keys/scroll/trackpad are silently no-ops (the daemon logs `platform sink unavailable` at startup). Follow [uinput permissions](#uinput-permissions) — the udev rule plus adding yourself to the `input` group, then log out and back in. `just check-uinput` confirms it.
+**2. Grant** `/dev/uinput` **write access.** Without it, keys/scroll/trackpad are silently no-ops (the daemon logs `platform sink unavailable` at startup). Follow [uinput permissions](#uinput-permissions) — the udev rule plus adding yourself to the `input` group, then log out and back in. `just check-uinput` confirms it.
 
 **3. Run the daemon**, then install the focus KWin script:
 
@@ -204,6 +241,8 @@ The client can be viewed and design-iterated without a running daemon:
 - **Responsive gallery** — `cd client && npm run dev`, then open `/gallery.html`. Renders the real client in phone / large-phone / 7" / 10"-tablet iframes at once, with layout and orientation selectors — for checking how a layout reads across screen sizes. Dev-only entry, not in the production build.
 - **Ladle** (component workbench) — `cd client && npm run ladle`. Browse `ButtonGrid` / `Icon` / `JogStrip` stories in isolation with width/theme controls, plus `Surface → Device sizes` stories that render the grid in fixed phone/tablet frames (size + orientation) for a quick per-component resolution check. Stories live in `src/*.stories.tsx` (Storybook-compatible CSF).
 - **Lint** — `cd client && npm run lint` (ESLint flat config; `npm run build` still runs `tsc --noEmit`).
+
+
 
 ### Hosted demo (GitHub Pages)
 
@@ -250,7 +289,7 @@ Tailscale is **not** running an application proxy — `tailscale serve status` w
 
 That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws` (Vite's port), not `:8765` (daemon's port).
 
-**Contrast: `tailscale serve` (persistent URL, no dev server).** If you want an installable PWA at `https://<host>.<tailnet>.ts.net/` (no port, works without any process running on the desktop besides the daemon), that's a different setup — `just build-client` + `just run-daemon` + `tailscale serve --bg 8765`. Tailscale proxies `:443 → 127.0.0.1:8765`, the daemon serves the built `client/dist/`. You lose HMR but gain a URL that survives closing your dev terminals. Not covered by any `just` recipe yet — file an issue if you want one.
+**Contrast:** `tailscale serve` **(persistent URL, no dev server).** If you want an installable PWA at `https://<host>.<tailnet>.ts.net/` (no port, works without any process running on the desktop besides the daemon), that's a different setup — `just build-client` + `just run-daemon` + `tailscale serve --bg 8765`. Tailscale proxies `:443 → 127.0.0.1:8765`, the daemon serves the built `client/dist/`. You lose HMR but gain a URL that survives closing your dev terminals. Not covered by any `just` recipe yet — file an issue if you want one.
 
 ### Client chrome
 
@@ -269,12 +308,14 @@ Manual control covers the long tail layouts don't: URL bars, chat boxes, ad-hoc 
 
 **Trackpad gestures** (client-side; daemon receives `pad` / `pad_tap` / `pad_drag` events and maps them to `REL_X` / `REL_Y` + `BTN_LEFT` / `BTN_RIGHT` on the same uinput device that handles keys and scroll):
 
+
 | Gesture                                                      | Action                                                            |
 | ------------------------------------------------------------ | ----------------------------------------------------------------- |
 | One-finger drag                                              | Move the desktop cursor (relative motion, like a laptop trackpad) |
 | Quick tap (< 250ms, < 10px)                                  | Left click                                                        |
 | Two-finger tap (both down, both up together)                 | Right click                                                       |
 | Tap-and-a-half (tap, then touch again within 400ms and drag) | Left button held during the drag; release on finger lift          |
+
 
 The right-side jogstrip stays available for scrolling while you're pointing.
 
@@ -287,6 +328,8 @@ The right-side jogstrip stays available for scrolling while you're pointing.
 - **Physical keyboards.** A Bluetooth keyboard paired to the phone works through the `keydown` path with no extra setup.
 
 > ⚠️ **Security: trusted networks only until token auth lands.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. The WebSocket currently has no authentication, so only expose the daemon (`--host 0.0.0.0`) on a network you fully trust: a Tailscale tailnet counts, open LAN/WiFi does not. Token auth is tracked in [#16](https://github.com/jonocodes/deckd/issues/16).
+
+
 
 ### Chrome app badge
 
@@ -310,14 +353,19 @@ widgets:
   - ...
 ```
 
+
+
 ### Client tuning
 
 Tap the `settings` button in the bottom chrome for a control panel:
 
 - **Scroll scale** (slider, integer 1–10, default 3) — high-resolution wheel units per CSS pixel.
 - **Scroll invert** (toggle) — flip vertical scroll direction.
+- **Bar width** (slider, 40%–100%, default 100%) — width of the persistent right-side jogstrip (the scroll bar), as a fraction of its responsive base width, so you can slim it down on devices where it reads as too wide.
 - **Trackpad sensitivity** (slider, float 0.5×–3.0×, default 1.0×) — multiplier applied to raw pointer deltas before they're sent to the daemon.
 - **Content size** (slider, float 0.75×–2.5×, default 1.0×) — multiplier for grid content (button icon + label, in-grid jogstrip) on top of the responsive base, so the deck stays readable across phone and tablet screens. The persistent chrome is unaffected.
+- **Text size** (slider, float 0.5×–1.5×, default 1.0×) — multiplier for the button label (the caption under each icon), applied on top of Content size, so the text can be dialled down without shrinking the icon.
+- **Bottom bar** (slider, 40%–100%, default 100%) — size of the persistent bottom chrome bar (app badge, connection indicator, trackpad + settings buttons), so you can shrink it down on devices where it reads as too tall.
 - **Keep screen awake** (toggle, default on) — holds a Screen Wake Lock while the socket is open and the tab is visible, so a phone acting as the surface doesn't sleep mid-use. Released on tab hidden / socket disconnect; re-acquired on visible / reconnect. Unsupported browsers or denied permissions are logged and swallowed.
 
 Values persist per-device to `localStorage` — closing and reopening the client keeps your tuning. The persistent right-side jogstrip stays live inside the settings view so you can feel scale/invert changes immediately.
@@ -329,6 +377,9 @@ http://<host>:5173/?scrollScale=2
 http://<host>:5173/?scrollScale=4&scrollInvert=1
 http://<host>:5173/?padSensitivity=1.5
 http://<host>:5173/?contentScale=1.5
+http://<host>:5173/?labelScale=0.7
+http://<host>:5173/?jogWidth=0.6
+http://<host>:5173/?bottomScale=0.7
 http://<host>:5173/?wakeLock=0
 ```
 
@@ -346,6 +397,8 @@ Lower friction decays faster; `--scroll-momentum-friction 0` effectively disable
 ```sh
 sleep 2 && .venv/bin/python -u scripts/send_scroll.py --velocity 1200
 ```
+
+
 
 ### uinput permissions
 
@@ -433,9 +486,11 @@ app_id='org.gnome.Console' wm_class='org.gnome.Console' pid=1234 title='Terminal
 app_id=None wm_class='firefox' pid=188566 title='YouTube — Mozilla Firefox'
 ```
 
+
+
 #### X11 sessions (any desktop environment)
 
-On any X11 session — XFCE, MATE, Cinnamon, Budgie, LXQt, KDE-X11, GNOME-X11, standalone i3/openbox, etc. — the focus watcher uses [`xdotool`](https://manpages.ubuntu.com/manpages/xdotool) directly. No GNOME extension is needed; no D-Bus service is required. The daemon picks `X11FocusBackend` automatically when `XDG_SESSION_TYPE=x11`.
+On any X11 session — XFCE, MATE, Cinnamon, Budgie, LXQt, KDE-X11, GNOME-X11, standalone i3/openbox, etc. — the focus watcher uses `[xdotool](https://manpages.ubuntu.com/manpages/xdotool)` directly. No GNOME extension is needed; no D-Bus service is required. The daemon picks `X11FocusBackend` automatically when `XDG_SESSION_TYPE=x11`.
 
 Make sure `xdotool` is on `$PATH`:
 
@@ -521,6 +576,8 @@ uv pip install -e ".[dev]"   # installs the websockets test dep
 .venv/bin/python -u scripts/smoke.py
 ```
 
+
+
 ### CLI
 
 ```sh
@@ -529,6 +586,8 @@ deckctl reload              # POST /reload — re-read layout YAML and push
 deckctl layout firefox      # force all clients to the firefox layout (dev)
 deckctl layout default      # force the default layout
 ```
+
+
 
 ## Configuration
 
@@ -539,24 +598,29 @@ A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` f
 - `key: "ctrl+t"` — fire the keystroke through uinput as a single combo.
 - `dbus: "service:path org.Interface.Method arg1 arg2"` — call a D-Bus method via `dbus-fast`. The bus is inferred from the interface name (`org.freedesktop.login1.*`, `systemd1.*`, `timedate1.*`, `locale1.*`, etc. → system bus; everything else → session bus). Errors are logged, not surfaced to the client. With the `service:path` prefix omitted, the daemon derives them from the first two / three segments of the interface name.
 
+
+
 ### Per-platform overlay
 
 The daemon also loads a sibling directory next to `--layouts-dir` whose name is suffixed with the current platform: `layouts.macos/` on macOS, `layouts.linux/` on Linux. A missing overlay is fine (the most common case). Overlay entries load first and **replace** any base entry with the same `id` — so `layouts.macos/firefox.yaml` overrides `layouts/firefox.yaml` on Mac without you touching the shared base. The watcher also watches the overlay dir, so edits reload live. Pass `--no-overlay` to skip the overlay even when it exists (debugging, cross-platform checkout debugging, etc.).
 
 This is how `layouts.macos/firefox.yaml` carries the `super+t` / `super+[` / `super+]` shortcuts without forking the rest of `firefox.yaml` for every Linux user who pulls the repo.
 
-## What works today
+## Under the hood
+
+The pieces behind the features above, for anyone reading the code:
 
 - **Wire protocol** in both directions: `LayoutMessage` (with `jogstrip_enabled` + optional `error`) and `press` / `jog` / `jog_end` / `pad` / `pad_tap` / `pad_drag` / `type` / `key` events.
-- **YAML config → Pydantic → `Widget` graph → action dispatch** for `shell`, `terminal`, `key`, `dbus` primitives.
+- **YAML config → Pydantic →** `Widget` **graph → action dispatch** for `shell`, `terminal`, `key`, `dbus` primitives.
 - **Jogstrip** scroll plumbing from browser pointer movement to daemon-side uinput, including release momentum.
 - **Manual control mode**: combined trackpad (`REL_X` / `REL_Y` motion plus `BTN_LEFT` / `BTN_RIGHT` / `BTN_MIDDLE` on the same uinput device, with client-side gesture recognition: tap / two-finger tap / tap-and-a-half drag lock) and IME passthrough (`type` / `key` wire messages, ASCII+Shift→evdev translation, daemon-side focus guard against self-injection). Both live in one view; the strip's keyboard-icon toggle raises the soft keyboard.
-
 - **Active-window detection** via GNOME Shell extension + session D-Bus (`app_id`, `wm_class`, `title`, `pid`).
 - **Persistent client chrome** — bottom strip (branded app badge + connection dot + manual-control button) and right-side jogstrip — layered above every layout with zero daemon involvement. The app badge optionally carries an icon, a theme colour, and a human-readable name the layout YAML declares (ADR-0007).
 - **Layout hot-reload** — the daemon watches `layouts/*.yaml` and re-pushes on any edit; bad YAML surfaces as a diagnostic on the client without crashing the daemon.
 - **Reconnecting client** (`useDeckdSocket` exponential backoff).
 - **Build output** is plain static files — `client/dist/` — served by the daemon.
+
+
 
 ## Why a venv, not a Nix shell?
 

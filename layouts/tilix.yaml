@@ -1,6 +1,11 @@
 match:
   - com.gexperts.Tilix
   - Tilix
+display_name: Tilix
+theme: "#8bc34a"
+icon:
+  source: lucide
+  name: terminal
 widgets:
   - id: split-right
     kind: button

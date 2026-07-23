@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useOrientation } from "./orientation";
 import {
+  BOTTOM_SCALE_MAX,
+  BOTTOM_SCALE_MIN,
+  BOTTOM_SCALE_STEP,
   CONTENT_SCALE_MAX,
   CONTENT_SCALE_MIN,
   CONTENT_SCALE_STEP,
+  JOG_WIDTH_MAX,
+  JOG_WIDTH_MIN,
+  JOG_WIDTH_STEP,
+  LABEL_SCALE_MAX,
+  LABEL_SCALE_MIN,
+  LABEL_SCALE_STEP,
   PAD_SENS_MAX,
   PAD_SENS_MIN,
   PAD_SENS_STEP,
@@ -27,6 +36,12 @@ type Props = {
   onWakeLockChange: (v: boolean) => void;
   contentScale: number;
   onContentScaleChange: (n: number) => void;
+  jogWidth: number;
+  onJogWidthChange: (n: number) => void;
+  bottomScale: number;
+  onBottomScaleChange: (n: number) => void;
+  labelScale: number;
+  onLabelScaleChange: (n: number) => void;
 };
 
 type Health = {
@@ -51,6 +66,12 @@ export function Settings({
   onWakeLockChange,
   contentScale,
   onContentScaleChange,
+  jogWidth,
+  onJogWidthChange,
+  bottomScale,
+  onBottomScaleChange,
+  labelScale,
+  onLabelScaleChange,
 }: Props) {
   const orientation = useOrientation();
   const standalone = useStandaloneMode();
@@ -97,6 +118,22 @@ export function Settings({
             {scrollScale}
           </span>
         </div>
+        <div className="settings-control">
+          <span className="settings-control-label">Bar width</span>
+          <input
+            type="range"
+            className="slider"
+            aria-label="Scroll bar width"
+            min={JOG_WIDTH_MIN}
+            max={JOG_WIDTH_MAX}
+            step={JOG_WIDTH_STEP}
+            value={jogWidth}
+            onChange={(e) => onJogWidthChange(Number(e.target.value))}
+          />
+          <span className="settings-control-value" aria-live="polite">
+            {Math.round(jogWidth * 100)}%
+          </span>
+        </div>
         <SettingToggle
           label="Invert"
           value={scrollInvert}
@@ -140,6 +177,38 @@ export function Settings({
           />
           <span className="settings-control-value" aria-live="polite">
             {contentScale.toFixed(1)}×
+          </span>
+        </div>
+        <div className="settings-control">
+          <span className="settings-control-label">Text size</span>
+          <input
+            type="range"
+            className="slider"
+            aria-label="Text size"
+            min={LABEL_SCALE_MIN}
+            max={LABEL_SCALE_MAX}
+            step={LABEL_SCALE_STEP}
+            value={labelScale}
+            onChange={(e) => onLabelScaleChange(Number(e.target.value))}
+          />
+          <span className="settings-control-value" aria-live="polite">
+            {labelScale.toFixed(1)}×
+          </span>
+        </div>
+        <div className="settings-control">
+          <span className="settings-control-label">Bottom bar</span>
+          <input
+            type="range"
+            className="slider"
+            aria-label="Bottom bar size"
+            min={BOTTOM_SCALE_MIN}
+            max={BOTTOM_SCALE_MAX}
+            step={BOTTOM_SCALE_STEP}
+            value={bottomScale}
+            onChange={(e) => onBottomScaleChange(Number(e.target.value))}
+          />
+          <span className="settings-control-value" aria-live="polite">
+            {Math.round(bottomScale * 100)}%
           </span>
         </div>
         <SettingToggle

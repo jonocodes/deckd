@@ -1,7 +1,9 @@
 :root {
   color-scheme: dark;
   font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  background: #0e1115;
+  /* App background: a touch lighter than near-black, kept a step darker than
+     the bottom chrome bar (#161b21) so the bar still reads as raised chrome. */
+  background: #12161b;
   color: #e6e9ef;
   /* Multiplier for grid content (buttons + in-grid jogstrip). App sets this
      on the layout area (.surface) from the user's Button-size setting; the
@@ -63,7 +65,9 @@ button:focus-visible { outline: none; }
 
 .chrome-jogstrip {
   flex: 0 0 auto;
-  width: clamp(56px, 12vw, 88px);
+  /* Base responsive width, scaled by the user's scroll-bar width preference
+     (``--jog-width``, default 1). App sets the var on this element. */
+  width: calc(clamp(56px, 12vw, 88px) * var(--jog-width, 1));
   padding: 8px 8px 8px 0;
   /* In landscape a notch/camera-cutout on the right side would eat into
      the strip; pad it out so the touch target stays clear. */
@@ -94,17 +98,21 @@ button:focus-visible { outline: none; }
  * ------------------------------------------------------------------------- */
 
 .chrome-bottom {
+  /* Height-driving metrics (padding, gap, font-size, and the child badge /
+     button sizes below) scale by the user's bottom-bar size preference
+     (``--bottom-scale``, default 1). App sets the var on this element. */
+  --bottom-scale: 1;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
+  gap: calc(10px * var(--bottom-scale));
+  padding: calc(10px * var(--bottom-scale)) calc(14px * var(--bottom-scale));
   /* Extend the bar into the iOS home-indicator area so the background
      colour still reaches the screen edge; the extra space is added
      below the flex row via padding-bottom, not layout gap. */
-  padding-bottom: max(10px, env(safe-area-inset-bottom));
-  background: #161b21;
+  padding-bottom: max(calc(10px * var(--bottom-scale)), env(safe-area-inset-bottom));
+  background: #181818;
   border-top: 1px solid #232a32;
-  font-size: 13px;
+  font-size: calc(13px * var(--bottom-scale));
   letter-spacing: 0.04em;
   flex: 0 0 auto;
 }
@@ -121,7 +129,7 @@ button:focus-visible { outline: none; }
   gap: 8px;
   min-width: 0;
   font-weight: 700;
-  font-size: 13px;
+  font-size: calc(13px * var(--bottom-scale, 1));
   letter-spacing: 0.04em;
   overflow: hidden;
   white-space: nowrap;
@@ -139,20 +147,21 @@ button:focus-visible { outline: none; }
   min-width: 0;
   max-width: 100%;
   margin-right: auto;
-  padding: 4px 12px 4px 4px;
+  padding: calc(4px * var(--bottom-scale, 1)) calc(12px * var(--bottom-scale, 1))
+    calc(4px * var(--bottom-scale, 1)) calc(4px * var(--bottom-scale, 1));
   border-radius: 999px;
   background: #1b222a;
   border: 1px solid #2a333d;
   font-weight: 700;
-  font-size: 13px;
+  font-size: calc(13px * var(--bottom-scale, 1));
   letter-spacing: 0.04em;
   overflow: hidden;
   white-space: nowrap;
 }
 
 .app-badge-icon {
-  width: clamp(18px, 4vw, 24px);
-  height: clamp(18px, 4vw, 24px);
+  width: calc(clamp(18px, 4vw, 24px) * var(--bottom-scale, 1));
+  height: calc(clamp(18px, 4vw, 24px) * var(--bottom-scale, 1));
   flex: 0 0 auto;
   color: #e6e9ef;
 }
@@ -196,8 +205,8 @@ button:focus-visible { outline: none; }
 
 .connection-dot {
   display: inline-block;
-  width: 9px;
-  height: 9px;
+  width: calc(9px * var(--bottom-scale, 1));
+  height: calc(9px * var(--bottom-scale, 1));
   border-radius: 50%;
   background: #6b7785;
 }
@@ -215,7 +224,7 @@ button:focus-visible { outline: none; }
 }
 
 .chrome-btn {
-  padding: 8px 12px;
+  padding: calc(8px * var(--bottom-scale, 1)) calc(12px * var(--bottom-scale, 1));
   border-radius: 9px;
   background: #1b222a;
   border: 1px solid #2a333d;
@@ -226,6 +235,14 @@ button:focus-visible { outline: none; }
   text-transform: uppercase;
   touch-action: manipulation;
   transition: background 80ms ease, transform 80ms ease;
+}
+
+/* The trackpad / settings glyphs are Lucide SVGs sized via a JSX ``size``
+   prop (fixed px); override here so they scale with the bottom-bar size
+   preference like the rest of the chrome. */
+.chrome-btn > svg {
+  width: calc(18px * var(--bottom-scale, 1));
+  height: calc(18px * var(--bottom-scale, 1));
 }
 
 .chrome-btn:active { transform: scale(0.97); background: #2a333d; }
@@ -275,7 +292,10 @@ button:focus-visible { outline: none; }
 }
 
 .cell-button .label {
-  font-size: calc(clamp(9px, 1.5vw, 12px) * var(--content-scale));
+  /* Label text scales with the overall content size and, on top of that, the
+     user's Text-size preference (``--label-scale``, default 1) so the caption
+     under the icon can be dialled down without shrinking the icon. */
+  font-size: calc(clamp(9px, 1.5vw, 12px) * var(--content-scale) * var(--label-scale, 1));
   font-weight: 600;
   line-height: 1.2;
   word-break: break-word;

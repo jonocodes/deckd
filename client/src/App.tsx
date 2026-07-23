@@ -7,7 +7,10 @@ import { JogStrip } from "./JogStrip";
 import { ManualControl } from "./ManualControl";
 import { Settings } from "./Settings";
 import {
+  useBottomScale,
   useContentScale,
+  useJogWidth,
+  useLabelScale,
   useScrollSettings,
   useTrackpadSettings,
   useWakeLockSetting,
@@ -49,6 +52,9 @@ export function App() {
   const trackpad = useTrackpadSettings();
   const wakeLock = useWakeLockSetting();
   const contentScale = useContentScale();
+  const jogWidth = useJogWidth();
+  const bottomScale = useBottomScale();
+  const labelScale = useLabelScale();
   // Hold the wake lock while the user wants it AND the socket is live;
   // a stale surface with no daemon behind it has no reason to keep the
   // screen on. Visibility is handled inside the hook.
@@ -79,7 +85,10 @@ export function App() {
   const appIcon: IconRef | null = layout?.icon ?? null;
   const hasBadge = appTheme !== null || appIcon !== null;
   const badgeClass = hasBadge ? `app-badge${appTheme ? " app-badge-themed" : ""}` : "app-name";
-  const badgeVars = appTheme ? ({ "--badge-theme": appTheme } as CSSProperties) : undefined;
+  const bottomVars = {
+    "--bottom-scale": bottomScale.scale,
+    ...(appTheme ? { "--badge-theme": appTheme } : {}),
+  } as CSSProperties;
 
   return (
     <div className="app">
@@ -89,7 +98,12 @@ export function App() {
             chrome — the sibling jogstrip and the bottom bar — stays fixed. */}
         <main
           className="surface"
-          style={{ "--content-scale": contentScale.scale } as CSSProperties}
+          style={
+            {
+              "--content-scale": contentScale.scale,
+              "--label-scale": labelScale.scale,
+            } as CSSProperties
+          }
         >
           {view === "trackpad" ? (
             <ManualControl
@@ -114,6 +128,12 @@ export function App() {
               onWakeLockChange={wakeLock.setEnabled}
               contentScale={contentScale.scale}
               onContentScaleChange={contentScale.setScale}
+              jogWidth={jogWidth.width}
+              onJogWidthChange={jogWidth.setWidth}
+              bottomScale={bottomScale.scale}
+              onBottomScaleChange={bottomScale.setScale}
+              labelScale={labelScale.scale}
+              onLabelScaleChange={labelScale.setScale}
             />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">
@@ -134,7 +154,10 @@ export function App() {
           )}
         </main>
         {jogstripEnabled && (
-          <aside className="chrome-jogstrip">
+          <aside
+            className="chrome-jogstrip"
+            style={{ "--jog-width": jogWidth.width } as CSSProperties}
+          >
             <JogStrip
               widget={CHROME_JOG_HANDLE}
               variant="chrome"
@@ -146,7 +169,7 @@ export function App() {
           </aside>
         )}
       </div>
-      <footer className="chrome-bottom" style={badgeVars}>
+      <footer className="chrome-bottom" style={bottomVars}>
         <span className={badgeClass}>
           {appIcon ? <Icon icon={appIcon} className="app-badge-icon" /> : null}
           <span className="app-badge-name">{appName}</span>
