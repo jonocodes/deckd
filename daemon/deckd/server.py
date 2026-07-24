@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import errno
 import hmac
 import json
 import logging
@@ -33,6 +35,41 @@ DEFAULT_APP_ID = "default"
 # How long a WebSocket has to send its authenticating ``hello`` before we
 # drop it. Generous — a real client sends it immediately on open.
 WS_AUTH_TIMEOUT_S = 10.0
+
+# Application-defined WebSocket close code (private-use range 4000-4999)
+# meaning "auth rejected". Mnemonic for HTTP 401. The client keys off this
+# in onclose so a browser that dropped the rejection frame still learns it
+# was unauthorized and shows the password gate.
+WS_CLOSE_UNAUTHORIZED = 4401
+
+# Beat between sending the rejection frame and closing, so browsers deliver
+# the frame to onmessage as its own event instead of coalescing it with the
+# close frame and dropping it.
+WS_AUTH_REJECT_GRACE_S = 0.25
+
+
+class PortInUseError(RuntimeError):
+    """The daemon's listen port is already bound by another process.
+
+    Raised from :meth:`Server.start` instead of letting aiohttp's raw
+    ``OSError: [Errno 98] address already in use`` traceback escape. The
+    message names the port and the one-liners to find and stop the
+    offender (almost always a stale deckd instance) so a Vite dev server
+    left pointing at a dead backend is diagnosable at a glance rather than
+    a wall of asyncio frames. ``__main__`` catches this and exits 1 with
+    just the message.
+    """
+
+    def __init__(self, host: str, port: int) -> None:
+        self.host = host
+        self.port = port
+        super().__init__(
+            f"cannot bind {host}:{port} — another process is already "
+            f"listening there (usually a stale deckd instance).\n"
+            f"  find it:  ss -ltnp | grep {port}   (or: pgrep -af bin/deckd)\n"
+            f"  stop it:  pkill -f bin/deckd\n"
+            f"  or use another port:  deckd --port <N>"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +172,7 @@ class Server:
         focus_backend: "PlatformBackend | None" = None,
         overlay_dir: Path | None = None,
         password: str | None = None,
+        sensor_manager: "SensorManager | None" = None,
     ) -> None:
         self.layouts_dir = layouts_dir
         self.overlay_dir = overlay_dir
@@ -155,8 +193,18 @@ class Server:
         self.focus_backend = focus_backend
         self._focus_task: asyncio.Task[None] | None = None
         self._layouts_task: asyncio.Task[None] | None = None
+        self._sensor_task: asyncio.Task[None] | None = None
         self._current_error: str | None = None
         self._deckd_window_focused = False
+        # Sensor subscriptions for the active layout. Re-derived whenever
+        # the active layout changes (focus change or hot reload) so the
+        # daemon only polls sensors the current view is actually using.
+        # ``None`` means "use the platform default"; explicit ``None``
+        # tests can pass a fake manager. ``_subscribed_sources`` is the
+        # set we currently hold refcounts on, used to keep
+        # subscribe/unsubscribe balanced across layout changes.
+        self.sensors: "SensorManager | None" = sensor_manager
+        self._subscribed_sources: set[str] = set()
 
     # -- layout state --------------------------------------------------------
 
@@ -197,6 +245,11 @@ class Server:
             new_layout = self.layouts.default()
         self._current_layout = new_layout
         self._current_error = None
+        # A layout reload can change which meter sources the active
+        # layout uses (a meter added in the new YAML, an old one
+        # removed). Reconcile subscriptions so the manager polls only
+        # what's now in use.
+        self._sync_sensor_subscriptions()
         log.info(
             "reloaded layouts from %s%s",
             self.layouts_dir,
@@ -253,6 +306,11 @@ class Server:
         log.info("focus -> %s (layout=%s)", app, new_app_id)
         self._current_app_id = new_app_id
         self._current_layout = new_layout
+        # Different layouts reference different meter sources (e.g.
+        # switching from a desktop to a terminal layout that monitors
+        # something else). Resubscribe so the manager's polling tracks
+        # the active view.
+        self._sync_sensor_subscriptions()
         await self._push_to_all()
 
     async def run_focus_watcher(self) -> None:
@@ -343,6 +401,171 @@ class Server:
             return None
         self._layouts_task = asyncio.create_task(self.run_layouts_watcher())
         return self._layouts_task
+
+    # -- sensor pump ---------------------------------------------------------
+    #
+    # The :class:`SensorManager` polls sources on its own task and keeps
+    # the latest reading in ``_last[name]``. The server's only job is to
+    # notice when a reading changes and push a ``widget_update`` frame
+    # to every connected session whose active layout has a meter bound
+    # to that source. Polling frequency is bounded by the source's
+    # ``interval_s``; the pump itself runs at 100ms so a 1s source
+    # produces up to one push per second, and we don't notice a
+    # millisecond late.
+
+    def _meters_for_source(self, source: str) -> list[Widget]:
+        """Return every meter widget in the active layout bound to ``source``.
+
+        Used by the pump to know which ``id`` to send in the push.
+        Order matches the layout's declaration order so the wire is
+        deterministic for tests.
+        """
+        return [
+            w
+            for w in self._current_layout.widgets
+            if w.kind == "meter" and w.source == source
+        ]
+
+    def _active_sources(self) -> set[str]:
+        """Names of every sensor referenced by a meter in the active layout.
+
+        Excludes unknown source names (no such source registered with
+        the manager) so a typo in a layout YAML doesn't crash the
+        pump — the meter just stays stale. The exclusion is best-effort
+        at this layer; the manager's ``is_available`` check is the
+        authoritative gate.
+        """
+        sources: set[str] = set()
+        manager = self.sensors
+        for w in self._current_layout.widgets:
+            if w.kind != "meter" or not w.source:
+                continue
+            if manager is None or manager.has(w.source):
+                sources.add(w.source)
+        return sources
+
+    def _sync_sensor_subscriptions(self) -> None:
+        """Reconcile :class:`SensorManager` subscriptions with the active layout.
+
+        Idempotent: calling it back-to-back is a no-op. Drops
+        subscriptions to sources no longer referenced; adds new ones.
+        Layouts with no meter widgets clear all subscriptions so the
+        daemon idles its polling.
+        """
+        manager = self.sensors
+        if manager is None:
+            return
+        wanted = self._active_sources()
+        for name in self._subscribed_sources - wanted:
+            manager.unsubscribe(name)
+        for name in wanted - self._subscribed_sources:
+            manager.subscribe(name)
+        self._subscribed_sources = wanted
+
+    async def run_sensor_pump(self) -> None:
+        """Watch :class:`SensorManager` and push widget_update frames.
+
+        Compares the manager's ``_last`` against the last value pushed
+        for each ``(source, widget_id)`` pair and emits a frame on
+        change. Stale-flag flips (``True`` after a sensor error) also
+        count as a change so the UI can show the unknown treatment.
+
+        A meter bound to an unknown source simply never produces a
+        push — the client renders no value at all. This is intentional:
+        the alternative (one push per pump tick with the error
+        surfaced) would spam a layout YAML typo across the WebSocket
+        forever. The :meth:`_active_sources` filter is the gate that
+        keeps unknown sources out of the subscription set in the first
+        place.
+        """
+        manager = self.sensors
+        if manager is None:
+            return
+        manager.start()
+        last_pushed: dict[tuple[str, str], tuple[float, bool, str]] = {}
+        try:
+            while True:
+                # Snapshot subscriptions so a layout change that drops a
+                # source mid-iteration doesn't reach into a stale entry.
+                for name in list(self._subscribed_sources):
+                    reading = manager.latest(name)
+                    for widget in self._meters_for_source(name):
+                        key = (name, widget.id)
+                        if reading is None:
+                            # No reading yet: don't push until the
+                            # source produces one. Avoids spamming an
+                            # unknown-value frame at connect time when
+                            # the first poll is still pending.
+                            continue
+                        payload = (reading.value, reading.stale, reading.unit)
+                        if last_pushed.get(key) == payload:
+                            continue
+                        # Only cache the payload once a session has
+                        # actually received it. Without this, a pump
+                        # tick that runs before any client is connected
+                        # would burn the first push — the next tick
+                        # (with sessions attached) would see the same
+                        # value as already-pushed and silently skip it,
+                        # leaving the first client staring at an empty
+                        # meter until the value actually changes.
+                        if not await self._broadcast_widget_update(widget, reading):
+                            continue
+                        last_pushed[key] = payload
+                await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            return
+
+    async def _broadcast_widget_update(
+        self, widget: Widget, reading: "SensorReading"
+    ) -> bool:
+        """Send a WidgetUpdateMessage to every connected session.
+
+        Returns ``True`` when at least one session actually received
+        the frame. ``False`` when there are no sessions (a pump tick
+        that ran before any client connected) or every send errored
+        out — the pump uses the False return to skip caching the
+        payload so the next tick still sees the same value as new and
+        pushes it once a client arrives.
+
+        Stale-connection failures are silently dropped; the session
+        is already being torn down. ``stale=True`` messages are sent
+        so the client can stop claiming the value is fresh.
+        """
+        if not self._sessions:
+            return False
+        msg = p.WidgetUpdateMessage(
+            type="widget_update",
+            id=widget.id,
+            source=reading.source,
+            value=reading.value,
+            unit=reading.unit,
+            stale=reading.stale,
+        )
+        sent = 0
+        dead: list[Session] = []
+        for session in list(self._sessions):
+            try:
+                await session.send(msg)
+                sent += 1
+            except (ConnectionResetError, RuntimeError, ConnectionError):
+                dead.append(session)
+        for session in dead:
+            self._sessions.discard(session)
+        return sent > 0
+
+    def start_sensor_pump(self) -> asyncio.Task[None] | None:
+        if self.sensors is None or self._sensor_task is not None:
+            return None
+        # Make sure the manager is subscribed to whatever the active
+        # layout uses before the pump task starts polling. ``__init__``
+        # deliberately doesn't subscribe (no event loop yet), and
+        # ``reload_layouts`` / ``_on_focus`` keep the set in sync as
+        # the layout changes; this call bridges the gap on first start
+        # so the very first ``widget_update`` push isn't delayed by a
+        # missing subscription.
+        self._sync_sensor_subscriptions()
+        self._sensor_task = asyncio.create_task(self.run_sensor_pump())
+        return self._sensor_task
 
     # -- auth ----------------------------------------------------------------
     #
@@ -493,8 +716,24 @@ class Server:
             hello = await self._authenticate_ws(ws)
             if hello is None:
                 log.info("ws auth failed from %s; closing", req.remote)
-                await ws.send_json({"type": "error", "reason": "unauthorized"})
-                await ws.close()
+                # A client that failed (or abandoned) auth has often already
+                # closed the socket, so the rejection frame races the teardown.
+                # Suppress the write-to-closing-transport error: the rejection
+                # is best-effort and the connection is going away regardless.
+                with contextlib.suppress(ConnectionError, RuntimeError):
+                    await ws.send_json({"type": "error", "reason": "unauthorized"})
+                    # Browsers coalesce a data frame with an immediately
+                    # following close frame and drop the data one, so the
+                    # client's onmessage never sees the rejection and it just
+                    # reconnect-loops without ever showing the password gate.
+                    # Two defences: (1) a short beat so the data frame is
+                    # delivered as its own event before the close, and (2) a
+                    # dedicated close code the client also treats as
+                    # unauthorized — the close code survives the race even if
+                    # the frame is still dropped. (A raw ws client tolerates
+                    # the coalescing; a browser does not.)
+                    await asyncio.sleep(WS_AUTH_REJECT_GRACE_S)
+                    await ws.close(code=WS_CLOSE_UNAUTHORIZED, message=b"unauthorized")
                 return ws
             # Auth consumed the hello, so apply its demo pin before the initial
             # push. (No-auth clients' hellos arrive via _dispatch instead.)
@@ -601,15 +840,22 @@ class Server:
         runner = web.AppRunner(self.app, access_log=None)
         await runner.setup()
         site = web.TCPSite(runner, self.host, self.port)
-        await site.start()
+        try:
+            await site.start()
+        except OSError as exc:
+            if exc.errno == errno.EADDRINUSE:
+                await runner.cleanup()
+                raise PortInUseError(self.host, self.port) from exc
+            raise
         log.info("listening on http://%s:%d (ws=%s/ws)", self.host, self.port, self.host)
         self._runner = runner
         self.start_layouts_watcher()
+        self.start_sensor_pump()
         while True:
             await asyncio.sleep(3600)
 
     async def stop(self) -> None:
-        for task in (self._focus_task, self._layouts_task):
+        for task in (self._focus_task, self._layouts_task, self._sensor_task):
             if task is not None:
                 task.cancel()
                 try:
@@ -621,6 +867,8 @@ class Server:
                 await self.focus_backend.stop()
             except Exception as exc:
                 log.debug("focus backend stop failed: %s", exc)
+        if self.sensors is not None:
+            self.sensors.stop()
         runner = getattr(self, "_runner", None)
         if runner is not None:
             await runner.cleanup()

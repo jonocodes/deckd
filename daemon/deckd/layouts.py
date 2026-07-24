@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from .platform import AppInfo
 
@@ -38,6 +38,43 @@ class Widget(BaseModel):
     # input, so no sanitisation is needed.
     color: str | None = None
     action: "Action | None" = None
+    # ``meter`` widgets bind to a daemon-side :class:`SensorSource` by
+    # name (e.g. ``cpu_percent``). The daemon pushes ``WidgetUpdateMessage``
+    # frames for every meter widget in the active layout whose source
+    # has live readings. ``min`` / ``max`` define the bar's visible
+    # range; values outside the range clamp at the ends so a runaway
+    # sensor paints the bar at full red rather than overflowing.
+    # ``min``/``max`` default to a CPU-friendly 0..100 %; layouts with
+    # non-thermal sensors should override.
+    source: str | None = None
+    min: float | None = None
+    max: float | None = None
+
+    @field_validator("kind")
+    @classmethod
+    def _validate_meter_needs_source(cls, v: str) -> str:
+        # Field-level validators on Pydantic v2 don't see sibling fields
+        # via ``info.data`` (that dict only contains fields validated
+        # *before* this one, not peer fields). The cross-field check
+        # (meter requires ``source``, min < max) lives in the
+        # ``_validate_meter_invariants`` model validator below where
+        # the full model is available.
+        return v
+
+    @model_validator(mode="after")
+    def _validate_meter_invariants(self) -> "Widget":
+        if self.kind == "meter":
+            if not self.source:
+                raise ValueError(
+                    "meter widgets require a 'source' field naming a "
+                    "daemon-side SensorSource (e.g. 'cpu_percent')"
+                )
+            if self.min is not None and self.max is not None and self.min >= self.max:
+                raise ValueError(
+                    f"meter widget min ({self.min}) must be strictly "
+                    f"less than max ({self.max})"
+                )
+        return self
 
 
 class Action(BaseModel):

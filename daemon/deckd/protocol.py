@@ -42,8 +42,35 @@ class BrightnessMessage(BaseModel):
     value: int = Field(ge=0, le=255)
 
 
+class WidgetUpdateMessage(BaseModel):
+    """Daemon->client push: a meter widget's live value (issue #40).
+
+    The daemon sends one of these to every connected session whenever a
+    sensor the session has subscribed to produces a new reading.
+    ``id`` is the widget id from the active layout; ``source`` echoes
+    the bound sensor name so a client with a stale layout can still tell
+    what the value belongs to; ``unit`` rides along so the client
+    doesn't have to know a per-source unit registry.
+
+    ``stale=True`` means the source could not refresh (sensor
+    disappeared, permission denied); the client renders an "unknown"
+    treatment and keeps the bar at its last-known position. We send
+    ``stale=True`` explicitly rather than dropping the message so the
+    UI can stop claiming the value is fresh.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["widget_update"]
+    id: str
+    source: str
+    value: float
+    unit: str
+    stale: bool = False
+
+
 ServerMessage = Annotated[
-    Union[LayoutMessage, StateMessage, BrightnessMessage],
+    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage],
     Field(discriminator="type"),
 ]
 

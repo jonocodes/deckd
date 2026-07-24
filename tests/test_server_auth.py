@@ -51,8 +51,14 @@ async def test_ws_without_password_rejected() -> None:
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             await ws.send(json.dumps({"type": "hello", "client": "web"}))
             assert await _recv(ws) == {"type": "error", "reason": "unauthorized"}
-            with pytest.raises(websockets.ConnectionClosed):
+            # The rejection also closes with a dedicated code (4401) that the
+            # client keys off, because browsers can drop the data frame above
+            # when it's coalesced with the close. Client and daemon must agree
+            # on 4401 (see socket.ts UNAUTHORIZED_CLOSE_CODE); assert it here so
+            # the two can't silently drift.
+            with pytest.raises(websockets.ConnectionClosed) as excinfo:
                 await _recv(ws)
+            assert excinfo.value.rcvd.code == 4401
 
 
 async def test_ws_with_wrong_password_rejected() -> None:

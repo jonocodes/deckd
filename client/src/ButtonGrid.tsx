@@ -2,6 +2,8 @@ import type { CSSProperties } from "react";
 import type { Widget } from "./protocol";
 import { Icon } from "./Icon";
 import { JogStrip } from "./JogStrip";
+import { MeterCell } from "./MeterCell";
+import type { MeterReading } from "./meter-store";
 import { transposeWidgets, useOrientation } from "./orientation";
 import type { Orientation } from "./orientation";
 
@@ -17,6 +19,13 @@ type Props = {
    * device stories pass it so the transpose matches the container's shape
    * rather than the window's. */
   orientation?: Orientation;
+  /** Latest reading per meter widget id. Missing ids render with no
+   * value (bar empty, "—" numeric). Stale readings show the bar at
+   * its last position with a dimmed readout. */
+  meterReadings?: Record<string, MeterReading>;
+  /** Multiplier for the meter widget's caption label so it scales with
+   * the same user-facing "label size" preference as buttons. */
+  labelScale?: number;
 };
 
 const FALLBACK_DIM = 4;
@@ -46,6 +55,8 @@ export function ButtonGrid({
   scrollScale,
   scrollInvert,
   orientation: orientationOverride,
+  meterReadings,
+  labelScale,
 }: Props) {
   const autoOrientation = useOrientation();
   const orientation = orientationOverride ?? autoOrientation;
@@ -86,6 +97,17 @@ export function ButtonGrid({
                 invert={scrollInvert}
                 onJog={onJog}
                 onJogEnd={onJogEnd}
+              />
+            );
+          }
+          if (w.kind === "meter") {
+            return (
+              <MeterCell
+                key={w.id}
+                widget={w}
+                reading={meterReadings?.[w.id] ?? null}
+                style={style}
+                labelScale={labelScale ?? 1}
               />
             );
           }

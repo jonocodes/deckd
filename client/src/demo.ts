@@ -60,10 +60,63 @@ const SHOWCASE: ServerLayout = {
   ],
 };
 
+// Backend-free meter demo (issue #40). Mirrors what the daemon would
+// push for a real CPU%/MEM% source — a couple of realistic values so
+// the bar's color-graded fill renders across the spectrum. Wired via
+// the meter store's localStorage hydration on mount, so opening
+// ``/?demo=meter`` lands in a "fresh layout, pre-populated values"
+// state without needing the daemon at all.
+const METER: ServerLayout = {
+  type: "layout",
+  app: "meter (demo)",
+  display_name: "Meter demo",
+  theme: "#1d4ed8",
+  jogstrip_enabled: true,
+  widgets: [
+    {
+      id: "cpu_percent",
+      kind: "meter",
+      label: "CPU",
+      icon: { source: "lucide", name: "cpu" },
+      source: "cpu_percent",
+      min: 0,
+      max: 100,
+      grid: [0, 0, 2, 1],
+    },
+    {
+      id: "mem_percent",
+      kind: "meter",
+      label: "MEM",
+      icon: { source: "lucide", name: "memory-stick" },
+      source: "mem_percent",
+      min: 0,
+      max: 100,
+      grid: [0, 1, 2, 1],
+    },
+    { id: "open-url", kind: "button", label: "example.com", icon: { source: "simple-icons", name: "firefox" }, grid: [2, 0, 1, 1] },
+    { id: "tilix", kind: "button", label: "Tilix", icon: { source: "lucide", name: "square-terminal" }, grid: [3, 0, 1, 1] },
+    { id: "audio-toggle", kind: "button", label: "VLC", icon: { source: "lucide", name: "play" }, grid: [2, 1, 1, 1] },
+    { id: "send-key-tab", kind: "button", label: "Ctrl+T", icon: { source: "lucide", name: "keyboard" }, grid: [3, 1, 1, 1] },
+  ],
+};
+
+// Seed values for the meter demo so the bar renders with realistic
+// values on first paint (localStorage hydration, see meter-store.ts).
+// These are written into localStorage by the app on first mount when
+// the meter demo is selected, and cleared when the user navigates
+// away to a non-meter demo. Keeping the seeds in the same file as the
+// fixture means a designer iterating on the meter layout doesn't have
+// to remember to update two places.
+export const METER_DEMO_SEEDS: Record<string, { value: number; unit: string }> = {
+  cpu_percent: { value: 58, unit: "%" },
+  mem_percent: { value: 41, unit: "%" },
+};
+
 const DEMOS: Record<string, ServerLayout> = {
   firefox: FIREFOX,
   default: DEFAULT,
   showcase: SHOWCASE,
+  meter: METER,
 };
 
 /** The demo fixtures, keyed by name — for the gallery and Ladle stories. */

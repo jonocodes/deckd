@@ -51,6 +51,30 @@ run-daemon:
 run-daemon-lan:
     deckd --host 0.0.0.0 --layouts-dir layouts --verbose
 
+# Kill whatever is bound to the two ports we use: the daemon (:8765) and
+# the Vite dev server (:5173). Handy when a stale daemon still holds the
+# port (deckd now fails fast on that) or a dev server outlived its
+# terminal, leaving the client with no backend. Reports free ports and
+# no-ops cleanly when nothing is running.
+kill:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    for port in 8765 5173; do
+        pids=$(lsof -ti "tcp:$port" 2>/dev/null || true)
+        if [ -z "$pids" ]; then
+            echo ":$port already free"
+            continue
+        fi
+        echo "killing :$port -> $pids"
+        kill $pids 2>/dev/null || true
+        sleep 0.3
+        pids=$(lsof -ti "tcp:$port" 2>/dev/null || true)
+        if [ -n "$pids" ]; then
+            echo "  still alive, SIGKILL -> $pids"
+            kill -9 $pids 2>/dev/null || true
+        fi
+    done
+
 # Run the daemon under a supervisor that restarts it when daemon/**/*.py
 # changes. Layout YAML hot-reload is built into the daemon itself; this is
 # only useful when editing Python.

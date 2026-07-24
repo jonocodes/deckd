@@ -826,3 +826,41 @@ async def test_layouts_watcher_bad_edit_pushes_error_not_crash(
             recovered = await _next_layout(ws, timeout=5.0)
             assert recovered.get("error") in (None, "")
             assert recovered["widgets"][0]["id"] == "home-v2"
+
+
+async def test_start_raises_port_in_use_not_raw_oserror(tmp_path: Path) -> None:
+    """A busy listen port fails fast with ``PortInUseError`` (a clean,
+    actionable message) instead of aiohttp's raw ``OSError: [Errno 98]``.
+
+    Regression guard for the stale-daemon footgun: a second deckd (or any
+    process on the port) must not dump an asyncio traceback that reads as a
+    mysterious crash — ``__main__`` relies on this typed error to exit 1
+    with the find/stop hint.
+    """
+    import socket as _socket
+
+    from conftest import make_test_server
+    from deckd.server import PortInUseError
+
+    (tmp_path / "default.yaml").write_text(
+        "match:\n  - default\nwidgets: []\n"
+    )
+
+    # Hold a real listener so the daemon's bind is guaranteed to collide.
+    blocker = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    blocker.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    busy_port = blocker.getsockname()[1]
+
+    try:
+        server, *_ = make_test_server(layouts_dir=tmp_path)
+        server.host = "127.0.0.1"
+        server.port = busy_port
+        with pytest.raises(PortInUseError) as excinfo:
+            await server.start()
+        assert excinfo.value.port == busy_port
+        assert "pkill -f bin/deckd" in str(excinfo.value)
+        await server.stop()
+    finally:
+        blocker.close()
