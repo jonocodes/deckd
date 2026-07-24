@@ -1,82 +1,84 @@
 # Mac fallback layout. Used when no per-app layout matches. Same `id` as
 # `layouts/default.yaml` so the overlay-replaces-base loader picks this
 # one on Mac without touching the shared base.
-#
-# Designed for "works for max apps": the buttons below are useful in a
-# long tail of Mac apps (browsers, terminals, editors, chat clients, etc.)
-# and the launchers work regardless of which app is focused.
 match:
   - default
+display_name: Home
 widgets:
-  - id: new-tab
+  - id: code
     kind: button
-    label: New tab
     icon:
       source: lucide
-      name: plus
+      name: file-code
+    color: "#2e328a"
     grid: [0, 0, 1, 1]
     action:
-      key: "super+t"
-  - id: close-tab
+      shell: code
+  - id: firefox
     kind: button
-    label: Close
     icon:
-      source: lucide
-      name: x
+      source: simple-icons
+      name: firefox
+    color: "#b5641d"
     grid: [1, 0, 1, 1]
     action:
-      key: "super+w"
-  - id: find
+      shell: "open -a Firefox"
+  - id: obsidian
     kind: button
-    label: Find
     icon:
-      source: lucide
-      name: search
+      source: simple-icons
+      name: obsidian
+    color: "#6d28c8"
     grid: [2, 0, 1, 1]
     action:
-      key: "super+f"
-  - id: new-window
+      shell: "open -a Obsidian"
+  - id: thunderbird
     kind: button
-    label: New window
     icon:
-      source: lucide
-      name: app-window
+      source: simple-icons
+      name: thunderbird
+    color: "#0A84FF"
     grid: [3, 0, 1, 1]
     action:
-      key: "super+n"
+      shell: "open -a Thunderbird"
+
   - id: open-url
     kind: button
-    label: Open example.com
     icon:
-      source: lucide
-      name: globe
+      source: simple-icons
+      name: github
+    color: "black"
     grid: [0, 1, 1, 1]
     action:
-      shell: "open https://example.com"
-  - id: launch-iterm
+      shell: "open https://github.com"
+
+  - id: terminal
     kind: button
-    label: iTerm
     icon:
       source: lucide
-      name: terminal
+      name: square-terminal
+    color: "#6b0101"
     grid: [1, 1, 1, 1]
     action:
+      # terminal: true
       shell: "open -a iTerm"
-  - id: launch-terminal
+
+  - id: send-key-tab
     kind: button
-    label: Terminal
+    label: Send Cmd+T
     icon:
       source: lucide
-      name: terminal
+      name: keyboard
     grid: [2, 1, 1, 1]
     action:
-      shell: "open -a Terminal"
-  - id: system-settings
-    kind: button
-    label: Settings
-    icon:
-      source: lucide
-      name: cog
+      key: "super+t"
+
+  - id: system
+    kind: stats
+    label: System
     grid: [3, 1, 1, 1]
-    action:
-      shell: "open -a \"System Settings\""
+    metrics:
+      - source: cpu_percent
+        label: CPU
+      - source: mem_percent
+        label: MEM

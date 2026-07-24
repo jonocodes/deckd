@@ -239,7 +239,7 @@ export function App() {
             <div className="empty">waiting for daemon…</div>
           )}
         </main>
-        {jogstripEnabled && (
+        {jogstripEnabled && view !== "settings" && (
           <aside
             className="chrome-jogstrip"
             style={{ "--jog-width": jogWidth.width } as CSSProperties}

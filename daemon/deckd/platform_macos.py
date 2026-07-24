@@ -30,6 +30,7 @@ evdev events.
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from collections.abc import Sequence
 from types import ModuleType
@@ -53,6 +54,34 @@ def _load_quartz() -> tuple[ModuleType | None, bool]:
         return Quartz, True
     except ImportError:
         return None, False
+
+
+def _terminal_name() -> str:
+    """Return the name of the terminal app this process runs under.
+
+    Used for permission-setup instructions so the user knows exactly
+    which app to add in System Settings (e.g. iTerm.app, Code, cmux,
+    Terminal).
+    """
+    env = os.environ.get("TERM_PROGRAM", "")
+    if env == "iTerm.app":
+        return "iTerm.app"
+    if env in ("Apple_Terminal", "Terminal"):
+        return "Terminal.app"
+    if any(k.startswith("VSCODE_") for k in os.environ):
+        return "Code (VS Code)"
+    try:
+        ppid = os.getppid()
+        name = subprocess.check_output(
+            ["ps", "-o", "comm=", "-p", str(ppid)],
+            text=True,
+        ).strip()
+        if name:
+            return name
+    except Exception:
+        pass
+    return env or "your terminal"
+
 
 # ---------------------------------------------------------------------------
 # Focus
@@ -104,9 +133,12 @@ _MOD_CLAUSE: dict[str, str] = {
     "meta": "command",
 }
 
-# AppleScript ``key code`` numbers (HID usage IDs) for the non-printable
-# keys we care about. Letters and digits are sent as ``keystroke "x"``
-# instead -- easier and locale-correct.
+# AppleScript ``key code`` numbers (HID usage IDs) for keys that need
+# layout-independent key codes. Letters and digits are sent as
+# ``keystroke "x"`` -- easier and locale-correct. But bracket keys
+# (``[`` / ``]``) vary by keyboard layout when sent as characters, so
+# they go through ``key code`` instead so they always hit the same
+# physical key.
 _MAC_KEY_CODE: dict[str, int] = {
     "esc": 53, "escape": 53,
     "tab": 48,
@@ -125,6 +157,8 @@ _MAC_KEY_CODE: dict[str, int] = {
     "f1": 122, "f2": 120, "f3": 99, "f4": 118, "f5": 96, "f6": 97,
     "f7": 98, "f8": 100, "f9": 101, "f10": 109, "f11": 103, "f12": 111,
     "capslock": 57,
+    "[": 33,
+    "]": 30,
 }
 
 
@@ -192,26 +226,66 @@ class MacKeySink(KeySink):
                 "trackpad pointer / clicks will log only "
                 "(install with: pip install pyobjc-framework-Quartz)"
             )
+        else:
+            log.info(
+                "[mac key] macOS 15+ may require Input Monitoring permission "
+                "for %s (System Settings > Privacy & Security > Input Monitoring)",
+                _terminal_name(),
+            )
         # Track the held-button state so emit_pointer emits
         # ``LeftMouseDragged`` (not ``MouseMoved``) while the user is
         # mid-drag. The server drives this via pad_drag start/end.
         self._dragging_left = False
+        self._check_accessibility()
 
     # -- key -----------------------------------------------------------------
+
+    @staticmethod
+    def _check_accessibility() -> None:
+        """Check that osascript can send keystrokes via System Events.
+
+        macOS 14+ may silently deny keystroke injection even when the
+        terminal is listed in Accessibility preferences (a re-add often
+        fixes it). This probe warns the user at startup with actionable
+        instructions instead of failing silently on the first button
+        press.
+        """
+        try:
+            proc = subprocess.run(
+                ["osascript", "-e",
+                 'tell application "System Events" to keystroke ""'],
+                capture_output=True, text=True, timeout=10,
+            )
+            if proc.returncode != 0:
+                term = _terminal_name()
+                reason = proc.stderr.strip() or f"exit code {proc.returncode}"
+                log.warning(
+                    "[mac key] osascript keystroke probe failed: %s\n"
+                    "  Grant Accessibility to %s in System Settings > Privacy & Security.\n"
+                    "  If already listed, remove it, re-add it, then restart the terminal.",
+                    reason,
+                    term,
+                )
+        except FileNotFoundError:
+            log.warning("[mac key] osascript not found; key injection unavailable")
+        except subprocess.TimeoutExpired:
+            log.warning("[mac key] osascript keystroke probe timed out")
 
     def emit_key(self, keycodes: list[int]) -> None:
         script = _build_keystroke_script(keycodes)
         if script is None:
             return
-        # Fire and forget: osascript is too slow to block the event loop on
-        # the first call (TCC prompt can take seconds). The key reaches the
-        # focused app a few ms later; the wire protocol doesn't await.
-        subprocess.Popen(
+        proc = subprocess.Popen(
             ["osascript", "-e", script],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
         )
-        log.debug("[mac key] %s", script)
+        _, err = proc.communicate()
+        if err:
+            log.warning("[mac key] osascript stderr: %s", err.strip())
+        else:
+            log.debug("[mac key] %s", script)
 
     # -- pointer / click (Quartz) -------------------------------------------
 
@@ -309,6 +383,11 @@ class MacScrollSink(ScrollSink):
         self._Quartz, self._available = _load_quartz()
         if self._available:
             log.info("[mac scroll] Quartz loaded; wheel events will be injected")
+            log.info(
+                "[mac scroll] macOS 15+ may require Input Monitoring permission "
+                "for %s (System Settings > Privacy & Security > Input Monitoring)",
+                _terminal_name(),
+            )
         else:
             log.warning(
                 "[mac scroll] PyObjC Quartz not available; "

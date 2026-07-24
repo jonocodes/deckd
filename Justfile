@@ -95,7 +95,7 @@ dev:
 # Same as `just dev` but with the plain-HTTP LAN client (no tailscale cert,
 # no sudo). Reachable at http://<host>:5173/ on the LAN; no PWA install
 # prompt (that needs the HTTPS secure context `just dev` provides).
-#   TODO: consider replacing this with overmind/hivemind
+# TODO: consider replacing this with overmind/hivemind
 dev-lan:
     #!/usr/bin/env bash
     set -uo pipefail
@@ -128,12 +128,14 @@ dev-client-lan:
 dev-client-tailscale:
     #!/usr/bin/env bash
     set -euo pipefail
-    host="$(tailscale status --self --json | jq -r .Self.DNSName | sed 's:\.$::')"
+    ts() { local cmd="tailscale"; for c in tailscale /Applications/Tailscale.app/Contents/MacOS/Tailscale; do if command -v "$c" &>/dev/null; then cmd="$c"; break; fi; done; if ! command -v "$cmd" &>/dev/null; then echo "tailscale CLI not found. Install Tailscale or symlink it:" >&2; echo "  sudo ln -s /Applications/Tailscale.app/Contents/MacOS/Tailscale /usr/local/bin/tailscale" >&2; exit 1; fi; echo "$cmd"; }
+    ts="$(ts)"
+    host="$("$ts" status --self --json | jq -r .Self.DNSName | sed 's:\.$::')"
     tls="client/.tls"
     mkdir -p "$tls"
     if [ ! -f "$tls/$host.crt" ] || [ ! -f "$tls/$host.key" ]; then
       echo "Provisioning tailscale cert for $host in $tls/ (requires sudo)..."
-      (cd "$tls" && sudo tailscale cert "$host" && sudo chown "$USER" "$host.crt" "$host.key")
+      (cd "$tls" && sudo "$ts" cert "$host" && sudo chown "$USER" "$host.crt" "$host.key")
     fi
     echo "-> https://$host:5173/"
     cd client && DECKD_TLS_DIR="./.tls" DECKD_TLS_HOST="$host" npm run dev -- --host 0.0.0.0 --strictPort
