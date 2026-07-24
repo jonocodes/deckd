@@ -75,6 +75,35 @@ kill:
         fi
     done
 
+# Run the whole dev stack with one command: the daemon (LAN, restart-on-edit)
+# plus the Vite client (tailscale HTTPS). Ctrl+C — or either process dying —
+# stops both. This replaces the old Procfile
+# (daemon: dev-daemon-lan / client: dev-client-tailscale). For a plain
+# LAN/HTTP client with no cert, run `just dev-lan` instead.
+dev:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    # kill 0 targets this script's process group, so Ctrl+C tears down both
+    # `just` children AND their grandchildren (deckd, node/vite) — no orphans
+    # left holding :8765 / :5173.
+    trap 'kill 0' EXIT
+    just dev-daemon-lan &
+    just dev-client-tailscale &
+    # Fall through (and via the trap, stop the sibling) the moment either exits.
+    wait -n
+
+# Same as `just dev` but with the plain-HTTP LAN client (no tailscale cert,
+# no sudo). Reachable at http://<host>:5173/ on the LAN; no PWA install
+# prompt (that needs the HTTPS secure context `just dev` provides).
+#   TODO: consider replacing this with overmind/hivemind
+dev-lan:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    trap 'kill 0' EXIT
+    just dev-daemon-lan &
+    just dev-client-lan &
+    wait -n
+
 # Run the daemon under a supervisor that restarts it when daemon/**/*.py
 # changes. Layout YAML hot-reload is built into the daemon itself; this is
 # only useful when editing Python.
