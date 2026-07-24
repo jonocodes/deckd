@@ -24,7 +24,7 @@ const LABEL_SCALE_KEY = "deckd.labelScale";
 const WAKE_LOCK_DEFAULT = true;
 
 export const SCROLL_SCALE_MIN = 1;
-export const SCROLL_SCALE_MAX = 10;
+export const SCROLL_SCALE_MAX = 20;
 export const SCROLL_SCALE_DEFAULT = 3;
 
 // Multiplier applied to grid content (button icon + label, in-grid jogstrip)
@@ -70,7 +70,7 @@ export const LABEL_SCALE_DEFAULT = 1.0;
 // is set for phone-thumb-in-hand comfort — feet-away media-room use might
 // want higher, we'll widen if someone asks.
 export const PAD_SENS_MIN = 0.5;
-export const PAD_SENS_MAX = 3.0;
+export const PAD_SENS_MAX = 5.0;
 export const PAD_SENS_STEP = 0.1;
 export const PAD_SENS_DEFAULT = 1.0;
 

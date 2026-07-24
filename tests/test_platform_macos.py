@@ -28,8 +28,8 @@ from deckd.platform_macos import _build_keystroke_script
         ("0", 'tell application "System Events" to keystroke "0"'),
         ("=", 'tell application "System Events" to keystroke "="'),
         ("-", 'tell application "System Events" to keystroke "-"'),
-        ("[", 'tell application "System Events" to keystroke "["'),
-        ("]", 'tell application "System Events" to keystroke "]"'),
+        ("[", 'tell application "System Events" to key code 33'),
+        ("]", 'tell application "System Events" to key code 30'),
     ],
 )
 def test_printable_char_emits_keystroke_literal(combo: str, expected: str) -> None:
@@ -85,15 +85,13 @@ def test_multiple_modifiers_combine_in_order() -> None:
     )
 
 
-def test_super_plus_bracket_uses_literal_keystroke() -> None:
-    """Regression test: ``super+[`` used to log
-    ``no macOS mapping for key 'leftbrace'`` because the keycode
-    reverse-lookup returned the long alias. Now ``name_from_keycode``
-    prefers the single-char form and the script is a clean
-    ``keystroke "["``."""
+def test_super_plus_bracket_uses_key_code() -> None:
+    """``super+[`` now uses ``key code 33`` instead of ``keystroke "["``
+    for layout-independent key injection. The keystroke path broke on
+    non-US keyboard layouts where ``[`` requires Option."""
     script = _build_keystroke_script(parse_key_combo("super+["))
     assert script == (
-        'tell application "System Events" to keystroke "[" '
+        'tell application "System Events" to key code 33 '
         "using {command down}"
     )
 
