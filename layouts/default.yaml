@@ -66,19 +66,16 @@ widgets:
       # Open the auto-detected terminal ($TERMINAL, then a candidate list).
       # For a specific emulator, use e.g. shell: "tilix" instead.
       terminal: true
-  # Send a key combo (issue #16). Commented out — the cell is now home
-  # to the live CPU meter below (same grid slot [2, 2]). Kept here as a
-  # worked example of the ``key`` action; re-enable by removing the
-  # leading ``#``s and moving it to a vacant slot.
-  # - id: send-key-tab
-  #   kind: button
-  #   label: Send Ctrl+T
-  #   icon:
-  #     source: lucide
-  #     name: keyboard
-  #   grid: [2, 2, 1, 1]
-  #   action:
-  #     key: "ctrl+t"
+  # Send a key combo (issue #16): fires ctrl+t to the focused app.
+  - id: send-key-tab
+    kind: button
+    label: Send Ctrl+T
+    icon:
+      source: lucide
+      name: keyboard
+    grid: [2, 1, 1, 1]
+    action:
+      key: "ctrl+t"
   # Audio / VLC media control. Commented out — the cell is now home
   # to the live CPU meter (the audio use case is rare from a phone
   # in practice, and the daemon already sends widget_update frames
@@ -94,26 +91,15 @@ widgets:
   #   grid: [3, 2, 1, 1]
   #   action:
   #     dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
-  # Live system stats (issue #40). Both meters are psutil-backed,
-  # so they work identically on Linux + macOS Intel + Apple Silicon
-  # with no per-platform install step. The daemon pushes
-  # ``widget_update`` frames at each source's poll cadence (1s for
-  # both); the bar fills proportionally between min/max. Tighten the
-  # min/max pair to dial in a narrower "happy" range on the bar —
-  # e.g. ``min: 0, max: 50`` makes the meter turn red sooner on a
-  # workload that should sit under 50% CPU.
-  - id: cpu_percent
-    kind: meter
-    label: CPU
-    source: cpu_percent
-    min: 0
-    max: 100
-    grid: [2, 1, 1, 1]
-  # Combined system stats (issue #40). A bar-less ``stats`` cell showing
-  # several sensor values at once — simpler than the single-value meter
-  # above, and easy to grow: add another entry to ``metrics`` (each names
-  # a daemon-side source; ``label`` is optional and defaults to the source
-  # name, e.g. cpu_percent -> CPU). Sits where the standalone MEM meter was.
+  # Live system stats (issue #40). A bar-less ``stats`` cell showing
+  # several psutil-backed sensor values at once — CPU + memory here — so
+  # they work identically on Linux + macOS Intel + Apple Silicon with no
+  # per-platform install step. The daemon pushes ``widget_update`` frames
+  # at each source's poll cadence (1s). Easy to grow: add another entry to
+  # ``metrics`` (each names a daemon-side source; ``label`` is optional and
+  # defaults to the source name, e.g. cpu_percent -> CPU). For a single
+  # value with a proportional bar instead, use a ``kind: meter`` widget
+  # (see README) bound to one ``source``.
   - id: system
     kind: stats
     label: System
