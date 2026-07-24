@@ -9,6 +9,12 @@ dependencies = [
     "pydantic>=2.6",
     "dbus-fast>=5",
     "watchfiles>=1.0",
+    # psutil backs the daemon's cross-platform sensor sources
+    # (CPU utilization, memory used, CPU frequency, battery).
+    # One pure-Python dep that works on Linux + macOS Intel + Apple
+    # Silicon without per-OS install steps. Wheel-only on every
+    # supported platform; no compile toolchain needed.
+    "psutil>=5.9",
 ]
 
 [project.optional-dependencies]

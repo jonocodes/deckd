@@ -66,6 +66,7 @@ widgets:
       # Open the auto-detected terminal ($TERMINAL, then a candidate list).
       # For a specific emulator, use e.g. shell: "tilix" instead.
       terminal: true
+  # Send a key combo (issue #16): fires ctrl+t to the focused app.
   - id: send-key-tab
     kind: button
     label: Send Ctrl+T
@@ -75,12 +76,36 @@ widgets:
     grid: [2, 1, 1, 1]
     action:
       key: "ctrl+t"
-  - id: audio-toggle
-    kind: button
-    label: VLC Play/Pause
-    icon:
-      source: lucide
-      name: play
+  # Audio / VLC media control. Commented out — the cell is now home
+  # to the live CPU meter (the audio use case is rare from a phone
+  # in practice, and the daemon already sends widget_update frames
+  # for it). Re-enable by removing the leading ``#``s; the grid slot
+  # below is intentionally vacant so adding it back doesn't shift
+  # neighbouring widgets.
+  # - id: audio-toggle
+  #   kind: button
+  #   label: VLC Play/Pause
+  #   icon:
+  #     source: lucide
+  #     name: play
+  #   grid: [3, 2, 1, 1]
+  #   action:
+  #     dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
+  # Live system stats (issue #40). A bar-less ``stats`` cell showing
+  # several psutil-backed sensor values at once — CPU + memory here — so
+  # they work identically on Linux + macOS Intel + Apple Silicon with no
+  # per-platform install step. The daemon pushes ``widget_update`` frames
+  # at each source's poll cadence (1s). Easy to grow: add another entry to
+  # ``metrics`` (each names a daemon-side source; ``label`` is optional and
+  # defaults to the source name, e.g. cpu_percent -> CPU). For a single
+  # value with a proportional bar instead, use a ``kind: meter`` widget
+  # (see README) bound to one ``source``.
+  - id: system
+    kind: stats
+    label: System
     grid: [3, 1, 1, 1]
-    action:
-      dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
+    metrics:
+      - source: cpu_percent
+        label: CPU
+      - source: mem_percent
+        label: MEM

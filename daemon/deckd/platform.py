@@ -28,6 +28,252 @@ class AppInfo:
         return self.app_id or self.wm_class or "unknown"
 
 
+@dataclass(frozen=True)
+class SensorReading:
+    """One sample from a named sensor source.
+
+    ``value`` is the live reading in the unit the source documents
+    (``sensor.unit``). ``stale=True`` marks a reading the source could
+    not refresh (sensor disappeared, permission denied) so the client
+    can render an "unknown" treatment instead of an arbitrary number
+    pinned to the last good value.
+    """
+
+    source: str
+    value: float
+    unit: str
+    stale: bool = False
+
+
+class SensorSource:
+    """Named data source the daemon pushes to the client.
+
+    Sources own their own polling cadence: a thermal-zone reader can
+    re-read ``/sys`` cheaply on every tick, while a D-Bus signal
+    listener just exposes the next event. ``SensorManager`` polls each
+    registered source at its declared ``interval_s``; sources that need
+    event-driven semantics override :meth:`wait_for_next` instead.
+
+    Implementations must be cheap to construct and side-effect-free at
+    construction time — file handles / bus connections open on the
+    first call to :meth:`read`.
+    """
+
+    #: Short, stable identifier the client references (matches the
+    #: ``source`` field on a meter widget in a layout YAML).
+    name: str = ""
+
+    #: Human-readable unit the value is in (e.g. ``"°C"``). Pushed
+    #: alongside the value so the client can render a label without
+    #: hard-coding units per source.
+    unit: str = ""
+
+    #: Default poll cadence the SensorManager uses when no per-widget
+    #: override is in effect. Sources can override per-poll.
+    interval_s: float = 1.0
+
+    def is_available(self) -> bool:
+        """True when the source can produce readings in this environment.
+
+        Checked once at manager start; sources that return False are
+        skipped and their meter widgets render ``stale=True`` forever.
+        The check should be cheap (a stat, an env var read) — no I/O.
+        """
+        return True
+
+    def read(self) -> SensorReading | None:
+        """Return the next reading, or ``None`` to signal "no data".
+
+        ``None`` keeps the manager's last-good value and flips the
+        ``stale`` flag on subsequent pushes. Implementations should
+        swallow their own exceptions and return ``None`` on failure;
+        the manager will log and continue.
+        """
+        raise NotImplementedError
+
+
+class SensorManager:
+    """Owns a set of :class:`SensorSource` instances keyed by name.
+
+    Built once at daemon startup with the platform-default sources.
+    Layouts reference sources by name; the manager hands the same
+    ``SensorReading`` to every subscriber so two meter widgets bound
+    to the same source see one canonical value rather than two
+    polls racing against each other.
+
+    A single :class:`SensorManager` is shared across all sessions
+    (the manager is process-scoped state, not session state). When
+    no meter widget is interested in a source, the manager stops
+    polling it: a phone that's never connected doesn't waste CPU
+    re-reading ``/sys``. Polling resumes the moment any session
+    binds a widget to the source.
+    """
+
+    def __init__(self, sources: list[SensorSource]) -> None:
+        self._sources: dict[str, SensorSource] = {s.name: s for s in sources if s.name}
+        self._last: dict[str, SensorReading] = {}
+        self._subscribers: dict[str, int] = {}  # source -> refcount
+        self._tasks: dict[str, asyncio.Task[None]] = {}
+
+    @property
+    def sources(self) -> list[str]:
+        return list(self._sources)
+
+    def has(self, name: str) -> bool:
+        return name in self._sources
+
+    def is_available(self, name: str) -> bool:
+        src = self._sources.get(name)
+        return src is not None and src.is_available()
+
+    def latest(self, name: str) -> SensorReading | None:
+        return self._last.get(name)
+
+    def subscribe(self, name: str) -> None:
+        """Record one more consumer of ``name``.
+
+        Bumps the refcount; starts the polling task on the 0 -> 1
+        transition. Repeated calls are idempotent — only the first
+        call per source kicks the task off.
+        """
+        if name not in self._sources:
+            return
+        self._subscribers[name] = self._subscribers.get(name, 0) + 1
+        if name not in self._tasks:
+            self._tasks[name] = asyncio.create_task(self._poll_loop(name))
+
+    def unsubscribe(self, name: str) -> None:
+        """Drop one consumer; stop polling when the count hits zero.
+
+        Safe to call more times than :meth:`subscribe`; the count
+        floors at zero. The polling task is cancelled on the 1 -> 0
+        transition; the cached last reading stays so a re-subscribe
+        within the same session doesn't flash ``stale=True``.
+        """
+        if name not in self._sources:
+            return
+        self._subscribers[name] = max(0, self._subscribers.get(name, 0) - 1)
+        if self._subscribers[name] == 0 and name in self._tasks:
+            task = self._tasks.pop(name)
+            task.cancel()
+
+    def start(self) -> None:
+        """No-op retained for symmetry with :meth:`stop`.
+
+        Sources are started lazily on :meth:`subscribe` so a process
+        with no meter subscribers never opens a file handle.
+        """
+        return None
+
+    def stop(self) -> None:
+        for task in self._tasks.values():
+            task.cancel()
+        self._tasks.clear()
+
+    async def _poll_loop(self, name: str) -> None:
+        src = self._sources[name]
+        interval = max(0.05, src.interval_s)
+        while True:
+            try:
+                reading = src.read()
+            except Exception as exc:  # sources should swallow, but be defensive
+                log.warning("sensor %s raised: %s", name, exc)
+                reading = None
+            if reading is None:
+                last = self._last.get(name)
+                if last is not None and not last.stale:
+                    self._last[name] = SensorReading(
+                        source=name, value=last.value, unit=last.unit, stale=True
+                    )
+            else:
+                self._last[name] = reading
+            try:
+                await asyncio.sleep(interval)
+            except asyncio.CancelledError:
+                return
+
+
+# ---------------------------------------------------------------------------
+# psutil-backed sensor sources
+# ---------------------------------------------------------------------------
+#
+# We deliberately dropped the per-platform CPU-temperature readers
+# (``/sys/class/thermal`` on Linux, ``osx-cpu-temp`` / ``istats`` shell-outs
+# on macOS) in favour of metrics psutil exposes identically on every
+# platform: CPU utilisation, memory usage, CPU frequency, battery.
+# The trade-off is documented in ``README.md``; the short version is
+# that Apple Silicon doesn't expose a stable, unprivileged CPU
+# temperature API, and shelling out for one-off helper binaries is a
+# support liability that buys us nothing the user can't see in
+# Activity Monitor / ``top``.
+#
+# ``psutil.cpu_percent(interval=None)`` is the canonical non-blocking
+# form: it returns the delta between this call and the previous one,
+# so a 1s poll cadence gives a fresh per-second percentage. The
+# first call returns 0.0 (no baseline yet) — that's correct, not a
+# bug.
+
+
+class PsutilCpuPercentSensorSource(SensorSource):
+    """Whole-system CPU utilisation in percent, via ``psutil``.
+
+    Returns a value in ``[0, 100]`` (well, sometimes briefly above
+    on busy multi-core systems where psutil's normalisation hasn't
+    settled — the meter cell clamps the bar to 100% anyway). The
+    interval is ``1.0s`` to match psutil's standard semantics:
+    ``cpu_percent(interval=None)`` is delta-since-last-call, so the
+    delta window equals the poll cadence. Setting the source
+    interval below ~0.5s makes the numbers jittery because the
+    sampling window gets too short to be statistically meaningful.
+    """
+
+    name = "cpu_percent"
+    unit = "%"
+    interval_s = 1.0
+
+    def is_available(self) -> bool:
+        return True
+
+    def read(self) -> SensorReading | None:
+        try:
+            import psutil
+
+            value = psutil.cpu_percent(interval=None)
+        except Exception:
+            return None
+        # First call after daemon start returns 0.0 (no baseline).
+        # We surface that as a normal reading — the bar shows 0%
+        # for one second, which is honest.
+        return SensorReading(source=self.name, value=float(value), unit=self.unit)
+
+
+class PsutilMemoryPercentSensorSource(SensorSource):
+    """System memory usage in percent, via ``psutil.virtual_memory``.
+
+    This is the ``used / total`` ratio on Linux and macOS. On Windows
+    it follows the same definition. The value is a snapshot — no
+    sampling window needed — so the interval can be as fast as we
+    like; ``1.0s`` is the conservative default that keeps a meter's
+    transition animation readable.
+    """
+
+    name = "mem_percent"
+    unit = "%"
+    interval_s = 1.0
+
+    def is_available(self) -> bool:
+        return True
+
+    def read(self) -> SensorReading | None:
+        try:
+            import psutil
+
+            value = psutil.virtual_memory().percent
+        except Exception:
+            return None
+        return SensorReading(source=self.name, value=float(value), unit=self.unit)
+
+
 class PlatformBackend:
     async def start(self) -> None:
         """Acquire any long-lived resources (a D-Bus bus name, a session
@@ -405,6 +651,31 @@ def default_backend() -> PlatformBackend:
     if _is_kde_wayland_session():
         return KdeFocusBackend()
     return GnomeShellFocusBackend()
+
+
+def default_sensor_manager() -> "SensorManager":
+    """Build the platform-default :class:`SensorManager`.
+
+    Every source here is psutil-backed, so the same set works on
+    Linux, macOS Intel, and Apple Silicon without per-OS install
+    steps or shell-outs. We register every source the manager knows
+    about; per-widget subscriptions are gated by
+    :meth:`SensorSource.is_available` so a sensor that can't read
+    (e.g. ``battery`` on a desktop) just stays quiet rather than
+    spamming None.
+
+    Trade-off documented in README.md: dropping CPU temperature
+    because Apple Silicon doesn't expose one without root + a
+    privileged helper + a parser for Apple's undocumented format.
+    CPU utilisation and memory percent cover the same "is the box
+    healthy" use case and work everywhere.
+    """
+    return SensorManager(
+        [
+            PsutilCpuPercentSensorSource(),
+            PsutilMemoryPercentSensorSource(),
+        ]
+    )
 
 
 def _is_kde_wayland_session() -> bool:

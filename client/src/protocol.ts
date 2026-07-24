@@ -4,15 +4,33 @@
  * renders a placeholder for an unknown source. */
 export type Icon = { source: string; name: string };
 
+/** One data point of a ``stats`` widget: a sensor ``source`` plus an
+ * optional short caption. When ``label`` is absent the client derives one
+ * from the source name (``cpu_percent`` → ``CPU``). */
+export type Metric = { source: string; label?: string | null };
+
 export type Widget = {
   id: string;
-  kind: "button" | "jogstrip" | "trackpad";
+  kind: "button" | "jogstrip" | "trackpad" | "meter" | "stats";
   label?: string | null;
   icon?: Icon | null;
   grid: [number, number, number, number];
   /** Optional CSS colour string; applied as the button's background. */
   color?: string | null;
   action?: Record<string, unknown> | null;
+  /**
+   * Meter-only: the daemon-side sensor source name the widget
+   * subscribes to (e.g. ``"cpu_percent"``, ``"mem_percent"``). Opaque
+   * to the client — the daemon validates it; unknown sources just
+   * leave the widget stale.
+   */
+  source?: string | null;
+  /** Meter-only: lower bound of the bar's visible range. */
+  min?: number | null;
+  /** Meter-only: upper bound of the bar's visible range. */
+  max?: number | null;
+  /** Stats-only: the data points to display, one compact row each. */
+  metrics?: Metric[] | null;
 };
 
 export type ServerLayout = {
@@ -38,6 +56,19 @@ export type ServerLayout = {
 
 export type ServerState = { type: "state"; locked: boolean };
 export type ServerBrightness = { type: "brightness"; value: number };
+/** Live value for a meter widget (issue #40). Pushed at the sensor's
+ * poll cadence; the client renders the bar + numeric readout from
+ * ``value`` / ``unit``. ``stale=true`` means the source could not
+ * refresh — the UI keeps the last known position but stops claiming
+ * the value is fresh. */
+export type ServerWidgetUpdate = {
+  type: "widget_update";
+  id: string;
+  source: string;
+  value: number;
+  unit: string;
+  stale: boolean;
+};
 /** Sent by the daemon to a non-loopback client whose ``hello`` omitted or
  * got the shared password wrong (issue #16); the socket is closed straight
  * after. The client swaps in the password prompt. */
@@ -46,6 +77,7 @@ export type ServerMessage =
   | ServerLayout
   | ServerState
   | ServerBrightness
+  | ServerWidgetUpdate
   | ServerError;
 
 export type ClientHello = {

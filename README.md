@@ -308,6 +308,8 @@ Tailscale is **not** running an application proxy — `tailscale serve status` w
 
 That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws` (Vite's port), not `:8765` (daemon's port).
 
+**Troubleshooting — page loads but `wss://…:5173/ws` won't connect and no password prompt appears.** This is almost always the daemon being down, not a cert problem: the page loads over HTTPS (so the cert is fine, and `wss://` reuses it), but Vite's `/ws` proxy has no upstream to forward to, so the socket is dropped mid-handshake. Because the auth exchange never completes, the client never receives the `unauthorized` frame and the password gate never renders — it just loops on reconnect. Check `curl -s http://127.0.0.1:8765/health`; if it fails, (re)start the daemon. Note the password lives in per-origin `localStorage`, so entering it once at `localhost:5173` does **not** carry over to the `<host>.ts.net:5173` origin — enter it again there. If the daemon itself won't start, it now fails fast with `cannot bind 127.0.0.1:8765 — another process is already listening there` (usually a stale `deckd`); clear it with `pkill -f bin/deckd` and relaunch.
+
 **Contrast:** `tailscale serve` **(persistent URL, no dev server).** If you want an installable PWA at `https://<host>.<tailnet>.ts.net/` (no port, works without any process running on the desktop besides the daemon), that's a different setup — `just build-client` + `just run-daemon` + `tailscale serve --bg 8765`. Tailscale proxies `:443 → 127.0.0.1:8765`, the daemon serves the built `client/dist/`. You lose HMR but gain a URL that survives closing your dev terminals. Not covered by any `just` recipe yet — file an issue if you want one.
 
 ### Client chrome
@@ -643,6 +645,47 @@ The password is a shared secret over a plaintext WebSocket — it gates access, 
 The daemon also loads a sibling directory next to `--layouts-dir` whose name is suffixed with the current platform: `layouts.macos/` on macOS, `layouts.linux/` on Linux. A missing overlay is fine (the most common case). Overlay entries load first and **replace** any base entry with the same `id` — so `layouts.macos/firefox.yaml` overrides `layouts/firefox.yaml` on Mac without you touching the shared base. The watcher also watches the overlay dir, so edits reload live. Pass `--no-overlay` to skip the overlay even when it exists (debugging, cross-platform checkout debugging, etc.).
 
 This is how `layouts.macos/firefox.yaml` carries the `super+t` / `super+[` / `super+]` shortcuts without forking the rest of `firefox.yaml` for every Linux user who pulls the repo.
+
+### Live widgets (the `meter` kind)
+
+A layout can include widgets that display values pushed by the daemon in real time. Today the only kind is `meter` (a numeric readout with a horizontal bar). It looks like a button in the grid, doesn't react to taps, and renders the value the daemon keeps pushing on the bound sensor source.
+
+```yaml
+- id: cpu_percent
+  kind: meter
+  label: CPU
+  icon:
+    source: lucide
+    name: cpu
+  source: cpu_percent  # daemon-side sensor name
+  min: 0               # bar's left edge (default 0)
+  max: 100             # bar's right edge (default 100)
+  grid: [2, 2, 1, 1]
+```
+
+The daemon polls the bound sensor on a timer and pushes a `widget_update` WebSocket frame every time the value changes (or the source flips stale). The bar fills proportionally between `min` and `max` and is color-graded cool→hot so a glance tells you whether the number is OK before you read it.
+
+Built-in sensors (all psutil-backed — see "Why no CPU temperature?" below for the rationale):
+
+| Source         | What it shows                  | How                                              | Poll   |
+|----------------|--------------------------------|--------------------------------------------------|--------|
+| `cpu_percent`  | Whole-system CPU utilisation   | `psutil.cpu_percent(interval=None)` — delta since the last call. The first reading is `0.0` (no baseline); subsequent readings land in `[0, 100]`. | 1s     |
+| `mem_percent`  | Memory used / total            | `psutil.virtual_memory().percent`                 | 1s     |
+| *(more TBD)*   | CPU frequency, battery, swap   | `psutil.cpu_freq()`, `psutil.sensors_battery()`, `psutil.swap_memory()` — all the same API. Open to contributions. | varies |
+
+#### Why no CPU temperature?
+
+We deliberately don't ship a `cpu_temp` source. The short version is that **Apple Silicon doesn't expose a stable, unprivileged CPU temperature API**:
+
+- `psutil.sensors_temperatures()` has **no macOS backend at all** (verified against the upstream source — there's no IOKit call, no SMC probe, no entitlement handling).
+- `osx-cpu-temp` (Homebrew, ~100 lines of C) and `istats` (the `iStats` Ruby gem) both read classic Intel SMC keys (`TC0P`, `TC0D`, `TC0E`). Apple Silicon uses a completely different sensor namespace that Apple doesn't document and that changes per SoC generation; the brew arm64 bottle exists because the binary compiles and runs, not because it returns valid temperature data.
+- The only reliable M-series source is Apple's own `sudo powermetrics`, which requires root, an undocumented/unstable output format, and either a privileged helper or interactive sudo prompts.
+
+Net result: a cross-platform `cpu_temp` source would either silently fail on most Apple Silicon Macs (deceptive) or require a deployment story heavier than the rest of deckd put together (overkill). `cpu_percent` and `mem_percent` cover the same "is the box healthy" use case and work on every Linux + every macOS without any per-OS install step. Users who really want CPU temp on Linux specifically can keep a custom layout pointing at `/sys/class/thermal` (we removed the in-tree reader because nothing on macOS could share the code path; bringing it back is a small PR).
+
+The meter rendering is a regular cell in the grid (it picks up `--content-scale` and the user's Button-size preference like every other widget). When the daemon hasn't pushed a value yet, the cell renders "—" with the bar at 0% and a dashed border so you can see at a glance it's waiting.
+
+Try it without sensors: `?demo=meter` loads a backend-free demo with seeded CPU%/MEM% values so you can see the meter without a running daemon.
 
 ## Under the hood
 

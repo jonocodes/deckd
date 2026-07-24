@@ -754,3 +754,191 @@ button:focus-visible { outline: none; }
 .settings-logout:active {
   background: #3a1c20;
 }
+
+/* ---------------------------------------------------------------------------
+ * Meter widget (issue #40): a live value with a horizontal bar that fills
+ * proportionally to the value. Visually parallel to a button cell so it
+ * reads as a first-class grid citizen; the bar gives a glance-readable
+ * "is this OK" answer before the user reads the number.
+ *
+ * Layout:
+ *   ┌────────────────────────┐
+ *   │  [icon]                │
+ *   │      58                │  <- .meter-readout (big number + unit)
+ *   │      °C                │
+ *   │  ▰▰▰▰▰▰▰▱▱▱           │  <- .meter-bar (track + fill)
+ *   │      CPU               │  <- .meter-label (caption)
+ *   └────────────────────────┘
+ *
+ * Color-graded fill (cool blue → green → red) is applied inline by the
+ * component; the track stays neutral so the fill stands out.
+ * ------------------------------------------------------------------------- */
+
+.cell-meter {
+  background: #1b222a;
+  border: 1px solid #2a333d;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 12px;
+  /* Meter cells aren't pressable — they're informational. Block the
+     default tap-highlight from breaking the visual rest state. */
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  text-align: center;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Stale treatment: dim the border + background so a meter that hasn't
+ * seen a fresh push reads as "waiting" rather than asserting a live
+ * number. The numeric readout dims further in MeterCell. */
+.cell-meter-stale {
+  border-style: dashed;
+  border-color: #2a333d;
+  background: #161b21;
+}
+
+.cell-meter .icon {
+  width: calc(clamp(20px, 5vw, 28px) * var(--content-scale));
+  height: calc(clamp(20px, 5vw, 28px) * var(--content-scale));
+  color: currentColor;
+  align-self: center;
+}
+
+.meter-readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 3px;
+  line-height: 1;
+  min-height: 0;
+  min-width: 0;
+}
+
+.meter-value {
+  /* Big enough to read at arm's length on a phone; not so big it pushes
+     the bar off-cell on a 1x1 grid slot. Scales with content-scale so
+     the user's Button-size setting covers this too. */
+  font-size: calc(clamp(20px, 5vw, 30px) * var(--content-scale));
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.meter-unit {
+  font-size: calc(clamp(11px, 1.6vw, 14px) * var(--content-scale));
+  color: #7a8590;
+  font-weight: 500;
+}
+
+.meter-bar {
+  /* Track: a thin neutral bar across the cell. Fill painted inline by
+     the component. The track is left visible at 0% fill so the bar
+     still reads as "a meter" even before the first push lands. */
+  position: relative;
+  height: calc(8px * var(--content-scale));
+  background: #2a333d;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.meter-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  /* Soft transition so a 1s polling cadence reads as a smooth crawl
+     rather than a stutter step. 250ms is short enough that an abrupt
+     value change still snaps visually. */
+  transition: width 250ms ease, background 250ms ease;
+  /* Subtle inner glow makes the fill pop against the dark track. The
+     glow is dark-mode-friendly (no white halo) and stays at a fixed
+     color so a fill at any hue reads consistently. */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.meter-label {
+  /* Caption under the bar — same scale rules as button labels so the
+     caption stays in step with the rest of the grid's text. */
+  font-size: calc(clamp(9px, 1.5vw, 12px) * var(--content-scale) * var(--label-scale, 1));
+  font-weight: 600;
+  line-height: 1.2;
+  color: #7a8590;
+  word-break: break-word;
+}
+
+/* Stats cell: a compact multi-value readout. Shares the meter cell's chrome
+ * (background, border, radius, non-pressable) but stacks "LABEL value" rows
+ * instead of a single big number + bar, so 2–4 data points fit one grid slot.
+ *
+ * Layout:
+ *   ┌────────────────────────┐
+ *   │  System                │  <- .stats-title (optional caption)
+ *   │  CPU              58 %  │  <- .stats-row (label ....... value unit)
+ *   │  MEM              41 %  │
+ *   └────────────────────────┘
+ */
+.cell-stats {
+  background: #1b222a;
+  border: 1px solid #2a333d;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.stats-title {
+  color: #7a8590;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.stats-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+}
+
+.stats-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  line-height: 1.1;
+}
+
+.stats-row-label {
+  font-size: calc(clamp(10px, 1.6vw, 13px) * var(--content-scale) * var(--label-scale, 1));
+  font-weight: 600;
+  color: #7a8590;
+  letter-spacing: 0.02em;
+}
+
+.stats-row-value {
+  font-size: calc(clamp(14px, 2.4vw, 20px) * var(--content-scale));
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.stats-row-unit {
+  font-size: 0.6em;
+  color: #7a8590;
+  font-weight: 500;
+  margin-left: 2px;
+}
+

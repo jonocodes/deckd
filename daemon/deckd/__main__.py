@@ -7,10 +7,12 @@ import signal
 import sys
 from pathlib import Path
 
+from aiohttp import web
+
 from .auth import PasswordError, default_password_path, load_or_create_password
 from .input import LoggingKeySink, LoggingScrollSink, ScrollController, UinputSink
-from .platform import default_backend
-from .server import Server
+from .platform import default_backend, default_sensor_manager
+from .server import PortInUseError, Server
 
 
 async def _run(server: Server) -> None:
@@ -166,15 +168,35 @@ def main() -> None:
         focus_backend=focus_backend,
         overlay_dir=overlay_dir,
         password=password,
+        sensor_manager=default_sensor_manager(),
     )
 
     if args.client_dist is not None:
-        server.app.router.add_static("/", args.client_dist, show_index=True, append_version=False)
-        async def spa(_req):
-            return _req.response(200, text=(args.client_dist / "index.html").read_text(), content_type="text/html")
-        server.app.router.add_get("/{path:^(?!ws$|health$|.+\\..+$).*}", spa)
+        index_text = (args.client_dist / "index.html").read_text()
 
-    asyncio.run(_run(server))
+        async def spa(_req):
+            # SPA fallback: serve the built index.html for any path
+            # without a file extension that isn't a reserved route
+            # (``/ws``, ``/health``, ``/reload``, ``/layout/...``).
+            return web.Response(text=index_text, content_type="text/html")
+
+        # Register the SPA routes BEFORE add_static so they win the
+        # match for ``/`` and other extension-less paths. ``add_static``
+        # would otherwise claim ``/`` first and return a directory
+        # listing, breaking ``/?demo=meter``-style entry points.
+        server.app.router.add_get("/", spa)
+        server.app.router.add_get(
+            "/{path:^(?!ws$|health$|reload$|layout($|/)).+}", spa
+        )
+        server.app.router.add_static("/", args.client_dist, show_index=False, append_version=False)
+
+    try:
+        asyncio.run(_run(server))
+    except PortInUseError as exc:
+        # Fail fast with the actionable message instead of a raw asyncio
+        # traceback ending in OSError: [Errno 98].
+        logging.getLogger("deckd").error("%s", exc)
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

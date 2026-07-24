@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerMessage } from "./protocol";
+import type { ClientMessage, ServerLayout, ServerMessage, ServerWidgetUpdate } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
 
 // localStorage key for the remote-client shared password (issue #16). The
 // ``deckd.*`` namespace is shared with the per-device settings store.
 const PASSWORD_KEY = "deckd.password";
+
+// Application-defined WebSocket close code the daemon uses to signal an auth
+// rejection (must match server.py WS_CLOSE_UNAUTHORIZED). Keying off the close
+// code makes the gate robust to browsers dropping the rejection data frame.
+const UNAUTHORIZED_CLOSE_CODE = 4401;
 
 function loadStoredPassword(): string {
   try {
@@ -36,7 +41,8 @@ function readPinnedLayout(): string {
 }
 
 export function useDeckdSocket(
-  onLayout: (m: Extract<ServerMessage, { type: "layout" }>) => void,
+  onLayout: (m: ServerLayout) => void,
+  onWidgetUpdate: (m: ServerWidgetUpdate) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -96,6 +102,7 @@ export function useDeckdSocket(
         try {
           const msg = JSON.parse(ev.data) as ServerMessage;
           if (msg.type === "layout") onLayout(msg);
+          else if (msg.type === "widget_update") onWidgetUpdate(msg);
           else if (msg.type === "error" && msg.reason === "unauthorized") {
             // Wrong/absent password: stop reconnecting and prompt the user.
             unauthorizedRef.current = true;
@@ -107,7 +114,16 @@ export function useDeckdSocket(
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
+        // Dedicated "unauthorized" close code (see daemon WS_CLOSE_UNAUTHORIZED).
+        // Browsers can drop the app-level rejection frame when the daemon closes
+        // right after sending it, so the onmessage handler above may never fire;
+        // the close code survives that race, so treat it as the gate trigger too.
+        if (ev.code === UNAUTHORIZED_CLOSE_CODE) {
+          unauthorizedRef.current = true;
+          setStatus("unauthorized");
+          return;
+        }
         if (stopped || unauthorizedRef.current) {
           if (!unauthorizedRef.current) setStatus("closed");
           return;
@@ -129,7 +145,7 @@ export function useDeckdSocket(
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onLayout, enabled, gen]);
+  }, [onLayout, onWidgetUpdate, enabled, gen]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;
