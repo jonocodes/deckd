@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from .platform import AppInfo
 
@@ -46,7 +46,22 @@ class Action(BaseModel):
     key: str | None = None
     shell: str | None = None
     dbus: str | None = None
-    terminal: bool | str | None = None
+    # ``terminal: true`` opens the auto-detected terminal emulator ($TERMINAL,
+    # then a candidate list). It intentionally does NOT take a command string:
+    # to launch a specific program use ``shell:`` (which is fire-and-forget),
+    # so there's exactly one way to launch a named program.
+    terminal: bool | None = None
+
+    @field_validator("terminal", mode="before")
+    @classmethod
+    def _reject_terminal_string(cls, v: object) -> object:
+        if isinstance(v, str):
+            raise ValueError(
+                "the 'terminal' action no longer takes a command string; use "
+                "'terminal: true' to open the auto-detected terminal, or "
+                f"'shell: \"{v}\"' to launch that program directly"
+            )
+        return v
 
 
 class Layout(BaseModel):

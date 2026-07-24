@@ -173,3 +173,36 @@ async def test_malformed_dbus_action_logged_and_ignored(
     assert factory.buses == []
     # And the error was logged
     assert any(rec.levelno >= logging.WARNING for rec in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# Shell action: fire-and-forget launcher (does not block on the child).
+# ---------------------------------------------------------------------------
+
+
+async def test_run_shell_does_not_wait_for_the_child() -> None:
+    """A button press returns immediately; a long-running child must not
+    block the dispatch coroutine."""
+    import time
+
+    from deckd.actions import _run_shell
+
+    start = time.monotonic()
+    await _run_shell("sleep 5")
+    elapsed = time.monotonic() - start
+    assert elapsed < 1.0, f"_run_shell blocked for {elapsed:.2f}s"
+
+
+async def test_run_shell_start_failure_is_logged(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A spawn failure (OSError) is caught and logged, never raised."""
+    import deckd.actions as actions_mod
+
+    async def boom(*_a, **_k):
+        raise OSError("nope")
+
+    monkeypatch.setattr(actions_mod.asyncio, "create_subprocess_shell", boom)
+    with caplog.at_level(logging.ERROR, logger="deckd.actions"):
+        await actions_mod._run_shell("whatever")
+    assert any(rec.levelno >= logging.ERROR for rec in caplog.records)

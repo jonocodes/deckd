@@ -31,20 +31,21 @@ def _resolve_terminal() -> str | None:
     return None
 
 
-async def run_terminal(target: bool | str = True) -> None:
-    if isinstance(target, str):
-        cmd = target
-        if not shutil.which(cmd.split()[0]):
-            log.warning("[terminal] %r not on $PATH", cmd)
-            return
-        await _run_shell(f"{cmd} &")
+async def run_terminal(target: bool = True) -> None:
+    """Open the auto-detected terminal emulator.
+
+    Only ``terminal: true`` is meaningful; a specific program should be
+    launched with a ``shell:`` action instead (the layout schema rejects a
+    string ``terminal`` value at load time). ``target`` is anything other
+    than ``True`` is a no-op.
+    """
+    if target is not True:
         return
-    if target is True:
-        cmd = _resolve_terminal()
-        if cmd is None:
-            log.warning("[terminal] no terminal emulator found; set $TERMINAL")
-            return
-        await _run_shell(f"{cmd} &")
+    cmd = _resolve_terminal()
+    if cmd is None:
+        log.warning("[terminal] no terminal emulator found; set $TERMINAL")
+        return
+    await _run_shell(cmd)
 
 
 @dataclass
@@ -80,19 +81,27 @@ async def execute(
 
 
 async def _run_shell(command: str) -> None:
+    """Launch ``command`` via the shell, detached and fire-and-forget.
+
+    A button press must return immediately whether it launched a GUI app or
+    a one-shot command, so we do NOT wait for the child to exit. stdin/stdout/
+    stderr are discarded and the child runs in its own session (``setsid``) so
+    it outlives the daemon and isn't tied to the daemon's process group. The
+    trade-off is that a non-zero exit is not observable — that's inherent to
+    fire-and-forget; use it to launch things, not to run commands you need the
+    result of.
+    """
     log.info("[shell] %s", command)
     try:
-        proc = await asyncio.create_subprocess_shell(
+        await asyncio.create_subprocess_shell(
             command,
+            stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=True,
         )
     except OSError as exc:
         log.error("[shell] failed to start %r: %s", command, exc)
-        return
-    rc = await proc.wait()
-    if rc != 0:
-        log.warning("[shell] %s exited rc=%s", command, rc)
 
 
 async def _dispatch_key(key_string: str, ctx: ActionContext) -> None:

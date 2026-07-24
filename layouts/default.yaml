@@ -8,7 +8,7 @@ widgets:
     icon:
       source: lucide
       name: file-code
-    color: "#1e328a"
+    color: "#2e328a"
     grid: [0, 0, 1, 1]
     action:
       shell: code
@@ -31,7 +31,7 @@ widgets:
     color: "#6d28c8"
     grid: [2, 0, 1, 1]
     action:
-      terminal: "xterm"
+      shell: "md.obsidian.Obsidian"
   - id: thunderbird
     kind: button
     # label: Thunderbird
@@ -41,7 +41,7 @@ widgets:
     color: "#0A84FF"
     grid: [3, 0, 1, 1]
     action:
-      terminal: "Thunderbird"
+      shell: "Thunderbird"
 
   - id: open-url
     kind: button
@@ -63,17 +63,9 @@ widgets:
     color: "#6b0101"
     grid: [1, 1, 1, 1]
     action:
-      terminal: "tilix"
-  # - id: xterm
-  #   kind: button
-  #   label: xterm
-  #   icon:
-  #     source: lucide
-  #     name: terminal
-  #   color: "#5b5b5c"
-  #   grid: [1, 1, 1, 1]
-  #   action:
-  #     terminal: "xterm"
+      # Open the auto-detected terminal ($TERMINAL, then a candidate list).
+      # For a specific emulator, use e.g. shell: "tilix" instead.
+      terminal: true
   - id: send-key-tab
     kind: button
     label: Send Ctrl+T

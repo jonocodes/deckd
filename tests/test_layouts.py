@@ -390,6 +390,44 @@ widgets:
         load_layouts(tmp_path)
 
 
+def test_action_terminal_true_parses(tmp_path: Path) -> None:
+    """``terminal: true`` opens the auto-detected emulator and loads fine."""
+    body = """
+match:
+  - default
+widgets:
+  - id: term
+    kind: button
+    grid: [0, 0, 1, 1]
+    action:
+      terminal: true
+"""
+    _write(tmp_path, "default.yaml", body)
+    store = load_layouts(tmp_path)
+    assert store.default().widgets[0].action.terminal is True
+
+
+def test_action_terminal_string_rejected_with_guidance(tmp_path: Path) -> None:
+    """A command string on ``terminal`` is a load error that points the user
+    at ``terminal: true`` or a ``shell:`` action (issue: shell/terminal split)."""
+    body = """
+match:
+  - default
+widgets:
+  - id: term
+    kind: button
+    grid: [0, 0, 1, 1]
+    action:
+      terminal: "tilix"
+"""
+    _write(tmp_path, "default.yaml", body)
+    with pytest.raises(SystemExit) as exc:
+        load_layouts(tmp_path)
+    msg = str(exc.value)
+    assert "terminal: true" in msg
+    assert 'shell: "tilix"' in msg
+
+
 # ---------------------------------------------------------------------------
 # Platform overlay
 #

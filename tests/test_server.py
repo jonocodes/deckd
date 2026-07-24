@@ -123,12 +123,13 @@ widgets:
     assert any(kind == "terminal" for kind, _ in called)
 
 
-async def test_press_terminal_explicit(srv: ServerHandle) -> None:
+async def test_press_terminal_true(srv: ServerHandle) -> None:
+    """A ``terminal: true`` widget dispatches to the auto-detect terminal."""
     async with ws_connected(srv) as (ws, _):
-        await ws.send(json.dumps({"type": "press", "id": "xterm"}))
+        await ws.send(json.dumps({"type": "press", "id": "open-terminal"}))
         await asyncio.sleep(SIDE_EFFECT_WAIT)
 
-    assert ("terminal", "xterm") in srv.called
+    assert ("terminal", "True") in srv.called
 
 
 # ---------------------------------------------------------------------------

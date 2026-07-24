@@ -17,12 +17,12 @@ widgets:
     grid: [0, 0, 1, 1]
     action:
       shell: "xdg-open https://example.com"
-  - id: xterm
+  - id: open-terminal
     kind: button
-    label: xterm
+    label: Terminal
     grid: [1, 0, 1, 1]
     action:
-      terminal: "xterm"
+      terminal: true
   - id: send-key
     kind: button
     label: Send Ctrl+T
