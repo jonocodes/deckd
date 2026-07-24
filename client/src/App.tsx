@@ -200,6 +200,7 @@ export function App() {
         </span>
         <button
           className={`chrome-btn${view === "trackpad" ? " chrome-btn-active" : ""}`}
+          aria-label="manual control"
           onPointerDown={() => setView(view === "trackpad" ? "layout" : "trackpad")}
         >
           <PointerIcon size={18} />

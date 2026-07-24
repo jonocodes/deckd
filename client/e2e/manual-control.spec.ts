@@ -14,7 +14,9 @@ const KEY_UP = 103;
 const KEY_LEFT = 105;
 
 async function enterManualControl(page: Page) {
-  await page.locator("button", { hasText: "manual control" }).click();
+  // The manual-control toggle is an icon-only chrome button; it exposes its
+  // accessible name via aria-label rather than visible text.
+  await page.getByRole("button", { name: "manual control" }).click();
   await page.locator(".manual-control").waitFor();
 }
 
@@ -31,7 +33,7 @@ async function raiseIme(page: Page) {
 test.describe("manual control (issue #23 merge) — full pipeline against a logging-sink daemon", () => {
   test("manual control chrome button is visible on every client (no touch gate)", async ({ page }) => {
     await page.goto("/index.html", { waitUntil: "networkidle" });
-    await expect(page.locator("button", { hasText: "manual control" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "manual control" })).toHaveCount(1);
   });
 
   test("entering manual control shows the strip (6 key buttons + IME toggle) and trackpad", async ({
@@ -213,7 +215,7 @@ test.describe("manual control (issue #23 merge) — full pipeline against a logg
     const ctx = await browser.newContext({ viewport: { width: 420, height: 800 } });
     const page = await ctx.newPage();
     await page.goto("/index.html", { waitUntil: "networkidle" });
-    await expect(page.locator("button", { hasText: "manual control" })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "manual control" })).toHaveCount(1);
     await ctx.close();
   });
 

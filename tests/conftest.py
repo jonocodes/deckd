@@ -18,7 +18,11 @@ from deckd.input import ScrollController
 from deckd.platform import AppInfo
 from deckd.server import Server
 
-LAYOUTS_DIR = Path(__file__).parent.parent / "layouts"
+# Stable fixture layouts for the server behaviour tests. Deliberately NOT the
+# shipping ``layouts/`` dir — that's a user-editable file whose widget ids and
+# app-badge fields drift, which would (and did) break tests that assert on
+# specific widgets. A separate smoke test loads the real layouts.
+LAYOUTS_DIR = Path(__file__).parent / "fixtures" / "layouts"
 
 
 # ---------------------------------------------------------------------------

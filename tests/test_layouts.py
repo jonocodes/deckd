@@ -547,3 +547,24 @@ def test_overlay_dir_preserves_arbitrary_base_name(monkeypatch, tmp_path: Path) 
     base = tmp_path / "my-configs" / "deckd-layouts"
     base.parent.mkdir()
     assert _overlay_dir_for(base) == base.parent / "deckd-layouts.macos"
+
+
+# ---------------------------------------------------------------------------
+# Smoke test: the real shipping layouts must actually load.
+#
+# The server behaviour tests run against a stable fixture layout dir
+# (tests/fixtures/layouts) so they don't break when the user edits their
+# personal layouts. This test is the counterweight — it loads the real
+# ``layouts/`` dir so a broken shipping layout is still caught somewhere.
+# ---------------------------------------------------------------------------
+
+
+REPO_LAYOUTS_DIR = Path(__file__).parent.parent / "layouts"
+
+
+def test_shipping_layouts_load_and_resolve_default() -> None:
+    store = load_layouts(REPO_LAYOUTS_DIR)
+    # A default layout must exist with at least one widget, and every shipped
+    # layout must carry a non-empty match list (that's what makes it findable).
+    default = store.default()
+    assert default.widgets, "shipping default.yaml has no widgets"

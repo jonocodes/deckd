@@ -1,0 +1,40 @@
+# Stable fixture layout for the daemon's WebSocket/HTTP behaviour tests.
+#
+# These tests assert on specific widget ids and action shapes, so they must
+# NOT depend on the shipping ``layouts/default.yaml`` (a user-editable file
+# that legitimately drifts). Keep the widget ids and actions below in sync
+# with the assertions in tests/test_server.py, not with the real layout.
+#
+# Intentionally omits ``display_name`` / ``theme`` / ``icon`` so the app-badge
+# fields serialise as null (test_layout_message_app_badge_null_when_omitted),
+# and omits ``jogstrip`` so it defaults to true.
+match:
+  - default
+widgets:
+  - id: open-url
+    kind: button
+    label: Open URL
+    grid: [0, 0, 1, 1]
+    action:
+      shell: "xdg-open https://example.com"
+  - id: xterm
+    kind: button
+    label: xterm
+    grid: [1, 0, 1, 1]
+    action:
+      terminal: "xterm"
+  - id: send-key
+    kind: button
+    label: Send Ctrl+T
+    grid: [2, 0, 1, 1]
+    action:
+      key: "ctrl+t"
+  - id: audio-toggle
+    kind: button
+    label: VLC Play/Pause
+    grid: [3, 0, 1, 1]
+    action:
+      dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
+  - id: scroll-strip
+    kind: jogstrip
+    grid: [0, 1, 4, 1]

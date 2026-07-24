@@ -1,0 +1,17 @@
+# Stable fixture layout used by the layout-override tests (POST /layout/firefox).
+# See fixtures/layouts/default.yaml for why these are separate from the
+# shipping layouts. The override tests assert the ``back`` widget is present.
+match:
+  - firefox
+display_name: Firefox
+theme: "#ff7139"
+icon:
+  source: simple-icons
+  name: firefox
+widgets:
+  - id: back
+    kind: button
+    label: Back
+    grid: [0, 0, 1, 1]
+    action:
+      key: "alt+Left"
