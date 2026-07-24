@@ -37,6 +37,9 @@ export function useDeckdSocket(
   // Held in a ref so a reconnect (bumping ``gen``) always sends the latest
   // password without re-subscribing every consumer of the hook.
   const passwordRef = useRef<string>(loadStoredPassword());
+  // Reactive mirror of "do we have a stored password" so the Settings panel
+  // can show/hide the log-out control.
+  const [hasPassword, setHasPassword] = useState(() => !!passwordRef.current);
   // Latches when the daemon answers ``unauthorized`` so ``onclose`` stops the
   // reconnect loop — otherwise we'd hammer the daemon with bad credentials.
   const unauthorizedRef = useRef(false);
@@ -124,12 +127,25 @@ export function useDeckdSocket(
   const authenticate = useCallback((password: string) => {
     passwordRef.current = password;
     storePassword(password);
+    setHasPassword(!!password);
     unauthorizedRef.current = false;
     backoffRef.current = 500;
     setGen((g) => g + 1);
   }, []);
 
-  return { status, send, authenticate };
+  // Forget the stored password and reconnect with none — the daemon (auth on)
+  // then rejects and the gate reappears. A no-op-looking reconnect if the
+  // daemon runs --no-auth (nothing to log out of).
+  const deauthenticate = useCallback(() => {
+    passwordRef.current = "";
+    storePassword("");
+    setHasPassword(false);
+    unauthorizedRef.current = false;
+    backoffRef.current = 500;
+    setGen((g) => g + 1);
+  }, []);
+
+  return { status, send, authenticate, deauthenticate, hasPassword };
 }
 
 function resolve_ws_url(): string {

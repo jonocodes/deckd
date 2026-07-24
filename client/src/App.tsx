@@ -49,9 +49,8 @@ export function App() {
   const [layout, setLayout] = useState<ServerLayout | null>(demoLayout);
   const [view, setView] = useState<View>("layout");
   const onLayout = useCallback((m: ServerLayout) => setLayout(m), []);
-  const { status, send, authenticate } = useDeckdSocket(onLayout, {
-    enabled: !demoLayout,
-  });
+  const { status, send, authenticate, deauthenticate, hasPassword } =
+    useDeckdSocket(onLayout, { enabled: !demoLayout });
   // Track whether we've already handed the socket a password this session, so
   // the gate can say "incorrect" on a repeat rejection rather than on first
   // contact (where the stored password was simply empty).
@@ -154,6 +153,12 @@ export function App() {
               onBottomScaleChange={bottomScale.setScale}
               labelScale={labelScale.scale}
               onLabelScaleChange={labelScale.setScale}
+              canDeauthenticate={hasPassword}
+              onDeauthenticate={() => {
+                setAttemptedAuth(false);
+                setView("layout");
+                deauthenticate();
+              }}
             />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">

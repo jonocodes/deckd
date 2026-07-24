@@ -42,6 +42,10 @@ type Props = {
   onBottomScaleChange: (n: number) => void;
   labelScale: number;
   onLabelScaleChange: (n: number) => void;
+  /** True when a password is stored, so the log-out control is worth showing. */
+  canDeauthenticate?: boolean;
+  /** Forget the stored password and drop back to the gate. */
+  onDeauthenticate?: () => void;
 };
 
 type Health = {
@@ -72,6 +76,8 @@ export function Settings({
   onBottomScaleChange,
   labelScale,
   onLabelScaleChange,
+  canDeauthenticate,
+  onDeauthenticate,
 }: Props) {
   const orientation = useOrientation();
   const standalone = useStandaloneMode();
@@ -217,6 +223,21 @@ export function Settings({
           onChange={onWakeLockChange}
         />
       </div>
+
+      {canDeauthenticate && onDeauthenticate ? (
+        <>
+          <h2 className="settings-title settings-title-sub">Connection</h2>
+          <div className="settings-controls">
+            <button
+              type="button"
+              className="settings-logout"
+              onClick={onDeauthenticate}
+            >
+              Log out (forget password)
+            </button>
+          </div>
+        </>
+      ) : null}
 
       <h2 className="settings-title settings-title-sub">Diagnostics</h2>
       <dl className="settings-list">
