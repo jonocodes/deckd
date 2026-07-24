@@ -74,6 +74,10 @@ class Session:
     def __init__(self, ws: web.WebSocketResponse, server: "Server") -> None:
         self.ws = ws
         self.server = server
+        # Demo pin (``?layout=<name>`` in the client URL): when set to a loaded
+        # layout id, this session always renders that layout and ignores
+        # focus-driven changes. None = normal focus-following behaviour.
+        self.pinned_layout_id: str | None = None
 
     @property
     def app_id(self) -> str:
@@ -84,7 +88,17 @@ class Session:
 
     async def push_current(self) -> None:
         layout = self.server.current_layout
+        app_id = self.server.current_app_id
         error = self.server.current_error
+        # Pinned demo session: render the named layout regardless of host focus.
+        # Re-resolved from the store each push, so a layout-file edit + reload
+        # refreshes the pinned view; if the layout was removed on reload, fall
+        # back to the focus-driven layout above.
+        pin = self.pinned_layout_id
+        if pin is not None and pin in self.server.layouts:
+            layout = self.server.layouts[pin]
+            app_id = pin
+            error = None
         # Chrome app badge fields are relayed from the active layout even in
         # the error path: the bottom chrome remains the chrome, and a branded
         # badge is more useful than a bare match token while the user fixes
@@ -92,7 +106,7 @@ class Session:
         # can fall back to it when ``display_name`` is None.
         icon = p.Icon.model_validate(layout.icon.model_dump()) if layout.icon else None
         common = dict(
-            app=self.server.current_app_id,
+            app=app_id,
             jogstrip_enabled=layout.jogstrip,
             display_name=layout.display_name,
             theme=layout.theme,
@@ -358,22 +372,45 @@ class Server:
             return True
         return self._check_password(req.headers.get(PASSWORD_HEADER))
 
-    async def _authenticate_ws(self, ws: web.WebSocketResponse) -> bool:
+    async def _authenticate_ws(self, ws: web.WebSocketResponse) -> dict | None:
         """Read the first frame and require it to be a ``hello`` carrying the
-        correct password."""
+        correct password. Returns the parsed hello (so the caller can apply a
+        demo pin) on success, or ``None`` when auth fails."""
         try:
             msg = await asyncio.wait_for(ws.receive(), timeout=WS_AUTH_TIMEOUT_S)
         except (asyncio.TimeoutError, ConnectionError):
-            return False
+            return None
         if msg.type != WSMsgType.TEXT:
-            return False
+            return None
         try:
             data = json.loads(msg.data)
         except json.JSONDecodeError:
-            return False
+            return None
         if data.get("type") != "hello":
+            return None
+        if not self._check_password(data.get("password")):
+            return None
+        return data
+
+    def _pin_session(self, session: "Session", data: dict) -> bool:
+        """Apply the ``?layout=<name>`` demo pin from a hello frame. Returns
+        True if the session's pin changed (so the caller re-pushes). An unknown
+        or absent name is a no-op — the session keeps following focus. The name
+        is resolved leniently (id / display_name / any match token,
+        case-insensitively) so friendly names like ``tilix`` work even when the
+        layout id is a reverse-DNS token like ``com.gexperts.Tilix``."""
+        name = data.get("layout")
+        if not isinstance(name, str) or not name:
             return False
-        return self._check_password(data.get("password"))
+        layout_id = self.layouts.resolve_id(name)
+        if layout_id is None:
+            log.warning("ignoring unknown demo pin layout: %s", name)
+            return False
+        if session.pinned_layout_id == layout_id:
+            return False
+        session.pinned_layout_id = layout_id
+        log.info("session pinned to layout %s (demo, requested %r)", layout_id, name)
+        return True
 
     # -- routes / lifecycle --------------------------------------------------
 
@@ -451,13 +488,17 @@ class Server:
         # Clients must authenticate before we add the session or leak any
         # layout. The authenticating ``hello`` frame is consumed here;
         # subsequent frames flow through the normal dispatch loop.
+        session = Session(ws, self)
         if self._auth_required:
-            if not await self._authenticate_ws(ws):
+            hello = await self._authenticate_ws(ws)
+            if hello is None:
                 log.info("ws auth failed from %s; closing", req.remote)
                 await ws.send_json({"type": "error", "reason": "unauthorized"})
                 await ws.close()
                 return ws
-        session = Session(ws, self)
+            # Auth consumed the hello, so apply its demo pin before the initial
+            # push. (No-auth clients' hellos arrive via _dispatch instead.)
+            self._pin_session(session, hello)
         self._sessions.add(session)
         log.info(
             "client connected (%d, app=%s)", len(self._sessions), self._current_app_id
@@ -482,6 +523,10 @@ class Server:
         msg_type = data.get("type")
         if msg_type == "hello":
             log.info("client hello (token=%s)", bool(data.get("token")))
+            # No-auth path: the hello arrives here (after the initial push), so
+            # applying a demo pin needs a re-push to switch this client over.
+            if self._pin_session(session, data):
+                await session.push_current()
             return
         if msg_type == "jog":
             msg = p.JogMessage.model_validate(data)

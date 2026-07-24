@@ -4,19 +4,26 @@ App-aware touch control surface for your desktop. A Stream Deck-like deck of but
 
 ## Uses
 
-- Get custom controls for each app you are using
-- Expose hotkeys for launching apps, or keyboard shortcuts
+- Control your desktop from your phone, or tablet, or laptop
 - Control multiple computers from one surface
-- Control your desktop from your laptop, phone, or tablet
 - Control slides/presentations
-- Use as a mouse, scrollbar, and keyboard controller
-- Voice typing
+- Get custom controls for each app you are using
+- Automatically switch display depending on which app is active
+- Expose hotkeys for launching apps, or keyboard shortcuts
+- Use phone as a mouse, scrollbar, and keyboard controller
+- Voice typing from your phone to desktop
+
 
 ## Screenshots
+
 
 ### Home launcher
 
 ![home launcher](docs/screenshot-home.png)
+
+### Portrait phone view
+
+![home portrait](docs/screenshot-portrait.png)
 
 ### Firefox
 
@@ -28,7 +35,7 @@ App-aware touch control surface for your desktop. A Stream Deck-like deck of but
 
 ## Status
 
-Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's still planned — as features, not tickets.
+Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's still planned.
 
 **Working today**
 
@@ -37,13 +44,14 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Button styling** — bundled icons (Lucide glyphs + Simple Icons brand logos) and per-button background colours, set in YAML.
 - [x] **Scroll strip** — an always-on right-side jogstrip to scroll the focused window, with release momentum.
 - [x] **Manual control mode** — the phone becomes a trackpad (move, tap, right-click, drag-lock) and a keyboard, so you can type into and point at the focused app for the things layouts don't cover (URL bars, chat boxes, ad-hoc commands).
-- [x] **App badge** — the focused app's name, icon, and accent colour show in the bottom bar so you can tell at a glance what you're controlling.
+- [x] **App badge** — the focused app's name, icon, and accent color show in the bottom bar so you can tell at a glance what you're controlling.
 - [x] **Live layout editing** — edit a layout file on the desktop and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
 - [x] **Keep screen awake** while the surface is in use.
 - [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
 - [x] **Password auth** — every client authenticates with a shared password (on by default; `--no-auth` disables it for local development). See [Client auth](#client-auth).
-- [x] **Runs on GNOME (Wayland), KDE Plasma (Wayland), any X11 desktop, and macOS.**
+- [x] **Runs on Linux: GNOME (Wayland), KDE Plasma (Wayland), X11**
+- [x] **Runs on MacOS (barely tested)**
 
 **Planned**
 
@@ -56,7 +64,19 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [ ] **Raise or switch to an already-running app** from the controller.
 - [ ] **Multi-daemon chooser** — pair and pick between several desktops.
 - [ ] **GUI layout editor** — build layouts without hand-editing YAML.
-- [ ] **Windows support.**
+- [ ] **Windows support**
+- [ ] **Packing and deployment**
+
+## Inspiration
+
+- [Steam Deck](https://www.elgato.com/us/en/s/explore-stream-deck)
+- [KDE Connect](https://kdeconnect.kde.org/)
+- [Apple Touch Bar](https://support.apple.com/guide/mac-help/use-the-touch-bar-mchlbfd5b039/mac)
+- [Remote Touchpad](https://github.com/Unrud/remote-touchpad)
+- [OpenDeck](https://github.com/nekename/OpenDeck#showcase)
+- [Boatswain](https://flathub.org/en/apps/com.feaneron.Boatswain)
+
+## Architecture
 
 ```
                         ┌──────────┐
@@ -110,7 +130,6 @@ layouts/           Per-app YAML layouts (default.yaml + one per app)
 scripts/smoke.py   End-to-end test that boots the daemon over WS, clicks every button
 docs/INCEPTION.md  Full design doc — source of truth for *what* and *why*
 ```
-
 
 
 ## Running deckd
@@ -237,7 +256,7 @@ Open `http://<desktop-lan-ip>:8765` on the phone, for example `http://192.168.30
 
 The client can be viewed and design-iterated without a running daemon:
 
-- **Demo mode** — append `?demo=<name>` to the client URL (`firefox`, `default`, or `showcase`) to render a fixture layout with the WebSocket disabled. The `showcase` fixture exercises every icon path (Lucide glyphs, Simple Icons brand logos, per-button colour, a no-icon button, and the unknown-icon placeholder). Dev-only; adds no cost when the param is absent.
+- **Demo mode** — append `?demo=<name>` to the client URL (`firefox`, `default`, or `showcase`) to render a fixture layout with the WebSocket disabled. The `showcase` fixture exercises every icon path (Lucide glyphs, Simple Icons brand logos, per-button colour, a no-icon button, and the unknown-icon placeholder). Dev-only; adds no cost when the param is absent. (For forcing a *real* daemon layout with a live backend, use the per-client `?layout=<name>` pin — see [Layout override](#dev-ux-auto-ignore--layout-override).)
 - **Responsive gallery** — `cd client && npm run dev`, then open `/gallery.html`. Renders the real client in phone / large-phone / 7" / 10"-tablet iframes at once, with layout and orientation selectors — for checking how a layout reads across screen sizes. Dev-only entry, not in the production build.
 - **Ladle** (component workbench) — `cd client && npm run ladle`. Browse `ButtonGrid` / `Icon` / `JogStrip` stories in isolation with width/theme controls, plus `Surface → Device sizes` stories that render the grid in fixed phone/tablet frames (size + orientation) for a quick per-component resolution check. Stories live in `src/*.stories.tsx` (Storybook-compatible CSF).
 - **Lint** — `cd client && npm run lint` (ESLint flat config; `npm run build` still runs `tsc --noEmit`).
@@ -565,7 +584,9 @@ deckctl layout default    # back to the default layout
 deckctl layout nonexistent  # error: unknown layout (exit 1)
 ```
 
-This hits `POST /layout/<name>` on the daemon. The override is **not sticky**: the next genuine (non-deckd-window) focus change clears it and normal focus-driven switching resumes.
+This hits `POST /layout/<name>` on the daemon. The override is **global** (every connected client) and **not sticky**: the next genuine (non-deckd-window) focus change clears it and normal focus-driven switching resumes.
+
+**Per-client pin (`?layout=<name>`).** For a demo device you want to park on one view, append `?layout=<name>` to the client URL (e.g. `?layout=tilix`). The client sends the name in its `hello` frame and the daemon pins **just that session** to the named layout, ignoring host focus and unaffected by other clients — so a window switch on the host won't move it. The name is matched case-insensitively against each layout's id, `display_name`, or any `match` token, so `?layout=tilix` finds the layout even though its id is the reverse-DNS token `com.gexperts.Tilix`. The pin lives in the URL (survives reload) and re-resolves from disk on `deckctl reload`; an unknown name is ignored and the client follows focus as normal. This is the backend-driven counterpart to the backend-free `?demo=<name>` fixtures (see [Design tooling](#design-tooling-no-daemon-required)) — `?layout=` serves the *real* daemon layouts, so it never drifts.
 
 ### Smoke test
 
@@ -593,8 +614,6 @@ DECKD_PASSWORD="$PW" deckctl --host desktop.tailnet.ts.net layout firefox
 
 When the daemon runs with auth on, the control endpoints (`/reload`, `/layout`) require the password — supply it with `--password` or the `DECKD_PASSWORD` env var. `deckctl` deliberately does **not** read the daemon's password file itself (it may be pointed at a remote daemon whose file it can't see). `deckctl status` hits `/health`, which is left open, so it always works. For frictionless local work, run the daemon with `--no-auth`.
 
-
-
 ## Configuration
 
 A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Shipped layouts today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), a `grid: [x, y, w, h]` placement, an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. A layout may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `LayoutMessage`. A layout may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:
@@ -614,7 +633,7 @@ Every client authenticates with a single shared password. There is **no** source
 - **First start.** If the file is absent, the daemon generates a random 32-char password, writes it (mode `0640`), and logs it **once** at WARN with a `SAVE THIS — it won't be shown again` header. It's never logged again.
 - **Pre-existing file.** Respected verbatim. Set your own before first start with `pwgen 32 | tee ~/.config/deckd/password && chmod 640 ~/.config/deckd/password`. The daemon **refuses to start** if the file exists but is unreadable or more permissive than `0640`, logging the path and reason.
 - **On the client.** A client that connects without (or with the wrong) password lands on a password screen; entering the password connects and the browser remembers it (localStorage). There's no QR, token file, or URL query param.
-- **`/health` stays open** even with auth on — it's a read-only diagnostic the Settings panel fetches, and `deckctl status` relies on it.
+- `/health` **stays open** even with auth on — it's a read-only diagnostic the Settings panel fetches, and `deckctl status` relies on it.
 - **Rotation** is out of scope: edit the file and restart the daemon.
 
 The password is a shared secret over a plaintext WebSocket — it gates access, it does not encrypt the link. Keep the daemon on a trusted network (see the security note above).

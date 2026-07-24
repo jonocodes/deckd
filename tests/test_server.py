@@ -252,6 +252,82 @@ async def test_layout_override_unknown_name_returns_error(srv: ServerHandle) -> 
 
 
 # ---------------------------------------------------------------------------
+# Demo pin (``?layout=<name>``): the client carries the name in its ``hello``
+# frame and the daemon pins THAT session to the named layout, regardless of
+# host focus, without affecting other clients. Backend-driven sibling of the
+# backend-free ``?demo=`` fixture path.
+# ---------------------------------------------------------------------------
+
+
+async def test_demo_pin_switches_session_to_named_layout(srv: ServerHandle) -> None:
+    async with websockets.connect(srv.ws_url) as ws:
+        initial = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        assert initial["app"] == "default"
+        # No-auth path: the hello arrives after the initial push, so the daemon
+        # re-pushes the pinned layout.
+        await ws.send(
+            json.dumps({"type": "hello", "client": "web", "layout": "firefox"})
+        )
+        pinned = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+
+    assert pinned["app"] == "firefox"
+    assert "back" in [w["id"] for w in pinned["widgets"]]
+    # The pin is per-session: global focus state is untouched.
+    assert srv.server.current_app_id == "default"
+
+
+async def test_demo_pin_survives_layout_broadcast(srv: ServerHandle) -> None:
+    """A global override (or focus change) must not move a pinned session."""
+    async with websockets.connect(srv.ws_url) as ws:
+        await asyncio.wait_for(ws.recv(), timeout=2)  # initial default
+        await ws.send(
+            json.dumps({"type": "hello", "client": "web", "layout": "firefox"})
+        )
+        assert json.loads(await asyncio.wait_for(ws.recv(), timeout=2))["app"] == "firefox"
+
+        # Broadcast a switch to default; the pinned client re-resolves to its
+        # own layout instead of following.
+        async with aiohttp.ClientSession() as http:
+            async with http.post(f"{srv.http_url}/layout/default") as r:
+                assert (await r.json())["ok"] is True
+
+        pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+
+    assert pushed["app"] == "firefox"
+
+
+async def test_demo_pin_resolves_friendly_name_case_insensitively(
+    srv: ServerHandle,
+) -> None:
+    """``?layout=`` need not be the exact id — a case-insensitive display_name
+    or match token resolves too (so ``tilix`` works, not just its id)."""
+    async with websockets.connect(srv.ws_url) as ws:
+        await asyncio.wait_for(ws.recv(), timeout=2)  # initial default
+        await ws.send(
+            json.dumps({"type": "hello", "client": "web", "layout": "Firefox"})
+        )
+        pinned = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+
+    assert pinned["app"] == "firefox"
+
+
+async def test_demo_pin_unknown_name_is_ignored(srv: ServerHandle) -> None:
+    """An unknown pin is a no-op; the session keeps following focus."""
+    async with websockets.connect(srv.ws_url) as ws:
+        await asyncio.wait_for(ws.recv(), timeout=2)  # initial default
+        await ws.send(
+            json.dumps({"type": "hello", "client": "web", "layout": "nonexistent"})
+        )
+        # No re-push for an unknown pin. A subsequent broadcast is followed,
+        # proving the session was never pinned.
+        async with aiohttp.ClientSession() as http:
+            await http.post(f"{srv.http_url}/layout/firefox")
+        pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+
+    assert pushed["app"] == "firefox"
+
+
+# ---------------------------------------------------------------------------
 # Persistent jogstrip flag in LayoutMessage (T6/issue #12)
 #
 # The daemon adds ``jogstrip_enabled`` to every LayoutMessage: True by

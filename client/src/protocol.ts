@@ -54,6 +54,9 @@ export type ClientHello = {
   token?: string;
   /** Shared password for remote clients; omitted on loopback (issue #16). */
   password?: string;
+  /** Demo pin from the ``?layout=<name>`` URL param: forces this session to
+   * the named daemon layout regardless of host focus. Omitted when absent. */
+  layout?: string;
 };
 export type ClientPress = { type: "press"; id: string };
 export type ClientJog = { type: "jog"; id: string; delta: number };

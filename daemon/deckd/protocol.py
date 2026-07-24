@@ -58,6 +58,10 @@ class HelloMessage(BaseModel):
     # on; validated by the server before the hello frame reaches ``_dispatch``.
     # Omitted only when the daemon was started with --no-auth.
     password: str | None = None
+    # Optional demo pin (``?layout=<name>`` in the client URL): forces this one
+    # session to the named layout regardless of host focus, so a demo device can
+    # be parked on a view. Ignored if the name doesn't match a loaded layout.
+    layout: str | None = None
 
 
 class PressMessage(BaseModel):

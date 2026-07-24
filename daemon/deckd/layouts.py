@@ -140,6 +140,26 @@ class LayoutStore:
                 return layout
         raise KeyError(layout_id)
 
+    def resolve_id(self, name: str) -> str | None:
+        """Map a human-supplied name to a canonical layout id, or None.
+
+        Used by the ``?layout=<name>`` demo pin, where the obvious thing to
+        type is a friendly name rather than the primary match token that
+        happens to be the id. Tries an exact id match first, then a
+        case-insensitive match against each layout's id, its ``display_name``,
+        and any of its match tokens — so ``tilix`` resolves the layout whose
+        id is ``com.gexperts.Tilix`` (display_name ``Tilix``).
+        """
+        for layout in self._layouts:
+            if layout.id == name:
+                return layout.id
+        lowered = name.casefold()
+        for layout in self._layouts:
+            candidates = (layout.id, layout.display_name, *layout.match)
+            if any(c and c.casefold() == lowered for c in candidates):
+                return layout.id
+        return None
+
     def default(self) -> Layout:
         for layout in self._layouts:
             if "default" in layout.match:

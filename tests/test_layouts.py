@@ -236,6 +236,30 @@ widgets:
     assert store["code"].match == ["code", "code-insiders"]
 
 
+def test_resolve_id_maps_friendly_names_to_canonical_id(tmp_path: Path) -> None:
+    """The ``?layout=`` demo pin resolves friendly names case-insensitively
+    against id / display_name / match tokens, so ``tilix`` finds the layout
+    whose id is the reverse-DNS token ``com.gexperts.Tilix``."""
+    body = """
+match:
+  - com.gexperts.Tilix
+  - Tilix
+display_name: Tilix
+widgets:
+  - id: split
+    kind: button
+    label: split
+    grid: [0, 0, 1, 1]
+"""
+    _write(tmp_path, "tilix.yaml", body)
+    store = load_layouts(tmp_path)
+    canonical = "com.gexperts.Tilix"
+    assert store.resolve_id(canonical) == canonical  # exact id
+    assert store.resolve_id("tilix") == canonical  # display_name, case-folded
+    assert store.resolve_id("Tilix") == canonical  # match token
+    assert store.resolve_id("nonexistent") is None
+
+
 # ---------------------------------------------------------------------------
 # Persistent jogstrip flag (T6/issue #12)
 #

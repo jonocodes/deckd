@@ -24,6 +24,17 @@ function storePassword(value: string): void {
   }
 }
 
+// Demo pin: ``?layout=<name>`` forces this client to a named daemon layout
+// regardless of host focus (see demo.ts for the backend-free ``?demo=``
+// sibling). Read once at load; the daemon ignores an unknown name.
+function readPinnedLayout(): string {
+  try {
+    return new URLSearchParams(window.location.search).get("layout") ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export function useDeckdSocket(
   onLayout: (m: Extract<ServerMessage, { type: "layout" }>) => void,
   options: { enabled?: boolean } = {},
@@ -71,10 +82,12 @@ export function useDeckdSocket(
         setStatus("open");
         backoffRef.current = 500;
         const password = passwordRef.current;
+        const pinnedLayout = readPinnedLayout();
         const hello: ClientMessage = {
           type: "hello",
           client: "web",
           ...(password ? { password } : {}),
+          ...(pinnedLayout ? { layout: pinnedLayout } : {}),
         };
         ws.send(JSON.stringify(hello));
       };

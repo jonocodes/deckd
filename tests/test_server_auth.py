@@ -86,6 +86,26 @@ async def test_ws_no_auth_configured_needs_no_password() -> None:
             assert layout["type"] == "layout"
 
 
+async def test_ws_demo_pin_applies_on_authenticated_hello() -> None:
+    """The auth path consumes the hello, so the ``?layout=`` demo pin is applied
+    from it before the initial push — the first frame is already the pin."""
+    async with _serve(password=PASSWORD) as (port, _):
+        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            await ws.send(
+                json.dumps(
+                    {
+                        "type": "hello",
+                        "client": "web",
+                        "password": PASSWORD,
+                        "layout": "firefox",
+                    }
+                )
+            )
+            layout = await _recv(ws)
+            assert layout["app"] == "firefox"
+            assert "back" in [w["id"] for w in layout["widgets"]]
+
+
 # ---------------------------------------------------------------------------
 # HTTP control endpoints
 # ---------------------------------------------------------------------------
