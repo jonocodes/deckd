@@ -1,10 +1,8 @@
 """Shared-password auth for remote deckd clients (issue #16).
 
-Local (loopback) connections stay unauthenticated; the server exempts
-``127.0.0.1`` / ``::1`` on both the WebSocket and the HTTP control
-endpoints (see ``Server``). Remote clients present a single shared
-password stored in plaintext at ``~/.config/deckd/password`` (mode
-``0640``).
+Every client presents a single shared password (there is no source-address
+exemption; see ``Server`` for the check). The password is stored in plaintext
+at ``~/.config/deckd/password`` (mode ``0640``).
 
 This module owns exactly one concern: producing that password value at
 startup. It either reads a pre-existing file (refusing to start on

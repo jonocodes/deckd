@@ -54,9 +54,9 @@ class HelloMessage(BaseModel):
     type: Literal["hello"]
     client: str = "web"
     token: str | None = None
-    # Shared password for remote (non-loopback) clients (issue #16). Loopback
-    # connections may omit it. Validated by the server before the hello frame
-    # reaches ``_dispatch``.
+    # Shared password (issue #16). Required whenever the daemon runs with auth
+    # on; validated by the server before the hello frame reaches ``_dispatch``.
+    # Omitted only when the daemon was started with --no-auth.
     password: str | None = None
 
 

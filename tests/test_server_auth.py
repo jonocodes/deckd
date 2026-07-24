@@ -1,10 +1,10 @@
-"""Remote-client password auth at the WS + HTTP boundary (issue #16).
+"""Shared-password auth at the WS + HTTP boundary (issue #16).
 
-The daemon binds to 127.0.0.1 in tests, so ``request.remote`` is always
-loopback. To exercise the *remote* path we monkeypatch ``_is_loopback``
-to report ``False`` — that's the one seam between "who is calling" and
-"do they need a password", and faking it is equivalent to a genuine
-non-loopback peer.
+The model is deliberately simple: when a password is configured, EVERY
+WebSocket and HTTP control connection must present it — there is no
+source-address (loopback) exemption. The password rides in the ``hello``
+frame / the ``X-Deckd-Password`` header, so this stays correct behind any
+proxy. ``--no-auth`` (password=None) turns it off entirely.
 """
 from __future__ import annotations
 
@@ -24,15 +24,10 @@ PASSWORD = "s3cret-shared-password"
 
 
 @asynccontextmanager
-async def _serve(
-    *, password: str | None, loopback: bool
-) -> AsyncIterator[tuple[int, object]]:
+async def _serve(*, password: str | None) -> AsyncIterator[tuple[int, object]]:
     server, _scroll, _key, _dbus = make_test_server(
         layouts_dir=LAYOUTS_DIR, password=password
     )
-    # Force every request onto the remote (or loopback) path regardless of
-    # the real 127.0.0.1 peer address.
-    server._is_loopback = lambda _req: loopback  # type: ignore[assignment]
     ts = TestServer(server.app, host="127.0.0.1")
     await ts.start_server()
     try:
@@ -51,30 +46,28 @@ async def _recv(ws, timeout: float = 2.0) -> dict:
 # ---------------------------------------------------------------------------
 
 
-async def test_ws_remote_without_password_rejected() -> None:
-    async with _serve(password=PASSWORD, loopback=False) as (port, _):
+async def test_ws_without_password_rejected() -> None:
+    async with _serve(password=PASSWORD) as (port, _):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             await ws.send(json.dumps({"type": "hello", "client": "web"}))
-            msg = await _recv(ws)
-            assert msg == {"type": "error", "reason": "unauthorized"}
+            assert await _recv(ws) == {"type": "error", "reason": "unauthorized"}
             with pytest.raises(websockets.ConnectionClosed):
                 await _recv(ws)
 
 
-async def test_ws_remote_with_wrong_password_rejected() -> None:
-    async with _serve(password=PASSWORD, loopback=False) as (port, _):
+async def test_ws_with_wrong_password_rejected() -> None:
+    async with _serve(password=PASSWORD) as (port, _):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             await ws.send(
                 json.dumps({"type": "hello", "client": "web", "password": "nope"})
             )
-            msg = await _recv(ws)
-            assert msg == {"type": "error", "reason": "unauthorized"}
+            assert await _recv(ws) == {"type": "error", "reason": "unauthorized"}
             with pytest.raises(websockets.ConnectionClosed):
                 await _recv(ws)
 
 
-async def test_ws_remote_with_correct_password_accepted() -> None:
-    async with _serve(password=PASSWORD, loopback=False) as (port, _):
+async def test_ws_with_correct_password_accepted() -> None:
+    async with _serve(password=PASSWORD) as (port, _):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             await ws.send(
                 json.dumps({"type": "hello", "client": "web", "password": PASSWORD})
@@ -84,19 +77,11 @@ async def test_ws_remote_with_correct_password_accepted() -> None:
             assert len(layout["widgets"]) > 0
 
 
-async def test_ws_loopback_needs_no_password() -> None:
-    async with _serve(password=PASSWORD, loopback=True) as (port, _):
-        async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            # Loopback pushes the layout immediately; hello may follow.
-            layout = await _recv(ws)
-            assert layout["type"] == "layout"
-            await ws.send(json.dumps({"type": "hello", "client": "web"}))
-
-
 async def test_ws_no_auth_configured_needs_no_password() -> None:
-    """With no password set, even a 'remote' peer connects freely."""
-    async with _serve(password=None, loopback=False) as (port, _):
+    """With --no-auth (password=None) the hello need carry nothing."""
+    async with _serve(password=None) as (port, _):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            await ws.send(json.dumps({"type": "hello", "client": "web"}))
             layout = await _recv(ws)
             assert layout["type"] == "layout"
 
@@ -106,8 +91,8 @@ async def test_ws_no_auth_configured_needs_no_password() -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_http_remote_without_password_is_401() -> None:
-    async with _serve(password=PASSWORD, loopback=False) as (port, _):
+async def test_http_without_password_is_401() -> None:
+    async with _serve(password=PASSWORD) as (port, _):
         async with aiohttp.ClientSession() as http:
             async with http.post(f"http://127.0.0.1:{port}/reload") as r:
                 assert r.status == 401
@@ -115,16 +100,16 @@ async def test_http_remote_without_password_is_401() -> None:
                 assert r.status == 401
 
 
-async def test_http_remote_with_wrong_password_is_401() -> None:
-    async with _serve(password=PASSWORD, loopback=False) as (port, _):
+async def test_http_with_wrong_password_is_401() -> None:
+    async with _serve(password=PASSWORD) as (port, _):
         headers = {"X-Deckd-Password": "wrong"}
         async with aiohttp.ClientSession() as http:
             async with http.post(f"http://127.0.0.1:{port}/reload", headers=headers) as r:
                 assert r.status == 401
 
 
-async def test_http_remote_with_correct_password_ok() -> None:
-    async with _serve(password=PASSWORD, loopback=False) as (port, _):
+async def test_http_with_correct_password_ok() -> None:
+    async with _serve(password=PASSWORD) as (port, _):
         headers = {"X-Deckd-Password": PASSWORD}
         async with aiohttp.ClientSession() as http:
             async with http.post(f"http://127.0.0.1:{port}/reload", headers=headers) as r:
@@ -135,21 +120,31 @@ async def test_http_remote_with_correct_password_ok() -> None:
                 assert r.status == 200
 
 
-async def test_http_loopback_needs_no_password() -> None:
-    async with _serve(password=PASSWORD, loopback=True) as (port, _):
+async def test_http_no_auth_configured_needs_no_password() -> None:
+    async with _serve(password=None) as (port, _):
         async with aiohttp.ClientSession() as http:
             async with http.post(f"http://127.0.0.1:{port}/reload") as r:
                 assert r.status == 200
 
 
+async def test_health_is_open_even_with_auth_on() -> None:
+    """/health is the one endpoint left unauthenticated (read-only)."""
+    async with _serve(password=PASSWORD) as (port, _):
+        async with aiohttp.ClientSession() as http:
+            async with http.get(f"http://127.0.0.1:{port}/health") as r:
+                assert r.status == 200
+                body = await r.json()
+    assert body["ok"] is True
+
+
+# ---------------------------------------------------------------------------
+# The password value must never appear in post-startup logs.
+# ---------------------------------------------------------------------------
+
+
 async def test_password_value_never_logged_after_startup(caplog) -> None:
-    """Acceptance: the daemon never logs the password value at any level
-    while handling connections. Only the one-time generation WARN (which
-    lives in ``auth``, not exercised here) may contain it."""
-    async with _serve(password=PASSWORD, loopback=False) as (port, _):
+    async with _serve(password=PASSWORD) as (port, _):
         with caplog.at_level("DEBUG", logger="deckd"):
-            # A rejected attempt (wrong password) and an accepted one both
-            # touch the auth path; neither should echo the secret.
             async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
                 await ws.send(
                     json.dumps({"type": "hello", "client": "web", "password": "wrong"})
@@ -171,15 +166,3 @@ async def test_password_value_never_logged_after_startup(caplog) -> None:
         assert PASSWORD not in record.getMessage(), (
             f"password leaked in {record.levelname} log: {record.getMessage()!r}"
         )
-
-
-async def test_loopback_addr_classification() -> None:
-    from deckd.server import _is_loopback_addr
-
-    assert _is_loopback_addr("127.0.0.1") is True
-    assert _is_loopback_addr("::1") is True
-    assert _is_loopback_addr("::ffff:127.0.0.1") is True
-    assert _is_loopback_addr("192.168.1.5") is False
-    assert _is_loopback_addr("10.0.0.1") is False
-    assert _is_loopback_addr(None) is False
-    assert _is_loopback_addr("not-an-ip") is False

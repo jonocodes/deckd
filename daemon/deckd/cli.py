@@ -21,8 +21,9 @@ def main() -> None:
         "--password",
         default=None,
         help=(
-            "Shared password for a remote daemon (falls back to $DECKD_PASSWORD). "
-            "Not needed for the default local (127.0.0.1) daemon — loopback is exempt."
+            "Shared password for the daemon (falls back to $DECKD_PASSWORD). "
+            "Required whenever the daemon runs with auth on; not needed if the "
+            "daemon was started with --no-auth."
         ),
     )
     sub = parser.add_subparsers(dest="cmd", required=True)

@@ -71,15 +71,15 @@ def main() -> None:
         type=Path,
         default=None,
         help=(
-            "Shared password for remote (non-loopback) clients. Defaults to "
+            "Shared password every client must present. Defaults to "
             "$XDG_CONFIG_HOME/deckd/password (~/.config/deckd/password); "
-            "generated on first start if absent. Loopback clients never need it."
+            "generated on first start if absent."
         ),
     )
     parser.add_argument(
         "--no-auth",
         action="store_true",
-        help="Disable remote-client password auth entirely (all connections allowed)",
+        help="Disable password auth entirely (all connections allowed)",
     )
     parser.add_argument(
         "--scroll-momentum-friction",

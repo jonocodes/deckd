@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import hmac
-import ipaddress
 import json
 import logging
 import os
@@ -31,28 +30,9 @@ log = logging.getLogger("deckd.server")
 
 DEFAULT_APP_ID = "default"
 
-# How long a non-loopback WebSocket has to send its authenticating ``hello``
-# before we drop it. Generous — a real client sends it immediately on open.
+# How long a WebSocket has to send its authenticating ``hello`` before we
+# drop it. Generous — a real client sends it immediately on open.
 WS_AUTH_TIMEOUT_S = 10.0
-
-
-def _is_loopback_addr(remote: str | None) -> bool:
-    """True if ``remote`` (aiohttp's ``request.remote``) is a loopback peer.
-
-    Covers IPv4 ``127.0.0.0/8``, IPv6 ``::1``, and the IPv4-mapped form
-    (``::ffff:127.0.0.1``) a dual-stack listener can report. A missing or
-    unparseable address is treated as non-loopback (fail closed).
-    """
-    if not remote:
-        return False
-    try:
-        addr = ipaddress.ip_address(remote)
-    except ValueError:
-        return False
-    mapped = getattr(addr, "ipv4_mapped", None)
-    if mapped is not None:
-        addr = mapped
-    return addr.is_loopback
 
 
 # ---------------------------------------------------------------------------
@@ -145,7 +125,7 @@ class Server:
         self.layouts_dir = layouts_dir
         self.overlay_dir = overlay_dir
         # ``None``/empty disables auth entirely (every connection is treated
-        # as authorized). When set, non-loopback clients must present it.
+        # as authorized). When set, every client must present it.
         self.password = password or None
         self.host = host
         self.port = port
@@ -351,15 +331,18 @@ class Server:
         return self._layouts_task
 
     # -- auth ----------------------------------------------------------------
+    #
+    # Every WebSocket and HTTP control connection must present the shared
+    # password (issue #16). There is no source-address exemption: the check
+    # only looks at the password carried in the ``hello`` frame / the
+    # ``X-Deckd-Password`` header, never at the peer IP. That keeps it correct
+    # behind any proxy (the Vite dev proxy, a TLS terminator) — the password
+    # rides in the message, which proxies forward verbatim. ``--no-auth``
+    # (``password is None``) turns the whole thing off for local development.
 
     @property
     def _auth_required(self) -> bool:
         return self.password is not None
-
-    def _is_loopback(self, req: web.Request) -> bool:
-        """Loopback exemption check. A method (not a bare function) so tests
-        can force the non-loopback path without a real remote peer."""
-        return _is_loopback_addr(req.remote)
 
     def _check_password(self, candidate: str | None) -> bool:
         """Constant-time compare against the shared password. Always True
@@ -371,13 +354,13 @@ class Server:
         return hmac.compare_digest(candidate, self.password or "")
 
     def _http_authorized(self, req: web.Request) -> bool:
-        if not self._auth_required or self._is_loopback(req):
+        if not self._auth_required:
             return True
         return self._check_password(req.headers.get(PASSWORD_HEADER))
 
     async def _authenticate_ws(self, ws: web.WebSocketResponse) -> bool:
-        """Read the first frame off a non-loopback socket and require it to
-        be a ``hello`` carrying the correct password."""
+        """Read the first frame and require it to be a ``hello`` carrying the
+        correct password."""
         try:
             msg = await asyncio.wait_for(ws.receive(), timeout=WS_AUTH_TIMEOUT_S)
         except (asyncio.TimeoutError, ConnectionError):
@@ -401,18 +384,15 @@ class Server:
         self.app.router.add_post("/layout/{layout_id}", self._set_layout)
 
     async def _health(self, _req: web.Request) -> web.Response:
-        # Intentionally NOT password-gated, even for remote clients: the web
-        # client's Settings panel fetches /health for host-identity
-        # diagnostics, and (unlike /reload and /layout) it neither mutates
-        # state nor injects input. Issue #16 enumerates the *control*
-        # endpoints as the ones to protect; the only exposure here is the
-        # hostname/OS/desktop/session-count already implied by connecting.
+        # The one endpoint left open when auth is on: the web client's
+        # Settings panel fetches /health for host-identity diagnostics
+        # (often before the user has entered the password), and unlike
+        # /reload and /layout it neither mutates state nor injects input.
+        # The only exposure is hostname/OS/desktop/session-count.
         #
-        # The web client fetches /health from the Settings panel to read
-        # host identity. On the Vite dev path (:5173 -> :8765) that fetch
-        # is cross-origin, so the browser needs an explicit allow header
-        # or it drops the response. A local dev tool with no auth has
-        # nothing to protect by cornering the origin, so ``*`` is fine.
+        # On the Vite dev path (:5173 -> :8765) that fetch is cross-origin,
+        # so the browser needs an explicit allow header or it drops the
+        # response; ``*`` is fine for a read-only diagnostic.
         return web.json_response(
             {
                 "ok": True,
@@ -468,10 +448,10 @@ class Server:
     async def _ws_handler(self, req: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse(heartbeat=30)
         await ws.prepare(req)
-        # Non-loopback clients must authenticate before we add the session or
-        # leak any layout. The authenticating ``hello`` frame is consumed
-        # here; subsequent frames flow through the normal dispatch loop.
-        if self._auth_required and not self._is_loopback(req):
+        # Clients must authenticate before we add the session or leak any
+        # layout. The authenticating ``hello`` frame is consumed here;
+        # subsequent frames flow through the normal dispatch loop.
+        if self._auth_required:
             if not await self._authenticate_ws(ws):
                 log.info("ws auth failed from %s; closing", req.remote)
                 await ws.send_json({"type": "error", "reason": "unauthorized"})

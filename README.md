@@ -42,7 +42,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
 - [x] **Keep screen awake** while the surface is in use.
 - [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
-- [x] **Password auth for remote clients** — remote (non-loopback) clients authenticate with a shared password; local (`127.0.0.1` / `::1`) connections stay password-free. See [Remote-client auth](#remote-client-auth).
+- [x] **Password auth** — every client authenticates with a shared password (on by default; `--no-auth` disables it for local development). See [Client auth](#client-auth).
 - [x] **Runs on GNOME (Wayland), KDE Plasma (Wayland), any X11 desktop, and macOS.**
 
 **Planned**
@@ -327,7 +327,7 @@ The right-side jogstrip stays available for scrolling while you're pointing.
 - **Focus guard.** Injected keystrokes land on whatever window has desktop focus. If that's the deckd client itself (you opened the client on the same machine as the daemon), the daemon drops `type` / `key` messages rather than feed the client's own input back into itself.
 - **Physical keyboards.** A Bluetooth keyboard paired to the phone works through the `keydown` path with no extra setup.
 
-> ⚠️ **Security.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. Remote (non-loopback) clients must authenticate with a shared password (see [Remote-client auth](#remote-client-auth)); local `127.0.0.1` / `::1` connections stay password-free. The password is a single shared secret over a plaintext WebSocket, not per-user auth or transport encryption — still expose the daemon (`--host 0.0.0.0`) only on a network you trust, ideally a Tailscale tailnet, and put TLS in front of it if the link isn't already private.
+> ⚠️ **Security.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. Every client authenticates with a shared password (see [Client auth](#client-auth)) unless the daemon is started with `--no-auth`. The password is a single shared secret over a plaintext WebSocket, not per-user auth or transport encryption — still expose the daemon (`--host 0.0.0.0`) only on a network you trust, ideally a Tailscale tailnet, and put TLS in front of it if the link isn't already private. (Auth is enforced from the `hello` message, so it holds up behind a proxy — a TLS terminator or the Vite dev proxy — without any `X-Forwarded-For` trust.)
 
 
 
@@ -581,17 +581,17 @@ uv pip install -e ".[dev]"   # installs the websockets test dep
 ### CLI
 
 ```sh
-deckctl status              # hit /health
+deckctl status              # hit /health (open — no password needed)
 deckctl reload              # POST /reload — re-read layout YAML and push
 deckctl layout firefox      # force all clients to the firefox layout (dev)
 deckctl layout default      # force the default layout
 
-# Against a remote daemon, pass the shared password (loopback needs none):
-deckctl --host desktop.tailnet.ts.net --password "$PW" status
-DECKD_PASSWORD="$PW" deckctl --host desktop.tailnet.ts.net reload
+# /reload and /layout are gated when auth is on — pass the password:
+deckctl --password "$PW" reload
+DECKD_PASSWORD="$PW" deckctl --host desktop.tailnet.ts.net layout firefox
 ```
 
-`deckctl` talking to the default local daemon (`127.0.0.1`) needs no password — the loopback exemption covers it. For a remote daemon, supply the password with `--password` or the `DECKD_PASSWORD` env var; `deckctl` deliberately does **not** read the daemon's password file itself.
+When the daemon runs with auth on, the control endpoints (`/reload`, `/layout`) require the password — supply it with `--password` or the `DECKD_PASSWORD` env var. `deckctl` deliberately does **not** read the daemon's password file itself (it may be pointed at a remote daemon whose file it can't see). `deckctl status` hits `/health`, which is left open, so it always works. For frictionless local work, run the daemon with `--no-auth`.
 
 
 
@@ -606,14 +606,15 @@ A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` f
 
 
 
-### Remote-client auth
+### Client auth
 
-Remote (non-loopback) clients authenticate with a single shared password; local connections (`127.0.0.1` and `::1`, on both the WebSocket and the HTTP control endpoints) are exempt, so same-machine use and `deckctl` need no setup.
+Every client authenticates with a single shared password. There is **no** source-address exemption — a same-machine browser is treated exactly like a phone on the LAN. The check only looks at the password carried in the WebSocket `hello` frame (or the `X-Deckd-Password` header for the HTTP control endpoints), never at the peer IP, so it stays correct behind a proxy (a TLS terminator, or the Vite dev proxy) without any forwarded-header trust. `--no-auth` turns it off entirely — the right choice for frictionless local development.
 
 - **Where it lives.** `~/.config/deckd/password` (`$XDG_CONFIG_HOME/deckd/password` if set), plaintext, mode `0640`. Override the location with `--password-file <path>`, or disable auth entirely with `--no-auth`.
 - **First start.** If the file is absent, the daemon generates a random 32-char password, writes it (mode `0640`), and logs it **once** at WARN with a `SAVE THIS — it won't be shown again` header. It's never logged again.
 - **Pre-existing file.** Respected verbatim. Set your own before first start with `pwgen 32 | tee ~/.config/deckd/password && chmod 640 ~/.config/deckd/password`. The daemon **refuses to start** if the file exists but is unreadable or more permissive than `0640`, logging the path and reason.
-- **On the phone.** A remote client that connects without (or with the wrong) password lands on a password screen; entering the password connects and the browser remembers it. There's no QR, token file, or URL query param.
+- **On the client.** A client that connects without (or with the wrong) password lands on a password screen; entering the password connects and the browser remembers it (localStorage). There's no QR, token file, or URL query param.
+- **`/health` stays open** even with auth on — it's a read-only diagnostic the Settings panel fetches, and `deckctl status` relies on it.
 - **Rotation** is out of scope: edit the file and restart the daemon.
 
 The password is a shared secret over a plaintext WebSocket — it gates access, it does not encrypt the link. Keep the daemon on a trusted network (see the security note above).
