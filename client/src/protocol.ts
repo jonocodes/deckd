@@ -4,9 +4,14 @@
  * renders a placeholder for an unknown source. */
 export type Icon = { source: string; name: string };
 
+/** One data point of a ``stats`` widget: a sensor ``source`` plus an
+ * optional short caption. When ``label`` is absent the client derives one
+ * from the source name (``cpu_percent`` → ``CPU``). */
+export type Metric = { source: string; label?: string | null };
+
 export type Widget = {
   id: string;
-  kind: "button" | "jogstrip" | "trackpad" | "meter";
+  kind: "button" | "jogstrip" | "trackpad" | "meter" | "stats";
   label?: string | null;
   icon?: Icon | null;
   grid: [number, number, number, number];
@@ -24,6 +29,8 @@ export type Widget = {
   min?: number | null;
   /** Meter-only: upper bound of the bar's visible range. */
   max?: number | null;
+  /** Stats-only: the data points to display, one compact row each. */
+  metrics?: Metric[] | null;
 };
 
 export type ServerLayout = {

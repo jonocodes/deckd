@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from dbus_fast.aio import MessageBus
 
     from .input import KeySink
+    from .layouts import Widget
     from .platform import AppInfo, PlatformBackend
 
 from . import PASSWORD_HEADER
@@ -70,6 +71,27 @@ class PortInUseError(RuntimeError):
             f"  stop it:  pkill -f bin/deckd\n"
             f"  or use another port:  deckd --port <N>"
         )
+
+
+# ---------------------------------------------------------------------------
+# Sensor-source helpers. A widget can reference sensor sources two ways: a
+# ``meter`` binds one (``w.source``); a ``stats`` widget binds several (one
+# per entry in ``w.metrics``). These fold both shapes into a single view so
+# the subscription/pump code doesn't special-case the widget kind.
+# ---------------------------------------------------------------------------
+
+
+def _widget_sources(widget: "Widget") -> list[str]:
+    """Every sensor source a widget displays, in declaration order."""
+    if widget.kind == "meter" and widget.source:
+        return [widget.source]
+    if widget.kind == "stats" and widget.metrics:
+        return [m.source for m in widget.metrics if m.source]
+    return []
+
+
+def _widget_uses_source(widget: "Widget", source: str) -> bool:
+    return source in _widget_sources(widget)
 
 
 # ---------------------------------------------------------------------------
@@ -414,16 +436,18 @@ class Server:
     # millisecond late.
 
     def _meters_for_source(self, source: str) -> list[Widget]:
-        """Return every meter widget in the active layout bound to ``source``.
+        """Return every widget in the active layout that displays ``source``.
 
-        Used by the pump to know which ``id`` to send in the push.
-        Order matches the layout's declaration order so the wire is
-        deterministic for tests.
+        Covers both single-value ``meter`` widgets (``w.source == source``)
+        and multi-value ``stats`` widgets (``source`` appears in their
+        ``metrics``). Used by the pump to know which widget ``id`` to send
+        in the push. Order matches the layout's declaration order so the
+        wire is deterministic for tests.
         """
         return [
             w
             for w in self._current_layout.widgets
-            if w.kind == "meter" and w.source == source
+            if _widget_uses_source(w, source)
         ]
 
     def _active_sources(self) -> set[str]:
@@ -438,10 +462,9 @@ class Server:
         sources: set[str] = set()
         manager = self.sensors
         for w in self._current_layout.widgets:
-            if w.kind != "meter" or not w.source:
-                continue
-            if manager is None or manager.has(w.source):
-                sources.add(w.source)
+            for name in _widget_sources(w):
+                if manager is None or manager.has(name):
+                    sources.add(name)
         return sources
 
     def _sync_sensor_subscriptions(self) -> None:

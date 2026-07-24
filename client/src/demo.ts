@@ -96,7 +96,19 @@ const METER: ServerLayout = {
     { id: "open-url", kind: "button", label: "example.com", icon: { source: "simple-icons", name: "firefox" }, grid: [2, 0, 1, 1] },
     { id: "tilix", kind: "button", label: "Tilix", icon: { source: "lucide", name: "square-terminal" }, grid: [3, 0, 1, 1] },
     { id: "audio-toggle", kind: "button", label: "VLC", icon: { source: "lucide", name: "play" }, grid: [2, 1, 1, 1] },
-    { id: "send-key-tab", kind: "button", label: "Ctrl+T", icon: { source: "lucide", name: "keyboard" }, grid: [3, 1, 1, 1] },
+    // Combined stats cell — reads the same cpu_percent/mem_percent seeds as
+    // the bar meters above (readings are keyed by source), so it renders
+    // without its own seed entry.
+    {
+      id: "system",
+      kind: "stats",
+      label: "System",
+      grid: [3, 1, 1, 1],
+      metrics: [
+        { source: "cpu_percent", label: "CPU" },
+        { source: "mem_percent", label: "MEM" },
+      ],
+    },
   ],
 };
 

@@ -109,10 +109,17 @@ widgets:
     min: 0
     max: 100
     grid: [2, 1, 1, 1]
-  - id: mem_percent
-    kind: meter
-    label: MEM
-    source: mem_percent
-    min: 0
-    max: 100
+  # Combined system stats (issue #40). A bar-less ``stats`` cell showing
+  # several sensor values at once — simpler than the single-value meter
+  # above, and easy to grow: add another entry to ``metrics`` (each names
+  # a daemon-side source; ``label`` is optional and defaults to the source
+  # name, e.g. cpu_percent -> CPU). Sits where the standalone MEM meter was.
+  - id: system
+    kind: stats
+    label: System
     grid: [3, 1, 1, 1]
+    metrics:
+      - source: cpu_percent
+        label: CPU
+      - source: mem_percent
+        label: MEM

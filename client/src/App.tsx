@@ -50,21 +50,24 @@ export function App() {
   const [layout, setLayout] = useState<ServerLayout | null>(demoLayout);
   const [view, setView] = useState<View>("layout");
   const onLayout = useCallback((m: ServerLayout) => setLayout(m), []);
-  // Track every meter widget id in the active layout so the meter
-  // store can drop entries that are no longer referenced — without
-  // this, a removed meter would keep its last reading in memory
-  // forever, and a layout-switch that hides meters would still
-  // remember them across reloads.
-  const activeMeterIds = useMemo(() => {
-    const ids = new Set<string>();
+  // Track every sensor source the active layout references (from ``meter``
+  // widgets and each ``stats`` widget's metrics) so the meter store can drop
+  // readings that are no longer on screen — without this, a source would
+  // keep its last reading in memory forever, and a layout switch that hides
+  // meters would still remember them across reloads.
+  const activeMeterSources = useMemo(() => {
+    const sources = new Set<string>();
     if (layout) {
       for (const w of layout.widgets) {
-        if (w.kind === "meter") ids.add(w.id);
+        if (w.kind === "meter" && w.source) sources.add(w.source);
+        if (w.kind === "stats" && w.metrics) {
+          for (const m of w.metrics) if (m.source) sources.add(m.source);
+        }
       }
     }
-    return ids;
+    return sources;
   }, [layout]);
-  const meter = useMeterStore(activeMeterIds);
+  const meter = useMeterStore(activeMeterSources);
   // Pull out the store's ``onUpdate`` (a stable useCallback) and feed
   // widget_update frames straight to it. Depending on the whole ``meter``
   // object instead would be a bug: it gets a fresh identity on every render

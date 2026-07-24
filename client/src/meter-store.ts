@@ -34,7 +34,14 @@ function loadInitial(): Record<string, MeterReading> {
         typeof parsed.value === "number" &&
         typeof parsed.unit === "string"
       ) {
-        initial[key.slice(METER_KEY_PREFIX.length)] = {
+        // Key by the persisted source name. Older entries (pre-source
+        // keying) stored the widget id as the key suffix and no source
+        // field; fall back to the suffix so they still load once.
+        const srcKey =
+          typeof parsed.source === "string" && parsed.source
+            ? parsed.source
+            : key.slice(METER_KEY_PREFIX.length);
+        initial[srcKey] = {
           value: parsed.value,
           unit: parsed.unit,
           stale: true,
@@ -48,21 +55,26 @@ function loadInitial(): Record<string, MeterReading> {
 }
 
 /**
- * Hook: hold a map of widget-id -> latest reading, fed by
+ * Hook: hold a map of sensor-source -> latest reading, fed by
  * ``widget_update`` WebSocket frames.
  *
+ * Keyed by **source**, not widget id: a reading belongs to a sensor, and
+ * keying this way lets one ``stats`` widget show several sources, and two
+ * widgets bound to the same source share one canonical value.
+ *
  * Returned API:
- *   ``readings`` — current map (id -> reading). Render-time consumers
- *     read this directly; ``MeterCell`` filters by its own widget id.
+ *   ``readings`` — current map (source -> reading). Render-time consumers
+ *     read this directly; ``MeterCell`` looks up its own ``source`` and a
+ *     ``stats`` cell looks up each of its metrics' sources.
  *   ``onUpdate(frame)`` — feed in a server frame.
  *
- * One shared instance is held at the ``App`` level so every meter cell
- * subscribes to the same map without prop-drilling. Entries whose ids
- * are not in ``activeWidgetIds`` are filtered out at render time so a
- * removed meter doesn't leave ghost values on screen, and re-adding
- * the same id later reads the cached value back from localStorage.
+ * One shared instance is held at the ``App`` level so every cell reads the
+ * same map without prop-drilling. Entries whose sources are not in
+ * ``activeSources`` are filtered out at render time so a source no longer
+ * on screen doesn't leave ghost values, and re-adding it later reads the
+ * cached value back from localStorage.
  */
-export function useMeterStore(activeWidgetIds: ReadonlySet<string>) {
+export function useMeterStore(activeSources: ReadonlySet<string>) {
   const [readings, setReadings] = useState<Record<string, MeterReading>>(loadInitial);
   // Ref-mirror so the stale-detection interval (which calls setState)
   // doesn't need to depend on the readings state — otherwise every push
@@ -78,7 +90,7 @@ export function useMeterStore(activeWidgetIds: ReadonlySet<string>) {
       // (a) wastes work and (b) re-fires the meter-cell's transition
       // animation. We compare on the three fields the UI actually
       // renders: value, stale flag, and unit.
-      const existing = prev[m.id];
+      const existing = prev[m.source];
       if (
         existing &&
         existing.value === m.value &&
@@ -89,16 +101,16 @@ export function useMeterStore(activeWidgetIds: ReadonlySet<string>) {
       }
       const next = {
         ...prev,
-        [m.id]: { value: m.value, unit: m.unit, stale: m.stale },
+        [m.source]: { value: m.value, unit: m.unit, stale: m.stale },
       };
       try {
         // Persist the most recent reading so a page reload doesn't
         // flash a blank meter until the next push lands. The full set
-        // is small (a handful of widgets per layout), so a single
-        // JSON blob per id keeps writes cheap and survives quota
+        // is small (a handful of sources per layout), so a single
+        // JSON blob per source keeps writes cheap and survives quota
         // pressure better than one key per push.
         window.localStorage.setItem(
-          `${METER_KEY_PREFIX}${m.id}`,
+          `${METER_KEY_PREFIX}${m.source}`,
           JSON.stringify({ value: m.value, unit: m.unit, stale: m.stale, source: m.source }),
         );
       } catch {
@@ -129,25 +141,25 @@ export function useMeterStore(activeWidgetIds: ReadonlySet<string>) {
     return () => window.clearInterval(id);
   }, []);
 
-  // Filter the live map down to just the ids the active layout
+  // Filter the live map down to just the sources the active layout
   // references. Done as a render-time memo (not an effect) so React
   // schedules a single render when both the readings map and the
-  // active-id set change; an effect-based reap would render once
+  // active-source set change; an effect-based reap would render once
   // with stale entries, then again after the effect fires.
   const visibleReadings = useMemo(() => {
     if (readings === EMPTY_RECORD) return readings;
     let filtered: Record<string, MeterReading> | null = null;
-    for (const id of Object.keys(readings)) {
-      if (!activeWidgetIds.has(id)) {
+    for (const source of Object.keys(readings)) {
+      if (!activeSources.has(source)) {
         filtered = filtered ?? { ...readings };
-        delete filtered[id];
+        delete filtered[source];
       }
     }
     return filtered ?? readings;
-  }, [readings, activeWidgetIds]);
+  }, [readings, activeSources]);
 
   const reading = useCallback(
-    (id: string): MeterReading | null => readings[id] ?? null,
+    (source: string): MeterReading | null => readings[source] ?? null,
     [readings],
   );
 

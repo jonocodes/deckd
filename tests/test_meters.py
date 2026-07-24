@@ -252,3 +252,120 @@ async def test_server_pump_skips_unknown_sources(meter_layout: Path) -> None:
     finally:
         await server.stop()
         await test_server.close()
+
+
+# ---------------------------------------------------------------------------
+# stats widget (multi-source, bar-less)
+# ---------------------------------------------------------------------------
+
+
+class _MemSource(SensorSource):
+    """Test sensor modelling ``mem_percent``."""
+
+    name = "mem_percent"
+    unit = "%"
+    interval_s = 0.01
+
+    def __init__(self, initial: float = 41.0) -> None:
+        self.value = initial
+
+    def read(self) -> SensorReading:
+        return SensorReading(source=self.name, value=self.value, unit=self.unit)
+
+
+def test_stats_widget_loads_with_metrics(tmp_path: Path) -> None:
+    from deckd.layouts import load_layouts
+
+    (tmp_path / "default.yaml").write_text(
+        """
+match:
+  - default
+widgets:
+  - id: system
+    kind: stats
+    label: System
+    grid: [0, 0, 1, 1]
+    metrics:
+      - source: cpu_percent
+        label: CPU
+      - source: mem_percent
+"""
+    )
+    w = next(w for w in load_layouts(tmp_path)["default"].widgets if w.kind == "stats")
+    assert [m.source for m in w.metrics] == ["cpu_percent", "mem_percent"]
+    assert w.metrics[0].label == "CPU"
+    assert w.metrics[1].label is None  # client derives it
+
+
+def test_stats_widget_without_metrics_is_rejected(tmp_path: Path) -> None:
+    from deckd.layouts import load_layouts
+
+    (tmp_path / "default.yaml").write_text(
+        """
+match:
+  - default
+widgets:
+  - id: system
+    kind: stats
+    grid: [0, 0, 1, 1]
+"""
+    )
+    with pytest.raises(SystemExit):
+        load_layouts(tmp_path)
+
+
+@pytest.fixture
+def stats_layout(tmp_path: Path) -> Path:
+    """A default layout with a stats widget bound to two sources."""
+    (tmp_path / "default.yaml").write_text(
+        """
+match:
+  - default
+widgets:
+  - id: system
+    kind: stats
+    label: System
+    grid: [0, 0, 1, 1]
+    metrics:
+      - source: cpu_percent
+        label: CPU
+      - source: mem_percent
+        label: MEM
+"""
+    )
+    return tmp_path
+
+
+async def test_stats_widget_pumps_all_its_sources(stats_layout: Path) -> None:
+    """The pump subscribes to every source a stats widget references and
+    pushes a widget_update (carrying the source) for each."""
+    mgr = SensorManager([_CpuSource(initial=58.0), _MemSource(initial=41.0)])
+    server, _, _, _ = make_test_server(layouts_dir=stats_layout, password=None)
+    server.sensors = mgr
+    server._sync_sensor_subscriptions()  # type: ignore[attr-defined]
+    server.start_sensor_pump()
+
+    test_server = TestServer(server.app, host="127.0.0.1")
+    await test_server.start_server()
+    try:
+        async with ws_connected_no_auth(test_server.port) as ws:
+            initial = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            assert initial["type"] == "layout"
+            by_source: dict[str, float] = {}
+            for _ in range(80):
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=0.2)
+                except asyncio.TimeoutError:
+                    continue
+                msg = json.loads(raw)
+                if msg.get("type") == "widget_update":
+                    # Frame carries the stats widget id + the specific source.
+                    assert msg["id"] == "system"
+                    by_source[msg["source"]] = msg["value"]
+                if {"cpu_percent", "mem_percent"} <= by_source.keys():
+                    break
+            assert by_source.get("cpu_percent") == pytest.approx(58.0)
+            assert by_source.get("mem_percent") == pytest.approx(41.0)
+    finally:
+        await server.stop()
+        await test_server.close()

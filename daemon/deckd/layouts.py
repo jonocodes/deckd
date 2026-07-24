@@ -24,6 +24,25 @@ class Icon(BaseModel):
     name: str = Field(min_length=1)
 
 
+class MetricSpec(BaseModel):
+    """One data point in a ``stats`` widget (issue #40).
+
+    ``source`` names a daemon-side :class:`SensorSource` (same registry
+    the single-value ``meter`` widget binds to). ``label`` is the short
+    caption shown beside the value; when omitted the client derives one
+    from the source name (``cpu_percent`` -> ``CPU``), so a minimal
+    ``metrics: [{source: cpu_percent}]`` still reads sensibly. Kept a
+    distinct model (rather than a bare string) so more per-metric knobs
+    (unit override, min/max, colour) can be added without a breaking
+    schema change.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = Field(min_length=1)
+    label: str | None = None
+
+
 class Widget(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -49,6 +68,12 @@ class Widget(BaseModel):
     source: str | None = None
     min: float | None = None
     max: float | None = None
+    # ``stats`` widgets bind to several sensor sources at once and render
+    # a compact, bar-less list of "label: value" rows. Each metric names a
+    # source the same way a ``meter`` names its single ``source``; the
+    # daemon subscribes to every referenced source while a stats widget is
+    # in the active layout, exactly as it does for meters.
+    metrics: list[MetricSpec] | None = None
 
     @field_validator("kind")
     @classmethod
@@ -74,6 +99,11 @@ class Widget(BaseModel):
                     f"meter widget min ({self.min}) must be strictly "
                     f"less than max ({self.max})"
                 )
+        if self.kind == "stats" and not self.metrics:
+            raise ValueError(
+                "stats widgets require a non-empty 'metrics' list, each "
+                "naming a 'source' (e.g. metrics: [{source: cpu_percent}])"
+            )
         return self
 
 

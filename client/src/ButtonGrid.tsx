@@ -3,6 +3,7 @@ import type { Widget } from "./protocol";
 import { Icon } from "./Icon";
 import { JogStrip } from "./JogStrip";
 import { MeterCell } from "./MeterCell";
+import { StatsCell } from "./StatsCell";
 import type { MeterReading } from "./meter-store";
 import { transposeWidgets, useOrientation } from "./orientation";
 import type { Orientation } from "./orientation";
@@ -19,7 +20,7 @@ type Props = {
    * device stories pass it so the transpose matches the container's shape
    * rather than the window's. */
   orientation?: Orientation;
-  /** Latest reading per meter widget id. Missing ids render with no
+  /** Latest reading per sensor source. Missing sources render with no
    * value (bar empty, "—" numeric). Stale readings show the bar at
    * its last position with a dimmed readout. */
   meterReadings?: Record<string, MeterReading>;
@@ -105,7 +106,18 @@ export function ButtonGrid({
               <MeterCell
                 key={w.id}
                 widget={w}
-                reading={meterReadings?.[w.id] ?? null}
+                reading={(w.source ? meterReadings?.[w.source] : null) ?? null}
+                style={style}
+                labelScale={labelScale ?? 1}
+              />
+            );
+          }
+          if (w.kind === "stats") {
+            return (
+              <StatsCell
+                key={w.id}
+                widget={w}
+                readings={meterReadings ?? {}}
                 style={style}
                 labelScale={labelScale ?? 1}
               />
