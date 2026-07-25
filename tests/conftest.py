@@ -242,6 +242,7 @@ def make_test_server(
     layouts_dir: Path,
     focus_backend=None,
     password: str | None = None,
+    media_manager=None,
 ) -> tuple[Server, FakeScrollSink, FakePointerSink, FakeDbusBusFactory]:
     """Build a ``Server`` with the same fake sinks used by the fixtures.
 
@@ -262,5 +263,6 @@ def make_test_server(
         dbus_bus_factory=dbus_factory,
         focus_backend=focus_backend,
         password=password,
+        media_manager=media_manager,
     )
     return server, scroll_sink, key_sink, dbus_factory

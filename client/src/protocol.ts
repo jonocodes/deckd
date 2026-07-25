@@ -10,6 +10,7 @@ export type Icon = { source: string; name: string };
 export type Metric = { source: string; label?: string | null };
 
 export type MediaHttp = { host?: string; port?: number; password_ref?: string | null };
+export type MediaControl = "play" | "previous" | "next" | "volume" | "position" | "speed";
 export type MediaState = {
   type: "media_state";
   id: string;
@@ -39,10 +40,12 @@ export type Widget = {
   min?: number | null;
   max?: number | null;
   metrics?: Metric[] | null;
-  controls?: string[] | null;
+  controls?: MediaControl[] | null;
   media_http?: MediaHttp | null;
   previous_action?: Record<string, unknown> | null;
   next_action?: Record<string, unknown> | null;
+  volume_up_action?: Record<string, unknown> | null;
+  volume_down_action?: Record<string, unknown> | null;
 };
 
 export type ServerLayout = {

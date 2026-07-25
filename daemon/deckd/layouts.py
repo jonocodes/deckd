@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Literal
 
 import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -43,12 +44,15 @@ class MetricSpec(BaseModel):
     label: str | None = None
 
 
+MediaControl = Literal["play", "previous", "next", "volume", "position", "speed"]
+
+
 class MediaHttp(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     host: str = "127.0.0.1"
     port: int = Field(default=8080, ge=1, le=65535)
-    password_ref: str | None = None
+    password_ref: str | None = Field(default=None, min_length=1)
 
 
 class Widget(BaseModel):
@@ -82,7 +86,7 @@ class Widget(BaseModel):
     # daemon subscribes to every referenced source while a stats widget is
     # in the active layout, exactly as it does for meters.
     metrics: list[MetricSpec] | None = None
-    controls: list[str] | None = None
+    controls: list[MediaControl] | None = None
     media_http: MediaHttp | None = None
     # Ordered art sources for a media widget. ``vlc`` uses VLC's own art
     # (embedded / its cache); ``itunes`` falls back to an online cover-art
@@ -91,6 +95,8 @@ class Widget(BaseModel):
     art_source: list[str] | None = None
     previous_action: "Action | None" = None
     next_action: "Action | None" = None
+    volume_up_action: "Action | None" = None
+    volume_down_action: "Action | None" = None
 
     @field_validator("kind")
     @classmethod
@@ -105,13 +111,13 @@ class Widget(BaseModel):
 
     @field_validator("controls")
     @classmethod
-    def _validate_media_controls(cls, v: list[str] | None) -> list[str] | None:
+    def _validate_media_controls(cls, v: list[MediaControl] | None) -> list[MediaControl] | None:
         if v is None:
             return v
-        allowed = {"play", "previous", "next", "volume", "position", "speed"}
-        invalid = sorted(set(v) - allowed)
-        if invalid:
-            raise ValueError(f"unknown media controls: {', '.join(invalid)}")
+        if not v:
+            raise ValueError("media controls must not be empty")
+        if len(v) != len(set(v)):
+            raise ValueError("media controls must not contain duplicates")
         return v
 
     @field_validator("art_source")
@@ -127,8 +133,21 @@ class Widget(BaseModel):
 
     @model_validator(mode="after")
     def _validate_media_invariants(self) -> "Widget":
+        media_fields = {
+            "controls": self.controls,
+            "media_http": self.media_http,
+            "art_source": self.art_source,
+            "previous_action": self.previous_action,
+            "next_action": self.next_action,
+            "volume_up_action": self.volume_up_action,
+            "volume_down_action": self.volume_down_action,
+        }
         if self.kind == "media" and self.controls is None:
             self.controls = ["play", "volume", "position"]
+        if self.kind != "media":
+            invalid = sorted(name for name, value in media_fields.items() if value is not None)
+            if invalid:
+                raise ValueError(f"media-only fields on non-media widget: {', '.join(invalid)}")
         if self.kind == "meter":
             if not self.source:
                 raise ValueError(

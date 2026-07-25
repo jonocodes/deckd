@@ -900,8 +900,8 @@ button:focus-visible { outline: none; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: clamp(10px, 2.4vh, 22px);
-  padding: clamp(16px, 3vw, 32px);
+  gap: clamp(7px, 1.5cqh, 16px);
+  padding: clamp(12px, 2.5cqmin, 24px);
   min-height: 0;
   min-width: 0;
   overflow: hidden;
@@ -914,7 +914,7 @@ button:focus-visible { outline: none; }
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: clamp(10px, 2.4vh, 22px);
+  gap: clamp(7px, 1.5cqh, 16px);
   width: 100%;
   min-width: 0;
 }
@@ -926,7 +926,7 @@ button:focus-visible { outline: none; }
 .media-art {
   flex: 0 0 auto;
   aspect-ratio: 1 / 1;
-  width: min(82cqmin, 520px);
+  width: min(52cqmin, 300px);
   max-width: 100%;
   display: flex;
   align-items: center;
@@ -1034,8 +1034,10 @@ button:focus-visible { outline: none; }
 }
 
 .media-play svg {
-  width: 46%;
-  height: 46%;
+  width: 62%;
+  height: 62%;
+  fill: currentColor;
+  stroke-width: 0;
 }
 
 .media-play:active {
@@ -1098,6 +1100,40 @@ button:focus-visible { outline: none; }
   opacity: 0.7;
 }
 
+.media-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.media-volume-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #9aa7b4;
+}
+
+.media-volume-fallback button {
+  min-width: 38px;
+  min-height: 38px;
+  border: 1px solid #3b4d5b;
+  border-radius: 8px;
+  background: #1b2a36;
+  color: #e6f7ff;
+  font-size: 22px;
+}
+
+.media-volume-fallback button:disabled {
+  opacity: 0.4;
+}
+
 /* Landscape / wide slot: a horizontal "now playing" layout. The cover sits
    beside a compact body (metadata + transport), and the sliders are dropped —
    a wide glance view is for at-a-glance status and skip, not scrubbing. */
@@ -1108,7 +1144,7 @@ button:focus-visible { outline: none; }
   }
   .media-art {
     width: auto;
-    height: min(84cqmin, 360px);
+    height: min(62cqmin, 240px);
   }
   .media-body {
     align-items: flex-start;
@@ -1126,10 +1162,6 @@ button:focus-visible { outline: none; }
   }
   .media-speed {
     justify-content: flex-start;
-  }
-  .media-range-position,
-  .media-range-volume {
-    display: none;
   }
 }
 

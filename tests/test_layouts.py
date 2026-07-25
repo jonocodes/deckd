@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from deckd.layouts import Layout, load_layouts, resolve_layout
+from deckd.layouts import Layout, Widget, load_layouts, resolve_layout
 from deckd.platform import AppInfo
 
 
@@ -68,9 +68,52 @@ widgets:
 """
 
 
-# ---------------------------------------------------------------------------
-# Loading
-# ---------------------------------------------------------------------------
+
+
+def test_media_schema_accepts_typed_controls_and_volume_fallback_actions() -> None:
+    widget = Widget.model_validate(
+        {
+            "id": "media",
+            "kind": "media",
+            "grid": [0, 0, 1, 1],
+            "controls": ["play", "volume"],
+            "volume_up_action": {"key": "volumeup"},
+            "volume_down_action": {"key": "volumedown"},
+        }
+    )
+    assert widget.controls == ["play", "volume"]
+
+
+@pytest.mark.parametrize("controls", [[], ["play", "play"], ["unknown"]])
+def test_media_schema_rejects_invalid_controls(controls: list[str]) -> None:
+    with pytest.raises(ValueError):
+        Widget.model_validate({"id": "media", "kind": "media", "grid": [0, 0, 1, 1], "controls": controls})
+
+
+def test_media_schema_rejects_empty_password_ref() -> None:
+    with pytest.raises(ValueError):
+        Widget.model_validate(
+            {"id": "media", "kind": "media", "grid": [0, 0, 1, 1], "media_http": {"password_ref": ""}}
+        )
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("controls", ["play"]),
+        ("media_http", {}),
+        ("art_source", ["vlc"]),
+        ("previous_action", {"key": "left"}),
+        ("next_action", {"key": "right"}),
+        ("volume_up_action", {"key": "volumeup"}),
+        ("volume_down_action", {"key": "volumedown"}),
+    ],
+)
+def test_media_only_fields_rejected_on_other_widgets(field: str, value: object) -> None:
+    with pytest.raises(ValueError, match="media-only"):
+        Widget.model_validate({"id": "button", "kind": "button", "grid": [0, 0, 1, 1], field: value})
+
+
 
 
 def test_load_layouts_reads_all_yaml_files(tmp_path: Path) -> None:

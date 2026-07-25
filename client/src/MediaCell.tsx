@@ -41,8 +41,12 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
   const duration = state?.duration ?? 0;
   const position = state?.position ?? 0;
   const unavailable = !state?.available || state.stale;
+  const status = unavailable ? "Media unavailable" : "Media live";
   return (
     <div className={`cell cell-media${unavailable ? " cell-media-unavailable" : ""}`} style={style}>
+      <span className="media-status" role="status" aria-live="polite">
+        {status}
+      </span>
       <div className="media-inner">
         <div className="media-art" aria-hidden>
           <MediaArt widgetId={widget.id} token={state?.art_token} />
@@ -57,6 +61,7 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
               <span>{formatTime(position)}</span>
               <input
                 aria-label="Playback position"
+                aria-valuetext={`${formatTime(position)} of ${formatTime(duration)}`}
                 type="range"
                 min={0}
                 max={duration || 1}
@@ -73,7 +78,7 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
                 <button
                   className="media-skip"
                   aria-label="Previous"
-                  onPointerDown={() => onPress(`${widget.id}:previous`)}
+                  onClick={() => onPress(`${widget.id}:previous`)}
                 >
                   <SkipBack fill="currentColor" />
                 </button>
@@ -81,7 +86,8 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
               <button
                 className="media-play"
                 aria-label={state?.playing ? "Pause" : "Play"}
-                onPointerDown={() => onPress(widget.id)}
+                aria-pressed={Boolean(state?.playing)}
+                onClick={() => onPress(widget.id)}
               >
                 {state?.playing ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
               </button>
@@ -89,7 +95,7 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
                 <button
                   className="media-skip"
                   aria-label="Next"
-                  onPointerDown={() => onPress(`${widget.id}:next`)}
+                  onClick={() => onPress(`${widget.id}:next`)}
                 >
                   <SkipForward fill="currentColor" />
                 </button>
@@ -97,19 +103,42 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
             </div>
           ) : null}
           {controls.includes("volume") ? (
-            <label className="media-range media-range-volume">
-              <span>Vol</span>
-              <input
-                aria-label="Volume"
-                className="media-volume-input"
-                type="range"
-                min={0}
-                max={100}
-                value={state?.volume ?? 0}
-                onChange={(event) => onCommand(widget.id, "volume", Number(event.target.value))}
-                disabled={unavailable}
-              />
-            </label>
+            widget.media_http ? (
+              <label className="media-range media-range-volume">
+                <span>Vol</span>
+                <input
+                  aria-label="Volume"
+                  aria-valuetext={`${state?.volume ?? 0} percent`}
+                  className="media-volume-input"
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={state?.volume ?? 0}
+                  onChange={(event) => onCommand(widget.id, "volume", Number(event.target.value))}
+                  disabled={unavailable}
+                />
+              </label>
+            ) : (
+              <div className="media-volume-fallback" role="group" aria-label="Volume">
+                <button
+                  type="button"
+                  aria-label="Volume down"
+                  onClick={() => onPress(`${widget.id}:volume_down`)}
+                  disabled={!widget.volume_down_action}
+                >
+                  −
+                </button>
+                <span>Vol</span>
+                <button
+                  type="button"
+                  aria-label="Volume up"
+                  onClick={() => onPress(`${widget.id}:volume_up`)}
+                  disabled={!widget.volume_up_action}
+                >
+                  +
+                </button>
+              </div>
+            )
           ) : null}
           {controls.includes("speed") ? (
             <label className="media-speed">
@@ -117,7 +146,7 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
               <button
                 type="button"
                 aria-label="Decrease speed"
-                onPointerDown={() =>
+                onClick={() =>
                   onCommand(widget.id, "rate", Math.max(0.25, (state?.rate ?? 1) - 0.25))
                 }
               >
@@ -127,7 +156,7 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
               <button
                 type="button"
                 aria-label="Increase speed"
-                onPointerDown={() => onCommand(widget.id, "rate", (state?.rate ?? 1) + 0.25)}
+                onClick={() => onCommand(widget.id, "rate", (state?.rate ?? 1) + 0.25)}
               >
                 +
               </button>

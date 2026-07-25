@@ -716,6 +716,8 @@ The `media` kind is a single responsive composite widget. It uses configured key
   grid: [0, 0, 4, 2]
   controls: [play, volume, position]
   action: {key: space}
+  volume_down_action: {key: volumedown}
+  volume_up_action: {key: volumeup}
   media_http:
     host: 127.0.0.1
     port: 8080
@@ -751,7 +753,7 @@ curl -u ':$VLC_HTTP_PASSWORD' \
 
 A successful response is JSON with fields such as `state`, `time`, `length`, `volume`, and `information.meta`. A `401 Unauthorized` response means VLC is running but the supplied password does not match the active Lua HTTP password. If the endpoint cannot connect, enable the Web interface, confirm VLC was restarted, and check that port `8080` is listening.
 
-The daemon polls this endpoint once per second and forwards changed values to the client over its WebSocket. Volume and seek commands use the same HTTP interface; play/pause remains the configured keyboard action. If VLC HTTP is unavailable, keyboard controls continue to work and live values are shown as unavailable. The password is never stored directly in layout YAML.
+The daemon polls this endpoint once per second and forwards changed values to the client over its WebSocket. Volume and seek commands use the same HTTP interface; play/pause remains the configured keyboard action. Without `media_http`, a media widget renders keyboard-only `−`/`+` controls backed by `volume_down_action` and `volume_up_action`; with HTTP configured, it preserves the live volume slider. If VLC HTTP becomes unavailable, live values are explicitly shown as unavailable. The password is never stored directly in layout YAML, and `password_ref` must name a non-empty environment variable.
 
 #### Album art
 

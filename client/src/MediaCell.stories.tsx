@@ -13,6 +13,7 @@ const WIDGET: Widget = {
   label: "VLC",
   grid: [0, 0, 4, 2],
   controls: ["play", "previous", "next", "volume", "position", "speed"],
+  media_http: {},
 };
 
 const PLAYING: MediaReading = {

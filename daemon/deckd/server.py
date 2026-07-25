@@ -958,7 +958,7 @@ class Server:
         if widget is None and ":" in press.id:
             base_id, control = press.id.rsplit(":", 1)
             widget = self._find_widget(base_id)
-            if widget is not None and control in {"previous", "next"}:
+            if widget is not None and control in {"previous", "next", "volume_up", "volume_down"}:
                 action_widget_id = control
         if widget is None:
             log.warning("press for unknown widget id=%s", press.id)
@@ -970,7 +970,7 @@ class Server:
             key_sink=self.key_sink,
             dbus_bus_factory=self.dbus_bus_factory,
         )
-        if action_widget_id in {"previous", "next"}:
+        if action_widget_id in {"previous", "next", "volume_up", "volume_down"}:
             action = getattr(widget, f"{action_widget_id}_action")
             if action is None:
                 return
