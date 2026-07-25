@@ -874,25 +874,63 @@ button:focus-visible { outline: none; }
 /* ---------------------------------------------------------------------------
  * Media widget
  * ------------------------------------------------------------------------- */
+/* The VLC media cell is a single responsive card. It stacks vertically and
+   centers everything — album art, then metadata, seek, transport, volume and
+   speed — with generous gaps so the controls have room to breathe. Sizes use
+   clamp() against the viewport so one rule serves both a wide desktop slot and
+   a narrow phone slot without a separate media query. */
 .cell-media {
-  background: linear-gradient(145deg, #1c2833, #12181e);
+  background: linear-gradient(160deg, #1c2833, #12181e);
   border: 1px solid #344150;
-  border-radius: 16px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.8fr);
-  grid-template-rows: auto auto 1fr auto;
+  border-radius: 18px;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 10px 18px;
-  padding: clamp(14px, 2vw, 28px);
+  justify-content: center;
+  gap: clamp(10px, 2.4vh, 22px);
+  padding: clamp(16px, 3vw, 32px);
   min-height: 0;
   min-width: 0;
   overflow: hidden;
   user-select: none;
   -webkit-user-select: none;
+  --media-accent: #59b8df;
+}
+
+/* Album-art placeholder: a centered square holding the VLC brand glyph until
+   real cover art is plumbed through. */
+.media-art {
+  flex: 0 1 auto;
+  aspect-ratio: 1 / 1;
+  height: clamp(64px, 22vh, 180px);
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 30% 25%, #26384a, #16202a 75%);
+  border: 1px solid #33445685;
+  border-radius: 16px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+}
+
+.media-art-icon {
+  width: 52%;
+  height: 52%;
+  color: #ff8c00;
+}
+
+.media-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  max-width: 100%;
+  text-align: center;
 }
 
 .media-title,
 .media-subtitle {
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -900,101 +938,127 @@ button:focus-visible { outline: none; }
 }
 
 .media-title {
-  grid-column: 1;
-  font-size: clamp(18px, 3vw, 34px);
+  font-size: clamp(16px, 2.6vw, 28px);
   font-weight: 700;
+  color: #f2f5f8;
 }
 
 .media-subtitle {
-  grid-column: 1;
   color: #9aa7b4;
-  font-size: clamp(12px, 1.8vw, 18px);
+  font-size: clamp(11px, 1.6vw, 16px);
 }
 
-  .media-volume-input {
-    writing-mode: horizontal-tb;
-    direction: ltr;
-    height: auto;
-    width: 100%;
-  }
+.media-range {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  color: #9aa7b4;
+  font-size: clamp(10px, 1.4vw, 13px);
+  font-variant-numeric: tabular-nums;
+}
+
+.media-range-position {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.media-range-volume {
+  grid-template-columns: auto minmax(0, 1fr);
+  max-width: min(100%, 320px);
+}
+
+.media-range input[type="range"] {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--media-accent);
+  /* Own the touch gesture so a horizontal drag seeks instead of scrolling
+     the surface out from under the user's finger. */
+  touch-action: none;
+  cursor: pointer;
+}
+
+.media-range input[type="range"]:disabled {
+  opacity: 0.4;
+}
+
+.media-transport {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(16px, 5vw, 40px);
+}
+
+.media-play {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(48px, 9vw, 68px);
+  height: clamp(48px, 9vw, 68px);
+  border-radius: 50%;
+  border: 0;
+  background: var(--media-accent);
+  color: #0e1720;
+  box-shadow: 0 4px 14px rgba(89, 184, 223, 0.35);
+}
+
+.media-play svg {
+  width: 46%;
+  height: 46%;
+}
+
+.media-play:active {
+  transform: scale(0.94);
+}
+
+.media-skip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: #c4d2dd;
+  padding: 8px;
+}
+
+.media-skip svg {
+  width: clamp(22px, 4vw, 30px);
+  height: clamp(22px, 4vw, 30px);
+}
+
+.media-skip:active {
+  color: var(--media-accent);
+  transform: scale(0.9);
+}
+
 .media-speed {
-  grid-column: 1 / -1;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 12px;
   color: #9aa7b4;
+  font-size: clamp(11px, 1.5vw, 14px);
 }
 
 .media-speed button {
-  min-width: 32px;
-  min-height: 32px;
+  min-width: 30px;
+  min-height: 30px;
   border: 1px solid #3b4d5b;
   border-radius: 8px;
   background: #1b2a36;
   color: #e6f7ff;
-  font-size: 20px;
+  font-size: 18px;
+  line-height: 1;
 }
 
-.media-speed output {
-  min-width: 48px;
-  text-align: center;
-  color: #e6e9ef;
-  font-variant-numeric: tabular-nums;
-}
-
-
-    grid-column: 1 / -1;
-    grid-row: auto;
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-
-.media-play svg {
-  width: 48%;
-  height: 48%;
-}
-
-.media-skip svg {
-  width: 28px;
-  height: 28px;
-}
-
-  transform: scale(0.94);
+.media-speed button:active {
   background: #31536a;
 }
 
-.media-range {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  color: #9aa7b4;
-  font-size: clamp(10px, 1.4vw, 14px);
+.media-speed output {
+  min-width: 52px;
+  text-align: center;
+  color: #e6e9ef;
   font-variant-numeric: tabular-nums;
-}
-
-.cell-media > .media-range {
-  grid-column: 1 / -1;
-}
-
-.media-range:has(.media-volume-input) {
-  grid-column: 2;
-  grid-row: 4;
-  grid-template-columns: auto minmax(0, 1fr);
-}
-
-.media-volume-input {
-  writing-mode: vertical-lr;
-  direction: rtl;
-  height: clamp(70px, 12vw, 140px);
-  width: 28px;
-  justify-self: center;
-}
-
-  width: 100%;
-  accent-color: #59b8df;
 }
 
 .cell-media-unavailable {
@@ -1002,40 +1066,8 @@ button:focus-visible { outline: none; }
   opacity: 0.7;
 }
 
-@media (max-width: 480px) {
-  .cell-media {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 8px 12px;
-    padding: 12px;
-  }
-.media-transport {
-  grid-column: 2;
-  grid-row: 1 / span 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(8px, 1.5vw, 20px);
-}
-
-.media-transport .media-play {
-  grid-column: auto;
-  grid-row: auto;
-}
-
-.media-skip {
-  border: 0;
-  background: transparent;
-  color: #b9c9d5;
-  font-size: clamp(14px, 2vw, 24px);
-  padding: 12px;
-}
-
-
-    width: 58px;
-    height: 58px;
-  }
-}
-
+/**
+ * A stats cell reuses the plain-cell chrome
  * (background, border, radius, non-pressable) but stacks "LABEL value" rows
  * instead of a single big number + bar, so 2–4 data points fit one grid slot.
  *

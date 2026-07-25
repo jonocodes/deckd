@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
+import { Icon } from "./Icon";
 import type { MediaReading } from "./media-store";
 import type { Widget } from "./protocol";
 
@@ -11,6 +12,10 @@ type Props = {
   onCommand: (id: string, command: "volume" | "seek" | "rate", value: number) => void;
 };
 
+// Album-art placeholder. Real cover art isn't plumbed through yet, so the
+// centered slot shows the VLC brand logo (Simple Icons) as a stand-in.
+const ART_ICON = { source: "simple-icons" as const, name: "vlcmediaplayer" };
+
 export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
   const controls = widget.controls ?? ["play", "volume", "position"];
   const duration = state?.duration ?? 0;
@@ -18,39 +23,15 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
   const unavailable = !state?.available || state.stale;
   return (
     <div className={`cell cell-media${unavailable ? " cell-media-unavailable" : ""}`} style={style}>
-      <div className="media-title">{state?.title ?? "—"}</div>
-      <div className="media-subtitle">{state?.artist ?? state?.album ?? "—"}</div>
-      {controls.includes("play") ? (
-        <div className="media-transport">
-          {controls.includes("previous") ? (
-            <button
-              className="media-skip"
-              aria-label="Previous"
-              onPointerDown={() => onPress(`${widget.id}:previous`)}
-            >
-              <SkipBack fill="#c0c0c0" />
-            </button>
-          ) : null}
-          <button
-            className="media-play"
-            aria-label={state?.playing ? "Pause" : "Play"}
-            onPointerDown={() => onPress(widget.id)}
-          >
-            {state?.playing ? <Pause fill="#c0c0c0" /> : <Play fill="#c0c0c0" />}
-          </button>
-          {controls.includes("next") ? (
-            <button
-              className="media-skip"
-              aria-label="Next"
-              onPointerDown={() => onPress(`${widget.id}:next`)}
-            >
-              <SkipForward fill="#c0c0c0" />
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      <div className="media-art" aria-hidden>
+        <Icon icon={ART_ICON} className="media-art-icon" />
+      </div>
+      <div className="media-meta">
+        <div className="media-title">{state?.title ?? "—"}</div>
+        <div className="media-subtitle">{state?.artist ?? state?.album ?? "—"}</div>
+      </div>
       {controls.includes("position") ? (
-        <label className="media-range">
+        <label className="media-range media-range-position">
           <span>{formatTime(position)}</span>
           <input
             aria-label="Playback position"
@@ -64,9 +45,38 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
           <span>{formatTime(duration)}</span>
         </label>
       ) : null}
+      {controls.includes("play") ? (
+        <div className="media-transport">
+          {controls.includes("previous") ? (
+            <button
+              className="media-skip"
+              aria-label="Previous"
+              onPointerDown={() => onPress(`${widget.id}:previous`)}
+            >
+              <SkipBack fill="currentColor" />
+            </button>
+          ) : null}
+          <button
+            className="media-play"
+            aria-label={state?.playing ? "Pause" : "Play"}
+            onPointerDown={() => onPress(widget.id)}
+          >
+            {state?.playing ? <Pause fill="currentColor" /> : <Play fill="currentColor" />}
+          </button>
+          {controls.includes("next") ? (
+            <button
+              className="media-skip"
+              aria-label="Next"
+              onPointerDown={() => onPress(`${widget.id}:next`)}
+            >
+              <SkipForward fill="currentColor" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {controls.includes("volume") ? (
-        <label className="media-range">
-          <span>Volume</span>
+        <label className="media-range media-range-volume">
+          <span>Vol</span>
           <input
             aria-label="Volume"
             className="media-volume-input"
