@@ -63,7 +63,14 @@ class VlcHttpBackend(MediaBackend):
         except Exception as exc:
             log.debug("VLC HTTP state unavailable: %s", exc)
             return MediaState(available=False, stale=True)
-        meta = data.get("information", {}).get("meta", {})
+        information = data.get("information", {})
+        meta = information.get("meta", {})
+        category_meta = information.get("category", {}).get("meta", {})
+        if not isinstance(meta, dict):
+            meta = {}
+        if not isinstance(category_meta, dict):
+            category_meta = {}
+        combined_meta = {**category_meta, **meta}
         length = data.get("length")
         time = data.get("time")
         volume = data.get("volume")
@@ -74,9 +81,9 @@ class VlcHttpBackend(MediaBackend):
             position=float(time) if isinstance(time, (int, float)) else None,
             duration=float(length) if isinstance(length, (int, float)) else None,
             volume=round(float(volume) / 256 * 100) if isinstance(volume, (int, float)) else None,
-            title=meta.get("title"),
-            artist=meta.get("artist"),
-            album=meta.get("album"),
+            title=combined_meta.get("title"),
+            artist=combined_meta.get("artist"),
+            album=combined_meta.get("album"),
         )
 
     async def command(self, command: str, value: float) -> None:
