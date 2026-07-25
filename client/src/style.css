@@ -874,15 +874,28 @@ button:focus-visible { outline: none; }
 /* ---------------------------------------------------------------------------
  * Media widget
  * ------------------------------------------------------------------------- */
-/* The VLC media cell is a single responsive card. It stacks vertically and
-   centers everything — album art, then metadata, seek, transport, volume and
-   speed — with generous gaps so the controls have room to breathe. Sizes use
-   clamp() against the viewport so one rule serves both a wide desktop slot and
-   a narrow phone slot without a separate media query. */
+/* The VLC media cell is a single responsive card. It's a query container, so
+   its own shape drives the layout: portrait stacks everything vertically
+   (art, metadata, seek, transport, volume, speed); a wide/landscape slot
+   switches to a horizontal "now playing" layout (art beside a compact body,
+   sliders dropped) via the @container rule further down. */
 .cell-media {
   background: linear-gradient(160deg, #1c2833, #12181e);
   border: 1px solid #344150;
   border-radius: 18px;
+  display: grid; /* the single .media-inner child stretches to fill the cell */
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  --media-accent: #59b8df;
+  /* cqmin/cqh/cqw below resolve against this box, so the art and gaps size to
+     the cell (not the viewport) and the layout can react to the cell's shape. */
+  container-type: size;
+}
+
+.media-inner {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -892,13 +905,18 @@ button:focus-visible { outline: none; }
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  user-select: none;
-  -webkit-user-select: none;
-  --media-accent: #59b8df;
-  /* Query container so the art can size to the cell (cqmin = the smaller of
-     the cell's width/height), filling the available room in either
-     orientation rather than a fixed pixel cap. */
-  container-type: size;
+}
+
+/* Everything except the art, grouped so the landscape layout can place it as a
+   column beside the cover. */
+.media-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(10px, 2.4vh, 22px);
+  width: 100%;
+  min-width: 0;
 }
 
 /* Album art: the hero of the cell. Sized to a large fraction of the smaller
@@ -1078,6 +1096,41 @@ button:focus-visible { outline: none; }
 .cell-media-unavailable {
   border-style: dashed;
   opacity: 0.7;
+}
+
+/* Landscape / wide slot: a horizontal "now playing" layout. The cover sits
+   beside a compact body (metadata + transport), and the sliders are dropped —
+   a wide glance view is for at-a-glance status and skip, not scrubbing. */
+@container (min-aspect-ratio: 4 / 3) {
+  .media-inner {
+    flex-direction: row;
+    gap: clamp(16px, 4cqw, 44px);
+  }
+  .media-art {
+    width: auto;
+    height: min(84cqmin, 360px);
+  }
+  .media-body {
+    align-items: flex-start;
+    text-align: left;
+    width: auto;
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .media-meta {
+    align-items: flex-start;
+    text-align: left;
+  }
+  .media-transport {
+    justify-content: flex-start;
+  }
+  .media-speed {
+    justify-content: flex-start;
+  }
+  .media-range-position,
+  .media-range-volume {
+    display: none;
+  }
 }
 
 /**

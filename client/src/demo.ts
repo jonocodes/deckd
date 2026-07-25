@@ -160,9 +160,10 @@ export const MEDIA_DEMO_STATES: MediaState[] = [
     duration: 225,
     volume: 65,
     rate: 1,
-    title: "Midnight City",
-    artist: "M83",
-    album: "Hurry Up, We're Dreaming",
+    title: "One More Time",
+    artist: "Daft Punk",
+    album: "Discovery",
+    art_token: "id:demo",
   },
 ];
 

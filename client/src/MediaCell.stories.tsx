@@ -31,7 +31,7 @@ const PLAYING: MediaReading = {
 
 /** The full VLC card (art, metadata, seek, transport, volume, speed). */
 export const Full: Story = () => (
-  <div style={{ width: 420, height: 560 }}>
+  <div style={{ display: "grid", width: 420, height: 560 }}>
     <MediaCell widget={WIDGET} state={PLAYING} onPress={noop} onCommand={noop} />
   </div>
 );
@@ -39,7 +39,7 @@ export const Full: Story = () => (
 /** With real cover art: the art slot fetches ``/media/<id>/art`` (served by
  * the daemon's proxy). Here ``art_token`` is set so the <img> renders. */
 export const WithArt: Story = () => (
-  <div style={{ width: 420, height: 560 }}>
+  <div style={{ display: "grid", width: 420, height: 560 }}>
     <MediaCell
       widget={WIDGET}
       state={{
@@ -57,14 +57,14 @@ export const WithArt: Story = () => (
 
 /** A wider, shorter slot — matches the default 4x2 grid footprint. */
 export const Wide: Story = () => (
-  <div style={{ width: 640, height: 360 }}>
+  <div style={{ display: "grid", width: 640, height: 360 }}>
     <MediaCell widget={WIDGET} state={PLAYING} onPress={noop} onCommand={noop} />
   </div>
 );
 
 /** Nothing playing / VLC unreachable — dashed, dimmed, placeholders. */
 export const Unavailable: Story = () => (
-  <div style={{ width: 420, height: 560 }}>
+  <div style={{ display: "grid", width: 420, height: 560 }}>
     <MediaCell widget={WIDGET} state={null} onPress={noop} onCommand={noop} />
   </div>
 );
