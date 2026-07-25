@@ -296,6 +296,8 @@ class MacKeySink(KeySink):
         if dx == 0 and dy == 0:
             return
         Q = self._Q
+        if Q is None:
+            return
         # ``LeftMouseDragged`` keeps the left button logically held in the
         # event stream; ``MouseMoved`` is plain cursor motion with no
         # button. Picking the right one is what makes the tap-and-a-half
@@ -325,6 +327,8 @@ class MacKeySink(KeySink):
             log.info("[mac click log] button=%s pressed=%s (no Quartz)", button, pressed)
             return
         Q = self._Q
+        if Q is None:
+            return
         if button == "left":
             down_type, up_type = Q.kCGEventLeftMouseDown, Q.kCGEventLeftMouseUp
             button_code = Q.kCGMouseButtonLeft
@@ -408,6 +412,8 @@ class MacScrollSink(ScrollSink):
             return
         self._wheel_remainder -= int(detents) * self.DETENT
         Q = self._Quartz
+        if Q is None:
+            return
         event = Q.CGEventCreateScrollWheelEvent(
             None,
             Q.kCGScrollEventUnitLine,

@@ -236,7 +236,7 @@ class PsutilCpuPercentSensorSource(SensorSource):
 
     def read(self) -> SensorReading | None:
         try:
-            import psutil
+            import psutil  # type: ignore[import-untyped]
 
             value = psutil.cpu_percent(interval=None)
         except Exception:
@@ -266,7 +266,7 @@ class PsutilMemoryPercentSensorSource(SensorSource):
 
     def read(self) -> SensorReading | None:
         try:
-            import psutil
+            import psutil  # type: ignore[import-untyped]
 
             value = psutil.virtual_memory().percent
         except Exception:
@@ -456,16 +456,16 @@ class DeckdFocusDBusService:
         interface_name = self.INTERFACE_NAME
         cache = self.cache
 
-        class _DeckdFocusInterface(ServiceInterface):
+        class _DeckdFocusInterface(ServiceInterface):  # type: ignore[misc]
             def __init__(self) -> None:
                 super().__init__(interface_name)
 
             @dbus_method()
-            def GetActiveWindow(self) -> "s":  # noqa: F722 — dbus signature
+            def GetActiveWindow(self) -> "s":  # type: ignore[name-defined]
                 return cache.payload
 
             @dbus_method()
-            def UpdateActiveWindow(self, payload: "s") -> "":  # noqa: F722
+            def UpdateActiveWindow(self, payload: "s") -> "":  # type: ignore[name-defined]
                 cache.update(payload)
 
         return _DeckdFocusInterface()
