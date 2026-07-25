@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { CirclePause, CirclePlay, SkipBack, SkipForward } from "lucide-react";
+import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import type { MediaReading } from "./media-store";
 import type { Widget } from "./protocol";
 
@@ -22,30 +22,83 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
       <div className="media-subtitle">{state?.artist ?? state?.album ?? "—"}</div>
       {controls.includes("play") ? (
         <div className="media-transport">
-          {controls.includes("previous") ? <button className="media-skip" aria-label="Previous" onPointerDown={() => onPress(`${widget.id}:previous`)}><SkipBack /></button> : null}
-          <button className="media-play" aria-label={state?.playing ? "Pause" : "Play"} onPointerDown={() => onPress(widget.id)}>{state?.playing ? <CirclePause /> : <CirclePlay />}</button>
-          {controls.includes("next") ? <button className="media-skip" aria-label="Next" onPointerDown={() => onPress(`${widget.id}:next`)}><SkipForward /></button> : null}
+          {controls.includes("previous") ? (
+            <button
+              className="media-skip"
+              aria-label="Previous"
+              onPointerDown={() => onPress(`${widget.id}:previous`)}
+            >
+              <SkipBack fill="#c0c0c0" />
+            </button>
+          ) : null}
+          <button
+            className="media-play"
+            aria-label={state?.playing ? "Pause" : "Play"}
+            onPointerDown={() => onPress(widget.id)}
+          >
+            {state?.playing ? <Pause fill="#c0c0c0" /> : <Play fill="#c0c0c0" />}
+          </button>
+          {controls.includes("next") ? (
+            <button
+              className="media-skip"
+              aria-label="Next"
+              onPointerDown={() => onPress(`${widget.id}:next`)}
+            >
+              <SkipForward fill="#c0c0c0" />
+            </button>
+          ) : null}
         </div>
       ) : null}
       {controls.includes("position") ? (
         <label className="media-range">
           <span>{formatTime(position)}</span>
-          <input aria-label="Playback position" type="range" min={0} max={duration || 1} value={Math.min(position, duration || 1)} onChange={(event) => onCommand(widget.id, "seek", Number(event.target.value))} disabled={unavailable || !duration} />
+          <input
+            aria-label="Playback position"
+            type="range"
+            min={0}
+            max={duration || 1}
+            value={Math.min(position, duration || 1)}
+            onChange={(event) => onCommand(widget.id, "seek", Number(event.target.value))}
+            disabled={unavailable || !duration}
+          />
           <span>{formatTime(duration)}</span>
         </label>
       ) : null}
       {controls.includes("volume") ? (
         <label className="media-range">
           <span>Volume</span>
-          <input aria-label="Volume" className="media-volume-input" type="range" min={0} max={100} value={state?.volume ?? 0} onChange={(event) => onCommand(widget.id, "volume", Number(event.target.value))} disabled={unavailable} />
+          <input
+            aria-label="Volume"
+            className="media-volume-input"
+            type="range"
+            min={0}
+            max={100}
+            value={state?.volume ?? 0}
+            onChange={(event) => onCommand(widget.id, "volume", Number(event.target.value))}
+            disabled={unavailable}
+          />
         </label>
       ) : null}
       {controls.includes("speed") ? (
         <label className="media-speed">
           <span>Speed</span>
-          <button type="button" aria-label="Decrease speed" onPointerDown={() => onCommand(widget.id, "rate", Math.max(0.25, (state?.rate ?? 1) - 0.25))}>−</button>
+          <button
+            type="button"
+            aria-label="Decrease speed"
+            onPointerDown={() =>
+              onCommand(widget.id, "rate", Math.max(0.25, (state?.rate ?? 1) - 0.25))
+            }
+          >
+            −
+          </button>
           <output>{(state?.rate ?? 1).toFixed(2)}×</output>
-          <button type="button" aria-label="Increase speed" onPointerDown={() => onCommand(widget.id, "rate", (state?.rate ?? 1) + 0.25)}>+</button>
+          <button
+            type="button"
+            aria-label="Increase speed"
+            onPointerDown={() => onCommand(widget.id, "rate", (state?.rate ?? 1) + 0.25)}
+          >
+            +
+          </button>
         </label>
       ) : null}
     </div>
@@ -55,6 +108,8 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
 function formatTime(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return "—";
   const minutes = Math.floor(seconds / 60);
-  const remainder = Math.floor(seconds % 60).toString().padStart(2, "0");
+  const remainder = Math.floor(seconds % 60)
+    .toString()
+    .padStart(2, "0");
   return `${minutes}:${remainder}`;
 }
