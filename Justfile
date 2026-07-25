@@ -45,11 +45,11 @@ setup:
 
 # Run the daemon against the layouts directory, serving the built client.
 run-daemon:
-    deckd --layouts-dir layouts --client-dist client/dist --verbose
+    VLC_HTTP_PASSWORD=dummy deckd --layouts-dir layouts --client-dist client/dist --verbose
 
 # Run the daemon on the LAN without a built client (use dev-client-lan for HMR).
 run-daemon-lan:
-    deckd --host 0.0.0.0 --layouts-dir layouts --verbose
+    VLC_HTTP_PASSWORD=dummy deckd --host 0.0.0.0 --layouts-dir layouts --verbose
 
 # Kill whatever is bound to the two ports we use: the daemon (:8765) and
 # the Vite dev server (:5173). Handy when a stale daemon still holds the
@@ -108,13 +108,13 @@ dev-lan:
 # changes. Layout YAML hot-reload is built into the daemon itself; this is
 # only useful when editing Python.
 dev-daemon:
-    deckd-dev --verbose
+    VLC_HTTP_PASSWORD=dummy deckd-dev --verbose
 
 # Same, but bind the daemon to all interfaces so a phone on the LAN
 # (or Tailscale) can reach it. deckd-dev forwards unknown args to the
 # child, so --host and --verbose end up on the deckd process.
 dev-daemon-lan:
-    deckd-dev --host 0.0.0.0 --verbose
+    VLC_HTTP_PASSWORD=dummy deckd-dev --host 0.0.0.0 --verbose
 
 # Vite dev server on the LAN. Vite proxies /ws and /health to the local
 # daemon (see vite.config.ts), so the client is same-origin at :5173.
