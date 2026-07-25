@@ -9,8 +9,10 @@ widgets:
     grid: [0, 0, 4, 2]
     controls: [play, previous, next, volume, position, speed]
     action: {key: space}
-    previous_action: {key: ctrl+Left}
-    next_action: {key: ctrl+Right}
+    # VLC playlist navigation: 'p'/'n' skip to the previous/next track.
+    # (ctrl+Left/Right are long seeks *within* a track, not track skips.)
+    previous_action: {key: p}
+    next_action: {key: n}
     media_http:
       host: 127.0.0.1
       port: 8080
