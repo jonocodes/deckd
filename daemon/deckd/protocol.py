@@ -42,6 +42,20 @@ class BrightnessMessage(BaseModel):
     value: int = Field(ge=0, le=255)
 
 
+class MediaStateMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["media_state"]
+    id: str
+    available: bool = False
+    stale: bool = True
+    playing: bool | None = None
+    position: float | None = Field(default=None, ge=0)
+    duration: float | None = Field(default=None, ge=0)
+    volume: int | None = Field(default=None, ge=0, le=100)
+    title: str | None = None
+    artist: str | None = None
+    album: str | None = None
 class WidgetUpdateMessage(BaseModel):
     """Daemon->client push: a meter widget's live value (issue #40).
 
@@ -70,7 +84,7 @@ class WidgetUpdateMessage(BaseModel):
 
 
 ServerMessage = Annotated[
-    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage],
+    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage],
     Field(discriminator="type"),
 ]
 
@@ -146,6 +160,13 @@ class TypeMessage(BaseModel):
     text: str
 
 
+class MediaCommandMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["media_command"]
+    id: str
+    command: Literal["volume", "seek"]
+    value: float
 class KeyMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -154,6 +175,6 @@ class KeyMessage(BaseModel):
 
 
 ClientMessage = Annotated[
-    Union[HelloMessage, PressMessage, JogMessage, JogEndMessage, PadMessage, PadTapMessage, PadDragMessage, TypeMessage, KeyMessage],
+    Union[HelloMessage, PressMessage, JogMessage, JogEndMessage, PadMessage, PadTapMessage, PadDragMessage, TypeMessage, KeyMessage, MediaCommandMessage],
     Field(discriminator="type"),
 ]

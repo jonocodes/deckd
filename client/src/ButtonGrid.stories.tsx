@@ -50,6 +50,7 @@ function Frame({
         onJogEnd={noop}
         scrollScale={3}
         scrollInvert={false}
+        onMediaCommand={noop}
       />
     </div>
   );

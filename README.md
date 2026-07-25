@@ -706,3 +706,20 @@ The pieces behind the features above, for anyone reading the code:
 ## Why a venv, not a Nix shell?
 
 The daemon is normal Python — `pip install -e .` is the contract. We keep the Nix-based packaging (udev rules, `input` group, `systemd.user.service`) in the lifecycle milestone [#5](https://github.com/jonocodes/deckd/issues/5) for when a clean-machine install story matters; the per-day edit/run loop should not need a sandbox.
+### VLC media widgets
+
+The `media` kind is a single responsive composite widget. It uses configured keyboard actions by default, so basic play/pause remains available without extra VLC configuration. Add `media_http` to receive live playback state, timestamps, volume, and text metadata from VLC's local HTTP interface:
+
+```yaml
+- id: vlc-media
+  kind: media
+  grid: [0, 0, 4, 2]
+  controls: [play, volume, position]
+  action: {key: space}
+  media_http:
+    host: 127.0.0.1
+    port: 8080
+    password_ref: VLC_HTTP_PASSWORD
+```
+
+Enable VLC's HTTP interface with `--extraintf=http` or through VLC's Preferences under Interface, Main interfaces. Configure its password there and export the same value through the variable named by `password_ref`. The password is never stored in layout YAML. If VLC HTTP is unavailable, keyboard controls continue to work and live values are shown as unavailable.

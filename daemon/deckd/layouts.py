@@ -43,6 +43,14 @@ class MetricSpec(BaseModel):
     label: str | None = None
 
 
+class MediaHttp(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    host: str = "127.0.0.1"
+    port: int = Field(default=8080, ge=1, le=65535)
+    password_ref: str | None = None
+
+
 class Widget(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -74,6 +82,8 @@ class Widget(BaseModel):
     # daemon subscribes to every referenced source while a stats widget is
     # in the active layout, exactly as it does for meters.
     metrics: list[MetricSpec] | None = None
+    controls: list[str] | None = None
+    media_http: MediaHttp | None = None
 
     @field_validator("kind")
     @classmethod
@@ -86,8 +96,21 @@ class Widget(BaseModel):
         # the full model is available.
         return v
 
+    @field_validator("controls")
+    @classmethod
+    def _validate_media_controls(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        allowed = {"play", "previous", "next", "volume", "position"}
+        invalid = sorted(set(v) - allowed)
+        if invalid:
+            raise ValueError(f"unknown media controls: {', '.join(invalid)}")
+        return v
+
     @model_validator(mode="after")
-    def _validate_meter_invariants(self) -> "Widget":
+    def _validate_media_invariants(self) -> "Widget":
+        if self.kind == "media" and self.controls is None:
+            self.controls = ["play", "volume", "position"]
         if self.kind == "meter":
             if not self.source:
                 raise ValueError(

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
 import { PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
@@ -8,6 +8,7 @@ import { ManualControl } from "./ManualControl";
 import { PasswordGate } from "./PasswordGate";
 import { Settings } from "./Settings";
 import { useMeterStore } from "./meter-store";
+import { useMediaStore } from "./media-store";
 import {
   useBottomScale,
   useContentScale,
@@ -19,7 +20,7 @@ import {
 } from "./settings-store";
 import type { CSSProperties } from "react";
 import { useWakeLock } from "./wake-lock";
-import { getDemoLayout, METER_DEMO_SEEDS } from "./demo";
+import { getDemoLayout } from "./demo";
 import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
 import type { Icon as IconRef, ServerLayout } from "./protocol";
@@ -68,6 +69,8 @@ export function App() {
     return sources;
   }, [layout]);
   const meter = useMeterStore(activeMeterSources);
+  const activeMediaIds = useMemo(() => new Set((layout?.widgets ?? []).filter((w) => w.kind === "media").map((w) => w.id)), [layout]);
+  const media = useMediaStore(activeMediaIds);
   // Pull out the store's ``onUpdate`` (a stable useCallback) and feed
   // widget_update frames straight to it. Depending on the whole ``meter``
   // object instead would be a bug: it gets a fresh identity on every render
@@ -77,42 +80,10 @@ export function App() {
   // enough to authenticate, so the password gate would never show.
   const pushReading = meter.onUpdate;
   const onWidgetUpdate = pushReading;
-  // Demo-mode seeding (issue #40). The meter demo fixture never
-  // receives server pushes (demo mode disables the socket). Seed the
-  // meter store with a realistic CPU temp so the bar renders with
-  // something to look at instead of staying at the "—" empty state.
-  // This is a one-shot write per id — subsequent seeds with the same
-  // id are no-ops, so a layout switch that lands back on the meter
-  // demo doesn't keep re-seeding.
-  useEffect(() => {
-    if (!demoLayout) return;
-    for (const w of demoLayout.widgets) {
-      if (w.kind !== "meter" || !w.source) continue;
-      const seed = METER_DEMO_SEEDS[w.id];
-      if (!seed) continue;
-      // Synthesise a ServerWidgetUpdate-like frame the store accepts.
-      // Treated as live (stale=false) so the demo shows a coloured
-      // bar; without a real source flipping the freshness, a demoed
-      // meter would auto-dim after STALE_AFTER_S.
-      void seed;
-      // Trigger an immediate push by writing to localStorage and
-      // triggering a state bump: easier and side-effect-free here is
-      // to just call onUpdate via a synthetic frame.
-      pushReading({
-        type: "widget_update",
-        id: w.id,
-        source: w.source,
-        value: seed.value,
-        unit: seed.unit,
-        stale: false,
-      });
-    }
-  }, [demoLayout, pushReading]);
+  const onMediaState = media.onUpdate;
   const { status, send, authenticate, deauthenticate, hasPassword } =
-    useDeckdSocket(onLayout, onWidgetUpdate, { enabled: !demoLayout });
+    useDeckdSocket(onLayout, onWidgetUpdate, onMediaState, { enabled: !demoLayout });
   // Track whether we've already handed the socket a password this session, so
-  // the gate can say "incorrect" on a repeat rejection rather than on first
-  // contact (where the stored password was simply empty).
   const [attemptedAuth, setAttemptedAuth] = useState(false);
   const scroll = useScrollSettings();
   const trackpad = useTrackpadSettings();
@@ -134,6 +105,7 @@ export function App() {
   const padDrag = (state: "start" | "end") => send({ type: "pad_drag", id: TRACKPAD_ID, state });
   const typeText = (text: string) => send({ type: "type", text });
   const keyCombo = (combo: string) => send({ type: "key", combo });
+  const mediaCommand = (id: string, command: "volume" | "seek", value: number) => send({ type: "media_command", id, command, value });
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
@@ -233,6 +205,8 @@ export function App() {
               scrollScale={scroll.scale}
               scrollInvert={scroll.invert}
               meterReadings={meter.readings ?? undefined}
+              mediaStates={media.states}
+              onMediaCommand={mediaCommand}
               labelScale={labelScale.scale}
             />
           ) : (

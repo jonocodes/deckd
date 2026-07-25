@@ -9,28 +9,34 @@ export type Icon = { source: string; name: string };
  * from the source name (``cpu_percent`` → ``CPU``). */
 export type Metric = { source: string; label?: string | null };
 
+export type MediaHttp = { host?: string; port?: number; password_ref?: string | null };
+export type MediaState = {
+  type: "media_state";
+  id: string;
+  available: boolean;
+  stale: boolean;
+  playing?: boolean | null;
+  position?: number | null;
+  duration?: number | null;
+  volume?: number | null;
+  title?: string | null;
+  artist?: string | null;
+  album?: string | null;
+};
 export type Widget = {
   id: string;
-  kind: "button" | "jogstrip" | "trackpad" | "meter" | "stats";
+  kind: "button" | "jogstrip" | "trackpad" | "meter" | "stats" | "media";
   label?: string | null;
   icon?: Icon | null;
   grid: [number, number, number, number];
-  /** Optional CSS colour string; applied as the button's background. */
   color?: string | null;
   action?: Record<string, unknown> | null;
-  /**
-   * Meter-only: the daemon-side sensor source name the widget
-   * subscribes to (e.g. ``"cpu_percent"``, ``"mem_percent"``). Opaque
-   * to the client — the daemon validates it; unknown sources just
-   * leave the widget stale.
-   */
   source?: string | null;
-  /** Meter-only: lower bound of the bar's visible range. */
   min?: number | null;
-  /** Meter-only: upper bound of the bar's visible range. */
   max?: number | null;
-  /** Stats-only: the data points to display, one compact row each. */
   metrics?: Metric[] | null;
+  controls?: string[] | null;
+  media_http?: MediaHttp | null;
 };
 
 export type ServerLayout = {
@@ -78,6 +84,7 @@ export type ServerMessage =
   | ServerState
   | ServerBrightness
   | ServerWidgetUpdate
+  | MediaState
   | ServerError;
 
 export type ClientHello = {
@@ -98,6 +105,7 @@ export type ClientPadTap = { type: "pad_tap"; id: string; fingers: number };
 export type ClientPadDrag = { type: "pad_drag"; id: string; state: "start" | "end" };
 export type ClientType = { type: "type"; text: string };
 export type ClientKey = { type: "key"; combo: string };
+export type ClientMediaCommand = { type: "media_command"; id: string; command: "volume" | "seek"; value: number };
 export type ClientMessage =
   | ClientHello
   | ClientPress
@@ -107,4 +115,5 @@ export type ClientMessage =
   | ClientPadTap
   | ClientPadDrag
   | ClientType
-  | ClientKey;
+  | ClientKey
+  | ClientMediaCommand;

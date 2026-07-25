@@ -4,6 +4,8 @@ import { Icon } from "./Icon";
 import { JogStrip } from "./JogStrip";
 import { MeterCell } from "./MeterCell";
 import { StatsCell } from "./StatsCell";
+import { MediaCell } from "./MediaCell";
+import type { MediaReading } from "./media-store";
 import type { MeterReading } from "./meter-store";
 import { transposeWidgets, useOrientation } from "./orientation";
 import type { Orientation } from "./orientation";
@@ -24,6 +26,8 @@ type Props = {
    * value (bar empty, "—" numeric). Stale readings show the bar at
    * its last position with a dimmed readout. */
   meterReadings?: Record<string, MeterReading>;
+  mediaStates?: Record<string, MediaReading>;
+  onMediaCommand?: (id: string, command: "volume" | "seek", value: number) => void;
   /** Multiplier for the meter widget's caption label so it scales with
    * the same user-facing "label size" preference as buttons. */
   labelScale?: number;
@@ -58,6 +62,8 @@ export function ButtonGrid({
   orientation: orientationOverride,
   meterReadings,
   labelScale,
+  mediaStates,
+  onMediaCommand,
 }: Props) {
   const autoOrientation = useOrientation();
   const orientation = orientationOverride ?? autoOrientation;
@@ -109,6 +115,18 @@ export function ButtonGrid({
                 reading={(w.source ? meterReadings?.[w.source] : null) ?? null}
                 style={style}
                 labelScale={labelScale ?? 1}
+              />
+            );
+          }
+          if (w.kind === "media") {
+            return (
+              <MediaCell
+                key={w.id}
+                widget={w}
+                state={mediaStates?.[w.id] ?? null}
+                style={style}
+                onPress={onPress}
+                onCommand={onMediaCommand ?? (() => undefined)}
               />
             );
           }

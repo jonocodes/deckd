@@ -12,6 +12,7 @@ from aiohttp import web
 from .auth import PasswordError, default_password_path, load_or_create_password
 from .input import LoggingKeySink, LoggingScrollSink, ScrollController, UinputSink
 from .platform import default_backend, default_sensor_manager
+from .media import MediaManager
 from .server import PortInUseError, Server
 
 
@@ -169,6 +170,7 @@ def main() -> None:
         overlay_dir=overlay_dir,
         password=password,
         sensor_manager=default_sensor_manager(),
+        media_manager=MediaManager(),
     )
 
     if args.client_dist is not None:

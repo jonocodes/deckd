@@ -11,7 +11,7 @@ The per-app configuration of what to show on the client surface. A layout has a 
 _Avoid_: profile, config, scene
 
 **Widget**:
-A single interactive element placed on a page. Current kinds: `button`, `jogstrip`, `trackpad`.
+A single interactive element placed on a page. Current kinds: `button`, `jogstrip`, `trackpad`, `meter`, `stats`, `media`. A media widget is a composite surface with internal playback, position, volume, and metadata controls.
 _Avoid_: control, element, tile
 
 **Grid placement**:

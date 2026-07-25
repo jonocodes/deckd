@@ -1,0 +1,15 @@
+match: [vlc, vlc-qt]
+display_name: VLC
+theme: "#ff8c00"
+icon: {source: simple-icons, name: vlcmediaplayer}
+widgets:
+  - id: vlc-media
+    kind: media
+    label: VLC
+    grid: [0, 0, 4, 2]
+    controls: [play, volume, position]
+    action: {key: space}
+    media_http:
+      host: 127.0.0.1
+      port: 8080
+      password_ref: VLC_HTTP_PASSWORD

@@ -18,6 +18,7 @@ from . import protocol as p
 from .actions import ActionContext, execute as run_action
 from .input import ScrollController, parse_key_combo, text_to_combos
 from .layouts import Layout, LayoutStore, load_layouts, resolve_layout
+from .media import MediaManager, MediaState
 
 if TYPE_CHECKING:
     from dbus_fast import BusType as BusTypeT
@@ -195,6 +196,7 @@ class Server:
         overlay_dir: Path | None = None,
         password: str | None = None,
         sensor_manager: "SensorManager | None" = None,
+        media_manager: MediaManager | None = None,
     ) -> None:
         self.layouts_dir = layouts_dir
         self.overlay_dir = overlay_dir
@@ -216,6 +218,7 @@ class Server:
         self._focus_task: asyncio.Task[None] | None = None
         self._layouts_task: asyncio.Task[None] | None = None
         self._sensor_task: asyncio.Task[None] | None = None
+        self._media_task: asyncio.Task[None] | None = None
         self._current_error: str | None = None
         self._deckd_window_focused = False
         # Sensor subscriptions for the active layout. Re-derived whenever
@@ -227,6 +230,7 @@ class Server:
         # subscribe/unsubscribe balanced across layout changes.
         self.sensors: "SensorManager | None" = sensor_manager
         self._subscribed_sources: set[str] = set()
+        self.media = media_manager
 
     # -- layout state --------------------------------------------------------
 
@@ -272,6 +276,7 @@ class Server:
         # removed). Reconcile subscriptions so the manager polls only
         # what's now in use.
         self._sync_sensor_subscriptions()
+        self._sync_media_subscriptions()
         log.info(
             "reloaded layouts from %s%s",
             self.layouts_dir,
@@ -333,6 +338,7 @@ class Server:
         # something else). Resubscribe so the manager's polling tracks
         # the active view.
         self._sync_sensor_subscriptions()
+        self._sync_media_subscriptions()
         await self._push_to_all()
 
     async def run_focus_watcher(self) -> None:
@@ -576,6 +582,52 @@ class Server:
             self._sessions.discard(session)
         return sent > 0
 
+    def _media_widgets(self) -> list[Widget]:
+        return [w for w in self._current_layout.widgets if w.kind == "media"]
+
+    def _sync_media_subscriptions(self) -> None:
+        return None
+
+    async def run_media_pump(self) -> None:
+        if self.media is None:
+            return
+        last: dict[str, MediaState] = {}
+        try:
+            while True:
+                for widget in self._media_widgets():
+                    config = widget.media_http
+                    if config is None:
+                        continue
+                    state = await self.media.read(
+                        widget.id,
+                        host=config.host,
+                        port=config.port,
+                        password_ref=config.password_ref,
+                    )
+                    if last.get(widget.id) == state:
+                        continue
+                    if await self._broadcast_media_state(widget.id, state):
+                        last[widget.id] = state
+                await asyncio.sleep(1.0)
+        except asyncio.CancelledError:
+            return
+
+    async def _broadcast_media_state(self, widget_id: str, state: MediaState) -> bool:
+        if not self._sessions:
+            return False
+        msg = p.MediaStateMessage(type="media_state", id=widget_id, **state.__dict__)
+        sent = 0
+        dead: list[Session] = []
+        for session in list(self._sessions):
+            try:
+                await session.send(msg)
+                sent += 1
+            except (ConnectionResetError, RuntimeError, ConnectionError):
+                dead.append(session)
+        for session in dead:
+            self._sessions.discard(session)
+        return sent > 0
+
     def start_sensor_pump(self) -> asyncio.Task[None] | None:
         if self.sensors is None or self._sensor_task is not None:
             return None
@@ -590,7 +642,12 @@ class Server:
         self._sensor_task = asyncio.create_task(self.run_sensor_pump())
         return self._sensor_task
 
-    # -- auth ----------------------------------------------------------------
+    def start_media_pump(self) -> asyncio.Task[None] | None:
+        if self.media is None or self._media_task is not None:
+            return None
+        self._media_task = asyncio.create_task(self.run_media_pump())
+        return self._media_task
+
     #
     # Every WebSocket and HTTP control connection must present the shared
     # password (issue #16). There is no source-address exemption: the check
@@ -830,6 +887,21 @@ class Server:
             if self.key_sink is not None:
                 self.key_sink.emit_key(parse_key_combo(kmsg.combo))
             return
+        if msg_type == "media_command":
+            msg = p.MediaCommandMessage.model_validate(data)
+            widget = self._find_widget(msg.id)
+            if widget is None or self.media is None or widget.media_http is None:
+                return
+            config = widget.media_http
+            await self.media.command(
+                widget.id,
+                msg.command,
+                msg.value,
+                host=config.host,
+                port=config.port,
+                password_ref=config.password_ref,
+            )
+            return
         if msg_type != "press":
             log.debug("ignoring %s", msg_type)
             return
@@ -874,11 +946,12 @@ class Server:
         self._runner = runner
         self.start_layouts_watcher()
         self.start_sensor_pump()
+        self.start_media_pump()
         while True:
             await asyncio.sleep(3600)
 
     async def stop(self) -> None:
-        for task in (self._focus_task, self._layouts_task, self._sensor_task):
+        for task in (self._focus_task, self._layouts_task, self._sensor_task, self._media_task):
             if task is not None:
                 task.cancel()
                 try:
@@ -892,6 +965,8 @@ class Server:
                 log.debug("focus backend stop failed: %s", exc)
         if self.sensors is not None:
             self.sensors.stop()
+        if self.media is not None:
+            self.media.stop()
         runner = getattr(self, "_runner", None)
         if runner is not None:
             await runner.cleanup()

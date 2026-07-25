@@ -1,0 +1,65 @@
+import type { CSSProperties } from "react";
+import type { Widget } from "./protocol";
+import type { MediaReading } from "./media-store";
+
+type Props = {
+  widget: Widget;
+  state: MediaReading | null;
+  style?: CSSProperties;
+  onPress: (id: string) => void;
+  onCommand: (id: string, command: "volume" | "seek", value: number) => void;
+};
+
+export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
+  const controls = widget.controls ?? ["play", "volume", "position"];
+  const duration = state?.duration ?? 0;
+  const position = state?.position ?? 0;
+  const unavailable = !state?.available || state.stale;
+  return (
+    <div className={`cell cell-media${unavailable ? " cell-media-unavailable" : ""}`} style={style}>
+      <div className="media-title">{state?.title ?? "—"}</div>
+      <div className="media-subtitle">{state?.artist ?? state?.album ?? "—"}</div>
+      {controls.includes("play") ? (
+        <button className="media-play" aria-label={state?.playing ? "Pause" : "Play"} onPointerDown={() => onPress(widget.id)}>
+          {state?.playing ? "Ⅱ" : "▶"}
+        </button>
+      ) : null}
+      {controls.includes("position") ? (
+        <label className="media-range">
+          <span>{formatTime(position)}</span>
+          <input
+            aria-label="Playback position"
+            type="range"
+            min={0}
+            max={duration || 1}
+            value={Math.min(position, duration || 1)}
+            onChange={(event) => onCommand(widget.id, "seek", Number(event.target.value))}
+            disabled={unavailable || !duration}
+          />
+          <span>{formatTime(duration)}</span>
+        </label>
+      ) : null}
+      {controls.includes("volume") ? (
+        <label className="media-range">
+          <span>Volume</span>
+          <input
+            aria-label="Volume"
+            type="range"
+            min={0}
+            max={100}
+            value={state?.volume ?? 0}
+            onChange={(event) => onCommand(widget.id, "volume", Number(event.target.value))}
+            disabled={unavailable}
+          />
+        </label>
+      ) : null}
+    </div>
+  );
+}
+
+function formatTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return "—";
+  const minutes = Math.floor(seconds / 60);
+  const remainder = Math.floor(seconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${remainder}`;
+}

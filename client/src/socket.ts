@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerLayout, ServerMessage, ServerWidgetUpdate } from "./protocol";
+import type { ClientMessage, ServerLayout, ServerMessage, ServerWidgetUpdate, MediaState } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
 
@@ -43,6 +43,7 @@ function readPinnedLayout(): string {
 export function useDeckdSocket(
   onLayout: (m: ServerLayout) => void,
   onWidgetUpdate: (m: ServerWidgetUpdate) => void,
+  onMediaState: (m: MediaState) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -103,6 +104,7 @@ export function useDeckdSocket(
           const msg = JSON.parse(ev.data) as ServerMessage;
           if (msg.type === "layout") onLayout(msg);
           else if (msg.type === "widget_update") onWidgetUpdate(msg);
+          else if (msg.type === "media_state") onMediaState(msg);
           else if (msg.type === "error" && msg.reason === "unauthorized") {
             // Wrong/absent password: stop reconnecting and prompt the user.
             unauthorizedRef.current = true;
@@ -145,7 +147,7 @@ export function useDeckdSocket(
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onLayout, onWidgetUpdate, enabled, gen]);
+  }, [onLayout, onWidgetUpdate, onMediaState, enabled, gen]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;
