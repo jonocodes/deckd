@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
 import { PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
@@ -20,7 +20,7 @@ import {
 } from "./settings-store";
 import type { CSSProperties } from "react";
 import { useWakeLock } from "./wake-lock";
-import { getDemoLayout } from "./demo";
+import { getDemoLayout, getDemoView, MEDIA_DEMO_STATES } from "./demo";
 import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
 import type { Icon as IconRef, ServerLayout } from "./protocol";
@@ -49,7 +49,9 @@ export function App() {
   // daemon-backed operation.
   const demoLayout = getDemoLayout();
   const [layout, setLayout] = useState<ServerLayout | null>(demoLayout);
-  const [view, setView] = useState<View>("layout");
+  // A view demo (``?demo=settings`` / ``?demo=trackpad``) opens straight into
+  // that chrome view; otherwise start on the layout grid.
+  const [view, setView] = useState<View>(getDemoView);
   const onLayout = useCallback((m: ServerLayout) => setLayout(m), []);
   // Track every sensor source the active layout references (from ``meter``
   // widgets and each ``stats`` widget's metrics) so the meter store can drop
@@ -81,6 +83,13 @@ export function App() {
   const pushReading = meter.onUpdate;
   const onWidgetUpdate = pushReading;
   const onMediaState = media.onUpdate;
+  // Demo mode has no socket, so seed the media store once on mount with the
+  // fixture readings — otherwise a media widget renders as "unavailable".
+  const isDemo = demoLayout !== null;
+  useEffect(() => {
+    if (!isDemo) return;
+    for (const state of MEDIA_DEMO_STATES) onMediaState(state);
+  }, [isDemo, onMediaState]);
   const { status, send, authenticate, deauthenticate, hasPassword } =
     useDeckdSocket(onLayout, onWidgetUpdate, onMediaState, { enabled: !demoLayout });
   // Track whether we've already handed the socket a password this session, so

@@ -1,4 +1,4 @@
-import type { ServerLayout } from "./protocol";
+import type { MediaState, ServerLayout } from "./protocol";
 
 /** Backend-free demo fixtures. Activated with a ``?demo=<name>`` URL param
  * (e.g. ``/?demo=firefox``): the app renders the fixture layout and skips the
@@ -124,24 +124,89 @@ export const METER_DEMO_SEEDS: Record<string, { value: number; unit: string }> =
   mem_percent: { value: 41, unit: "%" },
 };
 
+// Backend-free VLC media demo. A single full-width media cell, matching the
+// shipping ``layouts/vlc.yaml`` footprint, so ``/?demo=vlc`` shows the player
+// card in the real app chrome. Its playback state is seeded from
+// MEDIA_DEMO_STATES below (App pushes it into the media store on mount).
+const VLC: ServerLayout = {
+  type: "layout",
+  app: "VLC (demo)",
+  display_name: "VLC",
+  theme: "#ff8c00",
+  icon: { source: "simple-icons", name: "vlcmediaplayer" },
+  jogstrip_enabled: true,
+  widgets: [
+    {
+      id: "vlc-media",
+      kind: "media",
+      label: "VLC",
+      grid: [0, 0, 4, 2],
+      controls: ["play", "previous", "next", "volume", "position", "speed"],
+    },
+  ],
+};
+
+/** Seed readings for the VLC demo, keyed by widget id via ``id``. App pushes
+ * these into the media store on mount when a demo layout is active, so the
+ * card renders populated (art, metadata, live seek/volume) without a daemon. */
+export const MEDIA_DEMO_STATES: MediaState[] = [
+  {
+    type: "media_state",
+    id: "vlc-media",
+    available: true,
+    stale: false,
+    playing: true,
+    position: 73,
+    duration: 225,
+    volume: 65,
+    rate: 1,
+    title: "Midnight City",
+    artist: "M83",
+    album: "Hurry Up, We're Dreaming",
+  },
+];
+
 const DEMOS: Record<string, ServerLayout> = {
   firefox: FIREFOX,
   default: DEFAULT,
   showcase: SHOWCASE,
   meter: METER,
+  vlc: VLC,
 };
+
+type DemoView = "layout" | "trackpad" | "settings";
+
+// Demo names that open a chrome *view* (settings / trackpad) rather than a
+// bare layout. They render over a base fixture so the socket stays disabled
+// and the app chrome (badge, status) has real context behind the panel.
+const DEMO_VIEWS: Record<string, DemoView> = {
+  settings: "settings",
+  trackpad: "trackpad",
+};
+const VIEW_DEMO_BASE = VLC;
 
 /** The demo fixtures, keyed by name — for the gallery and Ladle stories. */
 export const DEMO_LAYOUTS = DEMOS;
 
-/** Names of the available demo fixtures, for the demo gallery selector. */
-export const DEMO_NAMES = Object.keys(DEMOS);
+/** Names of the available demo pages, for the demo gallery selector — the
+ * layout fixtures plus the settings / trackpad view demos. */
+export const DEMO_NAMES = [...Object.keys(DEMOS), ...Object.keys(DEMO_VIEWS)];
 
 /** Returns the demo layout named by the ``?demo=`` URL param, or ``null``
- * when the param is absent/unknown (normal daemon-backed operation). */
+ * when the param is absent/unknown (normal daemon-backed operation). A view
+ * demo (``settings`` / ``trackpad``) renders over a shared base fixture. */
 export function getDemoLayout(): ServerLayout | null {
   if (typeof window === "undefined") return null;
   const name = new URLSearchParams(window.location.search).get("demo");
   if (!name) return null;
+  if (name in DEMO_VIEWS) return VIEW_DEMO_BASE;
   return DEMOS[name] ?? null;
+}
+
+/** The initial chrome view for the current ``?demo=`` param — ``settings`` or
+ * ``trackpad`` for the view demos, otherwise ``layout``. */
+export function getDemoView(): DemoView {
+  if (typeof window === "undefined") return "layout";
+  const name = new URLSearchParams(window.location.search).get("demo");
+  return (name && DEMO_VIEWS[name]) || "layout";
 }
