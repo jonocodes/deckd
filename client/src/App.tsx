@@ -105,7 +105,7 @@ export function App() {
   const padDrag = (state: "start" | "end") => send({ type: "pad_drag", id: TRACKPAD_ID, state });
   const typeText = (text: string) => send({ type: "type", text });
   const keyCombo = (combo: string) => send({ type: "key", combo });
-  const mediaCommand = (id: string, command: "volume" | "seek", value: number) => send({ type: "media_command", id, command, value });
+  const mediaCommand = (id: string, command: "volume" | "seek" | "rate", value: number) => send({ type: "media_command", id, command, value });
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];

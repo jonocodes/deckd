@@ -27,7 +27,7 @@ type Props = {
    * its last position with a dimmed readout. */
   meterReadings?: Record<string, MeterReading>;
   mediaStates?: Record<string, MediaReading>;
-  onMediaCommand?: (id: string, command: "volume" | "seek", value: number) => void;
+  onMediaCommand?: (id: string, command: "volume" | "seek" | "rate", value: number) => void;
   /** Multiplier for the meter widget's caption label so it scales with
    * the same user-facing "label size" preference as buttons. */
   labelScale?: number;

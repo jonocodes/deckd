@@ -19,6 +19,7 @@ export type MediaState = {
   position?: number | null;
   duration?: number | null;
   volume?: number | null;
+  rate?: number | null;
   title?: string | null;
   artist?: string | null;
   album?: string | null;
@@ -107,7 +108,7 @@ export type ClientPadTap = { type: "pad_tap"; id: string; fingers: number };
 export type ClientPadDrag = { type: "pad_drag"; id: string; state: "start" | "end" };
 export type ClientType = { type: "type"; text: string };
 export type ClientKey = { type: "key"; combo: string };
-export type ClientMediaCommand = { type: "media_command"; id: string; command: "volume" | "seek"; value: number };
+export type ClientMediaCommand = { type: "media_command"; id: string; command: "volume" | "seek" | "rate"; value: number };
 export type ClientMessage =
   | ClientHello
   | ClientPress

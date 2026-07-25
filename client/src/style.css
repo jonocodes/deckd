@@ -917,7 +917,33 @@ button:focus-visible { outline: none; }
     height: auto;
     width: 100%;
   }
-  .media-range:has(.media-volume-input) {
+.media-speed {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #9aa7b4;
+}
+
+.media-speed button {
+  min-width: 32px;
+  min-height: 32px;
+  border: 1px solid #3b4d5b;
+  border-radius: 8px;
+  background: #1b2a36;
+  color: #e6f7ff;
+  font-size: 20px;
+}
+
+.media-speed output {
+  min-width: 48px;
+  text-align: center;
+  color: #e6e9ef;
+  font-variant-numeric: tabular-nums;
+}
+
+
     grid-column: 1 / -1;
     grid-row: auto;
     grid-template-columns: auto minmax(0, 1fr);

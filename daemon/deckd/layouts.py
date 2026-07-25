@@ -103,7 +103,7 @@ class Widget(BaseModel):
     def _validate_media_controls(cls, v: list[str] | None) -> list[str] | None:
         if v is None:
             return v
-        allowed = {"play", "previous", "next", "volume", "position"}
+        allowed = {"play", "previous", "next", "volume", "position", "speed"}
         invalid = sorted(set(v) - allowed)
         if invalid:
             raise ValueError(f"unknown media controls: {', '.join(invalid)}")

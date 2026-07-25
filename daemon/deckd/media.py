@@ -20,6 +20,7 @@ class MediaState:
     position: float | None = None
     duration: float | None = None
     volume: int | None = None
+    rate: float | None = None
     title: str | None = None
     artist: str | None = None
     album: str | None = None
@@ -81,6 +82,7 @@ class VlcHttpBackend(MediaBackend):
             position=float(time) if isinstance(time, (int, float)) else None,
             duration=float(length) if isinstance(length, (int, float)) else None,
             volume=round(float(volume) / 256 * 100) if isinstance(volume, (int, float)) else None,
+            rate=float(data["rate"]) if isinstance(data.get("rate"), (int, float)) else None,
             title=combined_meta.get("title"),
             artist=combined_meta.get("artist"),
             album=combined_meta.get("album"),
@@ -89,8 +91,8 @@ class VlcHttpBackend(MediaBackend):
     async def command(self, command: str, value: float) -> None:
         if command == "volume":
             params = {"command": "volume", "val": str(round(value / 100 * 256))}
-        elif command == "seek":
-            params = {"command": "seek", "val": str(max(0, value))}
+        elif command == "rate":
+            params = {"command": "rate", "val": str(max(0.1, value))}
         else:
             raise ValueError(f"unsupported media command: {command}")
         await asyncio.to_thread(self._request, f"/requests/status.json?{urlencode(params)}")

@@ -7,7 +7,7 @@ widgets:
     kind: media
     label: VLC
     grid: [0, 0, 4, 2]
-    controls: [play, previous, next, volume, position]
+    controls: [play, previous, next, volume, position, speed]
     action: {key: space}
     previous_action: {key: ctrl+Left}
     next_action: {key: ctrl+Right}

@@ -53,6 +53,7 @@ class MediaStateMessage(BaseModel):
     position: float | None = Field(default=None, ge=0)
     duration: float | None = Field(default=None, ge=0)
     volume: int | None = Field(default=None, ge=0, le=100)
+    rate: float | None = Field(default=None, gt=0)
     title: str | None = None
     artist: str | None = None
     album: str | None = None
@@ -165,7 +166,7 @@ class MediaCommandMessage(BaseModel):
 
     type: Literal["media_command"]
     id: str
-    command: Literal["volume", "seek"]
+    command: Literal["volume", "seek", "rate"]
     value: float
 class KeyMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
