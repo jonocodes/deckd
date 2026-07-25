@@ -20,9 +20,17 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
       <div className="media-title">{state?.title ?? "—"}</div>
       <div className="media-subtitle">{state?.artist ?? state?.album ?? "—"}</div>
       {controls.includes("play") ? (
-        <button className="media-play" aria-label={state?.playing ? "Pause" : "Play"} onPointerDown={() => onPress(widget.id)}>
-          {state?.playing ? "Ⅱ" : "▶"}
-        </button>
+        <div className="media-transport">
+          {controls.includes("previous") ? (
+            <button className="media-skip" aria-label="Previous" onPointerDown={() => onPress(`${widget.id}:previous`)}>◀◀</button>
+          ) : null}
+          <button className="media-play" aria-label={state?.playing ? "Pause" : "Play"} onPointerDown={() => onPress(widget.id)}>
+            {state?.playing ? "Ⅱ" : "▶"}
+          </button>
+          {controls.includes("next") ? (
+            <button className="media-skip" aria-label="Next" onPointerDown={() => onPress(`${widget.id}:next`)}>▶▶</button>
+          ) : null}
+        </div>
       ) : null}
       {controls.includes("position") ? (
         <label className="media-range">
@@ -42,8 +50,10 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
       {controls.includes("volume") ? (
         <label className="media-range">
           <span>Volume</span>
-          <input
-            aria-label="Volume"
+            <input
+              aria-label="Volume"
+              className="media-volume-input"
+
             type="range"
             min={0}
             max={100}

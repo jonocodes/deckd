@@ -84,6 +84,8 @@ class Widget(BaseModel):
     metrics: list[MetricSpec] | None = None
     controls: list[str] | None = None
     media_http: MediaHttp | None = None
+    previous_action: "Action | None" = None
+    next_action: "Action | None" = None
 
     @field_validator("kind")
     @classmethod

@@ -37,6 +37,8 @@ export type Widget = {
   metrics?: Metric[] | null;
   controls?: string[] | null;
   media_http?: MediaHttp | null;
+  previous_action?: Record<string, unknown> | null;
+  next_action?: Record<string, unknown> | null;
 };
 
 export type ServerLayout = {

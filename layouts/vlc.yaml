@@ -7,8 +7,10 @@ widgets:
     kind: media
     label: VLC
     grid: [0, 0, 4, 2]
-    controls: [play, volume, position]
+    controls: [play, previous, next, volume, position]
     action: {key: space}
+    previous_action: {key: ctrl+Left}
+    next_action: {key: ctrl+Right}
     media_http:
       host: 127.0.0.1
       port: 8080

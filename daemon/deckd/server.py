@@ -917,6 +917,12 @@ class Server:
             return
         press = p.PressMessage.model_validate(data)
         widget = self._find_widget(press.id)
+        action_widget_id = press.id
+        if widget is None and ":" in press.id:
+            base_id, control = press.id.rsplit(":", 1)
+            widget = self._find_widget(base_id)
+            if widget is not None and control in {"previous", "next"}:
+                action_widget_id = control
         if widget is None:
             log.warning("press for unknown widget id=%s", press.id)
             return
@@ -927,6 +933,17 @@ class Server:
             key_sink=self.key_sink,
             dbus_bus_factory=self.dbus_bus_factory,
         )
+        if action_widget_id in {"previous", "next"}:
+            action = getattr(widget, f"{action_widget_id}_action")
+            if action is None:
+                return
+            original = widget.action
+            widget.action = action
+            try:
+                await run_action(widget, ctx)
+            finally:
+                widget.action = original
+            return
         await run_action(widget, ctx)
 
     def _injection_blocked(self, what: str) -> bool:
