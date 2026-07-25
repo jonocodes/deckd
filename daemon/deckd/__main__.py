@@ -107,6 +107,9 @@ def main() -> None:
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
     )
 
+    sink: object | None
+    scroll_sink: object
+    key_sink: object
     try:
         if sys.platform == "darwin":
             from .platform_macos import MacKeySink, MacScrollSink

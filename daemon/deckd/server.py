@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
     from .input import KeySink
     from .layouts import Widget
-    from .platform import AppInfo, PlatformBackend
+    from .platform import AppInfo, PlatformBackend, SensorManager, SensorReading
 
 from . import PASSWORD_HEADER
 
@@ -165,20 +165,30 @@ class Session:
         # on-disk YAML. ``app`` still carries the match token so the chrome
         # can fall back to it when ``display_name`` is None.
         icon = p.Icon.model_validate(layout.icon.model_dump()) if layout.icon else None
-        common = dict(
-            app=app_id,
-            jogstrip_enabled=layout.jogstrip,
-            display_name=layout.display_name,
-            theme=layout.theme,
-            icon=icon,
-        )
         if error is not None:
             # Bad on-disk config: send widgets=[] plus the error text so the
             # client swaps the grid for a diagnostic message.
-            msg = p.LayoutMessage(type="layout", widgets=[], error=error, **common)
+            msg = p.LayoutMessage(
+                type="layout",
+                app=app_id,
+                jogstrip_enabled=layout.jogstrip,
+                display_name=layout.display_name,
+                theme=layout.theme,
+                icon=icon,
+                widgets=[],
+                error=error,
+            )
         else:
             widgets = [w.model_dump() for w in layout.widgets]
-            msg = p.LayoutMessage(type="layout", widgets=widgets, **common)
+            msg = p.LayoutMessage(
+                type="layout",
+                app=app_id,
+                jogstrip_enabled=layout.jogstrip,
+                display_name=layout.display_name,
+                theme=layout.theme,
+                icon=icon,
+                widgets=widgets,
+            )
         await self.send(msg)
 
 
@@ -852,8 +862,8 @@ class Server:
             self.scroll.jog(msg.id, msg.delta)
             return
         if msg_type == "jog_end":
-            msg = p.JogEndMessage.model_validate(data)
-            self.scroll.jog_end(msg.id, msg.velocity)
+            jog_end = p.JogEndMessage.model_validate(data)
+            self.scroll.jog_end(jog_end.id, jog_end.velocity)
             return
         if msg_type == "pad":
             pad = p.PadMessage.model_validate(data)
@@ -888,15 +898,15 @@ class Server:
                 self.key_sink.emit_key(parse_key_combo(kmsg.combo))
             return
         if msg_type == "media_command":
-            msg = p.MediaCommandMessage.model_validate(data)
-            widget = self._find_widget(msg.id)
+            media_command = p.MediaCommandMessage.model_validate(data)
+            widget = self._find_widget(media_command.id)
             if widget is None or self.media is None or widget.media_http is None:
                 return
             config = widget.media_http
             await self.media.command(
                 widget.id,
-                msg.command,
-                msg.value,
+                media_command.command,
+                media_command.value,
                 host=config.host,
                 port=config.port,
                 password_ref=config.password_ref,
@@ -905,10 +915,10 @@ class Server:
         if msg_type != "press":
             log.debug("ignoring %s", msg_type)
             return
-        msg = p.PressMessage.model_validate(data)
-        widget = self._find_widget(msg.id)
+        press = p.PressMessage.model_validate(data)
+        widget = self._find_widget(press.id)
         if widget is None:
-            log.warning("press for unknown widget id=%s", msg.id)
+            log.warning("press for unknown widget id=%s", press.id)
             return
         ctx = ActionContext(
             send_layout=session.push_current,

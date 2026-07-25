@@ -5,7 +5,7 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable
 
 from .layouts import Action, Widget
 
@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from dbus_fast.aio import MessageBus
 
     from .input import KeySink
+    from .layouts import Layout
 
 log = logging.getLogger("deckd.actions")
 
@@ -52,8 +53,8 @@ async def run_terminal(target: bool = True) -> None:
 class ActionContext:
     """Per-connection helpers the dispatcher needs."""
 
-    send_layout: "callable"
-    get_current_layout: "callable"
+    send_layout: "Callable[[], Awaitable[None]]"
+    get_current_layout: "Callable[[], Layout]"
     current_app: str
     key_sink: "KeySink | None" = None
     dbus_bus_factory: "Callable[[BusTypeT], MessageBus] | None" = None
