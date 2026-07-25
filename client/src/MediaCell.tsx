@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
-import type { Widget } from "./protocol";
+import { CirclePause, CirclePlay, SkipBack, SkipForward } from "lucide-react";
 import type { MediaReading } from "./media-store";
+import type { Widget } from "./protocol";
 
 type Props = {
   widget: Widget;
@@ -21,9 +22,9 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
       <div className="media-subtitle">{state?.artist ?? state?.album ?? "—"}</div>
       {controls.includes("play") ? (
         <div className="media-transport">
-          {controls.includes("previous") ? <button className="media-skip" aria-label="Previous" onPointerDown={() => onPress(`${widget.id}:previous`)}>◀◀</button> : null}
-          <button className="media-play" aria-label={state?.playing ? "Pause" : "Play"} onPointerDown={() => onPress(widget.id)}>{state?.playing ? "Ⅱ" : "▶"}</button>
-          {controls.includes("next") ? <button className="media-skip" aria-label="Next" onPointerDown={() => onPress(`${widget.id}:next`)}>▶▶</button> : null}
+          {controls.includes("previous") ? <button className="media-skip" aria-label="Previous" onPointerDown={() => onPress(`${widget.id}:previous`)}><SkipBack /></button> : null}
+          <button className="media-play" aria-label={state?.playing ? "Pause" : "Play"} onPointerDown={() => onPress(widget.id)}>{state?.playing ? <CirclePause /> : <CirclePlay />}</button>
+          {controls.includes("next") ? <button className="media-skip" aria-label="Next" onPointerDown={() => onPress(`${widget.id}:next`)}><SkipForward /></button> : null}
         </div>
       ) : null}
       {controls.includes("position") ? (

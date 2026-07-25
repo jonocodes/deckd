@@ -950,7 +950,16 @@ button:focus-visible { outline: none; }
   }
 
 
-.media-play:active {
+.media-play svg {
+  width: 48%;
+  height: 48%;
+}
+
+.media-skip svg {
+  width: 28px;
+  height: 28px;
+}
+
   transform: scale(0.94);
   background: #31536a;
 }
