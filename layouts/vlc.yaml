@@ -8,6 +8,11 @@ widgets:
     label: VLC
     grid: [0, 0, 4, 2]
     controls: [play, previous, next, volume, position, speed]
+    # Album art sources, in order. 'vlc' uses VLC's own art (embedded tags /
+    # its cache); 'itunes' falls back to an online cover-art lookup when VLC
+    # has none — this sends the track's artist/album/title to Apple's public
+    # search API. Drop 'itunes' to keep all metadata local.
+    art_source: [vlc, itunes]
     action: {key: space}
     # VLC playlist navigation: 'p'/'n' skip to the previous/next track.
     # (ctrl+Left/Right are long seeks *within* a track, not track skips.)

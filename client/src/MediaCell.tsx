@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { CSSProperties } from "react";
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { Icon } from "./Icon";
@@ -12,9 +13,28 @@ type Props = {
   onCommand: (id: string, command: "volume" | "seek" | "rate", value: number) => void;
 };
 
-// Album-art placeholder. Real cover art isn't plumbed through yet, so the
-// centered slot shows the VLC brand logo (Simple Icons) as a stand-in.
+// Fallback shown in the art slot when the current item has no cover art (or
+// it fails to load): the VLC brand logo (Simple Icons).
 const ART_ICON = { source: "simple-icons" as const, name: "vlcmediaplayer" };
+
+/** The album-art slot. When the daemon reports an ``art_token`` we point an
+ * <img> at its art proxy (``/media/<id>/art``), cache-busted by the token so
+ * it refetches only when the track changes; anything missing/broken falls
+ * back to the VLC cone. */
+function MediaArt({ widgetId, token }: { widgetId: string; token: string | null | undefined }) {
+  const [failedToken, setFailedToken] = useState<string | null>(null);
+  if (!token || failedToken === token) {
+    return <Icon icon={ART_ICON} className="media-art-icon" />;
+  }
+  return (
+    <img
+      className="media-art-img"
+      alt=""
+      src={`/media/${encodeURIComponent(widgetId)}/art?token=${encodeURIComponent(token)}`}
+      onError={() => setFailedToken(token)}
+    />
+  );
+}
 
 export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
   const controls = widget.controls ?? ["play", "volume", "position"];
@@ -24,7 +44,7 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
   return (
     <div className={`cell cell-media${unavailable ? " cell-media-unavailable" : ""}`} style={style}>
       <div className="media-art" aria-hidden>
-        <Icon icon={ART_ICON} className="media-art-icon" />
+        <MediaArt widgetId={widget.id} token={state?.art_token} />
       </div>
       <div className="media-meta">
         <div className="media-title">{state?.title ?? "—"}</div>

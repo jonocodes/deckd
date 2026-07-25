@@ -84,6 +84,11 @@ class Widget(BaseModel):
     metrics: list[MetricSpec] | None = None
     controls: list[str] | None = None
     media_http: MediaHttp | None = None
+    # Ordered art sources for a media widget. ``vlc`` uses VLC's own art
+    # (embedded / its cache); ``itunes`` falls back to an online cover-art
+    # lookup (sends the track's artist/album/title to Apple's public search
+    # API). Defaults to VLC-only; add ``itunes`` to opt into online art.
+    art_source: list[str] | None = None
     previous_action: "Action | None" = None
     next_action: "Action | None" = None
 
@@ -107,6 +112,17 @@ class Widget(BaseModel):
         invalid = sorted(set(v) - allowed)
         if invalid:
             raise ValueError(f"unknown media controls: {', '.join(invalid)}")
+        return v
+
+    @field_validator("art_source")
+    @classmethod
+    def _validate_art_source(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        allowed = {"vlc", "itunes"}
+        invalid = sorted(set(v) - allowed)
+        if invalid:
+            raise ValueError(f"unknown art sources: {', '.join(invalid)}")
         return v
 
     @model_validator(mode="after")

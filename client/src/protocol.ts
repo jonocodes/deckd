@@ -23,6 +23,9 @@ export type MediaState = {
   title?: string | null;
   artist?: string | null;
   album?: string | null;
+  /** Changes when the current item's album art changes (null when none), so
+   * the client can point an <img> at the daemon art proxy and cache-bust. */
+  art_token?: string | null;
 };
 export type Widget = {
   id: string;

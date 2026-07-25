@@ -57,6 +57,7 @@ class MediaStateMessage(BaseModel):
     title: str | None = None
     artist: str | None = None
     album: str | None = None
+    art_token: str | None = None
 class WidgetUpdateMessage(BaseModel):
     """Daemon->client push: a meter widget's live value (issue #40).
 

@@ -752,3 +752,18 @@ curl -u ':$VLC_HTTP_PASSWORD' \
 A successful response is JSON with fields such as `state`, `time`, `length`, `volume`, and `information.meta`. A `401 Unauthorized` response means VLC is running but the supplied password does not match the active Lua HTTP password. If the endpoint cannot connect, enable the Web interface, confirm VLC was restarted, and check that port `8080` is listening.
 
 The daemon polls this endpoint once per second and forwards changed values to the client over its WebSocket. Volume and seek commands use the same HTTP interface; play/pause remains the configured keyboard action. If VLC HTTP is unavailable, keyboard controls continue to work and live values are shown as unavailable. The password is never stored directly in layout YAML.
+
+#### Album art
+
+The media cell shows cover art in its centre, falling back to the VLC logo when none is available. Because the phone can't read the daemon host's local art cache or hold VLC's password, the daemon proxies the image: the client requests `/media/<widget-id>/art` (unauthenticated — album art is low-value and an `<img>` tag can't carry the password header) and the daemon streams back the current item's art. The URL is cache-busted per track, so the browser fetches each cover only once.
+
+Art sources are chosen with `art_source` (default `[vlc]`):
+
+```yaml
+  art_source: [vlc, itunes]
+```
+
+- `vlc` — VLC's own art (embedded tags or its art cache; enable VLC's *album-art download policy* if you want VLC itself to fetch online art).
+- `itunes` — when VLC has no art, the daemon looks the cover up via Apple's public iTunes Search API using the track's artist/album/title. This is opt-in because it **sends that metadata to a third party**; drop `itunes` to keep all metadata local. Results (including misses) are cached in memory, so a track is looked up at most once.
+
+> On some setups (e.g. NixOS) Python's TLS can't find a CA bundle, which makes the HTTPS lookup fail silently (art just falls back to the logo). If that happens, set `SSL_CERT_FILE` / `NIX_SSL_CERT_FILE` for the daemon.

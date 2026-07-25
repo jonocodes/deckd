@@ -895,14 +895,20 @@ button:focus-visible { outline: none; }
   user-select: none;
   -webkit-user-select: none;
   --media-accent: #59b8df;
+  /* Query container so the art can size to the cell (cqmin = the smaller of
+     the cell's width/height), filling the available room in either
+     orientation rather than a fixed pixel cap. */
+  container-type: size;
 }
 
-/* Album-art placeholder: a centered square holding the VLC brand glyph until
-   real cover art is plumbed through. */
+/* Album art: the hero of the cell. Sized to a large fraction of the smaller
+   cell dimension so it fills the space and stays square, capped so it doesn't
+   get gratuitously large on a big tablet slot. Falls back to the VLC glyph
+   when there's no cover. */
 .media-art {
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   aspect-ratio: 1 / 1;
-  height: clamp(64px, 22vh, 180px);
+  width: min(82cqmin, 520px);
   max-width: 100%;
   display: flex;
   align-items: center;
@@ -910,6 +916,7 @@ button:focus-visible { outline: none; }
   background: radial-gradient(circle at 30% 25%, #26384a, #16202a 75%);
   border: 1px solid #33445685;
   border-radius: 16px;
+  overflow: hidden;
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
 }
 
@@ -917,6 +924,13 @@ button:focus-visible { outline: none; }
   width: 52%;
   height: 52%;
   color: #ff8c00;
+}
+
+.media-art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 16px;
 }
 
 .media-meta {

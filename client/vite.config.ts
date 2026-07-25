@@ -43,6 +43,7 @@ export default defineConfig({
       },
       "/health": daemonUpstream,
       "/reload": daemonUpstream,
+      "/media": daemonUpstream,
     },
   },
   build: {

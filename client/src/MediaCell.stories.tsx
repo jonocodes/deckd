@@ -36,6 +36,25 @@ export const Full: Story = () => (
   </div>
 );
 
+/** With real cover art: the art slot fetches ``/media/<id>/art`` (served by
+ * the daemon's proxy). Here ``art_token`` is set so the <img> renders. */
+export const WithArt: Story = () => (
+  <div style={{ width: 420, height: 560 }}>
+    <MediaCell
+      widget={WIDGET}
+      state={{
+        ...PLAYING,
+        title: "One More Time",
+        artist: "Daft Punk",
+        album: "Discovery",
+        art_token: "id:demo",
+      }}
+      onPress={noop}
+      onCommand={noop}
+    />
+  </div>
+);
+
 /** A wider, shorter slot — matches the default 4x2 grid footprint. */
 export const Wide: Story = () => (
   <div style={{ width: 640, height: 360 }}>

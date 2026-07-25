@@ -18,7 +18,7 @@ from . import protocol as p
 from .actions import ActionContext, execute as run_action
 from .input import ScrollController, parse_key_combo, text_to_combos
 from .layouts import Layout, LayoutStore, load_layouts, resolve_layout
-from .media import MediaManager, MediaState
+from .media import MediaManager, MediaState, effective_art_token
 
 if TYPE_CHECKING:
     from dbus_fast import BusType as BusTypeT
@@ -616,16 +616,19 @@ class Server:
                     )
                     if last.get(widget.id) == state:
                         continue
-                    if await self._broadcast_media_state(widget.id, state):
+                    if await self._broadcast_media_state(widget.id, state, widget.art_source or ["vlc"]):
                         last[widget.id] = state
                 await asyncio.sleep(1.0)
         except asyncio.CancelledError:
             return
 
-    async def _broadcast_media_state(self, widget_id: str, state: MediaState) -> bool:
+    async def _broadcast_media_state(self, widget_id: str, state: MediaState, art_sources: list[str]) -> bool:
         if not self._sessions:
             return False
-        msg = p.MediaStateMessage(type="media_state", id=widget_id, **state.__dict__)
+        # The art token the client sees depends on the enabled sources: VLC's
+        # own art, or an online-lookup identity token when itunes is enabled.
+        fields = {**state.__dict__, "art_token": effective_art_token(state, art_sources)}
+        msg = p.MediaStateMessage(type="media_state", id=widget_id, **fields)
         sent = 0
         dead: list[Session] = []
         for session in list(self._sessions):
@@ -732,6 +735,11 @@ class Server:
         self.app.router.add_get("/health", self._health)
         self.app.router.add_post("/reload", self._reload)
         self.app.router.add_post("/layout/{layout_id}", self._set_layout)
+        # Album-art proxy. Deliberately unauthenticated (art is low-value and
+        # an <img> tag can't carry the password header): the daemon fetches
+        # the current item's art from VLC's own HTTP interface and streams it
+        # back so the phone never needs VLC's credentials or a local file path.
+        self.app.router.add_get("/media/{widget_id}/art", self._media_art)
 
     async def _health(self, _req: web.Request) -> web.Response:
         # The one endpoint left open when auth is on: the web client's
@@ -753,6 +761,30 @@ class Server:
                 "desktop": _desktop_env(),
             },
             headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    async def _media_art(self, req: web.Request) -> web.StreamResponse:
+        widget = self._find_widget(req.match_info["widget_id"])
+        if widget is None or self.media is None or widget.media_http is None:
+            raise web.HTTPNotFound()
+        config = widget.media_http
+        art = await self.media.art(
+            widget.id,
+            host=config.host,
+            port=config.port,
+            password_ref=config.password_ref,
+            sources=widget.art_source or ["vlc"],
+        )
+        if art is None:
+            raise web.HTTPNotFound()
+        content_type, data = art
+        # The client cache-busts with ?token=<art_token>, so a given URL is
+        # immutable — let the browser cache it hard and skip refetching until
+        # the track (and thus the token) changes.
+        return web.Response(
+            body=data,
+            content_type=content_type,
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
         )
 
     async def _reload(self, req: web.Request) -> web.Response:
