@@ -722,4 +722,33 @@ The `media` kind is a single responsive composite widget. It uses configured key
     password_ref: VLC_HTTP_PASSWORD
 ```
 
-Enable VLC's HTTP interface with `--extraintf=http` or through VLC's Preferences under Interface, Main interfaces. Configure its password there and export the same value through the variable named by `password_ref`. The password is never stored in layout YAML. If VLC HTTP is unavailable, keyboard controls continue to work and live values are shown as unavailable.
+#### Configure VLC HTTP
+
+In VLC, open **Tools → Preferences → Interface** and select **Web** under **Main interfaces**. Under **Interface → Main interfaces → Lua**, set the **Lua HTTP password**, save, and restart VLC. VLC's HTTP interface listens on port `8080` by default.
+
+For a Flatpak VLC installation, starting it explicitly is useful for testing:
+
+```sh
+flatpak run org.videolan.VLC \
+  --extraintf=http \
+  --http-host=127.0.0.1 \
+  --http-port=8080 \
+  --http-password=dummy
+```
+
+Keep the HTTP interface bound to localhost unless remote access is specifically required. Export the same password before starting deckd:
+
+```sh
+export VLC_HTTP_PASSWORD=dummy
+```
+
+Verify VLC independently before debugging deckd:
+
+```sh
+curl -u ':$VLC_HTTP_PASSWORD' \
+  http://127.0.0.1:8080/requests/status.json
+```
+
+A successful response is JSON with fields such as `state`, `time`, `length`, `volume`, and `information.meta`. A `401 Unauthorized` response means VLC is running but the supplied password does not match the active Lua HTTP password. If the endpoint cannot connect, enable the Web interface, confirm VLC was restarted, and check that port `8080` is listening.
+
+The daemon polls this endpoint once per second and forwards changed values to the client over its WebSocket. Volume and seek commands use the same HTTP interface; play/pause remains the configured keyboard action. If VLC HTTP is unavailable, keyboard controls continue to work and live values are shown as unavailable. The password is never stored directly in layout YAML.
