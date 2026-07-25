@@ -93,6 +93,10 @@ class VlcHttpBackend(MediaBackend):
             params = {"command": "volume", "val": str(round(value / 100 * 256))}
         elif command == "rate":
             params = {"command": "rate", "val": str(max(0.1, value))}
+        elif command == "seek":
+            # VLC's seek takes an absolute time in seconds; the client already
+            # sends the slider value in seconds (min=0, max=duration).
+            params = {"command": "seek", "val": str(max(0, round(value)))}
         else:
             raise ValueError(f"unsupported media command: {command}")
         await asyncio.to_thread(self._request, f"/requests/status.json?{urlencode(params)}")

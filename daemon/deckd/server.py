@@ -903,14 +903,19 @@ class Server:
             if widget is None or self.media is None or widget.media_http is None:
                 return
             config = widget.media_http
-            await self.media.command(
-                widget.id,
-                media_command.command,
-                media_command.value,
-                host=config.host,
-                port=config.port,
-                password_ref=config.password_ref,
-            )
+            try:
+                await self.media.command(
+                    widget.id,
+                    media_command.command,
+                    media_command.value,
+                    host=config.host,
+                    port=config.port,
+                    password_ref=config.password_ref,
+                )
+            except Exception as exc:
+                # A failed/unsupported media command must not tear down the
+                # websocket session (which would reset the client UI).
+                log.warning("media command %s failed: %s", media_command.command, exc)
             return
         if msg_type != "press":
             log.debug("ignoring %s", msg_type)
