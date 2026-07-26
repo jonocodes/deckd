@@ -139,6 +139,12 @@ class Session:
         # layout id, this session always renders that layout and ignores
         # focus-driven changes. None = normal focus-following behaviour.
         self.pinned_layout_id: str | None = None
+        # Chrome view pin (issue #50): when set to a loaded layout id, this
+        # session always renders that view's layout (regardless of host
+        # focus) and the ``LayoutMessage`` carries ``view=<name>``. Set by
+        # the client's ``select_view`` message; cleared by ``clear_view``.
+        # Per-session because the chrome icon's affordance is per-client.
+        self.view: str | None = None
 
     @property
     def app_id(self) -> str:
@@ -160,6 +166,27 @@ class Session:
             layout = self.server.layouts[pin]
             app_id = pin
             error = None
+        # Chrome view pin (issue #50): render the selected view's layout
+        # regardless of host focus, with ``view`` set so the client knows to
+        # stay on this chrome view. The view id is the synthetic token the
+        # client sends in ``select_view``; for the shipping ``mpris.yaml``
+        # the id and the first ``match`` token are the same string
+        # (``"mpris"``), so the lookup is ``layouts[view]``. If the view
+        # id no longer resolves (a reload removed the layout file), keep
+        # rendering the focused-app layout and surface
+        # ``error: "view not found"`` so the chrome can show the failure
+        # without dropping the user out of their normal chrome.
+        view_id: str | None = None
+        view_error: str | None = None
+        if self.view is not None:
+            if self.view in self.server.layouts:
+                layout = self.server.layouts[self.view]
+                app_id = self.view
+                error = None
+                view_id = self.view
+            else:
+                view_id = self.view
+                view_error = "view not found"
         # Chrome app badge fields are relayed from the active layout even in
         # the error path: the bottom chrome remains the chrome, and a branded
         # badge is more useful than a bare match token while the user fixes
@@ -172,6 +199,7 @@ class Session:
             msg = p.LayoutMessage(
                 type="layout",
                 app=app_id,
+                view=view_id,
                 jogstrip_enabled=layout.jogstrip,
                 display_name=layout.display_name,
                 theme=layout.theme,
@@ -184,11 +212,17 @@ class Session:
             msg = p.LayoutMessage(
                 type="layout",
                 app=app_id,
+                view=view_id,
                 jogstrip_enabled=layout.jogstrip,
                 display_name=layout.display_name,
                 theme=layout.theme,
                 icon=icon,
                 widgets=widgets,
+                # View-resolution errors ride alongside the focused-app
+                # widgets so the chrome stays usable while the user sees
+                # the failure (``view not found``). Distinct from a
+                # ``layout error`` (bad YAML) which replaces the grid.
+                error=view_error,
             )
         await self.send(msg)
 
@@ -972,6 +1006,17 @@ class Server:
                 # A failed/unsupported media command must not tear down the
                 # websocket session (which would reset the client UI).
                 log.warning("media command %s failed: %s", media_command.command, exc)
+            return
+        if msg_type == "select_view":
+            select_view = p.SelectViewMessage.model_validate(data)
+            log.info("session selected view %r", select_view.view)
+            session.view = select_view.view
+            await session.push_current()
+            return
+        if msg_type == "clear_view":
+            log.info("session cleared view")
+            session.view = None
+            await session.push_current()
             return
         if msg_type != "press":
             log.debug("ignoring %s", msg_type)

@@ -9,6 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from .platform import AppInfo
 
+# Literal aliases for ``mediabrowser`` widget knobs (issue #50). Defined
+# here so the daemon's ``Widget`` model — the one YAML flows through —
+# has a single source of truth; :class:`deckd.mpris.MediaBrowser`
+# imports the same names so the dedicated schema can't drift.
+MediaBrowserOrdering = Literal["playing_first", "stable"]
+MediaBrowserEmptyState = Literal["show", "hide"]
+
 log = logging.getLogger("deckd.layouts")
 
 
@@ -97,6 +104,14 @@ class Widget(BaseModel):
     next_action: "Action | None" = None
     volume_up_action: "Action | None" = None
     volume_down_action: "Action | None" = None
+    # ``mediabrowser`` widgets (issue #50) take two knobs documented on
+    # :class:`deckd.mpris.MediaBrowser`: how rows are ordered when the
+    # backend reports multiple players (``ordering``), and whether the
+    # cell still renders an empty placeholder when no player is discovered
+    # (``empty_state``). Mirrors the existing media-only-field rule: only
+    # valid when ``kind == "mediabrowser"``.
+    ordering: MediaBrowserOrdering | None = None
+    empty_state: MediaBrowserEmptyState | None = None
 
     @field_validator("kind")
     @classmethod
@@ -142,12 +157,33 @@ class Widget(BaseModel):
             "volume_up_action": self.volume_up_action,
             "volume_down_action": self.volume_down_action,
         }
+        mediabrowser_fields = {
+            "ordering": self.ordering,
+            "empty_state": self.empty_state,
+        }
         if self.kind == "media" and self.controls is None:
             self.controls = ["play", "volume", "position"]
+        if self.kind == "mediabrowser":
+            # Apply the same defaults as ``MediaBrowser`` so a widget
+            # declared with just ``id`` / ``kind`` / ``grid`` still
+            # round-trips through ``model_dump`` with both knobs
+            # populated — the client needs them to make rendering
+            # decisions (per-player ordering, empty placeholder), and
+            # absent keys would land as ``None`` on the wire.
+            if self.ordering is None:
+                self.ordering = "playing_first"
+            if self.empty_state is None:
+                self.empty_state = "show"
         if self.kind != "media":
             invalid = sorted(name for name, value in media_fields.items() if value is not None)
             if invalid:
                 raise ValueError(f"media-only fields on non-media widget: {', '.join(invalid)}")
+        if self.kind != "mediabrowser":
+            invalid = sorted(name for name, value in mediabrowser_fields.items() if value is not None)
+            if invalid:
+                raise ValueError(
+                    f"mediabrowser-only fields on non-mediabrowser widget: {', '.join(invalid)}"
+                )
         if self.kind == "meter":
             if not self.source:
                 raise ValueError(

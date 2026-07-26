@@ -1,0 +1,20 @@
+# MPRIS media browser (issue #50). This layout is reached from the
+# persistent chrome via the client sending ``select_view: "mpris"`` —
+# the match token (``mpris``) is the synthetic internal token the
+# server uses to address a chrome view, not the identity of any real
+# application (no app reports ``app_id == "mpris"`` to the focus
+# watcher). The server's view-resolution hook looks the view up by
+# layout id and sets ``view: "mpris"`` on the resulting
+# ``LayoutMessage`` so the chrome knows to stay on this view until the
+# client sends ``clear_view``.
+#
+# The ``mediabrowser`` widget asks the daemon to render one row per
+# discovered MPRIS player with prev / play-pause / next controls;
+# ``ordering`` and ``empty_state`` default sensibly so most users
+# don't need to override them.
+match: [mpris]
+display_name: MPRIS
+widgets:
+  - id: browser
+    kind: mediabrowser
+    grid: [0, 0, 4, 2]

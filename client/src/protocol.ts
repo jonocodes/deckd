@@ -11,6 +11,8 @@ export type Metric = { source: string; label?: string | null };
 
 export type MediaHttp = { host?: string; port?: number; password_ref?: string | null };
 export type MediaControl = "play" | "previous" | "next" | "volume" | "position" | "speed";
+export type MediaBrowserOrdering = "playing_first" | "stable";
+export type MediaBrowserEmptyState = "show" | "hide";
 export type MediaState = {
   type: "media_state";
   id: string;
@@ -30,7 +32,7 @@ export type MediaState = {
 };
 export type Widget = {
   id: string;
-  kind: "button" | "jogstrip" | "trackpad" | "meter" | "stats" | "media";
+  kind: "button" | "jogstrip" | "trackpad" | "meter" | "stats" | "media" | "mediabrowser";
   label?: string | null;
   icon?: Icon | null;
   grid: [number, number, number, number];
@@ -46,6 +48,14 @@ export type Widget = {
   next_action?: Record<string, unknown> | null;
   volume_up_action?: Record<string, unknown> | null;
   volume_down_action?: Record<string, unknown> | null;
+  /** ``mediabrowser`` knob (issue #50): how rows are presented when the
+   * backend reports multiple MPRIS players. ``playing_first`` surfaces
+   * the active player first; ``stable`` keeps the daemon-emitted order. */
+  ordering?: MediaBrowserOrdering | null;
+  /** ``mediabrowser`` knob (issue #50): whether the cell still renders
+   * a placeholder row when no MPRIS player is discovered. ``show``
+   * keeps the chrome's icon reachable; ``hide`` collapses the cell. */
+  empty_state?: MediaBrowserEmptyState | null;
 };
 
 export type ServerLayout = {
@@ -119,6 +129,13 @@ export type ClientKey = { type: "key"; combo: string };
 export type ClientMediaCommand =
   | { type: "media_command"; id: string; command: "volume" | "seek" | "rate"; value: number }
   | { type: "media_command"; id: string; command: "play-pause" | "next" | "previous"; value?: null };
+/** Ask the daemon to render a chrome view by name (issue #50). The name
+ * resolves to a layout id; the server pushes the resolved layout with
+ * ``view`` set. An unknown name pushes ``view: <name>`` with
+ * ``error: "view not found"`` so the client can show the failure. */
+export type ClientSelectView = { type: "select_view"; view: string };
+/** Undo a previous ``select_view`` for this session only. */
+export type ClientClearView = { type: "clear_view" };
 export type ClientMessage =
   | ClientHello
   | ClientPress
@@ -129,4 +146,6 @@ export type ClientMessage =
   | ClientPadDrag
   | ClientType
   | ClientKey
-  | ClientMediaCommand;
+  | ClientMediaCommand
+  | ClientSelectView
+  | ClientClearView;
