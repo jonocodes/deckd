@@ -316,7 +316,7 @@ That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws
 
 Every layout renders inside a persistent **chrome** shell that the daemon does not know about:
 
-- **Bottom strip** (always visible): the current app badge (from `LayoutMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the layout's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected), a `manual control` button that swaps the main area for the combined trackpad + IME surface (see [Manual control mode](#manual-control-mode)), a `media browser` button (when enabled — see [MPRIS media browser](#mpris-media-browser)) that asks the daemon for the global MPRIS browser view, and a `settings` button (see [Client tuning](#client-tuning)).
+- **Bottom strip** (always visible): the current app badge (from `LayoutMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the layout's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected), a `manual control` button that swaps the main area for the combined trackpad + IME surface (see [Manual control mode](#manual-control-mode)), a `media browser` button (when enabled — see [MPRIS media browser](#mpris-media-browser); ADR-0008 records the chrome-view carve-out that lets the client pin a specific layout) that asks the daemon for the global MPRIS browser view, and a `settings` button (see [Client tuning](#client-tuning)).
 - **Right-side jogstrip** (always visible): a full-height scroll strip that works the same as the in-grid `jogstrip` widget. A layout can suppress it with `jogstrip: false` at the YAML top level — the daemon forwards this as `jogstrip_enabled` on every `LayoutMessage`.
 
 Layout widget coordinates are relative to the chrome-excluded area; the client computes cell sizes from whatever space remains after the strips are subtracted. Layouts are authored in **landscape** orientation. When the viewport is portrait, the client automatically transposes each widget's grid (`[x, y, w, h] → [y, x, h, w]`) so a 4×2 landscape layout renders as 2×4 in portrait — same buttons, same relative arrangement, cells sized for the taller surface (ADR-0004).
@@ -696,7 +696,7 @@ The pieces behind the features above, for anyone reading the code:
 - **Jogstrip** scroll plumbing from browser pointer movement to daemon-side uinput, including release momentum.
 - **Manual control mode**: combined trackpad (`REL_X` / `REL_Y` motion plus `BTN_LEFT` / `BTN_RIGHT` / `BTN_MIDDLE` on the same uinput device, with client-side gesture recognition: tap / two-finger tap / tap-and-a-half drag lock) and IME passthrough (`type` / `key` wire messages, ASCII+Shift→evdev translation, daemon-side focus guard against self-injection). Both live in one view; the strip's keyboard-icon toggle raises the soft keyboard.
 - **Active-window detection** via GNOME Shell extension + session D-Bus (`app_id`, `wm_class`, `title`, `pid`).
-- **Persistent client chrome** — bottom strip (branded app badge + connection dot + manual-control button) and right-side jogstrip — layered above every layout with zero daemon involvement. The app badge optionally carries an icon, a theme colour, and a human-readable name the layout YAML declares (ADR-0007).
+- **Persistent client chrome** — bottom strip (branded app badge + connection dot + manual-control button + media icon + settings) and right-side jogstrip — layered above every layout with zero daemon involvement. The app badge optionally carries an icon, a theme colour, and a human-readable name the layout YAML declares (ADR-0007). The one carve-out is the `mediabrowser` chrome view: a client can pin its session to a specific layout via `select_view`, with the daemon pushing a `view`-tagged `LayoutMessage` so the client knows which mode to render. ADR-0008 records the carve-out and the general mechanism.
 - **Layout hot-reload** — the daemon watches `layouts/*.yaml` and re-pushes on any edit; bad YAML surfaces as a diagnostic on the client without crashing the daemon.
 - **Reconnecting client** (`useDeckdSocket` exponential backoff).
 - **Build output** is plain static files — `client/dist/` — served by the daemon.
@@ -772,9 +772,21 @@ Art sources are chosen with `art_source` (default `[vlc]`):
 
 ### MPRIS media browser
 
-A separate widget kind, `mediabrowser`, lists every MPRIS player the system exposes over the session D-Bus (VLC, mpv, Spotify, …) and gives each row a play/pause/prev/next transport. It lives next to its own chrome-view button (the music icon between the manual-control and settings buttons) and is reached from the bottom-strip.
+The MPRIS media browser is a global media-control surface that works
+independently of the focused app: it lists every MPRIS player the
+system exposes over the session D-Bus (VLC, mpv, Spotify, Firefox
+audio, …) and gives each row a prev / play-pause / next transport.
+It's a *chrome view* — a full-bleed panel that replaces the layout
+area — reached from the bottom chrome. It's deliberately separate
+from the VLC `media` widget (see [VLC media widgets](#vlc-media-widgets)):
+the VLC widget is per-VLC, the browser is per-host. A user with both
+sees the VLC widget in the VLC layout and the browser in the chrome
+view, side by side and not interfering.
 
-Enable it by shipping a layout that declares the widget:
+#### Enable it
+
+Drop a layout that declares the `mediabrowser` widget kind into your
+`layouts/` directory. The shipped `mpris.yaml` is exactly this:
 
 ```yaml
 match: [mpris]
@@ -785,12 +797,144 @@ widgets:
     grid: [0, 0, 4, 2]
 ```
 
-The shipped `mpris.yaml` is exactly this; `select_view: "mpris"` from the chrome reveals it. The widget renders one row per discovered player. Previous and next are non-reactive when `CanGoPrevious` / `CanGoNext` is false on the underlying player; play-pause is always reactive. When no players exist and the layout's `empty_state` is `"show"` (the default), a single "No media players detected" row appears; `"hide"` collapses the cell.
+The `match: [mpris]` token is a *synthetic* view name — no real
+application reports `app_id == "mpris"` to the focus watcher. It
+exists so the server can address the chrome view by name; you don't
+need a focus match for any real app.
 
-#### Discovery
+Once the layout is on disk, restart the daemon (or just wait — YAML
+changes are hot-reloaded). The bottom chrome gains a **music-note
+icon** between the manual-control and settings buttons — the chrome
+media icon, the entry point to the browser. Tapping it pins this
+client to the MPRIS chrome view (sends `select_view: "mpris"` over
+the WebSocket). Tapping it again reverts to the focused-app layout
+(`clear_view`). The pin is per-client: a phone parked on the browser
+doesn't lock a second phone out of its own focus-driven layout.
 
-The daemon enumerates every bus name matching `org.mpris.MediaPlayer2.*` on the session D-Bus at startup, gated on the layout actually containing a `mediabrowser` widget — users who don't enable the feature don't pay the bus-connect cost. The multiplexer `org.mpris.MediaPlayer2.playerctld` is excluded so it doesn't surface as a duplicate row, and a player that hands its bus name off to a new owner is treated as a remove-then-add (issue #52; the row stays reachable while the next poll pulls fresh state from the new owner).
+The icon is *opt-in*: a daemon that has no `mediabrowser` layout
+never shows the music-note button, never opens the session D-Bus, and
+never pays the bus-connect cost. Users who don't enable the feature
+see the bottom chrome exactly as before.
 
-A handful of MPRIS fields are forwarded: `PlaybackStatus`, `xesam:title`, `xesam:artist`, plus capability flags `CanGoNext` / `CanGoPrevious` that gate the previous/next buttons. Album art, scrubber, volume, and other browser controls are deferred follow-ups. Commands flow through `media_command` messages addressed as `mpris.<row-suffix>`; the server routes them straight to `org.mpris.MediaPlayer2.Player.{PlayPause,Next,Previous}` on the right bus name. The existing VLC `media` widget is unchanged — the two are independent features.
+#### What the view shows
 
-The passive playback-state tint on the chrome media icon (lit when something is playing) is a deferred follow-up: see issue #47.
+The chrome view is the same `mpris.yaml` layout, rendered with the
+layout area replaced by the `mediabrowser` widget. One row per
+discovered player. Each row has three slots:
+
+- **Art slot** (left) — the row's `art_token` if the daemon reported
+  one (image transfer is a deferred follow-up), the row's
+  `DesktopEntry`-mapped brand icon if the client has a mapping, or
+  the generic Lucide `Disc` glyph as the fallback.
+- **Title / subtitle** (centre) — `xesam:title` and `xesam:artist`
+  from MPRIS `Metadata`. Unknown fields render as an em-dash.
+- **Transport** (right) — previous / play-pause / next buttons. The
+  play-pause icon follows `PlaybackStatus`; previous and next are
+  present but become non-reactive when the underlying player reports
+  `CanGoPrevious == false` / `CanGoNext == false`. Play-pause is
+  always reactive.
+
+Tapping a transport button sends a typed `media_command` over the
+existing WebSocket — `play-pause` / `next` / `previous` keyed by
+`mpris.<row-suffix>`. The daemon routes the message to the right
+MPRIS bus name (`org.mpris.MediaPlayer2.<suffix>`) and the right
+Player-interface method (`PlayPause` / `Next` / `Previous`). Volume
+and seek are deferred follow-ups.
+
+The view persists across focus changes until cleared — a user who
+tapped the icon wants the browser to stay put even if they alt-tab
+to a different app. `clear_view` (the second tap on the chrome
+icon, or the session ending) is the only way out.
+
+#### Configuration knobs
+
+The `mediabrowser` widget has two optional knobs:
+
+```yaml
+- id: browser
+  kind: mediabrowser
+  grid: [0, 0, 4, 2]
+  ordering: playing_first   # or "stable"
+  empty_state: show         # or "hide"
+```
+
+- `ordering: playing_first` (default) — Playing rows first, then
+  Paused / Stopped (the two are conflated on the wire — see the
+  client comment in `MediaBrowserCell.tsx`); with stable order
+  inside each bucket by row id. `stable` keeps first-seen bus-name
+  order with no playback-state grouping.
+- `empty_state: show` (default) — when no players exist, render a
+  single "No media players detected" row so the chrome icon is still
+  reachable. `hide` collapses the cell so a layout that depends on
+  the browser can drop the cell entirely.
+
+Both default sensibly; most users won't need to override them.
+
+#### Player discovery
+
+The daemon enumerates every bus name matching
+`org.mpris.MediaPlayer2.*` on the session D-Bus at startup, gated on
+the layout actually containing a `mediabrowser` widget — users who
+don't enable the feature don't pay the bus-connect cost. Two
+exclusions:
+
+- `org.mpris.MediaPlayer2.playerctld` — the MPRIS multiplexer
+  forwards commands to other players but exposes itself on the bus
+  too. Including it would create a duplicate row the user has no
+  way to remove. It's filtered out by suffix.
+- Malformed suffixes (empty, non-ASCII, control characters) are
+  silently dropped at the bus-name parser so a misbehaving player
+  doesn't poison the row set.
+
+The bus is monitored live: `NameOwnerChanged` signals add / remove
+rows as players come and go (a bus-name handoff is treated as
+remove-then-add so the new owner's metadata is rebuilt cleanly),
+and `PropertiesChanged` signals update each row's cached state
+without a fresh `Properties.GetAll` round-trip. The browser reflects
+the bus, not a snapshot.
+
+The forwarded state subset is the documented one: `PlaybackStatus`,
+`xesam:title`, `xesam:artist`, `DesktopEntry`, `CanGoNext`,
+`CanGoPrevious`. `Metadata.artUrl` is *not* transferred (image
+transfer is a deferred follow-up; the client sees `art_token: null`
+today). Other Player-interface properties the daemon sees are
+ignored so a future contributor adding new state slots knows the
+subset is intentional.
+
+#### Coexistence with the VLC media widget
+
+The two are independent features. The VLC `media` widget is per-VLC:
+it lives in the VLC layout, polls VLC's local HTTP interface for
+playback state, and routes commands through VLC's HTTP API. The
+MPRIS browser is per-host: it lives in the chrome view, watches the
+session D-Bus for every MPRIS player, and routes commands through
+the standard MPRIS Player-interface methods. The shared wire message
+is the `media_command` you already saw in the previous section; the
+daemon's dispatch routes `mpris.*` ids to the MPRIS backend and
+everything else to the VLC handler. Adding one feature doesn't
+affect the other.
+
+A user who has both sees the VLC `media` widget in the VLC layout
+(with VLC's keyboard or HTTP-based transport) and the MPRIS browser
+in the chrome view (with per-player MPRIS transport), side by side
+and not interfering.
+
+#### Future follow-ups
+
+- **Passive playback-state tint on the chrome media icon** — the
+  icon is currently a static music note. A future follow-up will
+  subscribe to the live MPRIS state and tint the icon while a
+  player is `Playing`. See issue #47.
+- **Album art** — the wire carries an `art_token` placeholder; the
+  v1 browser doesn't fetch the image. Image transfer is scoped to a
+  follow-up ticket.
+- **Volume, seek, scrubber** — the v1 browser exposes the three
+  transport buttons only. Volume and seek controls (and the
+  capability-gated `CanSeek` honouring) are deferred.
+- **Per-row select / raise** — the GNOME 50 media widget calls
+  MPRIS `Raise` to bring the player to the foreground when the
+  card is tapped. Out of scope for v1.
+
+See ADR-0008 for the chrome-view carve-out (the `select_view` /
+`clear_view` mechanism, the `view` field on `LayoutMessage`, and how
+the new general mechanism positions future chrome-shaped views).
