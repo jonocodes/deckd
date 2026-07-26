@@ -479,6 +479,27 @@ button:focus-visible { outline: none; }
   color: #6b7785;
 }
 
+/* Chrome media-browser view (issue #51). v1 placeholder only — the
+   dedicated ``MediaBrowserCell`` (#53) replaces this with per-row
+   playback state once ``media_state`` frames start arriving. Sized to
+   fill the surface like ``.empty`` so the cell sits centred while the
+   browser is empty. */
+.mediabrowser {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: #6b7785;
+}
+
+.mediabrowser-empty {
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: #1b222a;
+  border: 1px dashed #2a333d;
+  color: #8a96a3;
+  font-size: calc(14px * var(--label-scale, 1));
+}
+
 /* ---------------------------------------------------------------------------
  * Settings / diagnostics view: read-only key/value list shown in place of
  * the grid when the chrome settings button is toggled on.

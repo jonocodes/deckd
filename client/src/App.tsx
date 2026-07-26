@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
-import { PointerIcon } from "lucide-react";
+import { Music as MusicIcon, PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
@@ -24,8 +24,9 @@ import { getDemoLayout, getDemoView, MEDIA_DEMO_STATES } from "./demo";
 import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
 import type { Icon as IconRef, ServerLayout } from "./protocol";
+import { MPRIS_VIEW_ID } from "./protocol";
 
-type View = "layout" | "trackpad" | "settings";
+type View = "layout" | "trackpad" | "settings" | "mediabrowser";
 type SocketStatus = "connecting" | "open" | "closed" | "unauthorized";
 
 /** Sentinel ids for the always-on chrome widgets. The daemon's pad / jog
@@ -115,6 +116,23 @@ export function App() {
   const typeText = (text: string) => send({ type: "type", text });
   const keyCombo = (combo: string) => send({ type: "key", combo });
   const mediaCommand = (id: string, command: "volume" | "seek" | "rate", value: number) => send({ type: "media_command", id, command, value });
+  // Chrome view toggle (issue #51): the media icon mirrors the existing
+  // trackpad / settings buttons. When opened it sends ``select_view``
+  // so the daemon pushes the mpris layout; when closed it sends
+  // ``clear_view`` so the daemon reverts to the focused-app layout.
+  // The icon does not auto-close when the user picks another chrome view
+  // (settings, trackpad) — that's intentional, mirroring how the
+  // existing buttons don't reset each other, and keeps the daemon-side
+  // view pinned across a brief settings detour.
+  const toggleMediaBrowser = () => {
+    if (view === "mediabrowser") {
+      setView("layout");
+      send({ type: "clear_view" });
+    } else {
+      setView("mediabrowser");
+      send({ type: "select_view", view: MPRIS_VIEW_ID });
+    }
+  };
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
@@ -173,6 +191,17 @@ export function App() {
               onKey={keyCombo}
               sensitivity={trackpad.sensitivity}
             />
+          ) : view === "mediabrowser" ? (
+            // v1 placeholder (issue #51). The dedicated
+            // ``MediaBrowserCell`` ticket (#53) replaces this with
+            // per-row playback state, prev/play-pause/next controls,
+            // and the live list of MPRIS rows as ``media_state`` frames
+            // arrive from the daemon. Until then, the empty state
+            // shows unconditionally — it's the visible signal that the
+            // chrome view is open and the daemon is listening.
+            <div className="mediabrowser" role="region" aria-label="media browser">
+              <div className="mediabrowser-empty">No media players detected</div>
+            </div>
           ) : view === "settings" ? (
             <Settings
               layout={layout}
@@ -222,7 +251,7 @@ export function App() {
             <div className="empty">waiting for daemon…</div>
           )}
         </main>
-        {jogstripEnabled && view !== "settings" && (
+        {jogstripEnabled && view !== "settings" && view !== "mediabrowser" && (
           <aside
             className="chrome-jogstrip"
             style={{ "--jog-width": jogWidth.width } as CSSProperties}
@@ -253,6 +282,13 @@ export function App() {
           onPointerDown={() => setView(view === "trackpad" ? "layout" : "trackpad")}
         >
           <PointerIcon size={18} />
+        </button>
+        <button
+          className={`chrome-btn${view === "mediabrowser" ? " chrome-btn-active" : ""}`}
+          aria-label="media browser"
+          onPointerDown={toggleMediaBrowser}
+        >
+          <MusicIcon size={18} />
         </button>
         <button
           className={`chrome-btn${view === "settings" ? " chrome-btn-active" : ""}`}

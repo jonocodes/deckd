@@ -136,6 +136,14 @@ export type ClientMediaCommand =
 export type ClientSelectView = { type: "select_view"; view: string };
 /** Undo a previous ``select_view`` for this session only. */
 export type ClientClearView = { type: "clear_view" };
+
+/** The wire-side id for the MPRIS chrome view (issue #51). The daemon
+ * resolves ``select_view: MPRIS_VIEW_ID`` to the layout whose id is the
+ * same string — today, ``layouts/mpris.yaml``. Hard-coding the literal
+ * here (rather than scattered through component code) keeps the wire
+ * surface and the layout loader in lockstep: a rename in either place
+ * surfaces as a type error or a load failure, not silent breakage. */
+export const MPRIS_VIEW_ID = "mpris";
 export type ClientMessage =
   | ClientHello
   | ClientPress
