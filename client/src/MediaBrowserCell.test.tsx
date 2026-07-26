@@ -82,6 +82,23 @@ describe("MediaBrowserCell", () => {
     expect(within(rows[1]).getByText("Title mpris.spotify")).toBeTruthy();
   });
 
+  it("renders the app_name as a per-row header, omitting it when null", () => {
+    render(
+      <MediaBrowserCell
+        widget={WIDGET}
+        states={{
+          "mpris.vlc": row("mpris.vlc", true, { app_name: "VLC media player" }),
+          "mpris.spotify": row("mpris.spotify", false, { app_name: null }),
+        }}
+        onCommand={vi.fn()}
+      />,
+    );
+    const rows = screen.getAllByRole("listitem");
+    expect(within(rows[0]).getByText("VLC media player")).toBeTruthy();
+    // The null-app_name row renders no header element at all.
+    expect(rows[1].querySelector(".mediabrowser-app")).toBeNull();
+  });
+
   it("falls back to a disc icon in the art slot when art_token is null", () => {
     render(
       <MediaBrowserCell

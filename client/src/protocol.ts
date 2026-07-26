@@ -37,6 +37,10 @@ export type MediaState = {
   desktop_entry?: string | null;
   can_go_next?: boolean | null;
   can_go_previous?: boolean | null;
+  /** The player's human-readable name from the MPRIS root interface's
+   * ``Identity`` (e.g. "Firefox", "VLC media player"). The browser renders
+   * it as a per-row header, matching GNOME. ``null`` for the VLC path. */
+  app_name?: string | null;
 };
 export type Widget = {
   id: string;

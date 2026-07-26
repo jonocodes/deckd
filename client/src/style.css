@@ -1243,6 +1243,18 @@ button:focus-visible { outline: none; }
   background: transparent;
 }
 
+/* GNOME-style per-player header: the MPRIS ``Identity`` (e.g. "Firefox")
+   spanning the full row above the art/title/transport line. */
+.mediabrowser-app {
+  grid-column: 1 / -1;
+  font-size: clamp(11px, 1.4vw, 13px);
+  font-weight: 600;
+  color: #8a96a3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .mediabrowser-art {
   width: 40px;
   height: 40px;

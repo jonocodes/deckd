@@ -37,6 +37,7 @@ _COMMANDS: dict[str, str] = {
 # and the backend can't drift apart on a typo.
 MPRIS_BUS_PREFIX = "org.mpris.MediaPlayer2"
 MPRIS_OBJECT_PATH = "/org/mpris/MediaPlayer2"
+ROOT_INTERFACE = "org.mpris.MediaPlayer2"
 PLAYER_INTERFACE = "org.mpris.MediaPlayer2.Player"
 PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
 DBUS_INTERFACE = "org.freedesktop.DBus"
@@ -90,6 +91,27 @@ def _first_body_value(message: Any) -> Any:
     if not body:
         return None
     return body[0]
+
+
+def _unwrap(value: Any) -> Any:
+    """Recursively strip ``dbus_fast`` ``Variant`` wrappers.
+
+    ``a{sv}`` bodies (``GetAll`` replies and ``PropertiesChanged``
+    ``changed`` dicts) arrive with every value boxed in a ``Variant``,
+    and ``Metadata`` is a ``Variant`` wrapping a nested ``a{sv}``. The
+    property mappers want plain ``str`` / ``bool`` / ``list``, so unwrap
+    before they run — otherwise ``isinstance`` checks silently drop
+    every field and ``status in {...}`` blows up on the unhashable
+    ``Variant``. Detected by duck-typing (``.value`` + ``.signature``)
+    to avoid a hard ``dbus_fast`` import on the test path.
+    """
+    if hasattr(value, "value") and hasattr(value, "signature"):
+        return _unwrap(value.value)
+    if isinstance(value, dict):
+        return {k: _unwrap(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_unwrap(v) for v in value]
+    return value
 
 
 def _is_awaitable(value: Any) -> bool:
@@ -200,6 +222,11 @@ class DbusMprisBackend(MprisBackend):
         # routes future signals to the right row.
         self._owners: dict[str, str] = {}
         self._states: dict[str, MediaState] = {}
+        # Row suffix -> the player's root-interface ``Identity`` string
+        # (or ``None`` when it has none / the read failed). Identity is
+        # stable for a bus name, so it's fetched once on first read and
+        # reused — a key absent from the dict means "not fetched yet".
+        self._identities: dict[str, str | None] = {}
         # ``list_names`` rebinds once ``start()`` has a live bus to a
         # coroutine that fetches via ``org.freedesktop.DBus.ListNames``;
         # tests override it to return a synchronous fixture list so
@@ -262,6 +289,7 @@ class DbusMprisBackend(MprisBackend):
         self._owned_names = set()
         self._owners = {}
         self._states = {}
+        self._identities = {}
 
     def _override_list_names_from_bus(self) -> None:
         """Bind ``list_names`` to the bus-backed ``ListNames`` caller.
@@ -315,6 +343,9 @@ class DbusMprisBackend(MprisBackend):
         # them cleanly.
         self._states = {k: v for k, v in self._states.items() if k in self._owned_names}
         self._owners = {k: v for k, v in self._owners.items() if k in self._owned_names}
+        self._identities = {
+            k: v for k, v in self._identities.items() if k in self._owned_names
+        }
 
     async def _populate_owners(self) -> None:
         """Populate ``_owners`` for every owned row via ``GetNameOwner``.
@@ -442,6 +473,7 @@ class DbusMprisBackend(MprisBackend):
             self._owned_names.discard(suffix)
             self._owners.pop(suffix, None)
             self._states.pop(suffix, None)
+            self._identities.pop(suffix, None)
         # Phase 2: re-add the new owner (no-op on a pure removal
         # where ``new_owner`` is the empty string).
         if new_owner:
@@ -456,7 +488,7 @@ class DbusMprisBackend(MprisBackend):
         body = message.body or []
         if len(body) < 2 or body[0] != PLAYER_INTERFACE:
             return
-        changed = body[1] or {}
+        changed = _unwrap(body[1] or {})
         sender = getattr(message, "sender", None)
         if not isinstance(sender, str):
             return
@@ -488,8 +520,15 @@ class DbusMprisBackend(MprisBackend):
         """
         if row_id not in self._owned_names or self._bus is None:
             return None
+        app_name = await self._read_identity(row_id)
         cached = self._states.get(row_id)
         if cached is not None:
+            # A signal-populated cache entry carries no app_name (the
+            # Player interface doesn't expose Identity); stamp the cached
+            # root-interface value on so the row header stays populated.
+            if cached.app_name != app_name:
+                cached = dataclasses.replace(cached, app_name=app_name)
+                self._states[row_id] = cached
             return cached
         from dbus_fast.message import Message
 
@@ -505,10 +544,47 @@ class DbusMprisBackend(MprisBackend):
         )
         if reply is None or reply.body is None:
             return None
-        inner = _first_body_value(reply)
+        inner = _unwrap(_first_body_value(reply))
         state = _properties_to_state(inner if isinstance(inner, dict) else {})
+        state = dataclasses.replace(state, app_name=app_name)
         self._states[row_id] = state
         return state
+
+    async def _read_identity(self, row_id: str) -> str | None:
+        """Fetch (and cache) the player's root-interface ``Identity``.
+
+        The human-readable app name GNOME shows above each row lives on
+        the ``org.mpris.MediaPlayer2`` root interface, a separate object
+        from the Player interface ``read_state`` polls. It's stable for a
+        bus name, so it's fetched once and cached; a failed read caches
+        ``None`` so a broken player doesn't get re-probed every second.
+        """
+        if row_id in self._identities:
+            return self._identities[row_id]
+        identity: str | None = None
+        if self._bus is not None:
+            from dbus_fast.message import Message
+
+            try:
+                reply = await self._bus.call(
+                    Message(
+                        destination=f"{MPRIS_BUS_PREFIX}.{row_id}",
+                        path=MPRIS_OBJECT_PATH,
+                        interface=PROPERTIES_INTERFACE,
+                        member="GetAll",
+                        signature="s",
+                        body=[ROOT_INTERFACE],
+                    )
+                )
+                inner = _unwrap(_first_body_value(reply))
+                if isinstance(inner, dict):
+                    value = inner.get("Identity")
+                    if isinstance(value, str) and value:
+                        identity = value
+            except Exception as exc:
+                log.warning("MPRIS Identity read on %s failed: %s", row_id, exc)
+        self._identities[row_id] = identity
+        return identity
 
     async def send_command(self, row_id: str, command: str) -> None:
         """Dispatch a browser command to the corresponding MPRIS method.

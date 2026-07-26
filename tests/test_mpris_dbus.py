@@ -33,6 +33,7 @@ from deckd.mpris import (
     MPRIS_OBJECT_PATH,
     PLAYER_INTERFACE,
     PROPERTIES_INTERFACE,
+    ROOT_INTERFACE,
     connect_mpris_backend,
 )
 
@@ -64,6 +65,9 @@ class FakeDbusBus:
         # Synthetic state: each row's bus name maps to the properties
         # the backend pulls via Properties.GetAll.
         self._properties: dict[str, dict[str, Any]] = {}
+        # Root-interface (``org.mpris.MediaPlayer2``) properties per bus
+        # name — where ``Identity`` (the human-readable app name) lives.
+        self._root_properties: dict[str, dict[str, Any]] = {}
         # Maps bus name to its current unique-name owner (":1.42").
         # ``GetNameOwner`` replies with this value; defaulted to
         # ":1.<n>" derived from insertion order so signals can be
@@ -138,7 +142,8 @@ class FakeDbusBus:
             interface = record["body"][0] if record["body"] else ""
             row_props = self._properties.get(destination, {})
             if interface != PLAYER_INTERFACE:
-                return _ok(signature="a{sv}", body=[{}])
+                root_props = self._root_properties.get(destination, {})
+                return _ok(signature="a{sv}", body=[dict(root_props)])
             return _ok(signature="a{sv}", body=[dict(row_props)])
 
         if (
@@ -164,6 +169,9 @@ class FakeDbusBus:
         if bus_name not in self._owners:
             self._owners[bus_name] = f":1.{self._owner_counter}"
             self._owner_counter += 1
+
+    def set_root_properties(self, bus_name: str, properties: dict[str, Any]) -> None:
+        self._root_properties[bus_name] = dict(properties)
 
     def set_owner(self, bus_name: str, unique_name: str) -> None:
         self._owners[bus_name] = unique_name
@@ -304,13 +312,15 @@ async def test_read_state_calls_properties_getall_on_player_interface() -> None:
     # for issues #52 and #53).
     assert state.art_token is None
 
-    assert len(bus.calls) == 1
-    call = bus.calls[0]
+    # ``read_state`` issues two GetAll calls: the root interface for the
+    # ``Identity`` app name and the Player interface for playback state.
+    getalls = [c for c in bus.calls if c["member"] == "GetAll"]
+    assert len(getalls) == 2
+    call = next(c for c in getalls if c["body"] == [PLAYER_INTERFACE])
     assert call["destination"] == "org.mpris.MediaPlayer2.vlc"
     assert call["path"] == MPRIS_OBJECT_PATH
     assert call["interface"] == PROPERTIES_INTERFACE
     assert call["member"] == "GetAll"
-    assert call["body"] == [PLAYER_INTERFACE]
 
 
 @pytest.mark.asyncio
@@ -526,7 +536,8 @@ async def test_properties_changed_updates_cached_state() -> None:
     state = await backend.read_state("vlc")
     assert state is not None
     assert state.playing is False
-    assert len(bus.calls) == 1
+    # Two GetAll calls on the first read: root (Identity) + Player state.
+    assert len(bus.calls) == 2
 
     # PropertiesChanged: player transitioned to Playing.
     bus.emit_properties_changed(
@@ -539,7 +550,9 @@ async def test_properties_changed_updates_cached_state() -> None:
     state = await backend.read_state("vlc")
     assert state is not None
     assert state.playing is True
-    assert len(bus.calls) == 1
+    # No new D-Bus calls: the signal refreshed the Player cache and the
+    # Identity is cached from the first read.
+    assert len(bus.calls) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -583,6 +596,99 @@ async def test_read_state_extracts_documented_field_subset() -> None:
     # they must stay ``None`` rather than leaking through.
     assert state.rate is None
     assert state.volume is None
+
+
+@pytest.mark.asyncio
+async def test_read_state_populates_app_name_from_root_identity() -> None:
+    """``read_state`` reads the root-interface ``Identity`` and exposes
+    it as ``app_name`` — the human-readable player name (e.g. "VLC media
+    player") the browser renders as a per-row header."""
+    bus = FakeDbusBus()
+    bus.set_player_properties(
+        "org.mpris.MediaPlayer2.vlc", {"PlaybackStatus": "Playing"}
+    )
+    bus.set_root_properties(
+        "org.mpris.MediaPlayer2.vlc", {"Identity": "VLC media player"}
+    )
+    backend = DbusMprisBackend()
+    backend._bus = bus
+    backend._owned_names = {"vlc"}
+
+    state = await backend.read_state("vlc")
+    assert state is not None
+    assert state.app_name == "VLC media player"
+
+    # Identity is stable, so it's fetched once and cached: a second read
+    # issues no further root-interface GetAll.
+    root_getalls = [
+        c for c in bus.calls if c["member"] == "GetAll" and c["body"] == [ROOT_INTERFACE]
+    ]
+    assert len(root_getalls) == 1
+    await backend.read_state("vlc")
+    root_getalls = [
+        c for c in bus.calls if c["member"] == "GetAll" and c["body"] == [ROOT_INTERFACE]
+    ]
+    assert len(root_getalls) == 1
+
+
+@pytest.mark.asyncio
+async def test_read_state_app_name_none_when_no_identity() -> None:
+    """A player that publishes no ``Identity`` leaves ``app_name`` None
+    (the browser then renders no header) rather than raising."""
+    bus = FakeDbusBus()
+    bus.set_player_properties(
+        "org.mpris.MediaPlayer2.mpv", {"PlaybackStatus": "Playing"}
+    )
+    backend = DbusMprisBackend()
+    backend._bus = bus
+    backend._owned_names = {"mpv"}
+
+    state = await backend.read_state("mpv")
+    assert state is not None
+    assert state.app_name is None
+
+
+@pytest.mark.asyncio
+async def test_properties_changed_unwraps_variant_values() -> None:
+    """``PropertiesChanged`` delivers ``a{sv}`` values boxed in
+    ``dbus_fast`` ``Variant`` objects (``Metadata`` is itself a Variant
+    wrapping a nested ``a{sv}``). The signal handler must unwrap them —
+    a raw ``Variant`` is unhashable and blows up the ``PlaybackStatus``
+    membership check (regression: the browser showed nothing for a real
+    playing VLC)."""
+    from dbus_fast.signature import Variant
+
+    bus = FakeDbusBus()
+    backend = DbusMprisBackend()
+    backend._bus = bus
+    backend._owned_names = {"vlc"}
+    backend._owners = {"vlc": ":1.42"}
+    bus.set_owner("org.mpris.MediaPlayer2.vlc", ":1.42")
+    bus.add_message_handler(backend._on_message)
+
+    # Signal body shaped like the real bus: every value is a Variant.
+    bus.emit_properties_changed(
+        "org.mpris.MediaPlayer2.vlc",
+        PLAYER_INTERFACE,
+        {
+            "PlaybackStatus": Variant("s", "Playing"),
+            "Metadata": Variant(
+                "a{sv}",
+                {
+                    "xesam:title": Variant("s", "Two In The Bush"),
+                    "xesam:artist": Variant("as", ["Outback"]),
+                },
+            ),
+            "CanGoNext": Variant("b", True),
+        },
+    )
+
+    state = await backend.read_state("vlc")
+    assert state is not None
+    assert state.playing is True
+    assert state.title == "Two In The Bush"
+    assert state.artist == "Outback"
+    assert state.can_go_next is True
 
 
 # ---------------------------------------------------------------------------

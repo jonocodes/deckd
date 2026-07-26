@@ -70,6 +70,10 @@ class MediaStateMessage(BaseModel):
     desktop_entry: str | None = None
     can_go_next: bool | None = None
     can_go_previous: bool | None = None
+    # The player's human-readable name from the MPRIS root interface's
+    # ``Identity`` (e.g. "Firefox", "VLC media player"); the browser
+    # renders it as a per-row header. ``None`` for the VLC widget path.
+    app_name: str | None = None
 
 
 class WidgetUpdateMessage(BaseModel):

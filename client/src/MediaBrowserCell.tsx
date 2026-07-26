@@ -125,6 +125,9 @@ export function MediaBrowserCell({ widget, states, onCommand }: Props) {
           className="mediabrowser-row"
           role="listitem"
         >
+          {reading.app_name ? (
+            <div className="mediabrowser-app">{reading.app_name}</div>
+          ) : null}
           <div className="mediabrowser-art" aria-hidden>
             {artSlot(reading)}
           </div>

@@ -84,6 +84,7 @@ async def test_media_state_and_command_cross_real_websocket_boundary(tmp_path: P
                 "desktop_entry": None,
                 "can_go_next": None,
                 "can_go_previous": None,
+                "app_name": None,
             }
             await ws.send(json.dumps({"type": "media_command", "id": "media", "command": "volume", "value": 55}))
             await asyncio.sleep(0.05)

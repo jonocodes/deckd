@@ -36,6 +36,11 @@ class MediaState:
     desktop_entry: str | None = None
     can_go_next: bool | None = None
     can_go_previous: bool | None = None
+    # The player's human-readable name from the MPRIS root interface's
+    # ``Identity`` property (e.g. "Firefox", "VLC media player"). The
+    # browser renders it as a header line above each row, matching
+    # GNOME's media control. VLC's own ``media`` widget keeps it ``None``.
+    app_name: str | None = None
 
 
 def _art_token(artwork_url: object) -> str | None:

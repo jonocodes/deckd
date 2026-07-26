@@ -820,7 +820,11 @@ see the bottom chrome exactly as before.
 
 The chrome view is the same `mpris.yaml` layout, rendered with the
 layout area replaced by the `mediabrowser` widget. One row per
-discovered player. Each row has three slots:
+discovered player. Each row is topped by an **app-name header** — the
+player's human-readable name from the MPRIS root interface's `Identity`
+(e.g. "Firefox", "VLC media player"), matching GNOME's media control —
+and omitted entirely when the player publishes no `Identity`. Below the
+header are three slots:
 
 - **Art slot** (left) — the row's `art_token` if the daemon reported
   one (image transfer is a deferred follow-up), the row's
@@ -895,11 +899,21 @@ the bus, not a snapshot.
 
 The forwarded state subset is the documented one: `PlaybackStatus`,
 `xesam:title`, `xesam:artist`, `DesktopEntry`, `CanGoNext`,
-`CanGoPrevious`. `Metadata.artUrl` is *not* transferred (image
+`CanGoPrevious` from the Player interface, plus `Identity` (the
+`app_name` header) from the root `org.mpris.MediaPlayer2` interface —
+a separate `GetAll` fetched once per player and cached, since the name
+is stable for a bus name. `Metadata.artUrl` is *not* transferred (image
 transfer is a deferred follow-up; the client sees `art_token: null`
 today). Other Player-interface properties the daemon sees are
 ignored so a future contributor adding new state slots knows the
 subset is intentional.
+
+`a{sv}` bodies (both the `GetAll` reply and the live `PropertiesChanged`
+`changed` dict) arrive with every value boxed in a `dbus_fast` `Variant`
+— and `Metadata` is a `Variant` wrapping a nested `a{sv}` — so the
+backend unwraps them recursively before the property mappers run.
+Skipping this silently drops every field (the `isinstance` checks fail)
+and crashes the signal path on the unhashable `Variant`.
 
 #### Coexistence with the VLC media widget
 
