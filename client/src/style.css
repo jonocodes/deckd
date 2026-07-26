@@ -479,16 +479,15 @@ button:focus-visible { outline: none; }
   color: #6b7785;
 }
 
-/* Chrome media-browser view (issue #51). v1 placeholder only — the
-   dedicated ``MediaBrowserCell`` (#53) replaces this with per-row
-   playback state once ``media_state`` frames start arriving. Sized to
-   fill the surface like ``.empty`` so the cell sits centred while the
-   browser is empty. */
+/* Chrome media-browser view (issue #51, #53). Holds the
+   ``MediaBrowserCell``; stays the same shell whether the cell is
+   showing rows or its single "No media players detected" row. */
 .mediabrowser {
-  display: grid;
-  place-items: center;
+  display: flex;
+  flex-direction: column;
   height: 100%;
-  color: #6b7785;
+  padding: 8px 4px 0 4px;
+  min-height: 0;
 }
 
 .mediabrowser-empty {
@@ -498,6 +497,8 @@ button:focus-visible { outline: none; }
   border: 1px dashed #2a333d;
   color: #8a96a3;
   font-size: calc(14px * var(--label-scale, 1));
+  text-align: center;
+  margin: auto;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1184,6 +1185,164 @@ button:focus-visible { outline: none; }
   .media-speed {
     justify-content: flex-start;
   }
+}
+
+/* ---------------------------------------------------------------------------
+ * Media browser cell (issue #53). A scrollable list of compact rows, one
+ * per discovered MPRIS player. Each row is full-width, equal-height, and
+ * top-aligned; the art slot falls back to a Lucide ``Disc`` icon when the
+ * player's ``art_token`` is null and the client doesn't recognise its
+ * ``DesktopEntry``.
+ *
+ * Layout (per row):
+ *   ┌──────────────────────────────────────────┐
+ *   │ [art]  Title            [⏮  ▶/⏸  ⏭]    │
+ *   │        Artist                             │
+ *   └──────────────────────────────────────────┘
+ *
+ * Transport buttons stay in the DOM and become non-reactive (disabled) when
+ * the player reports ``CanGoPrevious`` / ``CanGoNext`` = false. Play-pause
+ * is always reactive. Capability gating is at render time, not schema time.
+ * ------------------------------------------------------------------------- */
+
+.mediabrowser-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Long lists stay usable: scroll within the placement, not the surface. */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mediabrowser-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #1b222a;
+  border: 1px solid #2a333d;
+  border-radius: 10px;
+  min-height: 56px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.mediabrowser-row-empty {
+  grid-template-columns: 1fr;
+  justify-items: center;
+  color: #8a96a3;
+  font-size: calc(14px * var(--label-scale, 1));
+  border-style: dashed;
+  background: transparent;
+}
+
+.mediabrowser-art {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: #161b21;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+
+.mediabrowser-art-icon {
+  width: 60%;
+  height: 60%;
+  color: #8a96a3;
+}
+
+.mediabrowser-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.mediabrowser-title {
+  font-weight: 700;
+  font-size: clamp(13px, 1.8vw, 16px);
+  color: #e6e9ef;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mediabrowser-subtitle {
+  font-size: clamp(11px, 1.4vw, 13px);
+  color: #8a96a3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mediabrowser-transport {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.mediabrowser-skip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  background: transparent;
+  color: #c4d2dd;
+  border-radius: 8px;
+}
+
+.mediabrowser-skip svg {
+  width: 22px;
+  height: 22px;
+  fill: currentColor;
+  stroke-width: 0;
+}
+
+.mediabrowser-skip:active:not(:disabled) {
+  background: #2a333d;
+  color: #7dd3fc;
+}
+
+.mediabrowser-skip:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.mediabrowser-play {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 0;
+  background: #7dd3fc;
+  color: #0e1720;
+}
+
+.mediabrowser-play svg {
+  width: 60%;
+  height: 60%;
+  fill: currentColor;
+  stroke-width: 0;
+}
+
+.mediabrowser-play:active {
+  transform: scale(0.94);
 }
 
 /**

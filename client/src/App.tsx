@@ -5,6 +5,7 @@ import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
 import { ManualControl } from "./ManualControl";
+import { MediaBrowserCell } from "./MediaBrowserCell";
 import { PasswordGate } from "./PasswordGate";
 import { Settings } from "./Settings";
 import { useMeterStore } from "./meter-store";
@@ -20,7 +21,7 @@ import {
 } from "./settings-store";
 import type { CSSProperties } from "react";
 import { useWakeLock } from "./wake-lock";
-import { getDemoLayout, getDemoView, MEDIA_DEMO_STATES } from "./demo";
+import { getDemoLayout, getDemoView, MEDIA_DEMO_STATES, MPRIS_DEMO_STATES } from "./demo";
 import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
 import type { Icon as IconRef, ServerLayout } from "./protocol";
@@ -73,7 +74,25 @@ export function App() {
   }, [layout]);
   const meter = useMeterStore(activeMeterSources);
   const activeMediaIds = useMemo(() => new Set((layout?.widgets ?? []).filter((w) => w.kind === "media").map((w) => w.id)), [layout]);
-  const media = useMediaStore(activeMediaIds);
+  // Mediabrowser rows arrive with ids of the form ``mpris.<suffix>`` —
+  // the daemon enumerates them at runtime, so the client can't list
+  // them up front. The media store accepts a set of prefixes alongside
+  // the exact-id set; adding the bus-prefix here keeps the rows
+  // visible to the browser cell without leaking the VLC media widget's
+  // id into the browser.
+  const activeMediaPrefixes = useMemo(
+    () => new Set((layout?.widgets ?? []).filter((w) => w.kind === "mediabrowser").map(() => "mpris.")),
+    [layout],
+  );
+  // The single mediabrowser widget in the active layout is the
+  // configuration source for the chrome view; the chrome view has
+  // nowhere else to learn about ``ordering`` / ``empty_state``. Hoist
+  // the lookup out of the render path so the JSX stays declarative.
+  const browserWidget = useMemo(
+    () => (layout?.widgets ?? []).find((w) => w.kind === "mediabrowser") ?? null,
+    [layout],
+  );
+  const media = useMediaStore(activeMediaIds, activeMediaPrefixes);
   // Pull out the store's ``onUpdate`` (a stable useCallback) and feed
   // widget_update frames straight to it. Depending on the whole ``meter``
   // object instead would be a bug: it gets a fresh identity on every render
@@ -90,6 +109,10 @@ export function App() {
   useEffect(() => {
     if (!isDemo) return;
     for (const state of MEDIA_DEMO_STATES) onMediaState(state);
+    // The mpris demo seeds the same MPRIS rows the daemon would
+    // push; the browser cell filters to ``mpris.*`` ids so the VLC
+    // fixture doesn't leak into the browser.
+    for (const state of MPRIS_DEMO_STATES) onMediaState(state);
   }, [isDemo, onMediaState]);
   const { status, send, authenticate, deauthenticate, hasPassword } =
     useDeckdSocket(onLayout, onWidgetUpdate, onMediaState, { enabled: !demoLayout });
@@ -116,6 +139,15 @@ export function App() {
   const typeText = (text: string) => send({ type: "type", text });
   const keyCombo = (combo: string) => send({ type: "key", combo });
   const mediaCommand = (id: string, command: "volume" | "seek" | "rate", value: number) => send({ type: "media_command", id, command, value });
+  // Mediabrowser per-row transport (issue #54): the browser sends
+  // three value-less commands — ``play-pause`` / ``next`` / ``previous``
+  // — keyed by the row's ``mpris.<suffix>`` id. The server routes the
+  // ``mpris.`` prefix to the MPRIS backend and the rest of the
+  // ``media_command`` family keeps going to the VLC path. This
+  // callback is the only thing the browser cell needs to know about
+  // the wire surface.
+  const browserCommand = (id: string, command: "play-pause" | "next" | "previous") =>
+    send({ type: "media_command", id, command });
   // Chrome view toggle (issue #51): the media icon mirrors the existing
   // trackpad / settings buttons. When opened it sends ``select_view``
   // so the daemon pushes the mpris layout; when closed it sends
@@ -192,15 +224,26 @@ export function App() {
               sensitivity={trackpad.sensitivity}
             />
           ) : view === "mediabrowser" ? (
-            // v1 placeholder (issue #51). The dedicated
-            // ``MediaBrowserCell`` ticket (#53) replaces this with
-            // per-row playback state, prev/play-pause/next controls,
-            // and the live list of MPRIS rows as ``media_state`` frames
-            // arrive from the daemon. Until then, the empty state
-            // shows unconditionally — it's the visible signal that the
-            // chrome view is open and the daemon is listening.
+            // Per-row MPRIS browser (issue #53). The cell filters the
+            // shared media cache down to ``mpris.*`` ids, orders rows
+            // by the active widget's ``ordering`` knob, and gates the
+            // prev/next transport on each row's capabilities. The
+            // single mediabrowser widget in the active layout is the
+            // configuration source; ``null`` falls back to the legacy
+            // "no players" placeholder so the chrome view still
+            // renders something when the daemon hasn't pushed a
+            // mediabrowser layout (e.g. a transient race during a
+            // view switch).
             <div className="mediabrowser" role="region" aria-label="media browser">
-              <div className="mediabrowser-empty">No media players detected</div>
+              {browserWidget ? (
+                <MediaBrowserCell
+                  widget={browserWidget}
+                  states={media.states}
+                  onCommand={browserCommand}
+                />
+              ) : (
+                <div className="mediabrowser-empty">No media players detected</div>
+              )}
             </div>
           ) : view === "settings" ? (
             <Settings

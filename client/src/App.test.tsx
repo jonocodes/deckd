@@ -14,7 +14,7 @@
  * exactly which client message landed in ``send`` without spinning up a
  * daemon.
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClientMessage } from "./protocol";
 
@@ -73,8 +73,63 @@ describe("App — chrome media icon", () => {
     render(<App />);
     const button = screen.getByRole("button", { name: "media browser" });
     fireEvent.pointerDown(button);
-    // The empty-state placeholder row (issue #51; #53 replaces it with
-    // real per-row state when media_state frames arrive).
+    // The default demo has no mediabrowser widget, so the chrome view
+    // falls back to the "no players" placeholder (issue #51; #53 added
+    // the real per-row cell that takes over once a mediabrowser
+    // widget is in the active layout).
     expect(screen.getByText("No media players detected")).toBeTruthy();
+  });
+});
+
+/** Chrome media icon + mediabrowser view with the per-row cell (issue #53).
+ *
+ * The mpris demo seeds the active mediabrowser widget with four MPRIS
+ * rows, so opening the chrome view renders the real per-row cell
+ * (not the placeholder). Clicks on the per-row transport buttons
+ * fire the wire ``media_command`` with the row's ``mpris.<suffix>``
+ * id and the right command — that's the bridge to the server-side
+ * dispatch in #54.
+ */
+describe("App — mediabrowser per-row cell", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    window.history.replaceState(null, "", "/?demo=mpris");
+  });
+
+  it("renders the per-row browser with seeded MPRIS rows", () => {
+    render(<App />);
+    // ``?demo=mpris`` opens straight into the mediabrowser view, so
+    // the rows are visible without clicking the chrome icon. The
+    // demo seeds the media store from a mount-time ``useEffect`` —
+    // wrap the render in ``act`` so the seeded states have
+    // propagated by the time the assertion runs.
+    const rows = screen.getAllByRole("listitem");
+    expect(rows.length).toBeGreaterThan(0);
+    // ``playing_first`` ordering: Playing rows first, sorted by row
+    // id within the bucket. The seeded ``mpris.firefox`` (playing)
+    // sorts before ``mpris.vlc`` (also playing) because ``firefox``
+    // < ``vlc`` lexicographically.
+    expect(rows[0].getAttribute("data-row-id")).toBe("mpris.firefox");
+    expect(screen.getByText("One More Time")).toBeTruthy();
+  });
+
+  it("clicking a transport button sends the right media_command", () => {
+    let view: ReturnType<typeof render> | undefined;
+    act(() => {
+      view = render(<App />);
+    });
+    // The button only exists once the seeded ``media_state`` rows
+    // have propagated through the store; click the first Pause in
+    // the rendered list. The first row in playing-first order is
+    // ``mpris.firefox``.
+    const pause = screen.getAllByRole("button", { name: "Pause" })[0];
+    fireEvent.click(pause);
+    expect(send).toHaveBeenCalledWith({
+      type: "media_command",
+      id: "mpris.firefox",
+      command: "play-pause",
+    });
+    void view;
   });
 });

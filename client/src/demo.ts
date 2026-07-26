@@ -167,24 +167,113 @@ export const MEDIA_DEMO_STATES: MediaState[] = [
   },
 ];
 
+// Backend-free MPRIS browser demo (issue #53). A single
+// ``mediabrowser`` widget, matching the shipping ``layouts/mpris.yaml``
+// footprint, so ``/?demo=mpris`` opens the chrome view with seeded
+// MPRIS rows already in the media store — the same surface a real
+// daemon would render after the first ``media_state`` push. Three
+// rows (playing, paused, stopped) and one with no capabilities so
+// the art-slot fallback, capability gating, and ordering rules all
+// exercise in one view.
+const MPRIS: ServerLayout = {
+  type: "layout",
+  app: "mpris (demo)",
+  display_name: "MPRIS",
+  theme: "#22c55e",
+  icon: { source: "lucide", name: "music" },
+  jogstrip_enabled: true,
+  view: "mpris",
+  widgets: [
+    {
+      id: "browser",
+      kind: "mediabrowser",
+      grid: [0, 0, 4, 2],
+    },
+  ],
+};
+
+/** Seed MPRIS rows for the browser demo, with the
+ * ``mpris.<suffix>`` ids the daemon would emit. Mixed playback states
+ * and capabilities so the ordering, art fallback, and gating
+ * acceptance criteria all have something to render. */
+export const MPRIS_DEMO_STATES: MediaState[] = [
+  {
+    type: "media_state",
+    id: "mpris.vlc",
+    available: true,
+    stale: false,
+    playing: true,
+    title: "One More Time",
+    artist: "Daft Punk",
+    desktop_entry: "vlc",
+    can_go_next: true,
+    can_go_previous: true,
+  },
+  {
+    type: "media_state",
+    id: "mpris.spotify",
+    available: true,
+    stale: false,
+    playing: false,
+    title: "Intro",
+    artist: "The xx",
+    desktop_entry: "spotify",
+    can_go_next: true,
+    can_go_previous: false,
+  },
+  {
+    type: "media_state",
+    id: "mpris.firefox",
+    available: true,
+    stale: false,
+    playing: true,
+    title: "A podcast episode",
+    artist: "Tiled Topics",
+    desktop_entry: "firefox",
+    can_go_next: true,
+    can_go_previous: true,
+  },
+  // Unknown desktop entry exercises the disc-icon fallback in the art slot.
+  {
+    type: "media_state",
+    id: "mpris.mystery",
+    available: true,
+    stale: false,
+    playing: false,
+    title: "Stopped",
+    artist: "Unknown player",
+    desktop_entry: null,
+    can_go_next: false,
+    can_go_previous: false,
+  },
+];
+
 const DEMOS: Record<string, ServerLayout> = {
   firefox: FIREFOX,
   default: DEFAULT,
   showcase: SHOWCASE,
   meter: METER,
   vlc: VLC,
+  mpris: MPRIS,
 };
 
-type DemoView = "layout" | "trackpad" | "settings";
+type DemoView = "layout" | "trackpad" | "settings" | "mediabrowser";
 
 // Demo names that open a chrome *view* (settings / trackpad) rather than a
 // bare layout. They render over a base fixture so the socket stays disabled
 // and the app chrome (badge, status) has real context behind the panel.
+// ``mpris`` opens the mediabrowser view with the MPRIS fixture as the
+// base, so the per-row cell renders with seeded rows on first paint —
+// the layout file the real daemon would push.
 const DEMO_VIEWS: Record<string, DemoView> = {
   settings: "settings",
   trackpad: "trackpad",
+  mpris: "mediabrowser",
 };
 const VIEW_DEMO_BASE = VLC;
+const VIEW_DEMO_BASE_FOR: Record<string, ServerLayout> = {
+  mpris: MPRIS,
+};
 
 /** The demo fixtures, keyed by name — for the gallery and Ladle stories. */
 export const DEMO_LAYOUTS = DEMOS;
@@ -195,12 +284,16 @@ export const DEMO_NAMES = [...Object.keys(DEMOS), ...Object.keys(DEMO_VIEWS)];
 
 /** Returns the demo layout named by the ``?demo=`` URL param, or ``null``
  * when the param is absent/unknown (normal daemon-backed operation). A view
- * demo (``settings`` / ``trackpad``) renders over a shared base fixture. */
+ * demo (``settings`` / ``trackpad``) renders over a shared base fixture;
+ * ``mpris`` opens the mediabrowser view with the MPRIS fixture as the
+ * base so the per-row cell has a backing widget. */
 export function getDemoLayout(): ServerLayout | null {
   if (typeof window === "undefined") return null;
   const name = new URLSearchParams(window.location.search).get("demo");
   if (!name) return null;
-  if (name in DEMO_VIEWS) return VIEW_DEMO_BASE;
+  if (name in DEMO_VIEWS) {
+    return VIEW_DEMO_BASE_FOR[name] ?? VIEW_DEMO_BASE;
+  }
   return DEMOS[name] ?? null;
 }
 

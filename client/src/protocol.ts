@@ -29,6 +29,14 @@ export type MediaState = {
   /** Changes when the current item's album art changes (null when none), so
    * the client can point an <img> at the daemon art proxy and cache-bust. */
   art_token?: string | null;
+  /** MPRIS-only fields populated only for ``id == "mpris.<suffix>"`` rows
+   * (issue #52). VLC's path leaves them ``null``. The browser uses
+   * ``desktop_entry`` as a key into its app-icon registry; the two booleans
+   * mirror MPRIS ``CanGoNext`` / ``CanGoPrevious`` so the browser can gate
+   * the matching transport buttons. */
+  desktop_entry?: string | null;
+  can_go_next?: boolean | null;
+  can_go_previous?: boolean | null;
 };
 export type Widget = {
   id: string;
