@@ -769,3 +769,28 @@ Art sources are chosen with `art_source` (default `[vlc]`):
 - `itunes` — when VLC has no art, the daemon looks the cover up via Apple's public iTunes Search API using the track's artist/album/title. This is opt-in because it **sends that metadata to a third party**; drop `itunes` to keep all metadata local. Results (including misses) are cached in memory, so a track is looked up at most once.
 
 > On some setups (e.g. NixOS) Python's TLS can't find a CA bundle, which makes the HTTPS lookup fail silently (art just falls back to the logo). If that happens, set `SSL_CERT_FILE` / `NIX_SSL_CERT_FILE` for the daemon.
+
+### MPRIS media browser
+
+A separate widget kind, `mediabrowser`, lists every MPRIS player the system exposes over the session D-Bus (VLC, mpv, Spotify, …) and gives each row a play/pause/prev/next transport. It lives next to its own chrome-view button (the music icon between the manual-control and settings buttons) and is reached from the bottom-strip.
+
+Enable it by shipping a layout that declares the widget:
+
+```yaml
+match: [mpris]
+display_name: MPRIS
+widgets:
+  - id: browser
+    kind: mediabrowser
+    grid: [0, 0, 4, 2]
+```
+
+The shipped `mpris.yaml` is exactly this; `select_view: "mpris"` from the chrome reveals it. The widget renders one row per discovered player. Previous and next are non-reactive when `CanGoPrevious` / `CanGoNext` is false on the underlying player; play-pause is always reactive. When no players exist and the layout's `empty_state` is `"show"` (the default), a single "No media players detected" row appears; `"hide"` collapses the cell.
+
+#### Discovery
+
+The daemon enumerates every bus name matching `org.mpris.MediaPlayer2.*` on the session D-Bus at startup, gated on the layout actually containing a `mediabrowser` widget — users who don't enable the feature don't pay the bus-connect cost. The multiplexer `org.mpris.MediaPlayer2.playerctld` is excluded so it doesn't surface as a duplicate row, and a player that hands its bus name off to a new owner is treated as a remove-then-add (issue #52; the row stays reachable while the next poll pulls fresh state from the new owner).
+
+A handful of MPRIS fields are forwarded: `PlaybackStatus`, `xesam:title`, `xesam:artist`, plus capability flags `CanGoNext` / `CanGoPrevious` that gate the previous/next buttons. Album art, scrubber, volume, and other browser controls are deferred follow-ups (see issues #53 and #54). Commands flow through `media_command` messages addressed as `mpris.<row-suffix>`; the server routes them straight to `org.mpris.MediaPlayer2.Player.{PlayPause,Next,Previous}` on the right bus name. The existing VLC `media` widget is unchanged — the two are independent features.
+
+The passive playback-state tint on the chrome media icon (lit when something is playing) is a deferred follow-up: see issue #47.

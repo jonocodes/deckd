@@ -1,12 +1,105 @@
 from __future__ import annotations
 
+import dataclasses
+import logging
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Any, Callable, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from .layouts import MediaBrowserEmptyState, MediaBrowserOrdering
 from .media import MediaState
+
+if TYPE_CHECKING:
+    from dbus_fast import BusType
+    from dbus_fast.aio import MessageBus
+
+    from .layouts import LayoutStore
+
+log = logging.getLogger("deckd.mpris")
+
+
+# Browser-facing command -> MPRIS D-Bus method name. The set is the
+# three controls the v1 browser ships (issue #52 acceptance criterion
+# for the dispatch mapping); any other command is a no-op so a future
+# browser-side button can't accidentally invoke a destructive MPRIS
+# method.
+_COMMANDS: dict[str, str] = {
+    "play-pause": "PlayPause",
+    "next": "Next",
+    "previous": "Previous",
+}
+
+
+# MPRIS protocol constants. Documented in the upstream MPRIS spec
+# (https://specifications.freedesktop.org/mpris-spec/latest/) and
+# stated explicitly here so the layout / protocol / client surface
+# and the backend can't drift apart on a typo.
+MPRIS_BUS_PREFIX = "org.mpris.MediaPlayer2"
+MPRIS_OBJECT_PATH = "/org/mpris/MediaPlayer2"
+PLAYER_INTERFACE = "org.mpris.MediaPlayer2.Player"
+PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
+DBUS_INTERFACE = "org.freedesktop.DBus"
+NAME_OWNER_CHANGED = "NameOwnerChanged"
+PROPERTIES_CHANGED = "PropertiesChanged"
+
+# The MPRIS multiplexer (`playerctld`) accepts every other player's
+# commands and re-dispatches them. Listing it next to the real players
+# creates a duplicate row the user has no way to remove; we skip it.
+# The filter is a constant set so layouts / docs / tests can reference
+# the same list rather than hard-coding the strings.
+EXCLUDED_PLAYER_SUFFIXES = frozenset({"playerctld"})
+
+
+def _is_mpris_bus_name(name: str) -> bool:
+    """True for ``org.mpris.MediaPlayer2.<suffix>`` where ``suffix`` is a
+    non-empty, ASCII-safe segment."""
+    return _mpris_suffix(name) is not None
+
+
+def _mpris_suffix(name: str) -> str | None:
+    """Extract the row suffix (``"vlc"``, ``"spotify"``) from a bus
+    name like ``org.mpris.MediaPlayer2.vlc``, or ``None`` if the
+    name isn't a well-formed MPRIS row.
+
+    A well-formed suffix is non-empty, only ASCII alphanumerics or
+    ``-`` / ``_`` / ``.`` (legal in a D-Bus name), and not in
+    :data:`EXCLUDED_PLAYER_SUFFIXES`. Centralising the rule here
+    means :func:`_is_mpris_bus_name`, :meth:`refresh_names`, and
+    the ``NameOwnerChanged`` handler agree on the same filter."""
+    if not isinstance(name, str) or not name.startswith(MPRIS_BUS_PREFIX + "."):
+        return None
+    suffix = name[len(MPRIS_BUS_PREFIX) + 1 :]
+    if not suffix:
+        return None
+    if not all(c.isalnum() or c in "_-." for c in suffix):
+        return None
+    if suffix in EXCLUDED_PLAYER_SUFFIXES:
+        return None
+    return suffix
+
+
+def _first_body_value(message: Any) -> Any:
+    """Return ``message.body[0]`` when the body is a non-empty list,
+    else ``None``. Centralises the defensive shape check that the
+    GetAll / ListNames / GetNameOwner replies need — dbus_fast may
+    surface a None body or a missing first slot on some failure
+    paths, and four call sites all need the same handling.
+    """
+    body = getattr(message, "body", None)
+    if not body:
+        return None
+    return body[0]
+
+
+def _is_awaitable(value: Any) -> bool:
+    """True when ``value`` can be awaited (a coroutine, task, or Future).
+
+    Used to bridge a sync callable (the test seam) and an async one
+    (the real bus path) inside ``DbusMprisBackend.refresh_names`` —
+    the test passes a plain list; production rebinds the same slot to
+    a coroutine that fetches via ``org.freedesktop.DBus.ListNames``."""
+    return hasattr(value, "__await__")
 
 
 class MediaBrowser(BaseModel):
@@ -71,3 +164,511 @@ class FakeMprisBackend(MprisBackend):
 
     async def send_command(self, row_id: str, command: str) -> None:
         self.commands.append((row_id, command))
+
+
+class DbusMprisBackend(MprisBackend):
+    """Real-session-bus MPRIS backend (issue #52).
+
+    Connects to the session bus via ``dbus_fast.aio.MessageBus``,
+    enumerates ``org.mpris.MediaPlayer2.*`` players, subscribes to
+    ``NameOwnerChanged`` / ``PropertiesChanged`` so rows appear /
+    disappear as players start and stop, and translates browser
+    commands (``play-pause`` / ``next`` / ``previous``) into D-Bus
+    method calls on the right player.
+
+    The class is constructed empty; :meth:`start` does the connect /
+    enumerate / subscribe work, and :meth:`stop` tears it down. A
+    no-layouts-use-it factory :func:`connect_mpris_backend` returns
+    ``None`` so a daemon whose layouts don't include ``mediabrowser``
+    doesn't even open the bus.
+
+    The bus surface is plugged through ``bus_factory`` so tests can
+    swap in a fake without standing up a real session bus. The fake
+    used in :mod:`tests.test_mpris_dbus` records every method call
+    and lets the test push synthetic NameOwnerChanged /
+    PropertiesChanged signals into the backend's handlers.
+    """
+
+    def __init__(self, bus_factory: "Callable[[BusType], MessageBus] | None" = None) -> None:
+        self._bus_factory = bus_factory
+        self._bus: MessageBus | None = None
+        self._owned_names: set[str] = set()
+        # Maps a row suffix (``vlc``) to the unique-name
+        # (``":1.42"``) it last saw on the bus. Used to translate
+        # ``PropertiesChanged.sender`` (a unique name) back into a
+        # row id; updated on every ``NameOwnerChanged`` so a handoff
+        # routes future signals to the right row.
+        self._owners: dict[str, str] = {}
+        self._states: dict[str, MediaState] = {}
+        # ``list_names`` rebinds once ``start()`` has a live bus to a
+        # coroutine that fetches via ``org.freedesktop.DBus.ListNames``;
+        # tests override it to return a synchronous fixture list so
+        # they don't need an event loop or a real daemon bus. Both
+        # shapes (awaitable or plain list) are awaited by
+        # :meth:`refresh_names` via ``_is_awaitable``.
+        self.list_names: Callable[[], Any] = lambda: []
+
+    def row_ids(self) -> list[str]:
+        return sorted(self._owned_names)
+
+    async def start(self) -> None:
+        """Connect to the session bus, enumerate, and subscribe.
+
+        Idempotent: a second call without an intervening :meth:`stop`
+        is a no-op so the server's :meth:`start_media_pump` path can
+        call it freely without tracking first-start state.
+        """
+        if self._bus is not None:
+            return
+        factory = self._bus_factory
+        if factory is None:  # pragma: no cover -- guarded by factory caller
+            raise RuntimeError("DbusMprisBackend requires a bus_factory")
+        from dbus_fast import BusType
+
+        self._bus = factory(BusType.SESSION)
+        await self._bus.connect()
+        # Install match rules BEFORE we subscribe so the bus daemon
+        # actually delivers the signals we care about. ``AddMatch``
+        # is the standard D-Bus mechanism; without it, the registry
+        # never pushes ``NameOwnerChanged`` or
+        # ``PropertiesChanged`` to this connection, and the add_message_handler
+        # we register below would never see them in production.
+        await self._add_match(
+            "type='signal',sender='org.freedesktop.DBus',"
+            "interface='org.freedesktop.DBus',member='NameOwnerChanged'"
+        )
+        await self._add_match(
+            "type='signal',interface='org.freedesktop.DBus.Properties',"
+            "member='PropertiesChanged',arg0namespace='org.mpris'"
+        )
+        self._override_list_names_from_bus()
+        await self.refresh_names()
+        self._bus.add_message_handler(self._on_message)
+        # Discover the unique-name owner of every row so subsequent
+        # ``PropertiesChanged`` signals can be routed to the right
+        # row. ``GetNameOwner`` is cheap (it's a registry lookup); a
+        # second pass on the same list would be redundant.
+        await self._populate_owners()
+
+    async def stop(self) -> None:
+        """Disconnect from the session bus.
+
+        Safe to call without a prior :meth:`start` (test cleanup
+        paths fire this unconditionally).
+        """
+        if self._bus is not None:
+            self._bus.disconnect()
+            self._bus = None
+        self._owned_names = set()
+        self._owners = {}
+        self._states = {}
+
+    def _override_list_names_from_bus(self) -> None:
+        """Bind ``list_names`` to the bus-backed ``ListNames`` caller.
+
+        The real path uses ``org.freedesktop.DBus.ListNames`` to fetch
+        every owned bus name on every refresh. Tests leave the
+        default ``list_names`` in place and inject values directly;
+        both shapes (sync list-returning and async coroutine-returning) are
+        awaited by :meth:`refresh_names`.
+        """
+
+        async def _impl() -> list[str]:
+            assert self._bus is not None
+            from dbus_fast.message import Message
+
+            reply = await self._bus.call(
+                Message(
+                    destination=DBUS_INTERFACE,
+                    path="/org/freedesktop/DBus",
+                    interface=DBUS_INTERFACE,
+                    member="ListNames",
+                )
+            )
+            inner = _first_body_value(reply)
+            if not isinstance(inner, list):
+                return []
+            return [n for n in inner if isinstance(n, str)]
+
+        self.list_names = _impl  # type: ignore[assignment]  # bridge sync/async at runtime; see _is_awaitable in refresh_names
+
+    async def refresh_names(self) -> None:
+        """Re-read the bus-name registry and reconcile ``_owned_names``.
+
+        Called on startup and after every ``NameOwnerChanged`` signal —
+        the bus's list of owned ``org.mpris.MediaPlayer2.*`` names
+        changes whenever a player comes or goes. Filtering happens
+        here; the fake and the real bus both go through this single
+        path so the row set is identical in both shapes.
+        """
+        result = self.list_names()
+        if _is_awaitable(result):
+            result = await result  # type: ignore[misc]
+        names = {
+            suffix
+            for n in result
+            if (suffix := _mpris_suffix(n)) is not None
+        }
+        self._owned_names = {n for n in names if n}
+        # Drop cached state and stale owner mappings for players
+        # that disappeared so the next ``read_state`` repopulates
+        # them cleanly.
+        self._states = {k: v for k, v in self._states.items() if k in self._owned_names}
+        self._owners = {k: v for k, v in self._owners.items() if k in self._owned_names}
+
+    async def _populate_owners(self) -> None:
+        """Populate ``_owners`` for every owned row via ``GetNameOwner``.
+
+        ``PropertiesChanged`` signals arrive from the player's unique
+        name (``:1.N``), not the bus name, so we have to learn the
+        mapping once on startup.
+        """
+        if not self._bus:
+            return
+        from dbus_fast.message import Message
+
+        suffixes = list(self._owned_names)
+        for suffix in suffixes:
+            try:
+                reply = await self._bus.call(
+                    Message(
+                        destination=DBUS_INTERFACE,
+                        path="/org/freedesktop/DBus",
+                        interface=DBUS_INTERFACE,
+                        member="GetNameOwner",
+                        signature="s",
+                        body=[f"{MPRIS_BUS_PREFIX}.{suffix}"],
+                    )
+                )
+            except Exception as exc:
+                log.debug("GetNameOwner for %s failed: %s", suffix, exc)
+                continue
+            if reply is None or reply.body is None:
+                continue
+            owner = _first_body_value(reply)
+            if isinstance(owner, str) and owner:
+                self._owners[suffix] = owner
+
+    async def _add_match(self, rule: str) -> None:
+        """Install a D-Bus ``AddMatch`` rule on the bus connection.
+
+        ``dbus_fast`` registers ``NameOwnerChanged`` automatically
+        when its high-level proxy is constructed (the
+        ``_name_owner_match_rule`` member), but it does not by default
+        install our ``PropertiesChanged`` rule, and the bus daemon
+        only delivers signals to clients whose match rules match the
+        signal — so without these calls, the production backend
+        receives nothing.
+        """
+        if not self._bus:
+            return
+        from dbus_fast import MessageType
+        from dbus_fast.message import Message
+
+        try:
+            reply = await self._bus.call(
+                Message(
+                    destination=DBUS_INTERFACE,
+                    path="/org/freedesktop/DBus",
+                    interface=DBUS_INTERFACE,
+                    member="AddMatch",
+                    signature="s",
+                    body=[rule],
+                )
+            )
+        except Exception as exc:
+            log.warning("AddMatch %r failed: %s", rule, exc)
+            return
+        if reply is not None and reply.message_type == MessageType.ERROR:
+            log.warning(
+                "AddMatch %r returned error: %s", rule, getattr(reply, "body", None)
+            )
+
+    def _on_message(self, message: Any) -> None:
+        """Bus-side message handler.
+
+        dbus_fast delivers every inbound D-Bus message to every
+        registered handler — including ``METHOD_RETURN`` replies we
+        made (which are routed back to the originating ``call`` via
+        serial matching and are best ignored here). For signals
+        (``message_type == SIGNAL``), we react to the two subscriptions
+        the issue's acceptance criteria require: ``NameOwnerChanged``
+        and ``PropertiesChanged``.
+        """
+        from dbus_fast import MessageType
+
+        if getattr(message, "message_type", None) != MessageType.SIGNAL:
+            return
+        if (
+            message.member == NAME_OWNER_CHANGED
+            and message.interface == DBUS_INTERFACE
+        ):
+            self._handle_name_owner_changed(message)
+        elif (
+            message.member == PROPERTIES_CHANGED
+            and message.interface == PROPERTIES_INTERFACE
+        ):
+            self._handle_properties_changed(message)
+
+    def _handle_name_owner_changed(self, message: Any) -> None:
+        # ``NameOwnerChanged`` body is ``(name, old_owner, new_owner)``.
+        # ``old_owner`` empty + ``new_owner`` non-empty -> a name
+        # appeared; the reverse -> disappeared; both set -> a name was
+        # handed off (old owner left, new owner took it). Issue #52
+        # spec calls for treat-rename-as-remove-then-add: clear the
+        # row's owner and cache, then re-add it for the new owner. A
+        # brief row-blip between the two is the spec's intent — the
+        # the browser reflects what the bus is publishing, and the
+        # next ``read_state`` poll fills the new owner's cache.
+        body = message.body or []
+        if len(body) < 3:
+            return
+        name = body[0]
+        old_owner = body[1]
+        new_owner = body[2]
+        suffix = _mpris_suffix(name)
+        if suffix is None:
+            return
+        log.debug(
+            "NameOwnerChanged %s: %s -> %s",
+            name,
+            old_owner or "<none>",
+            new_owner or "<none>",
+        )
+        # Phase 1: drop the old owner (always — issue #52 says even a
+        # pure-add goes through a remove-and-add so the row's metadata
+        # is rebuilt cleanly under the new owner).
+        if old_owner:
+            self._owned_names.discard(suffix)
+            self._owners.pop(suffix, None)
+            self._states.pop(suffix, None)
+        # Phase 2: re-add the new owner (no-op on a pure removal
+        # where ``new_owner`` is the empty string).
+        if new_owner:
+            self._owned_names.add(suffix)
+            self._owners[suffix] = new_owner
+
+    def _handle_properties_changed(self, message: Any) -> None:
+        # ``PropertiesChanged`` body is ``(interface, changed,
+        # invalidated)``. Only the Player interface matters — the
+        # root ``org.mpris.MediaPlayer2`` interface doesn't carry
+        # playback state.
+        body = message.body or []
+        if len(body) < 2 or body[0] != PLAYER_INTERFACE:
+            return
+        changed = body[1] or {}
+        sender = getattr(message, "sender", None)
+        if not isinstance(sender, str):
+            return
+        # Reverse the owner map once per signal rather than maintain
+        # a per-row reverse index — the size is bounded by the number
+        # of MPRIS players (a handful on a typical desktop).
+        for row_id, owner in self._owners.items():
+            if owner == sender:
+                previous = self._states.get(row_id) or MediaState(
+                    available=True, stale=False
+                )
+                self._states[row_id] = _apply_properties_changed(previous, changed)
+                return
+
+    async def read_state(self, row_id: str) -> MediaState | None:
+        """Pull the row's :class:`MediaState`.
+
+        A fresh :class:`MediaState` is fetched via ``Properties.GetAll``
+        on every call; the v1 browser polls at 1Hz and the Properties
+        round-trip is cheap. The cache fills in opportunistically from
+        :class:`PropertiesChanged` signals and is consulted first so the
+        cache-hit path is observable in tests (issue #52's signaling
+        layer requires that ``read_state`` return the cached state
+        without re-issuing GetAll when a signal arrived after the
+        cache was populated).
+
+        Unknown rows return ``None`` so the pump loop can skip them
+        without surfacing a malformed destination on the wire.
+        """
+        if row_id not in self._owned_names or self._bus is None:
+            return None
+        cached = self._states.get(row_id)
+        if cached is not None:
+            return cached
+        from dbus_fast.message import Message
+
+        reply = await self._bus.call(
+            Message(
+                destination=f"{MPRIS_BUS_PREFIX}.{row_id}",
+                path=MPRIS_OBJECT_PATH,
+                interface=PROPERTIES_INTERFACE,
+                member="GetAll",
+                signature="s",
+                body=[PLAYER_INTERFACE],
+            )
+        )
+        if reply is None or reply.body is None:
+            return None
+        inner = _first_body_value(reply)
+        state = _properties_to_state(inner if isinstance(inner, dict) else {})
+        self._states[row_id] = state
+        return state
+
+    async def send_command(self, row_id: str, command: str) -> None:
+        """Dispatch a browser command to the corresponding MPRIS method.
+
+        Unknown rows, unknown commands, and bus errors are all no-ops
+        the server's pump catches and logs — the wire side never sees
+        a failure, only a log line.
+        """
+        if self._bus is None or row_id not in self._owned_names:
+            return
+        method = _COMMANDS.get(command)
+        if method is None:
+            return
+        from dbus_fast.message import Message
+
+        try:
+            await self._bus.call(
+                Message(
+                    destination=f"{MPRIS_BUS_PREFIX}.{row_id}",
+                    path=MPRIS_OBJECT_PATH,
+                    interface=PLAYER_INTERFACE,
+                    member=method,
+                )
+            )
+        except Exception as exc:
+            log.warning(
+                "MPRIS %s.%s on %s failed: %s",
+                PLAYER_INTERFACE,
+                method,
+                row_id,
+                exc,
+            )
+
+
+def _playback_to_playing(
+    status: Any, fallback: bool | None = None
+) -> bool | None:
+    """Map a ``PlaybackStatus`` string to a playing-bool.
+
+    ``"Playing"`` -> ``True``; ``"Paused"`` / ``"Stopped"`` ->
+    ``False``; anything else falls back to ``fallback`` (default
+    ``None``) so the caller controls whether unknown transitions
+    preserve the previous value.
+    """
+    if status == "Playing":
+        return True
+    if status in {"Paused", "Stopped"}:
+        return False
+    return fallback
+
+
+def _properties_to_state(properties: dict[str, Any]) -> MediaState:
+    """Map a Player-interface property dict to a :class:`MediaState`.
+
+    Populates only the documented subset (issue #52 acceptance
+    criterion 4): ``PlaybackStatus``, ``Metadata.title``,
+    ``Metadata.artist``, ``DesktopEntry``, ``CanGoNext``,
+    ``CanGoPrevious``. ``Metadata.artUrl`` stays ``None`` — image
+    transfer is out-of-scope per #52 / #53. Everything else on
+    ``MediaState`` is ``None`` so the relay contract stays explicit.
+    ``available=True`` whenever the row exists in the owned-names set
+    (that's the gate the caller already passed).
+    """
+    metadata = properties.get("Metadata") or {}
+    if not isinstance(metadata, dict):
+        metadata = {}
+    title = metadata.get("xesam:title")
+    artist_raw = metadata.get("xesam:artist")
+    if isinstance(artist_raw, list):
+        artist = ", ".join(a for a in artist_raw if isinstance(a, str))
+    elif isinstance(artist_raw, str):
+        artist = artist_raw
+    else:
+        artist = None
+    desktop_entry = properties.get("DesktopEntry")
+    return MediaState(
+        available=True,
+        stale=False,
+        playing=_playback_to_playing(properties.get("PlaybackStatus")),
+        title=title if isinstance(title, str) else None,
+        artist=artist,
+        desktop_entry=desktop_entry if isinstance(desktop_entry, str) else None,
+        can_go_next=properties.get("CanGoNext")
+        if isinstance(properties.get("CanGoNext"), bool)
+        else None,
+        can_go_previous=properties.get("CanGoPrevious")
+        if isinstance(properties.get("CanGoPrevious"), bool)
+        else None,
+        # ``art_token`` is always ``None``: issue #52's out-of-scope
+        # rule keeps art image transfer for a follow-up.
+    )
+
+
+def _apply_properties_changed(
+    previous: MediaState, changed: dict[str, Any]
+) -> MediaState:
+    """Merge a ``PropertiesChanged.changed`` dict into a previous state.
+
+    Used as the cache-write path so a Player signal updates the
+    backend's cached ``MediaState`` without a fresh GetAll. Issue
+    #52's acceptance criterion 3 calls for ``MediaState`` updates on
+    relevant transitions — track changes (title / artist), playback
+    transitions, capability flips. Fields the v1 browser doesn't
+    render (rate / volume / position / duration / album / art) are
+    ignored.
+
+    The ``Metadata`` dict carries ``xesam:title`` /
+    ``xesam:artist`` and the spec's documented field subset, so we
+    pick them out of ``changed["Metadata"]`` rather than waiting for
+    the next 1-second poll — the row's UI wants to reflect a track
+    skip immediately.
+    """
+    if not changed:
+        return previous
+    updates: dict[str, Any] = {"stale": False}
+    if "PlaybackStatus" in changed:
+        updates["playing"] = _playback_to_playing(
+            changed["PlaybackStatus"], previous.playing
+        )
+    metadata = changed.get("Metadata")
+    if isinstance(metadata, dict):
+        title = metadata.get("xesam:title")
+        if isinstance(title, str):
+            updates["title"] = title
+        artist_raw = metadata.get("xesam:artist")
+        if isinstance(artist_raw, list):
+            updates["artist"] = ", ".join(a for a in artist_raw if isinstance(a, str))
+        elif isinstance(artist_raw, str):
+            updates["artist"] = artist_raw
+    if "CanGoNext" in changed and isinstance(changed["CanGoNext"], bool):
+        updates["can_go_next"] = changed["CanGoNext"]
+    if "CanGoPrevious" in changed and isinstance(changed["CanGoPrevious"], bool):
+        updates["can_go_previous"] = changed["CanGoPrevious"]
+    if "DesktopEntry" in changed and isinstance(changed["DesktopEntry"], str):
+        updates["desktop_entry"] = changed["DesktopEntry"]
+    if len(updates) == 1:
+        # Only the staleness flip; nothing the browser cares about.
+        return previous
+    return dataclasses.replace(previous, **updates)
+
+
+def connect_mpris_backend(
+    layouts: "LayoutStore",
+    bus_factory: "Callable[[BusType], MessageBus]",
+) -> DbusMprisBackend | None:
+    """Connect a real :class:`DbusMprisBackend` if any layout uses it.
+
+    Users who don't enable the ``mediabrowser`` widget shouldn't pay
+    the cost of opening the session bus; this factory checks every
+    loaded layout for the widget kind and returns ``None`` when none
+    are present. Callers wire the result into the same
+    ``Server(mpris_backend=...)`` slot as ``FakeMprisBackend``.
+
+    The check is layout-only (not focus-driven): a user with the
+    mediabrowser layout in their config pays the cost once on startup
+    and re-uses the same backend on every focus change. The backend's
+    idle-while-no-active-mediabrowser-layout behaviour is owned by
+    the server's pump gating (``_has_mediabrowser``), not this factory.
+    """
+    for layout in layouts.layouts:
+        if any(getattr(w, "kind", None) == "mediabrowser" for w in layout.widgets):
+            return DbusMprisBackend(bus_factory=bus_factory)
+    return None

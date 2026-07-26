@@ -59,6 +59,17 @@ class MediaStateMessage(BaseModel):
     artist: str | None = None
     album: str | None = None
     art_token: str | None = None
+    # MPRIS-only fields populated only for ``id == "mpris.<suffix>"``
+    # state messages (issue #52). The VLC path leaves them ``None``.
+    # ``desktop_entry`` is the bus's reported ``.desktop`` basename
+    # (or ``None`` when the player doesn't publish one); the browser
+    # uses it to look up an app icon. ``can_go_next`` /
+    # ``can_go_previous`` mirror MPRIS ``CanGoNext`` /
+    # ``CanGoPrevious`` so the browser can grey out the matching
+    # transport controls.
+    desktop_entry: str | None = None
+    can_go_next: bool | None = None
+    can_go_previous: bool | None = None
 
 
 class WidgetUpdateMessage(BaseModel):

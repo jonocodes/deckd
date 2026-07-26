@@ -19,7 +19,7 @@ from .actions import ActionContext, execute as run_action
 from .input import ScrollController, parse_key_combo, text_to_combos
 from .layouts import Layout, LayoutStore, load_layouts, resolve_layout
 from .media import MediaManager, MediaState, effective_art_token
-from .mpris import MprisBackend
+from .mpris import DbusMprisBackend, MprisBackend, connect_mpris_backend
 
 if TYPE_CHECKING:
     from dbus_fast import BusType as BusTypeT
@@ -257,6 +257,19 @@ class Server:
         self.layouts: LayoutStore = load_layouts(layouts_dir, overlay_dir)
         self._current_app_id: str = DEFAULT_APP_ID
         self._current_layout: Layout = self.layouts.default()
+        self.mpris = mpris_backend
+        # Issue #52: when no mpris backend was injected, auto-build
+        # one iff a loaded layout uses ``mediabrowser``. Keeps the
+        # cost of opening the session bus off the path of users who
+        # don't enable the feature. The explicit injection
+        # (``mpris_backend=...``) is always honoured, so
+        # :class:`FakeMprisBackend` and the pre-configured
+        # :class:`DbusMprisBackend` tests bypass this path.
+        self._dbus_bus_factory = dbus_bus_factory
+        if mpris_backend is None and dbus_bus_factory is not None:
+            default = connect_mpris_backend(self.layouts, dbus_bus_factory)
+            if default is not None:
+                self.mpris = default
         self.scroll = scroll if scroll is not None else ScrollController()
         self.key_sink = key_sink
         self.dbus_bus_factory = dbus_bus_factory
@@ -277,7 +290,6 @@ class Server:
         self.sensors: "SensorManager | None" = sensor_manager
         self._subscribed_sources: set[str] = set()
         self.media = media_manager
-        self.mpris = mpris_backend
 
     # -- layout state --------------------------------------------------------
 
@@ -1077,6 +1089,16 @@ class Server:
             raise
         log.info("listening on http://%s:%d (ws=%s/ws)", self.host, self.port, self.host)
         self._runner = runner
+        # Open the MPRIS session bus before the pump task wakes up,
+        # so the first iteration's ``row_ids()`` sees live state
+        # instead of an empty set. Failure is logged, not raised —
+        # the daemon keeps running on a non-MPRIS layout.
+        if isinstance(self.mpris, DbusMprisBackend):
+            try:
+                await self.mpris.start()
+            except Exception as exc:
+                log.warning("MPRIS backend start failed: %s", exc)
+                self.mpris = None
         self.start_layouts_watcher()
         self.start_sensor_pump()
         self.start_media_pump()
@@ -1100,6 +1122,13 @@ class Server:
             self.sensors.stop()
         if self.media is not None:
             self.media.stop()
+        # Issue #52: tear down the bus connection so we don't keep
+        # a session-bus name around after the daemon stops.
+        if self.mpris is not None and isinstance(self.mpris, DbusMprisBackend):
+            try:
+                await self.mpris.stop()
+            except Exception as exc:
+                log.debug("MPRIS backend stop failed: %s", exc)
         runner = getattr(self, "_runner", None)
         if runner is not None:
             await runner.cleanup()

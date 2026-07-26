@@ -29,6 +29,13 @@ class MediaState:
     # has no art. It changes when the art changes, so the client can point an
     # <img> at the daemon's art proxy and cache-bust on track change.
     art_token: str | None = None
+    # MPRIS-only fields populated only by :class:`deckd.mpris.DbusMprisBackend`
+    # (issue #52). VLC keeps them ``None``. The browser renders
+    # ``desktop_entry`` as the app badge and uses ``can_go_next`` /
+    # ``can_go_previous`` to gate the matching transport buttons.
+    desktop_entry: str | None = None
+    can_go_next: bool | None = None
+    can_go_previous: bool | None = None
 
 
 def _art_token(artwork_url: object) -> str | None:
