@@ -113,6 +113,51 @@ widgets:
         await test_server.close()
 
 
+async def test_late_session_receives_current_players_via_snapshot(
+    tmp_path: Path,
+) -> None:
+    """A session that connects *after* the pump has already broadcast the
+    players must still receive them. The pump only broadcasts on change
+    against a global cache, and MPRIS state is static while a track plays,
+    so without a per-connect snapshot the second client (a reload, a
+    second phone) would show "no players detected" forever. Regression."""
+    (tmp_path / "default.yaml").write_text(
+        """
+match: [default]
+widgets:
+  - id: browser
+    kind: mediabrowser
+    grid: [0, 0, 4, 2]
+"""
+    )
+    backend = FakeMprisBackend(
+        {"vlc": MediaState(available=True, stale=False, playing=True, title="VLC")}
+    )
+    server, *_ = make_test_server(layouts_dir=tmp_path, mpris_backend=backend)
+    test_server = TestServer(server.app, host="127.0.0.1")
+    await test_server.start_server()
+    server.start_media_pump()
+    url = f"ws://127.0.0.1:{test_server.port}/ws"
+    try:
+        # First client drains the pump's initial broadcast, populating the
+        # pump's global ``last`` cache so it won't re-broadcast on change.
+        async with websockets.connect(url) as first:
+            assert json.loads(await asyncio.wait_for(first.recv(), 2))["type"] == "layout"
+            assert json.loads(await asyncio.wait_for(first.recv(), 2))["id"] == "mpris.vlc"
+            # Let the pump run another cycle so ``last`` is definitely set.
+            await asyncio.sleep(1.1)
+            # Second client connects late — must still see the player via the
+            # connect-time snapshot, not wait for a (never-coming) change.
+            async with websockets.connect(url) as second:
+                assert json.loads(await asyncio.wait_for(second.recv(), 2))["type"] == "layout"
+                snap = json.loads(await asyncio.wait_for(second.recv(), 2))
+                assert snap["type"] == "media_state"
+                assert snap["id"] == "mpris.vlc"
+    finally:
+        await server.stop()
+        await test_server.close()
+
+
 async def _boot_mpris_websocket(
     tmp_path: Path,
     bus: FakeDbusBus,

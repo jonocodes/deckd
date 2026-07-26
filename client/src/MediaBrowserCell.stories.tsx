@@ -15,7 +15,10 @@ const WIDGET: Widget = {
 
 /** A playing-VLC / paused-Spotify / stopped-mystery trio. The
  * ``desktop_entry`` mapping (vlc → Simple Icons vlcmediaplayer) and
- * the unknown entry's disc-icon fallback both show in this view. */
+ * the unknown entry's disc-icon fallback both show in this view. The
+ * ``app_name`` header (from the MPRIS root ``Identity``) shows on the
+ * first two rows; the mystery row leaves it null to exercise the
+ * omitted-header path. */
 const MIXED: Record<string, MediaReading> = {
   "mpris.vlc": {
     id: "mpris.vlc",
@@ -24,6 +27,7 @@ const MIXED: Record<string, MediaReading> = {
     playing: true,
     title: "One More Time",
     artist: "Daft Punk",
+    app_name: "VLC media player",
     desktop_entry: "vlc",
     can_go_next: true,
     can_go_previous: true,
@@ -35,6 +39,7 @@ const MIXED: Record<string, MediaReading> = {
     playing: false,
     title: "Intro",
     artist: "The xx",
+    app_name: "Spotify",
     desktop_entry: "spotify",
     can_go_next: true,
     can_go_previous: false,

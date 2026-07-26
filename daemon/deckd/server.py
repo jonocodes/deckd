@@ -693,13 +693,18 @@ class Server:
         except asyncio.CancelledError:
             return
 
-    async def _broadcast_media_state(self, widget_id: str, state: MediaState, art_sources: list[str]) -> bool:
-        if not self._sessions:
-            return False
+    def _media_message(
+        self, widget_id: str, state: MediaState, art_sources: list[str]
+    ) -> "p.MediaStateMessage":
         # The art token the client sees depends on the enabled sources: VLC's
         # own art, or an online-lookup identity token when itunes is enabled.
         fields = {**state.__dict__, "art_token": effective_art_token(state, art_sources)}
-        msg = p.MediaStateMessage(type="media_state", id=widget_id, **fields)
+        return p.MediaStateMessage(type="media_state", id=widget_id, **fields)
+
+    async def _broadcast_media_state(self, widget_id: str, state: MediaState, art_sources: list[str]) -> bool:
+        if not self._sessions:
+            return False
+        msg = self._media_message(widget_id, state, art_sources)
         sent = 0
         dead: list[Session] = []
         for session in list(self._sessions):
@@ -711,6 +716,30 @@ class Server:
         for session in dead:
             self._sessions.discard(session)
         return sent > 0
+
+    async def push_media_snapshot(self, session: Session) -> None:
+        """Replay the current MPRIS state to a single just-connected (or
+        just-view-switched) session.
+
+        The media pump only broadcasts on *change*, against a global
+        ``last`` cache shared by all sessions. A session that connects
+        after the last change would otherwise never receive the existing
+        players' state — and MPRIS state is static while a track plays the
+        same, so "never" is the common case (unlike the VLC ``media``
+        widget, whose ``position`` ticks every second and keeps
+        re-broadcasting). Replaying a snapshot on connect / ``select_view``
+        closes that gap so a reload or a second client shows the players
+        immediately instead of "no players detected"."""
+        if self.mpris is None or not self._has_mediabrowser():
+            return
+        for row_id in self.mpris.row_ids():
+            state = await self.mpris.read_state(row_id)
+            if state is None:
+                continue
+            with contextlib.suppress(
+                ConnectionResetError, RuntimeError, ConnectionError
+            ):
+                await session.send(self._media_message(f"mpris.{row_id}", state, []))
 
     def start_sensor_pump(self) -> asyncio.Task[None] | None:
         if self.sensors is None or self._sensor_task is not None:
@@ -937,6 +966,11 @@ class Server:
         )
         try:
             await session.push_current()
+            # The media pump only broadcasts on change, so replay a
+            # snapshot to this fresh session — otherwise a reload / second
+            # client sees "no players detected" until the state next
+            # changes (which for a steadily-playing MPRIS track is never).
+            await self.push_media_snapshot(session)
             async for raw in ws:
                 if raw.type != WSMsgType.TEXT:
                     continue
@@ -1035,6 +1069,10 @@ class Server:
             log.info("session selected view %r", select_view.view)
             session.view = select_view.view
             await session.push_current()
+            # Tapping the media icon switches to the browser view; replay
+            # the current players so they appear immediately rather than
+            # waiting for the pump's next state change.
+            await self.push_media_snapshot(session)
             return
         if msg_type == "clear_view":
             log.info("session cleared view")

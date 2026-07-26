@@ -915,6 +915,17 @@ backend unwraps them recursively before the property mappers run.
 Skipping this silently drops every field (the `isinstance` checks fail)
 and crashes the signal path on the unhashable `Variant`.
 
+The media pump broadcasts a row only when its state *changes*, against a
+single `last` cache shared by all sessions. That's fine for the VLC
+`media` widget — its `position` ticks every second, so every poll is a
+change and late-joining clients catch up within a second — but MPRIS
+state is static while a track plays the same, so a session that connects
+after the last change would never receive the existing players. The
+daemon closes that gap by replaying a per-session **snapshot** of the
+current MPRIS rows on connect and on `select_view` (see
+`Server.push_media_snapshot`), so a reload or a second client shows the
+players immediately instead of "no players detected".
+
 #### Coexistence with the VLC media widget
 
 The two are independent features. The VLC `media` widget is per-VLC:
