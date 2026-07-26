@@ -51,6 +51,8 @@ export type Widget = {
 export type ServerLayout = {
   type: "layout";
   app: string;
+  /** Optional chrome view identifier; null for focus-driven layouts. */
+  view?: string | null;
   widgets: Widget[];
   jogstrip_enabled: boolean;
   /** Human-readable name for the bottom-chrome app badge; falls back to
@@ -114,7 +116,9 @@ export type ClientPadTap = { type: "pad_tap"; id: string; fingers: number };
 export type ClientPadDrag = { type: "pad_drag"; id: string; state: "start" | "end" };
 export type ClientType = { type: "type"; text: string };
 export type ClientKey = { type: "key"; combo: string };
-export type ClientMediaCommand = { type: "media_command"; id: string; command: "volume" | "seek" | "rate"; value: number };
+export type ClientMediaCommand =
+  | { type: "media_command"; id: string; command: "volume" | "seek" | "rate"; value: number }
+  | { type: "media_command"; id: string; command: "play-pause" | "next" | "previous"; value?: null };
 export type ClientMessage =
   | ClientHello
   | ClientPress

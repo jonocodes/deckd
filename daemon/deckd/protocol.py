@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .layouts import Icon
 
@@ -12,6 +12,7 @@ class LayoutMessage(BaseModel):
 
     type: Literal["layout"]
     app: str = "default"
+    view: str | None = None
     widgets: list[dict]
     jogstrip_enabled: bool = True
     # Chrome app badge (ADR-0007), relayed opaquely. The client renders a
@@ -58,6 +59,8 @@ class MediaStateMessage(BaseModel):
     artist: str | None = None
     album: str | None = None
     art_token: str | None = None
+
+
 class WidgetUpdateMessage(BaseModel):
     """Daemon->client push: a meter widget's live value (issue #40).
 
@@ -167,8 +170,18 @@ class MediaCommandMessage(BaseModel):
 
     type: Literal["media_command"]
     id: str
-    command: Literal["volume", "seek", "rate"]
-    value: float
+    command: Literal["volume", "seek", "rate", "play-pause", "next", "previous"]
+    value: float | None = None
+
+    @model_validator(mode="after")
+    def validate_value(self) -> "MediaCommandMessage":
+        if self.command in {"volume", "seek", "rate"} and self.value is None:
+            raise ValueError(f"media command {self.command} requires a value")
+        if self.command in {"play-pause", "next", "previous"} and self.value is not None:
+            raise ValueError(f"media command {self.command} does not accept a value")
+        return self
+
+
 class KeyMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
