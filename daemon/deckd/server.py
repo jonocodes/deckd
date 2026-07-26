@@ -19,6 +19,7 @@ from .actions import ActionContext, execute as run_action
 from .input import ScrollController, parse_key_combo, text_to_combos
 from .layouts import Layout, LayoutStore, load_layouts, resolve_layout
 from .media import MediaManager, MediaState, effective_art_token
+from .mpris import MprisBackend
 
 if TYPE_CHECKING:
     from dbus_fast import BusType as BusTypeT
@@ -207,6 +208,7 @@ class Server:
         password: str | None = None,
         sensor_manager: "SensorManager | None" = None,
         media_manager: MediaManager | None = None,
+        mpris_backend: MprisBackend | None = None,
     ) -> None:
         self.layouts_dir = layouts_dir
         self.overlay_dir = overlay_dir
@@ -241,6 +243,7 @@ class Server:
         self.sensors: "SensorManager | None" = sensor_manager
         self._subscribed_sources: set[str] = set()
         self.media = media_manager
+        self.mpris = mpris_backend
 
     # -- layout state --------------------------------------------------------
 
@@ -595,29 +598,40 @@ class Server:
     def _media_widgets(self) -> list[Widget]:
         return [w for w in self._current_layout.widgets if w.kind == "media"]
 
+    def _has_mediabrowser(self) -> bool:
+        return any(w.kind == "mediabrowser" for w in self._current_layout.widgets)
+
     def _sync_media_subscriptions(self) -> None:
         return None
 
     async def run_media_pump(self) -> None:
-        if self.media is None:
+        if self.media is None and self.mpris is None:
             return
         last: dict[str, MediaState] = {}
         try:
             while True:
-                for widget in self._media_widgets():
-                    config = widget.media_http
-                    if config is None:
-                        continue
-                    state = await self.media.read(
-                        widget.id,
-                        host=config.host,
-                        port=config.port,
-                        password_ref=config.password_ref,
-                    )
-                    if last.get(widget.id) == state:
-                        continue
-                    if await self._broadcast_media_state(widget.id, state, widget.art_source or ["vlc"]):
-                        last[widget.id] = state
+                if self.media is not None:
+                    for widget in self._media_widgets():
+                        config = widget.media_http
+                        if config is None:
+                            continue
+                        state = await self.media.read(
+                            widget.id,
+                            host=config.host,
+                            port=config.port,
+                            password_ref=config.password_ref,
+                        )
+                        if last.get(widget.id) == state:
+                            continue
+                        if await self._broadcast_media_state(widget.id, state, widget.art_source or ["vlc"]):
+                            last[widget.id] = state
+                if self.mpris is not None and self._has_mediabrowser():
+                    for row_id in self.mpris.row_ids():
+                        state = await self.mpris.read_state(row_id)
+                        if state is None or last.get(f"mpris.{row_id}") == state:
+                            continue
+                        if await self._broadcast_media_state(f"mpris.{row_id}", state, []):
+                            last[f"mpris.{row_id}"] = state
                 await asyncio.sleep(1.0)
         except asyncio.CancelledError:
             return
@@ -656,7 +670,7 @@ class Server:
         return self._sensor_task
 
     def start_media_pump(self) -> asyncio.Task[None] | None:
-        if self.media is None or self._media_task is not None:
+        if (self.media is None and self.mpris is None) or self._media_task is not None:
             return None
         self._media_task = asyncio.create_task(self.run_media_pump())
         return self._media_task
@@ -931,6 +945,16 @@ class Server:
             return
         if msg_type == "media_command":
             media_command = p.MediaCommandMessage.model_validate(data)
+            if media_command.id.startswith("mpris."):
+                if self.mpris is None:
+                    return
+                try:
+                    await self.mpris.send_command(
+                        media_command.id.removeprefix("mpris."), media_command.command
+                    )
+                except Exception as exc:
+                    log.warning("MPRIS command %s failed: %s", media_command.command, exc)
+                return
             widget = self._find_widget(media_command.id)
             if widget is None or self.media is None or widget.media_http is None:
                 return
