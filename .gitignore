@@ -34,6 +34,11 @@ client/.tls/
 # shotput workspace-copy (image-inline clients only; not needed on OpenCode web)
 .shots/
 
+# Local scratch notes (research dumps, half-written designs, ...).
+# Keep out of the repo so future agents can use the directory without
+# colliding with someone else's dropped file.
+.scratch/
+
 # Playwright e2e artifacts
 client/e2e/.daemon.log
 client/test-results/
