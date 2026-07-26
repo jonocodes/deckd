@@ -67,6 +67,52 @@ widgets:
         await test_server.close()
 
 
+async def test_mpris_rows_flow_when_browser_is_a_non_current_view(
+    tmp_path: Path,
+) -> None:
+    """The pump must broadcast MPRIS rows even when the ``mediabrowser``
+    widget lives only in a chrome-view layout that is *not* the focused
+    app's current layout — the real-world shape, where a client pins the
+    ``mpris`` view while some other app (e.g. VLC) is focused. Regression:
+    gating on ``_current_layout`` starved the pump and left the browser
+    empty against a live daemon even though players were discovered."""
+    # Current/default layout has no mediabrowser widget...
+    (tmp_path / "default.yaml").write_text(
+        """
+match: [default]
+widgets:
+  - id: pad
+    kind: trackpad
+    grid: [0, 0, 4, 2]
+"""
+    )
+    # ...the browser lives only in the separate mpris view layout.
+    (tmp_path / "mpris.yaml").write_text(
+        """
+match: [mpris]
+widgets:
+  - id: browser
+    kind: mediabrowser
+    grid: [0, 0, 4, 2]
+"""
+    )
+    backend = FakeMprisBackend(
+        {"vlc": MediaState(available=True, stale=False, playing=True, title="VLC")}
+    )
+    server, *_ = make_test_server(layouts_dir=tmp_path, mpris_backend=backend)
+    test_server = TestServer(server.app, host="127.0.0.1")
+    await test_server.start_server()
+    server.start_media_pump()
+    try:
+        async with websockets.connect(f"ws://127.0.0.1:{test_server.port}/ws") as ws:
+            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "layout"
+            state = json.loads(await asyncio.wait_for(ws.recv(), 2))
+            assert state["id"] == "mpris.vlc"
+    finally:
+        await server.stop()
+        await test_server.close()
+
+
 async def _boot_mpris_websocket(
     tmp_path: Path,
     bus: FakeDbusBus,

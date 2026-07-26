@@ -645,7 +645,18 @@ class Server:
         return [w for w in self._current_layout.widgets if w.kind == "media"]
 
     def _has_mediabrowser(self) -> bool:
-        return any(w.kind == "mediabrowser" for w in self._current_layout.widgets)
+        # Gate on *any* loaded layout, not the focus-driven current one:
+        # the ``mediabrowser`` widget lives in the ``mpris`` chrome view,
+        # which a client pins per-session and which is never the focused
+        # app's layout. Checking ``_current_layout`` (e.g. the ``vlc``
+        # layout while VLC is focused) would starve the pump so the
+        # browser stays empty even though a client has it open. Mirrors
+        # the ``connect_mpris_backend`` discovery gate.
+        return any(
+            w.kind == "mediabrowser"
+            for layout in self.layouts.layouts
+            for w in layout.widgets
+        )
 
     def _sync_media_subscriptions(self) -> None:
         return None
