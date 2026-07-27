@@ -272,13 +272,6 @@ class DbusMprisBackend(MprisBackend):
         # stable for a bus name, so it's fetched once on first read and
         # reused — a key absent from the dict means "not fetched yet".
         self._identities: dict[str, str | None] = {}
-        # Row suffix -> the player's current ``Metadata.mpris:artUrl``
-        # (or ``None`` when there is none / the read failed). Cached so
-        # the daemon's ``/mpris/<row>/art`` proxy can stream the image
-        # bytes without an extra ``GetAll`` round-trip, and updated on
-        # every ``PropertiesChanged`` so a track skip refreshes the
-        # art URL in lockstep with the ``MediaState`` cache (issue #57).
-        self._art_urls: dict[str, str | None] = {}
         # ``list_names`` rebinds once ``start()`` has a live bus to a
         # coroutine that fetches via ``org.freedesktop.DBus.ListNames``;
         # tests override it to return a synchronous fixture list so
@@ -342,7 +335,6 @@ class DbusMprisBackend(MprisBackend):
         self._owners = {}
         self._states = {}
         self._identities = {}
-        self._art_urls = {}
 
     def _override_list_names_from_bus(self) -> None:
         """Bind ``list_names`` to the bus-backed ``ListNames`` caller.
@@ -398,9 +390,6 @@ class DbusMprisBackend(MprisBackend):
         self._owners = {k: v for k, v in self._owners.items() if k in self._owned_names}
         self._identities = {
             k: v for k, v in self._identities.items() if k in self._owned_names
-        }
-        self._art_urls = {
-            k: v for k, v in self._art_urls.items() if k in self._owned_names
         }
 
     async def _populate_owners(self) -> None:
@@ -530,7 +519,6 @@ class DbusMprisBackend(MprisBackend):
             self._owners.pop(suffix, None)
             self._states.pop(suffix, None)
             self._identities.pop(suffix, None)
-            self._art_urls.pop(suffix, None)
         # Phase 2: re-add the new owner (no-op on a pure removal
         # where ``new_owner`` is the empty string).
         if new_owner:
@@ -557,15 +545,12 @@ class DbusMprisBackend(MprisBackend):
                 previous = self._states.get(row_id) or MediaState(
                     available=True, stale=False
                 )
+                # ``_apply_properties_changed`` updates ``art_token`` and
+                # ``art_url`` together from the signal's ``Metadata`` (or
+                # preserves the previous values if Metadata is absent) —
+                # so the proxy's URL always tracks the state cache, no
+                # second cache to keep in sync (issue #57).
                 self._states[row_id] = _apply_properties_changed(previous, changed)
-                # Keep the artUrl cache in lockstep with the state cache
-                # so a track skip on the bus refreshes the proxy's URL
-                # on the very next request (issue #57). A signal that
-                # doesn't carry ``Metadata`` leaves the URL alone —
-                # playback flips and capability changes don't move the
-                # cover.
-                if "Metadata" in changed:
-                    self._art_urls[row_id] = _parse_mpris_art_url(changed["Metadata"])
                 return
 
     async def read_state(self, row_id: str) -> MediaState | None:
@@ -614,11 +599,12 @@ class DbusMprisBackend(MprisBackend):
             inner if isinstance(inner, dict) else {}
         )
         state = dataclasses.replace(state, app_name=app_name)
+        # ``art_url`` is already on the state from
+        # ``_properties_to_state``; cache the state itself so the
+        # proxy can read the URL from the same source the client
+        # reads its token (no second cache to drift out of sync —
+        # issue #57).
         self._states[row_id] = state
-        # ``_properties_to_state`` parsed the artUrl already; cache the
-        # result here so the proxy doesn't need a second ``GetAll`` to
-        # read the URL it was just told about (issue #57).
-        self._art_urls[row_id] = art_url
         return state
 
     def art_url(self, row_id: str) -> str | None:
@@ -626,14 +612,16 @@ class DbusMprisBackend(MprisBackend):
         ``http(s)://`` / ``data:``), or ``None`` when there is no art
         or the row is unknown.
 
-        This is the seam the daemon's ``/mpris/<row>/art`` proxy
-        reads — the proxy must not accept a client-supplied URL, so
-        the URL it streams is always the exact one the player's
-        current ``Metadata`` reported (issue #57).
+        Reads from the cached ``MediaState`` so the URL is always in
+        lockstep with the state — the proxy can never see a token
+        without a URL, or vice versa (issue #57).
         """
         if row_id not in self._owned_names:
             return None
-        return self._art_urls.get(row_id)
+        state = self._states.get(row_id)
+        if state is None:
+            return None
+        return state.art_url
 
     async def _read_identity(self, row_id: str) -> str | None:
         """Fetch (and cache) the player's root-interface ``Identity``.
@@ -767,11 +755,14 @@ def _properties_to_state(
         if isinstance(properties.get("CanGoPrevious"), bool)
         else None,
         # ``art_token`` is the cache-busting id the client stamps on
-        # ``/mpris/<row>/art?token=<token>``. The proxy reads the
-        # current ``mpris:artUrl`` straight from the bus (cached on
-        # the backend); the token just tells the client when the
-        # image has changed (issue #57).
+        # ``/mpris/<row>/art?token=<token>``; ``art_url`` is the URL
+        # the proxy resolves server-side. Both live on the state so a
+        # PropertiesChanged that updates the cover is a single
+        # ``dataclasses.replace`` — no second cache to keep in sync.
+        # ``art_url`` is stripped from the wire in
+        # ``Server._media_message`` (issue #57).
         art_token=_art_token(art_url),
+        art_url=art_url,
     ), art_url
 
 
@@ -812,11 +803,14 @@ def _apply_properties_changed(
         elif isinstance(artist_raw, str):
             updates["artist"] = artist_raw
         # ``Metadata.mpris:artUrl`` tracks the cover; re-hash it so a
-        # track skip invalidates the client's cached ``<img>`` (issue
-        # #57). ``_parse_mpris_art_url`` returns ``None`` for missing
-        # / unknown shapes, so the new token is the right value
-        # whatever the new track carries.
-        updates["art_token"] = _art_token(_parse_mpris_art_url(metadata))
+        # track skip invalidates the client's cached ``<img>`` and
+        # refresh the URL itself so the proxy stays in lockstep.
+        # ``_parse_mpris_art_url`` returns ``None`` for missing /
+        # unknown shapes, so the new token + URL are the right
+        # values whatever the new track carries (issue #57).
+        art_url = _parse_mpris_art_url(metadata)
+        updates["art_token"] = _art_token(art_url)
+        updates["art_url"] = art_url
     if "CanGoNext" in changed and isinstance(changed["CanGoNext"], bool):
         updates["can_go_next"] = changed["CanGoNext"]
     if "CanGoPrevious" in changed and isinstance(changed["CanGoPrevious"], bool):

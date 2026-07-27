@@ -31,6 +31,23 @@ def test_file_url_reads_local_bytes(tmp_path: Path) -> None:
     assert out == ("image/png", b"PNGDATA")
 
 
+def test_file_url_decodes_percent_encoded_path(tmp_path: Path) -> None:
+    """``mpris:artUrl`` percent-encodes spaces / unicode in the path
+    (``Dance%20The%20Devil%20Away/art.jpg``) while the filesystem
+    holds the decoded form. The resolver decodes before opening so
+    real-world VLC / Firefox URLs don't 404 (issue #57).
+    """
+    art = tmp_path / "Dance The Devil Away"
+    art.mkdir()
+    cover = art / "art.jpg"
+    cover.write_bytes(b"JPGDATA")
+    out = resolve_mpris_art(
+        f"file://{tmp_path}/Dance%20The%20Devil%20Away/art.jpg",
+        urlopen=lambda *a, **k: None,
+    )
+    assert out == ("image/jpeg", b"JPGDATA")
+
+
 def test_file_url_rejects_path_outside_file_scheme() -> None:
     # ``smb://`` is a non-``file://`` scheme — even if the rest of the
     # string looks like a path, the resolver must reject it rather than

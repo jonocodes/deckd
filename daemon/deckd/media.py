@@ -29,6 +29,14 @@ class MediaState:
     # has no art. It changes when the art changes, so the client can point an
     # <img> at the daemon's art proxy and cache-bust on track change.
     art_token: str | None = None
+    # The art's actual location (a ``file://`` / ``http(s)://`` / ``data:``
+    # URL the daemon's art proxy can fetch). Lives on the same frozen
+    # ``MediaState`` as ``art_token`` so the proxy never has to track a
+    # second cache that could drift out of sync with the state — a track
+    # skip updates both via a single ``dataclasses.replace`` (issue #57).
+    # Stripped from the wire in ``Server._media_message``; the client only
+    # ever sees ``art_token`` and resolves the URL via the proxy.
+    art_url: str | None = None
     # MPRIS-only fields populated only by :class:`deckd.mpris.DbusMprisBackend`
     # (issue #52). VLC keeps them ``None``. The browser renders
     # ``desktop_entry`` as the app badge and uses ``can_go_next`` /

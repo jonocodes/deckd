@@ -67,15 +67,25 @@ def _content_type_from_url(url: str) -> str:
 
 
 def _read_file(url: str) -> tuple[str, bytes] | None:
-    """``file://`` arm: strip the scheme, read the local file.
+    """``file://`` arm: strip the scheme, URL-decode, read the local
+    file.
 
     Returns ``None`` for a missing / unreadable / non-file path so
     the proxy 404s rather than serving a 500. ``os.path.isfile`` is
     a cheap pre-check that avoids the broader exception path on the
     common "file vanished between MPRIS metadata and our fetch" case
     (a player that writes / unlinks its art cache frequently).
+
+    ``mpris:artUrl`` values are real URLs — VLC, Firefox, and others
+    percent-encode spaces and unicode in the path (``Dance%20The%20Devil%20Away``),
+    and the filesystem holds the decoded form (``Dance The Devil Away``).
+    ``urllib.parse.unquote`` closes the gap so a URL with spaces in
+    the album/artist names doesn't 404 (regression: every VLC track
+    the test user tried came back 404 because of this).
     """
-    path = url[len("file://") :]
+    from urllib.parse import unquote
+
+    path = unquote(url[len("file://") :])
     if not os.path.isfile(path):
         return None
     try:

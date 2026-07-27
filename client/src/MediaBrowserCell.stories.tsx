@@ -92,3 +92,24 @@ export const EmptyHidden: Story = () => (
     />
   </div>
 );
+
+/** A trio with one row carrying real cover art. The art slot for that
+ * row renders an ``<img>`` pointing at the daemon's
+ * ``/mpris/<row-suffix>/art?token=<art_token>`` proxy (issue #57);
+ * the other two rows fall through the disc / brand-icon path so the
+ * story exercises both branches in one view. */
+export const WithArt: Story = () => (
+  <div style={{ display: "grid", width: 480, height: 360 }}>
+    <MediaBrowserCell
+      widget={WIDGET}
+      states={{
+        ...MIXED,
+        "mpris.vlc": {
+          ...MIXED["mpris.vlc"],
+          art_token: "b36191608f4768c5",
+        },
+      }}
+      onCommand={noop}
+    />
+  </div>
+);

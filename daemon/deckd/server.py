@@ -707,7 +707,14 @@ class Server:
     ) -> "p.MediaStateMessage":
         # The art token the client sees depends on the enabled sources: VLC's
         # own art, or an online-lookup identity token when itunes is enabled.
-        fields = {**state.__dict__, "art_token": effective_art_token(state, art_sources)}
+        # ``art_url`` is server-only (the proxy uses it, the client must
+        # never see it) so we pop it from ``state.__dict__`` before passing
+        # the rest to the wire model. ``art_token`` is computed from the
+        # enabled sources, so the raw state field is overwritten last
+        # (issue #57).
+        fields = dict(state.__dict__)
+        fields.pop("art_url", None)
+        fields["art_token"] = effective_art_token(state, art_sources)
         return p.MediaStateMessage(type="media_state", id=widget_id, **fields)
 
     async def _broadcast_media_state(self, widget_id: str, state: MediaState, art_sources: list[str]) -> bool:
