@@ -6,9 +6,11 @@
  *     top-aligned, equal-height). Rows for unrelated ids (e.g. the VLC
  *     media widget's ``id``) are not shown — the browser is a separate
  *     surface.
- *  2. The art slot falls back to a Lucide ``disc`` icon when
- *     ``art_token`` is null, and the app icon registry resolves a known
- *     ``desktop_entry`` when set.
+ *  2. The art slot: when ``art_token`` is set, renders an ``<img>``
+ *     pointing at the daemon's ``/mpris/<row>/art?token=<art_token>``
+ *     proxy (issue #57); on image load error, falls back through the
+ *     ``desktop_entry`` brand icon to the Lucide ``Disc`` glyph when
+ *     ``art_token`` is null.
  *  3. Previous / next buttons render disabled when
  *     ``can_go_previous`` / ``can_go_next`` are false; the play-pause
  *     button is always reactive. A click sends the right
@@ -19,7 +21,7 @@
  *     placeholder, no rows).
  *  5. Ordering: ``playing_first`` groups Playing → Paused → Stopped,
  *     stable order within each bucket by row id;
- *     ``stable`` keeps first-seen order by row id, no grouping.
+ *     ``stable`` keeps first-seen bus-name order by row id, no grouping.
  *  6. The sendMediaCommand callback fires with the row id and the
  *     typed command — that's the contract the parent App uses to send
  *     the wire ``media_command`` message.
@@ -114,6 +116,53 @@ describe("MediaBrowserCell", () => {
     const artIcon = document.querySelector(".mediabrowser-art-icon");
     expect(artIcon).not.toBeNull();
     expect(artIcon?.tagName.toLowerCase()).toBe("svg");
+  });
+
+  it("renders an <img> in the art slot when art_token is set (issue #57)", () => {
+    render(
+      <MediaBrowserCell
+        widget={WIDGET}
+        states={{
+          "mpris.vlc": row("mpris.vlc", true, {
+            art_token: "abc123token",
+          }),
+        }}
+        onCommand={vi.fn()}
+      />,
+    );
+    // art_token present -> the art slot is a real <img> pointing at
+    // the daemon's proxy, cache-busted with the token. Row id is the
+    // MPRIS bus suffix, not the wire ``mpris.`` prefixed one — the
+    // proxy lives at /mpris/<row-suffix>/art so the URL stays short.
+    const slot = document.querySelector(".mediabrowser-art");
+    const img = slot?.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute("src")).toBe(
+      "/mpris/vlc/art?token=abc123token",
+    );
+  });
+
+  it("falls back to the brand icon when the art <img> errors", () => {
+    render(
+      <MediaBrowserCell
+        widget={WIDGET}
+        states={{
+          "mpris.vlc": row("mpris.vlc", true, {
+            art_token: "abc",
+            desktop_entry: "vlc",
+          }),
+        }}
+        onCommand={vi.fn()}
+      />,
+    );
+    const img = document.querySelector(".mediabrowser-art img");
+    expect(img).not.toBeNull();
+    // Trigger the onError handler; the cell should swap the <img>
+    // for the desktop-entry brand icon and stop pointing at the
+    // broken URL.
+    fireEvent.error(img as HTMLElement);
+    const slot = document.querySelector(".mediabrowser-art");
+    expect(slot?.querySelector("img")).toBeNull();
   });
 
   it("uses the desktop_entry as the art-slot icon when art_token is null", () => {

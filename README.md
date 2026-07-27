@@ -826,10 +826,16 @@ player's human-readable name from the MPRIS root interface's `Identity`
 and omitted entirely when the player publishes no `Identity`. Below the
 header are three slots:
 
-- **Art slot** (left) — the row's `art_token` if the daemon reported
-  one (image transfer is a deferred follow-up), the row's
-  `DesktopEntry`-mapped brand icon if the client has a mapping, or
-  the generic Lucide `Disc` glyph as the fallback.
+- **Art slot** (left) — the row's cover art when the daemon has
+  `mpris:artUrl` to point at; the daemon proxies the image at
+  `GET /mpris/<row-suffix>/art` (unauthenticated, same rationale as
+  the VLC media widget's `/media/<id>/art`), so the phone never
+  reads the host's cache or carries upstream credentials. A
+  `file://` / `http(s)://` / `data:` URL is resolved server-side
+  (other shapes / no URL fall back through the `DesktopEntry`
+  brand icon to the generic Lucide `Disc` glyph). The cover is
+  cache-busted per track, so the browser fetches each new cover
+  exactly once.
 - **Title / subtitle** (centre) — `xesam:title` and `xesam:artist`
   from MPRIS `Metadata`. Unknown fields render as an em-dash.
 - **Transport** (right) — previous / play-pause / next buttons. The
@@ -898,13 +904,13 @@ without a fresh `Properties.GetAll` round-trip. The browser reflects
 the bus, not a snapshot.
 
 The forwarded state subset is the documented one: `PlaybackStatus`,
-`xesam:title`, `xesam:artist`, `DesktopEntry`, `CanGoNext`,
-`CanGoPrevious` from the Player interface, plus `Identity` (the
-`app_name` header) from the root `org.mpris.MediaPlayer2` interface —
-a separate `GetAll` fetched once per player and cached, since the name
-is stable for a bus name. `Metadata.artUrl` is *not* transferred (image
-transfer is a deferred follow-up; the client sees `art_token: null`
-today). Other Player-interface properties the daemon sees are
+`xesam:title`, `xesam:artist`, `mpris:artUrl` (hashed into a stable
+`art_token` the client stamps on the cover-art proxy, see [Album
+art](#album-art)), `DesktopEntry`, `CanGoNext`, `CanGoPrevious` from
+the Player interface, plus `Identity` (the `app_name` header) from
+the root `org.mpris.MediaPlayer2` interface — a separate `GetAll`
+fetched once per player and cached, since the name is stable for a
+bus name. Other Player-interface properties the daemon sees are
 ignored so a future contributor adding new state slots knows the
 subset is intentional.
 
@@ -925,6 +931,37 @@ daemon closes that gap by replaying a per-session **snapshot** of the
 current MPRIS rows on connect and on `select_view` (see
 `Server.push_media_snapshot`), so a reload or a second client shows the
 players immediately instead of "no players detected".
+
+#### Album art
+
+The browser shows a real cover in the row's art slot when the
+player's `Metadata.mpris:artUrl` is set, and falls back to the
+`DesktopEntry`-mapped brand icon or the `Disc` glyph otherwise.
+Because the phone can't reach the host's local art cache and has
+no way to carry upstream credentials, the daemon proxies the image
+at `GET /mpris/<row-suffix>/art` — unauthenticated, same rationale
+as the VLC media widget's `/media/<id>/art` (art is low-value, an
+`<img>` tag can't carry the password header, and the URL the proxy
+serves is always the exact one the row's current metadata reported,
+so the endpoint can't be redirected to an arbitrary path). The URL
+is cache-busted per track (`?token=<art_token>`), so the browser
+fetches each cover exactly once.
+
+The proxy supports the three `mpris:artUrl` shapes real players
+publish:
+
+- `file://…` — a local cache file (Firefox, Chromium, Spotify
+  write cover art to `~/.cache` or `/tmp`; the daemon reads it).
+- `http://…` / `https://…` — a remote cover URL (some players
+  point at a CDN); the daemon fetches it server-side so the phone
+  needs no outbound network or credentials.
+- `data:image/…;base64,…` — an inline cover (rare, but it sidesteps
+  the cache-file race); the daemon decodes the base64 payload.
+
+Anything else (a non-ASCII scheme like `smb://`, a malformed `data:`
+URL, no artUrl at all) leaves `art_token` null and the row falls
+back to the brand icon / `Disc` glyph. Downscaling / thumbnailing
+is out of scope for v1; the daemon streams the image as-is.
 
 #### Coexistence with the VLC media widget
 
@@ -950,9 +987,6 @@ and not interfering.
   icon is currently a static music note. A future follow-up will
   subscribe to the live MPRIS state and tint the icon while a
   player is `Playing`. See issue #47.
-- **Album art** — the wire carries an `art_token` placeholder; the
-  v1 browser doesn't fetch the image. Image transfer is scoped to a
-  follow-up ticket.
 - **Volume, seek, scrubber** — the v1 browser exposes the three
   transport buttons only. Volume and seek controls (and the
   capability-gated `CanSeek` honouring) are deferred.

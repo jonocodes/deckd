@@ -26,9 +26,11 @@ from typing import Any, Callable
 
 import pytest
 
+from deckd.media import _art_token
 from deckd.mpris import (
     DbusMprisBackend,
     EXCLUDED_PLAYER_SUFFIXES,
+    FakeMprisBackend,
     MPRIS_BUS_PREFIX,
     MPRIS_OBJECT_PATH,
     PLAYER_INTERFACE,
@@ -308,9 +310,12 @@ async def test_read_state_calls_properties_getall_on_player_interface() -> None:
     assert state.duration is None
     assert state.volume is None
     assert state.rate is None
-    # ``art_token`` is always ``None`` for the v1 browser (out-of-scope
-    # for issues #52 and #53).
-    assert state.art_token is None
+    # ``mpris:artUrl`` is a string per MPRIS; the daemon hashes it into a
+    # stable ``art_token`` so the client cache-busts an ``<img>`` on
+    # track change. The shape is opaque here — the proxy endpoint
+    # resolves the URL itself (issue #57).
+    assert state.art_token is not None
+    assert state.art_token == _art_token("file:///tmp/art.png")
 
     # ``read_state`` issues two GetAll calls: the root interface for the
     # ``Identity`` app name and the Player interface for playback state.
@@ -689,6 +694,241 @@ async def test_properties_changed_unwraps_variant_values() -> None:
     assert state.title == "Two In The Bush"
     assert state.artist == "Outback"
     assert state.can_go_next is True
+
+
+# ---------------------------------------------------------------------------
+# Slice 6c — art_token + art_url cache (issue #57)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_read_state_sets_art_token_from_mpris_arturl_file() -> None:
+    """A ``file://`` ``mpris:artUrl`` becomes a stable, hash-based
+    ``art_token`` on the ``MediaState``. The client uses the token as
+    a cache-buster on its ``<img>``; the URL itself never travels
+    (issue #57)."""
+    bus = FakeDbusBus()
+    bus.set_player_properties(
+        "org.mpris.MediaPlayer2.vlc",
+        {
+            "PlaybackStatus": "Playing",
+            "Metadata": {
+                "xesam:title": "Track",
+                "mpris:artUrl": "file:///home/u/.cache/vlc/art/one.jpg",
+            },
+        },
+    )
+    backend = DbusMprisBackend()
+    backend._bus = bus
+    backend._owned_names = {"vlc"}
+
+    state = await backend.read_state("vlc")
+    assert state is not None
+    assert state.art_token == _art_token(
+        "file:///home/u/.cache/vlc/art/one.jpg"
+    )
+    # And the same token is what the proxy would advertise.
+    assert backend.art_url("vlc") == "file:///home/u/.cache/vlc/art/one.jpg"
+
+
+@pytest.mark.asyncio
+async def test_read_state_handles_http_and_data_arturl_shapes() -> None:
+    """``mpris:artUrl`` can be ``file://``, ``http(s)://``, or
+    ``data:``; all three must produce a non-None ``art_token`` and be
+    cached verbatim on the backend for the proxy to fetch. Unknown
+    shapes / missing values leave the token null (issue #57)."""
+    bus = FakeDbusBus()
+    bus.set_player_properties(
+        "org.mpris.MediaPlayer2.spotify",
+        {
+            "PlaybackStatus": "Playing",
+            "Metadata": {
+                "xesam:title": "Remote",
+                "mpris:artUrl": "https://example.com/cover.jpg",
+            },
+        },
+    )
+    bus.set_player_properties(
+        "org.mpris.MediaPlayer2.firefox",
+        {
+            "PlaybackStatus": "Playing",
+            "Metadata": {
+                "xesam:title": "Inline",
+                "mpris:artUrl": "data:image/png;base64,AAAA",
+            },
+        },
+    )
+    bus.set_player_properties(
+        "org.mpris.MediaPlayer2.mpv",
+        {
+            "PlaybackStatus": "Playing",
+            "Metadata": {
+                "xesam:title": "Bogus",
+                "mpris:artUrl": "smb://server/cover.jpg",
+            },
+        },
+    )
+    bus.set_player_properties(
+        "org.mpris.MediaPlayer2.legacy",
+        {
+            "PlaybackStatus": "Playing",
+            "Metadata": {"xesam:title": "No art"},
+        },
+    )
+    backend = DbusMprisBackend()
+    backend._bus = bus
+    backend._owned_names = {"spotify", "firefox", "mpv", "legacy"}
+
+    spotify = await backend.read_state("spotify")
+    assert spotify is not None
+    assert spotify.art_token == _art_token("https://example.com/cover.jpg")
+    assert backend.art_url("spotify") == "https://example.com/cover.jpg"
+
+    firefox = await backend.read_state("firefox")
+    assert firefox is not None
+    assert firefox.art_token == _art_token("data:image/png;base64,AAAA")
+    assert backend.art_url("firefox") == "data:image/png;base64,AAAA"
+
+    mpv = await backend.read_state("mpv")
+    assert mpv is not None
+    # ``smb://`` isn't a known shape — token stays null, no cache entry
+    # written so the proxy 404s cleanly.
+    assert mpv.art_token is None
+    assert backend.art_url("mpv") is None
+
+    legacy = await backend.read_state("legacy")
+    assert legacy is not None
+    assert legacy.art_token is None
+    assert backend.art_url("legacy") is None
+
+
+@pytest.mark.asyncio
+async def test_properties_changed_updates_art_token_on_track_change() -> None:
+    """A ``PropertiesChanged`` signal carrying a new ``Metadata``
+    (with a different ``mpris:artUrl``) updates the cached
+    ``art_token`` and the proxy's artUrl cache, so the client's
+    next ``<img>`` request reflects the new cover (issue #57)."""
+    bus = FakeDbusBus()
+    backend = DbusMprisBackend()
+    backend._bus = bus
+    backend._owned_names = {"vlc"}
+    backend._owners = {"vlc": ":1.42"}
+    bus.set_owner("org.mpris.MediaPlayer2.vlc", ":1.42")
+    bus.add_message_handler(backend._on_message)
+
+    # Initial track: artUrl = file:///cache/vlc/old.png.
+    bus.set_player_properties(
+        "org.mpris.MediaPlayer2.vlc",
+        {
+            "PlaybackStatus": "Playing",
+            "Metadata": {
+                "xesam:title": "Old Track",
+                "mpris:artUrl": "file:///cache/vlc/old.png",
+            },
+        },
+    )
+    state = await backend.read_state("vlc")
+    assert state is not None
+    assert state.art_token == _art_token("file:///cache/vlc/old.png")
+    assert backend.art_url("vlc") == "file:///cache/vlc/old.png"
+
+    # Track skip: PropertiesChanged carries a new Metadata.
+    bus.emit_properties_changed(
+        "org.mpris.MediaPlayer2.vlc",
+        PLAYER_INTERFACE,
+        {
+            "Metadata": {
+                "xesam:title": "New Track",
+                "mpris:artUrl": "file:///cache/vlc/new.png",
+            },
+        },
+    )
+
+    state = await backend.read_state("vlc")
+    assert state is not None
+    assert state.art_token == _art_token("file:///cache/vlc/new.png")
+    assert state.title == "New Track"
+    assert backend.art_url("vlc") == "file:///cache/vlc/new.png"
+
+
+@pytest.mark.asyncio
+async def test_properties_changed_clears_art_when_arturl_disappears() -> None:
+    """If the new ``Metadata`` no longer carries an ``mpris:artUrl``
+    (e.g. the player moved to a track with no cover), the cached token
+    and URL both clear so the client falls back to the disc icon
+    rather than requesting a stale URL."""
+    bus = FakeDbusBus()
+    backend = DbusMprisBackend()
+    backend._bus = bus
+    backend._owned_names = {"vlc"}
+    backend._owners = {"vlc": ":1.42"}
+    bus.set_owner("org.mpris.MediaPlayer2.vlc", ":1.42")
+    bus.add_message_handler(backend._on_message)
+
+    bus.set_player_properties(
+        "org.mpris.MediaPlayer2.vlc",
+        {
+            "PlaybackStatus": "Playing",
+            "Metadata": {
+                "xesam:title": "With art",
+                "mpris:artUrl": "file:///cache/vlc/x.png",
+            },
+        },
+    )
+    state = await backend.read_state("vlc")
+    assert state is not None
+    assert state.art_token is not None
+    assert backend.art_url("vlc") == "file:///cache/vlc/x.png"
+
+    # Track change: new Metadata has no mpris:artUrl.
+    bus.emit_properties_changed(
+        "org.mpris.MediaPlayer2.vlc",
+        PLAYER_INTERFACE,
+        {"Metadata": {"xesam:title": "Without art"}},
+    )
+
+    state = await backend.read_state("vlc")
+    assert state is not None
+    assert state.art_token is None
+    assert backend.art_url("vlc") is None
+
+
+@pytest.mark.asyncio
+async def test_name_owner_changed_drops_cached_art_url() -> None:
+    """When a bus name is removed (or handed off), the cached
+    ``art_url`` for that row goes with it — the next read repopulates
+    it from the new owner's metadata."""
+    bus = FakeDbusBus()
+    backend = DbusMprisBackend()
+    backend._bus = bus
+    bus.add_message_handler(backend._on_message)
+
+    backend.list_names = _static_list_names(["org.mpris.MediaPlayer2.vlc"])  # type: ignore[attr-defined]
+    await backend.refresh_names()
+    backend._owners["vlc"] = ":1.1"
+    bus.set_player_properties(
+        "org.mpris.MediaPlayer2.vlc",
+        {
+            "PlaybackStatus": "Playing",
+            "Metadata": {"mpris:artUrl": "file:///cache/vlc/x.png"},
+        },
+    )
+    state = await backend.read_state("vlc")
+    assert state is not None
+    assert backend.art_url("vlc") == "file:///cache/vlc/x.png"
+
+    # vlc shuts down: cache is cleared.
+    bus.emit_name_owner_changed("org.mpris.MediaPlayer2.vlc", ":1.1", None)
+    assert backend.art_url("vlc") is None
+
+
+def test_fake_backend_art_url_is_none_when_unset() -> None:
+    """``FakeMprisBackend`` doesn't track art — the proxy in tests
+    that don't care about art just gets None. ``MediaState.art_token``
+    travels through the wire as-is, so a test fixture can populate
+    it on the underlying state to exercise the client side."""
+    backend = FakeMprisBackend({})
+    assert backend.art_url("anything") is None
 
 
 # ---------------------------------------------------------------------------

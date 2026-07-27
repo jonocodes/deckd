@@ -10,7 +10,7 @@ import os
 import platform
 import socket
 from pathlib import Path
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable
 
 from aiohttp import WSMsgType, web
 
@@ -20,6 +20,7 @@ from .input import ScrollController, parse_key_combo, text_to_combos
 from .layouts import Layout, LayoutStore, load_layouts, resolve_layout
 from .media import MediaManager, MediaState, effective_art_token
 from .mpris import DbusMprisBackend, MprisBackend, connect_mpris_backend
+from .mpris_art import resolve_mpris_art_async
 
 if TYPE_CHECKING:
     from dbus_fast import BusType as BusTypeT
@@ -243,6 +244,7 @@ class Server:
         sensor_manager: "SensorManager | None" = None,
         media_manager: MediaManager | None = None,
         mpris_backend: MprisBackend | None = None,
+        mpris_art_resolver: "Callable[[str | None], Awaitable[tuple[str, bytes] | None]] | None" = None,
     ) -> None:
         self.layouts_dir = layouts_dir
         self.overlay_dir = overlay_dir
@@ -252,6 +254,13 @@ class Server:
         self.host = host
         self.port = port
         self.app = web.Application()
+        # The ``/mpris/<row>/art`` proxy uses an injectable resolver so
+        # tests can stub out filesystem / network I/O. Production
+        # wires :func:`deckd.mpris_art.resolve_mpris_art_async` (issue
+        # #57).
+        self._mpris_art_resolver: Callable[[str | None], Awaitable[tuple[str, bytes] | None]] = (
+            mpris_art_resolver or resolve_mpris_art_async
+        )
         self._setup_routes()
         self._sessions: set[Session] = set()
         self.layouts: LayoutStore = load_layouts(layouts_dir, overlay_dir)
@@ -840,6 +849,15 @@ class Server:
         # the current item's art from VLC's own HTTP interface and streams it
         # back so the phone never needs VLC's credentials or a local file path.
         self.app.router.add_get("/media/{widget_id}/art", self._media_art)
+        # MPRIS album-art proxy (issue #57). Same rationale as
+        # ``/media/<id>/art`` — unauthenticated, server-side fetch —
+        # but the URL the proxy serves is the row's current
+        # ``Metadata.mpris:artUrl`` (``file://`` / ``http(s)://`` /
+        # ``data:``), never a client-supplied path. An ``<img>`` tag
+        # can't carry the password header, and the art itself is
+        # low-value; the proxy's only safety constraint is the one
+        # above (the row id is the only thing the URL is keyed on).
+        self.app.router.add_get("/mpris/{row_id}/art", self._mpris_art)
 
     async def _health(self, _req: web.Request) -> web.Response:
         # The one endpoint left open when auth is on: the web client's
@@ -881,6 +899,37 @@ class Server:
         # The client cache-busts with ?token=<art_token>, so a given URL is
         # immutable — let the browser cache it hard and skip refetching until
         # the track (and thus the token) changes.
+        return web.Response(
+            body=data,
+            content_type=content_type,
+            headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
+    async def _mpris_art(self, req: web.Request) -> web.StreamResponse:
+        # MPRIS art proxy (issue #57). Two layers of indirection keep
+        # the proxy safe by construction:
+        #   1. The URL the proxy serves is the row's current
+        #      ``art_url`` — the resolver never reads a URL off the
+        #      request, so a client can't redirect it. A query string
+        #      like ``?file=...`` is silently ignored.
+        #   2. The resolver itself only handles ``file://`` /
+        #      ``http(s)://`` / ``data:`` and 404s on anything else
+        #      (including missing / malformed input), so even a
+        #      crafted artUrl can't make the daemon read arbitrary
+        #      paths.
+        if self.mpris is None:
+            raise web.HTTPNotFound()
+        row_id = req.match_info["row_id"]
+        art_url = self.mpris.art_url(row_id)
+        if art_url is None:
+            raise web.HTTPNotFound()
+        art = await self._mpris_art_resolver(art_url)
+        if art is None:
+            raise web.HTTPNotFound()
+        content_type, data = art
+        # Same cache-busting story as ``/media/<id>/art``:
+        # ``?token=<art_token>`` makes the URL immutable until the
+        # track changes, so the browser can keep the cover.
         return web.Response(
             body=data,
             content_type=content_type,

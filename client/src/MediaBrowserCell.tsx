@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Disc, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { Icon } from "./Icon";
 import type { MediaReading } from "./media-store";
@@ -36,18 +36,23 @@ const DESKTOP_ICONS: Record<string, { source: "simple-icons"; name: string }> = 
   audacity: { source: "simple-icons", name: "audacity" },
 };
 
-function artSlot(reading: MediaReading) {
-  // The wire's ``art_token`` carries a daemon-side cache-busting id
-  // for the current track's art. The spec scopes image transfer to
-  // a follow-up ticket, so v1 doesn't fetch the URL; we still
-  // surface its presence in the DOM as a data attribute so a future
-  // image-renderer can pick it up without a protocol change.
-  if (reading.art_token) {
+/** The art slot for a single row. When the daemon reported an
+ * ``art_token`` we render a real ``<img>`` pointing at the daemon's
+ * ``/mpris/<row-suffix>/art?token=<art_token>`` proxy (issue #57);
+ * the token is the cache-buster so the browser only refetches on
+ * track change. A network / 404 error falls back through the
+ * ``desktop_entry`` brand icon to the Lucide ``Disc`` glyph so the
+ * row never reads as broken. */
+function ArtSlot({ id, reading }: { id: string; reading: MediaReading }) {
+  const [failedToken, setFailedToken] = useState<string | null>(null);
+  const rowSuffix = id.startsWith("mpris.") ? id.slice("mpris.".length) : id;
+  if (reading.art_token && failedToken !== reading.art_token) {
     return (
-      <span
-        className="mediabrowser-art-icon"
-        data-art-token={reading.art_token}
-        aria-hidden
+      <img
+        className="mediabrowser-art-img"
+        alt=""
+        src={`/mpris/${encodeURIComponent(rowSuffix)}/art?token=${encodeURIComponent(reading.art_token)}`}
+        onError={() => setFailedToken(reading.art_token ?? null)}
       />
     );
   }
@@ -129,7 +134,7 @@ export function MediaBrowserCell({ widget, states, onCommand }: Props) {
             <div className="mediabrowser-app">{reading.app_name}</div>
           ) : null}
           <div className="mediabrowser-art" aria-hidden>
-            {artSlot(reading)}
+            <ArtSlot id={id} reading={reading} />
           </div>
           <div className="mediabrowser-text">
             <div className="mediabrowser-title">{reading.title ?? "—"}</div>

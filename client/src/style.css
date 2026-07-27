@@ -1273,6 +1273,17 @@ button:focus-visible { outline: none; }
   color: #8a96a3;
 }
 
+/* The album-art ``<img>`` for rows whose daemon state carries an
+ * ``art_token`` (issue #57). Fills the same 40x40 slot as the icon
+ * fallbacks so the row layout stays stable as the source switches
+ * between the brand icon, the disc glyph, and the actual cover. */
+.mediabrowser-art-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .mediabrowser-text {
   display: flex;
   flex-direction: column;
