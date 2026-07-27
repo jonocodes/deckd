@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .layouts import MediaBrowserEmptyState, MediaBrowserOrdering
+from .layouts import MediaBrowserEmptyState
 from .media import MediaState, _art_token
 from .mpris_art import is_supported_art_url
 
@@ -164,20 +164,21 @@ class MediaBrowser(BaseModel):
       to the client so it can correlate per-row updates).
     - ``grid``: the standard 4-int grid placement, identical to every
       other widget kind.
-    - ``ordering``: how rows are presented when multiple MPRIS players
-      are available. ``playing_first`` (default) surfaces the active
-      player first; ``stable`` keeps the daemon-emitted order.
     - ``empty_state``: whether the cell still renders a placeholder row
       when no MPRIS player is discovered. ``show`` (default) keeps the
       chrome's icon reachable; ``hide`` collapses the cell so a layout
       that relies on the browser can drop the cell entirely.
+
+    Row order is whatever :meth:`MprisBackend.row_ids` returns — by
+    convention the order the session bus's ``ListNames`` reply reports
+    them, matching GNOME Shell's quick-settings media widget. No
+    per-layout knob (issue #58).
     """
 
     model_config = ConfigDict(extra="forbid")
 
     id: str
     grid: list[int] = Field(min_length=4, max_length=4)
-    ordering: MediaBrowserOrdering = "playing_first"
     empty_state: MediaBrowserEmptyState = "show"
 
 
@@ -259,7 +260,14 @@ class DbusMprisBackend(MprisBackend):
     def __init__(self, bus_factory: "Callable[[BusType], MessageBus] | None" = None) -> None:
         self._bus_factory = bus_factory
         self._bus: MessageBus | None = None
-        self._owned_names: set[str] = set()
+        # Owned MPRIS row suffixes in bus-discovery order — i.e. the
+        # order :meth:`refresh_names` last saw on the session bus's
+        # ``ListNames`` reply (matching GNOME Shell, issue #58). The
+        # set is bounded by the number of MPRIS players on the bus
+        # (a handful), so list ops are fine; ``list`` is the right
+        # shape because we need stable iteration order, not O(1)
+        # membership.
+        self._owned_names: list[str] = []
         # Maps a row suffix (``vlc``) to the unique-name
         # (``":1.42"``) it last saw on the bus. Used to translate
         # ``PropertiesChanged.sender`` (a unique name) back into a
@@ -281,7 +289,13 @@ class DbusMprisBackend(MprisBackend):
         self.list_names: Callable[[], Any] = lambda: []
 
     def row_ids(self) -> list[str]:
-        return sorted(self._owned_names)
+        # The single source of truth for the row order the browser
+        # surfaces. Reflects whatever ``refresh_names`` last observed
+        # on the session bus (typically == ``ListNames`` reply order,
+        # matching GNOME Shell — issue #58). Returns a copy so callers
+        # can iterate without worrying about concurrent mutation from
+        # ``NameOwnerChanged`` handlers.
+        return list(self._owned_names)
 
     async def start(self) -> None:
         """Connect to the session bus, enumerate, and subscribe.
@@ -331,7 +345,7 @@ class DbusMprisBackend(MprisBackend):
         if self._bus is not None:
             self._bus.disconnect()
             self._bus = None
-        self._owned_names = set()
+        self._owned_names = []
         self._owners = {}
         self._states = {}
         self._identities = {}
@@ -373,16 +387,25 @@ class DbusMprisBackend(MprisBackend):
         changes whenever a player comes or goes. Filtering happens
         here; the fake and the real bus both go through this single
         path so the row set is identical in both shapes.
+
+        The list preserves the ``ListNames`` reply order: ``row_ids``
+        then returns the same order GNOME Shell's quick-settings
+        media widget surfaces, so the two read identically end-to-end
+        on the same session bus. Duplicates the bus might publish are
+        collapsed to first occurrence — issue #58.
         """
         result = self.list_names()
         if _is_awaitable(result):
             result = await result  # type: ignore[misc]
-        names = {
-            suffix
-            for n in result
-            if (suffix := _mpris_suffix(n)) is not None
-        }
-        self._owned_names = {n for n in names if n}
+        new_names: list[str] = []
+        seen: set[str] = set()
+        for n in result:
+            suffix = _mpris_suffix(n)
+            if suffix is None or suffix in seen:
+                continue
+            seen.add(suffix)
+            new_names.append(suffix)
+        self._owned_names = new_names
         # Drop cached state and stale owner mappings for players
         # that disappeared so the next ``read_state`` repopulates
         # them cleanly.
@@ -515,14 +538,18 @@ class DbusMprisBackend(MprisBackend):
         # pure-add goes through a remove-and-add so the row's metadata
         # is rebuilt cleanly under the new owner).
         if old_owner:
-            self._owned_names.discard(suffix)
+            if suffix in self._owned_names:
+                self._owned_names.remove(suffix)
             self._owners.pop(suffix, None)
             self._states.pop(suffix, None)
             self._identities.pop(suffix, None)
         # Phase 2: re-add the new owner (no-op on a pure removal
-        # where ``new_owner`` is the empty string).
-        if new_owner:
-            self._owned_names.add(suffix)
+        # where ``new_owner`` is the empty string). Append to the tail
+        # so the row's position in ``row_ids`` reflects when it last
+        # appeared on the bus — matching GNOME Shell's quick-settings
+        # widget (issue #58).
+        if new_owner and suffix not in self._owned_names:
+            self._owned_names.append(suffix)
             self._owners[suffix] = new_owner
 
     def _handle_properties_changed(self, message: Any) -> None:

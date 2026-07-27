@@ -9,11 +9,13 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from .platform import AppInfo
 
-# Literal aliases for ``mediabrowser`` widget knobs (issue #50). Defined
-# here so the daemon's ``Widget`` model — the one YAML flows through —
-# has a single source of truth; :class:`deckd.mpris.MediaBrowser`
-# imports the same names so the dedicated schema can't drift.
-MediaBrowserOrdering = Literal["playing_first", "stable"]
+# Literal alias for the ``mediabrowser`` widget's ``empty_state`` knob
+# (issue #50). Defined here so the daemon's ``Widget`` model — the one
+# YAML flows through — has a single source of truth;
+# :class:`deckd.mpris.MediaBrowser` imports the same name so the
+# dedicated schema can't drift. ``ordering`` was removed in issue #58:
+# rows now reflect the session bus's ``ListNames`` order (matching GNOME
+# Shell) with no per-layout knob.
 MediaBrowserEmptyState = Literal["show", "hide"]
 
 log = logging.getLogger("deckd.layouts")
@@ -104,13 +106,12 @@ class Widget(BaseModel):
     next_action: "Action | None" = None
     volume_up_action: "Action | None" = None
     volume_down_action: "Action | None" = None
-    # ``mediabrowser`` widgets (issue #50) take two knobs documented on
-    # :class:`deckd.mpris.MediaBrowser`: how rows are ordered when the
-    # backend reports multiple players (``ordering``), and whether the
-    # cell still renders an empty placeholder when no player is discovered
-    # (``empty_state``). Mirrors the existing media-only-field rule: only
-    # valid when ``kind == "mediabrowser"``.
-    ordering: MediaBrowserOrdering | None = None
+    # ``mediabrowser`` widgets (issue #50) take one knob documented on
+    # :class:`deckd.mpris.MediaBrowser`: whether the cell still renders
+    # an empty placeholder when no player is discovered (``empty_state``).
+    # Row order follows the session bus's ``ListNames`` reply — no
+    # per-layout knob (issue #58). Mirrors the existing media-only-field
+    # rule: only valid when ``kind == "mediabrowser"``.
     empty_state: MediaBrowserEmptyState | None = None
 
     @field_validator("kind")
@@ -158,20 +159,16 @@ class Widget(BaseModel):
             "volume_down_action": self.volume_down_action,
         }
         mediabrowser_fields = {
-            "ordering": self.ordering,
             "empty_state": self.empty_state,
         }
         if self.kind == "media" and self.controls is None:
             self.controls = ["play", "volume", "position"]
         if self.kind == "mediabrowser":
-            # Apply the same defaults as ``MediaBrowser`` so a widget
+            # Apply the same default as ``MediaBrowser`` so a widget
             # declared with just ``id`` / ``kind`` / ``grid`` still
-            # round-trips through ``model_dump`` with both knobs
-            # populated — the client needs them to make rendering
-            # decisions (per-player ordering, empty placeholder), and
-            # absent keys would land as ``None`` on the wire.
-            if self.ordering is None:
-                self.ordering = "playing_first"
+            # round-trips through ``model_dump`` with the knob populated —
+            # the client needs it to make the empty-placeholder decision,
+            # and an absent key would land as ``None`` on the wire.
             if self.empty_state is None:
                 self.empty_state = "show"
         if self.kind != "media":

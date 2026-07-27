@@ -2,11 +2,7 @@ import { useMemo, useState } from "react";
 import { Disc, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { Icon } from "./Icon";
 import type { MediaReading } from "./media-store";
-import type {
-  MediaBrowserEmptyState,
-  MediaBrowserOrdering,
-  Widget,
-} from "./protocol";
+import type { MediaBrowserEmptyState, Widget } from "./protocol";
 
 type Props = {
   widget: Widget;
@@ -61,54 +57,24 @@ function ArtSlot({ id, reading }: { id: string; reading: MediaReading }) {
   return <Disc className="mediabrowser-art-icon" />;
 }
 
-/** Group rows by playback for the playing-first ordering.
- *
- * The wire's ``playing`` field is a boolean: ``True`` (Playing),
- * ``False`` (Paused or Stopped, conflated), or ``null`` (unknown).
- * The spec mentions three buckets — Playing / Paused / Stopped —
- * but the daemon's relay collapses the latter two into a single
- * ``False`` per ``_playback_to_playing`` in ``daemon/deckd/mpris.py``.
- * Two buckets are what the wire can express today; a future wire
- * extension (e.g. relaying ``PlaybackStatus`` as a string) would let
- * the order match the spec verbatim. */
-function bucketFor(playing: boolean | null | undefined): 0 | 1 {
-  return playing === true ? 0 : 1;
-}
-
-function orderRows(rows: Row[], ordering: MediaBrowserOrdering): Row[] {
-  if (ordering === "stable") {
-    // First-seen bus-name order is the natural insertion order of the
-    // ``Record``; the media store rebuilds its cache with object
-    // spread (``{...previous, [state.id]: state}``) which preserves
-    // that order across updates.
-    return rows;
-  }
-  // playing_first: stable order within each bucket, sorted by row id
-  // so the test (and a real run that re-sorts on every state change)
-  // gets a deterministic result.
-  return [...rows].sort((a, b) => {
-    const diff = bucketFor(a.reading.playing) - bucketFor(b.reading.playing);
-    if (diff !== 0) return diff;
-    return a.id.localeCompare(b.id);
-  });
-}
-
 export function MediaBrowserCell({ widget, states, onCommand }: Props) {
-  const ordering: MediaBrowserOrdering = widget.ordering ?? "playing_first";
   const emptyState: MediaBrowserEmptyState = widget.empty_state ?? "show";
 
   // Filter the parent store down to MPRIS rows. The store is keyed by
   // widget id, so a row whose id starts with ``mpris.`` belongs to
   // this widget; the VLC media widget's ids don't, so they're not
-  // shown here.
+  // shown here. Rows are emitted in the daemon's ``row_ids`` order
+  // (session bus ``ListNames`` reply — matching GNOME Shell, issue
+  // #58). The store rebuilds its cache with object spread so insertion
+  // order is preserved across updates.
   const rows = useMemo<Row[]>(() => {
     const result: Row[] = [];
     for (const [id, reading] of Object.entries(states)) {
       if (!id.startsWith("mpris.")) continue;
       result.push({ id, reading });
     }
-    return orderRows(result, ordering);
-  }, [states, ordering]);
+    return result;
+  }, [states]);
 
   if (rows.length === 0) {
     if (emptyState === "hide") return null;

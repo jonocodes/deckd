@@ -86,8 +86,8 @@ export function App() {
   );
   // The single mediabrowser widget in the active layout is the
   // configuration source for the chrome view; the chrome view has
-  // nowhere else to learn about ``ordering`` / ``empty_state``. Hoist
-  // the lookup out of the render path so the JSX stays declarative.
+  // nowhere else to learn about ``empty_state``. Hoist the lookup out
+  // of the render path so the JSX stays declarative.
   const browserWidget = useMemo(
     () => (layout?.widgets ?? []).find((w) => w.kind === "mediabrowser") ?? null,
     [layout],
@@ -225,8 +225,9 @@ export function App() {
             />
           ) : view === "mediabrowser" ? (
             // Per-row MPRIS browser (issue #53). The cell filters the
-            // shared media cache down to ``mpris.*`` ids, orders rows
-            // by the active widget's ``ordering`` knob, and gates the
+            // shared media cache down to ``mpris.*`` ids in the order
+            // the daemon reports them (session bus ``ListNames``
+            // reply — matching GNOME Shell, issue #58), and gates the
             // prev/next transport on each row's capabilities. The
             // single mediabrowser widget in the active layout is the
             // configuration source; ``null`` falls back to the legacy

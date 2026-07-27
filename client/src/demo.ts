@@ -173,8 +173,10 @@ export const MEDIA_DEMO_STATES: MediaState[] = [
 // MPRIS rows already in the media store — the same surface a real
 // daemon would render after the first ``media_state`` push. Three
 // rows (playing, paused, stopped) and one with no capabilities so
-// the art-slot fallback, capability gating, and ordering rules all
-// exercise in one view.
+// the art-slot fallback and capability gating exercise in one view.
+// Row order is the media-store insertion order — issue #58 dropped
+// the per-widget ``ordering`` knob and the client no longer re-sorts
+// by playback state.
 const MPRIS: ServerLayout = {
   type: "layout",
   app: "mpris (demo)",
@@ -194,8 +196,9 @@ const MPRIS: ServerLayout = {
 
 /** Seed MPRIS rows for the browser demo, with the
  * ``mpris.<suffix>`` ids the daemon would emit. Mixed playback states
- * and capabilities so the ordering, art fallback, and gating
- * acceptance criteria all have something to render. */
+ * and capabilities so the art-fallback and gating acceptance criteria
+ * have something to render. (Issue #58 removed the ``ordering`` knob;
+ * the client no longer re-sorts by playback state.) */
 export const MPRIS_DEMO_STATES: MediaState[] = [
   {
     type: "media_state",

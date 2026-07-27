@@ -97,8 +97,10 @@ pinned; the chrome surface (trackpad, settings, browser) is a *mode*
 the client swaps into when the layout's `match` token matches the
 selected view name. Both shapes share the same `LayoutMessage` — the
 `view` field tells the client which mode to render. The widget kind
-also has a small public schema (`ordering`, `empty_state`) but those
-live with the kind, not the view mechanism.
+also has a small public schema (`empty_state`) but that lives with
+the kind, not the view mechanism. Row order follows the session bus's
+`ListNames` reply — matching GNOME Shell — with no per-widget knob
+(issue #58).
 
 A layout that uses `mediabrowser` also pays the bus-connect cost:
 the daemon opens the session D-Bus only when at least one loaded

@@ -9,9 +9,10 @@
 # client sends ``clear_view``.
 #
 # The ``mediabrowser`` widget asks the daemon to render one row per
-# discovered MPRIS player with prev / play-pause / next controls;
-# ``ordering`` and ``empty_state`` default sensibly so most users
-# don't need to override them.
+# discovered MPRIS player with prev / play-pause / next controls. Row
+# order follows the session bus's ``ListNames`` reply (matching GNOME
+# Shell — issue #58) with no per-layout knob; ``empty_state`` defaults
+# sensibly so most users don't need to override it.
 match: [mpris]
 display_name: MPRIS
 widgets:

@@ -11,7 +11,6 @@ export type Metric = { source: string; label?: string | null };
 
 export type MediaHttp = { host?: string; port?: number; password_ref?: string | null };
 export type MediaControl = "play" | "previous" | "next" | "volume" | "position" | "speed";
-export type MediaBrowserOrdering = "playing_first" | "stable";
 export type MediaBrowserEmptyState = "show" | "hide";
 export type MediaState = {
   type: "media_state";
@@ -60,13 +59,11 @@ export type Widget = {
   next_action?: Record<string, unknown> | null;
   volume_up_action?: Record<string, unknown> | null;
   volume_down_action?: Record<string, unknown> | null;
-  /** ``mediabrowser`` knob (issue #50): how rows are presented when the
-   * backend reports multiple MPRIS players. ``playing_first`` surfaces
-   * the active player first; ``stable`` keeps the daemon-emitted order. */
-  ordering?: MediaBrowserOrdering | null;
   /** ``mediabrowser`` knob (issue #50): whether the cell still renders
    * a placeholder row when no MPRIS player is discovered. ``show``
-   * keeps the chrome's icon reachable; ``hide`` collapses the cell. */
+   * keeps the chrome's icon reachable; ``hide`` collapses the cell.
+   * Row order follows the daemon's ``row_ids`` (the session bus's
+   * ``ListNames`` reply order — matching GNOME Shell — issue #58). */
   empty_state?: MediaBrowserEmptyState | null;
 };
 

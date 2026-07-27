@@ -12,6 +12,8 @@ plus ``org.freedesktop.DBus.ListNames`` plus
 
 Coverage mirrors the issue's acceptance criteria:
   * enumeration (``row_ids``) skips ``playerctld`` and malformed names
+    and returns the order the bus reported them (issue #58 — matches
+    GNOME Shell's quick-settings media widget)
   * ``read_state`` pulls documented fields via the Player interface
   * ``send_command`` translates browser commands to MPRIS methods
   * ``NameOwnerChanged`` adds/removes rows (rename = remove then add)
@@ -256,8 +258,9 @@ async def test_row_ids_lists_filtered_mpris_bus_names() -> None:
     backend._bus = bus
     await backend.refresh_names()
 
-    ids = sorted(backend.row_ids())
-    assert ids == ["spotify", "vlc"]
+    # Issue #58: order reflects what the bus reported, not alphabetical.
+    # ``vlc`` was first in the input list, so it comes out first.
+    assert backend.row_ids() == ["vlc", "spotify"]
 
 
 def test_playerctld_is_excluded_constant() -> None:
@@ -460,9 +463,11 @@ async def test_name_owner_changed_adds_a_new_row() -> None:
     assert backend.row_ids() == ["vlc"]
 
     # A new player appears: org.mpris.MediaPlayer2.spotify registered
-    # with owner ":1.99". The handler must extend the row set.
+    # with owner ":1.99". The handler extends the row set in
+    # bus-discovery order: the new entry sits at the tail (matching
+    # GNOME Shell — issue #58).
     bus.emit_name_owner_changed("org.mpris.MediaPlayer2.spotify", None, ":1.99")
-    assert sorted(backend.row_ids()) == ["spotify", "vlc"]
+    assert backend.row_ids() == ["vlc", "spotify"]
 
 
 @pytest.mark.asyncio
@@ -475,10 +480,11 @@ async def test_name_owner_changed_removes_a_row() -> None:
     backend._bus = bus
     bus.add_message_handler(backend._on_message)
     await backend.refresh_names()
-    assert sorted(backend.row_ids()) == ["spotify", "vlc"]
+    # Initial refresh preserves the input order (vlc first, spotify second).
+    assert backend.row_ids() == ["vlc", "spotify"]
 
     # VLC shuts down; its name is released. The handler must drop
-    # ``vlc`` from the row set.
+    # ``vlc`` from the row set while leaving ``spotify`` in place.
     bus.emit_name_owner_changed("org.mpris.MediaPlayer2.vlc", ":1.42", None)
     assert backend.row_ids() == ["spotify"]
 

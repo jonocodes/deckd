@@ -858,27 +858,24 @@ icon, or the session ending) is the only way out.
 
 #### Configuration knobs
 
-The `mediabrowser` widget has two optional knobs:
+The `mediabrowser` widget has one optional knob:
 
 ```yaml
 - id: browser
   kind: mediabrowser
   grid: [0, 0, 4, 2]
-  ordering: playing_first   # or "stable"
   empty_state: show         # or "hide"
 ```
 
-- `ordering: playing_first` (default) — Playing rows first, then
-  Paused / Stopped (the two are conflated on the wire — see the
-  client comment in `MediaBrowserCell.tsx`); with stable order
-  inside each bucket by row id. `stable` keeps first-seen bus-name
-  order with no playback-state grouping.
 - `empty_state: show` (default) — when no players exist, render a
   single "No media players detected" row so the chrome icon is still
   reachable. `hide` collapses the cell so a layout that depends on
   the browser can drop the cell entirely.
 
-Both default sensibly; most users won't need to override them.
+Row order is the order the session bus's `org.freedesktop.DBus.ListNames`
+reply reports the players — the same order GNOME Shell's quick-settings
+media widget surfaces, so the two surfaces line up on the same desktop
+session. There is no per-widget ordering knob (issue #58).
 
 #### Player discovery
 

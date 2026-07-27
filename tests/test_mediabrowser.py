@@ -4,8 +4,8 @@ Three concerns, one ticket:
 
 1. The ``MediaBrowser`` Pydantic model (schema for the new widget kind).
 2. The matching ``mpris.yaml`` shipping layout + ``Layout`` / ``Widget``
-   models accepting a ``mediabrowser``-kind widget with the new optional
-   fields.
+   models accepting a ``mediabrowser``-kind widget with the
+   ``empty_state`` knob (issue #58 removed the ``ordering`` knob).
 3. The server's view-resolution hook: ``select_view`` / ``clear_view``
    client -> daemon messages resolve the synthetic ``mpris`` view to
    the ``mpris.yaml`` layout, with the ``view`` field set on the
@@ -41,30 +41,27 @@ from deckd.platform import AppInfo
 
 
 def test_media_browser_defaults() -> None:
-    """The model's required fields are ``id`` and ``grid``; the two optional
-    knobs default to ``playing_first`` and ``show`` respectively."""
+    """The model's required fields are ``id`` and ``grid``; the only
+    optional knob, ``empty_state``, defaults to ``show`` (issue #58
+    removed the ``ordering`` knob)."""
     widget = MediaBrowser.model_validate({"id": "browser", "grid": [0, 0, 4, 2]})
 
     assert widget.id == "browser"
     assert widget.grid == [0, 0, 4, 2]
-    assert widget.ordering == "playing_first"
     assert widget.empty_state == "show"
 
 
 def test_media_browser_accepts_explicit_knobs() -> None:
-    """Both knobs accept every documented value."""
-    stable = MediaBrowser.model_validate(
-        {"id": "browser", "grid": [0, 0, 4, 2], "ordering": "stable", "empty_state": "hide"}
+    """The ``empty_state`` knob accepts both documented values."""
+    hidden = MediaBrowser.model_validate(
+        {"id": "browser", "grid": [0, 0, 4, 2], "empty_state": "hide"}
     )
-    assert stable.ordering == "stable"
-    assert stable.empty_state == "hide"
+    assert hidden.empty_state == "hide"
 
 
 @pytest.mark.parametrize(
     "field,value",
     [
-        ("ordering", "alphabetical"),
-        ("ordering", ""),
         ("empty_state", "auto"),
         ("empty_state", ""),
     ],
@@ -84,31 +81,47 @@ def test_media_browser_rejects_bad_grid() -> None:
 
 
 def test_media_browser_rejects_extra_fields() -> None:
-    """Unknown fields are rejected so a typo in ``mpris.yaml`` is loud."""
+    """Unknown fields are rejected so a typo in ``mpris.yaml`` is loud
+    (issue #58: the removed ``ordering`` knob is the most likely typo)."""
     with pytest.raises(ValidationError):
         MediaBrowser.model_validate(
             {"id": "browser", "grid": [0, 0, 4, 2], "ordring": "stable"}
         )
 
 
+@pytest.mark.parametrize("model", [MediaBrowser, Widget])
+def test_rejects_removed_ordering_knob(model) -> None:
+    """Issue #58 removed the ``ordering`` knob: a layout that still
+    declares it must fail loud rather than silently ignore the intent.
+    Both the dedicated ``MediaBrowser`` model and the generic
+    ``Widget`` model (the one YAML flows through) reject it via
+    ``extra='forbid'``."""
+    payload = {
+        "id": "browser",
+        "kind": "mediabrowser",
+        "grid": [0, 0, 4, 2],
+        "ordering": "playing_first",
+    }
+    with pytest.raises(ValidationError):
+        model.model_validate(payload)
+
+
 def test_widget_accepts_mediabrowser_kind_with_optional_knobs() -> None:
     """The daemon's ``Widget`` model (the one YAML flows through) accepts a
-    ``mediabrowser`` kind and round-trips the two new optional fields the
-    client needs to know about (``ordering`` / ``empty_state``)."""
+    ``mediabrowser`` kind and round-trips the optional ``empty_state``
+    field the client needs to know about (issue #58 removed the
+    ``ordering`` knob)."""
     widget = Widget.model_validate(
         {
             "id": "browser",
             "kind": "mediabrowser",
             "grid": [0, 0, 4, 2],
-            "ordering": "stable",
             "empty_state": "hide",
         }
     )
     assert widget.kind == "mediabrowser"
-    assert widget.ordering == "stable"
     assert widget.empty_state == "hide"
     dumped = widget.model_dump()
-    assert dumped["ordering"] == "stable"
     assert dumped["empty_state"] == "hide"
 
 
@@ -116,39 +129,30 @@ def test_widget_defaults_mediabrowser_knobs() -> None:
     widget = Widget.model_validate(
         {"id": "browser", "kind": "mediabrowser", "grid": [0, 0, 4, 2]}
     )
-    assert widget.ordering == "playing_first"
     assert widget.empty_state == "show"
 
 
 def test_widget_rejects_mediabrowser_knobs_on_other_kinds() -> None:
-    """Mirrors the existing media-only-fields rule: ``ordering`` and
-    ``empty_state`` are only valid on ``kind: mediabrowser``."""
-    for field, value in [("ordering", "stable"), ("empty_state", "hide")]:
-        with pytest.raises(ValueError, match="mediabrowser-only"):
-            Widget.model_validate(
-                {"id": "back", "kind": "button", "grid": [0, 0, 1, 1], field: value}
-            )
-
-
-def test_widget_rejects_unknown_ordering_value() -> None:
-    with pytest.raises(ValidationError):
+    """Mirrors the existing media-only-fields rule: ``empty_state``
+    is only valid on ``kind: mediabrowser``."""
+    with pytest.raises(ValueError, match="mediabrowser-only"):
         Widget.model_validate(
             {
-                "id": "browser",
-                "kind": "mediabrowser",
-                "grid": [0, 0, 4, 2],
-                "ordering": "alphabetical",
+                "id": "back",
+                "kind": "button",
+                "grid": [0, 0, 1, 1],
+                "empty_state": "hide",
             }
         )
 
 
 def test_widget_mediabrowser_round_trips_through_json_wire_shape() -> None:
-    """The TS ``Widget`` type (issue #50 acceptance bullet) declares
-    ``ordering`` / ``empty_state`` as optional ``null``-able fields.
-    This is the wire-shape contract: a ``Widget`` serialised on the
-    Python side must parse back into the same shape with the documented
-    defaults populated (so a TS client can rely on receiving both keys
-    even when the YAML omits them)."""
+    """The TS ``Widget`` type declares ``empty_state`` as an optional
+    ``null``-able field. This is the wire-shape contract: a ``Widget``
+    serialised on the Python side must parse back into the same shape
+    with the documented default populated (so a TS client can rely on
+    receiving the key even when the YAML omits it — issue #58 dropped
+    ``ordering``)."""
     widget = Widget.model_validate(
         {"id": "browser", "kind": "mediabrowser", "grid": [0, 0, 4, 2]}
     )
@@ -157,20 +161,17 @@ def test_widget_mediabrowser_round_trips_through_json_wire_shape() -> None:
     # client with a stale types file can still destructure it.
     dumped = json.loads(widget.model_dump_json())
     assert dumped["kind"] == "mediabrowser"
-    assert dumped["ordering"] == "playing_first"
     assert dumped["empty_state"] == "show"
-    # And a wire shape with both knobs explicit survives the round-trip.
+    # And a wire shape with the knob explicit survives the round-trip.
     explicit = Widget.model_validate(
         {
             "id": "browser",
             "kind": "mediabrowser",
             "grid": [0, 0, 4, 2],
-            "ordering": "stable",
             "empty_state": "hide",
         }
     )
     explicit_dumped = json.loads(explicit.model_dump_json())
-    assert explicit_dumped["ordering"] == "stable"
     assert explicit_dumped["empty_state"] == "hide"
 
 
@@ -193,8 +194,8 @@ def test_shipping_mpris_layout_loads_and_has_mediabrowser_widget() -> None:
     widget = layout.widgets[0]
     assert widget.kind == "mediabrowser"
     assert widget.id  # non-empty
-    # Defaults survive the round-trip even when the YAML omits them.
-    assert widget.ordering == "playing_first"
+    # Default survives the round-trip even when the YAML omits it.
+    # (Issue #58 removed the ``ordering`` knob — no longer asserted.)
     assert widget.empty_state == "show"
 
 

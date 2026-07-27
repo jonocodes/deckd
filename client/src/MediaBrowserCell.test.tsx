@@ -19,9 +19,11 @@
  *     a "No media players detected" row renders; when
  *     ``empty_state === "hide"``, the cell renders nothing (no
  *     placeholder, no rows).
- *  5. Ordering: ``playing_first`` groups Playing → Paused → Stopped,
- *     stable order within each bucket by row id;
- *     ``stable`` keeps first-seen bus-name order by row id, no grouping.
+ *  5. Row order is the daemon's ``row_ids`` order (issue #58): the
+ *     media store's insertion order, matching the session bus's
+ *     ``ListNames`` reply and GNOME Shell's quick-settings media
+ *     widget. There is no per-widget ordering knob — playback state
+ *     never re-shuffles rows.
  *  6. The sendMediaCommand callback fires with the row id and the
  *     typed command — that's the contract the parent App uses to send
  *     the wire ``media_command`` message.
@@ -37,7 +39,6 @@ const WIDGET: Widget = {
   id: "browser",
   kind: "mediabrowser",
   grid: [0, 0, 4, 2],
-  ordering: "playing_first",
   empty_state: "show",
 };
 
@@ -233,16 +234,17 @@ describe("MediaBrowserCell", () => {
     expect(screen.queryByText("No media players detected")).toBeNull();
   });
 
-  it("orders playing rows first, then non-playing rows, with stable order inside each bucket", () => {
-    // The wire's ``playing`` field is a boolean — Paused and Stopped
-    // are conflated — so the spec's three-bucket order collapses to
-    // two: Playing vs everything-else, sorted by row id within each
-    // bucket.
+  it("preserves the media-store insertion order (issue #58)", () => {
+    // The cell does not re-sort by playback state — the row order is
+    // whatever the daemon's ``row_ids`` returned, which the media
+    // store has cached in insertion order. This matches the session
+    // bus's ``ListNames`` reply order and GNOME Shell's quick-settings
+    // media widget. Insertion order, not playback state, drives
+    // display.
     const states: Record<string, MediaReading> = {
-      "mpris.stopped-1": row("mpris.stopped-1", false),
-      "mpris.playing-2": row("mpris.playing-2", true),
-      "mpris.playing-1": row("mpris.playing-1", true),
-      "mpris.paused-1": row("mpris.paused-1", false),
+      "mpris.vlc": row("mpris.vlc", true),
+      "mpris.spotify": row("mpris.spotify", false),
+      "mpris.firefox": row("mpris.firefox", true),
     };
     render(
       <MediaBrowserCell
@@ -253,31 +255,9 @@ describe("MediaBrowserCell", () => {
     );
     const rows = screen.getAllByRole("listitem");
     expect(rows.map((r) => r.getAttribute("data-row-id"))).toEqual([
-      "mpris.playing-1",
-      "mpris.playing-2",
-      "mpris.paused-1",
-      "mpris.stopped-1",
-    ]);
-  });
-
-  it("orders rows by first-seen bus name when ordering is stable", () => {
-    const states: Record<string, MediaReading> = {
-      "mpris.b": row("mpris.b", false),
-      "mpris.a": row("mpris.a", true),
-      "mpris.c": row("mpris.c", false),
-    };
-    render(
-      <MediaBrowserCell
-        widget={{ ...WIDGET, ordering: "stable" }}
-        states={states}
-        onCommand={vi.fn()}
-      />,
-    );
-    const rows = screen.getAllByRole("listitem");
-    expect(rows.map((r) => r.getAttribute("data-row-id"))).toEqual([
-      "mpris.b",
-      "mpris.a",
-      "mpris.c",
+      "mpris.vlc",
+      "mpris.spotify",
+      "mpris.firefox",
     ]);
   });
 

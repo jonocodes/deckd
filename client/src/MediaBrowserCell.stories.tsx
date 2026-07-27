@@ -57,20 +57,10 @@ const MIXED: Record<string, MediaReading> = {
   },
 };
 
-export const PlayingFirst: Story = () => (
+export const Default: Story = () => (
   <div style={{ display: "grid", width: 480, height: 360 }}>
     <MediaBrowserCell
       widget={WIDGET}
-      states={MIXED}
-      onCommand={noop}
-    />
-  </div>
-);
-
-export const Stable: Story = () => (
-  <div style={{ display: "grid", width: 480, height: 360 }}>
-    <MediaBrowserCell
-      widget={{ ...WIDGET, ordering: "stable" }}
       states={MIXED}
       onCommand={noop}
     />

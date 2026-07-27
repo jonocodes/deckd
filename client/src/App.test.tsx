@@ -106,11 +106,10 @@ describe("App — mediabrowser per-row cell", () => {
     // propagated by the time the assertion runs.
     const rows = screen.getAllByRole("listitem");
     expect(rows.length).toBeGreaterThan(0);
-    // ``playing_first`` ordering: Playing rows first, sorted by row
-    // id within the bucket. The seeded ``mpris.firefox`` (playing)
-    // sorts before ``mpris.vlc`` (also playing) because ``firefox``
-    // < ``vlc`` lexicographically.
-    expect(rows[0].getAttribute("data-row-id")).toBe("mpris.firefox");
+    // Issue #58: the browser no longer re-sorts by playback state;
+    // rows appear in the media-store's insertion order, which the
+    // demo seeds with ``mpris.vlc`` first.
+    expect(rows[0].getAttribute("data-row-id")).toBe("mpris.vlc");
     expect(screen.getByText("One More Time")).toBeTruthy();
   });
 
@@ -121,13 +120,12 @@ describe("App — mediabrowser per-row cell", () => {
     });
     // The button only exists once the seeded ``media_state`` rows
     // have propagated through the store; click the first Pause in
-    // the rendered list. The first row in playing-first order is
-    // ``mpris.firefox``.
+    // the rendered list. The first row is ``mpris.vlc`` (issue #58).
     const pause = screen.getAllByRole("button", { name: "Pause" })[0];
     fireEvent.click(pause);
     expect(send).toHaveBeenCalledWith({
       type: "media_command",
-      id: "mpris.firefox",
+      id: "mpris.vlc",
       command: "play-pause",
     });
     void view;
