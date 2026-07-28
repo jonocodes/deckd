@@ -334,6 +334,23 @@ button:focus-visible {
   }
 }
 
+/* Reusable screen-reader-only utility. Elements with this class are
+   invisible to sighted users but read by screen readers. Uses the
+   1px-clip trick: width/height 1px, overflow hidden, and clip to
+   zero-rect so the text stays in the accessibility tree without
+   occupying visual space. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Screen-reader-only state label for the media browser button
    (issue #62, AC #3). The pulsing green dot is a colour-only
    carrier — a colour-blind user sees a dot they can't tell apart

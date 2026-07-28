@@ -473,3 +473,168 @@ describe("App — focus restoration", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "settings" }));
   });
 });
+
+/* ---------------------------------------------------------------------
+   Screen-reader headings (issue #63, AC #2).
+
+   Every surface must have a single top-level heading so screen reader
+   users can jump by heading. The h1 lives inside <main> and changes
+   content per active view. Only one surface is rendered at a time,
+   so there is always exactly one h1 in the DOM.
+   --------------------------------------------------------------------- */
+
+describe("App — screen-reader headings", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    window.history.replaceState(null, "", "/?demo=default");
+  });
+
+  it("renders an h1 at the top of the main landmark", () => {
+    render(<App />);
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading).not.toBeNull();
+    expect(heading.closest("main")).not.toBeNull();
+  });
+
+  it("shows the app name as the heading in layout view", () => {
+    render(<App />);
+    // "demo=default" layout has app: "default (demo)" with no display_name,
+    // so the heading falls back to the raw app token.
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "default (demo)",
+    );
+  });
+
+  it("shows display_name as the heading when the layout has one", () => {
+    window.history.replaceState(null, "", "/?demo=firefox");
+    render(<App />);
+    // Firefox demo has display_name: "Firefox".
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Firefox",
+    );
+  });
+
+  it("heading changes to Settings when the settings view opens", () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "3" });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Settings",
+    );
+  });
+
+  it("heading changes to Manual control when the trackpad view opens", () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "1" });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Manual control",
+    );
+  });
+
+  it("heading changes to Media browser when the media view opens", () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "2" });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Media browser",
+    );
+  });
+
+  it("heading returns to the app name when returning to the layout", () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "3" });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Settings",
+    );
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "default (demo)",
+    );
+  });
+});
+
+/* ---------------------------------------------------------------------
+   aria-live announcements (issue #63, AC #4).
+
+   Connection state, locked state, and layout switches must be
+   announced via live regions so the user hears what changed without
+   losing context. A hidden <span role="status"> in the bottom chrome
+   carries the announcement text.
+   --------------------------------------------------------------------- */
+
+describe("App — aria-live announcements", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    onLayout.mockReset();
+    mockStatus = "open";
+    window.history.replaceState(null, "", "/?demo=default");
+  });
+
+  it("renders a role=status live region in the chrome", () => {
+    render(<App />);
+    const status = screen.getByRole("status");
+    expect(status).not.toBeNull();
+  });
+
+  it("announces a connection status change from open to closed", () => {
+    const { rerender } = render(<App />);
+    mockStatus = "closed";
+    rerender(<App />);
+    expect(screen.getByRole("status").textContent).toBe("Disconnected");
+  });
+
+  it("announces a connection status change to reconnecting", () => {
+    const { rerender } = render(<App />);
+    mockStatus = "connecting";
+    rerender(<App />);
+    expect(screen.getByRole("status").textContent).toBe("Reconnecting");
+  });
+
+  it("announces a locked status change", () => {
+    const { rerender } = render(<App />);
+    mockStatus = "unauthorized";
+    rerender(<App />);
+    expect(screen.getByRole("status").textContent).toBe("Locked");
+  });
+
+  it("announces connected when returning from closed", () => {
+    mockStatus = "closed";
+    const { rerender } = render(<App />);
+    mockStatus = "open";
+    rerender(<App />);
+    expect(screen.getByRole("status").textContent).toBe("Connected");
+  });
+
+  it("announces a layout switch", () => {
+    const { rerender } = render(<App />);
+    act(() => {
+      onLayout({
+        type: "layout",
+        app: "test-app",
+        display_name: "Test App",
+        jogstrip_enabled: true,
+        widgets: [],
+      });
+    });
+    rerender(<App />);
+    expect(screen.getByRole("status").textContent).toBe("Layout: Test App");
+  });
+
+  it("falls back to the raw app token when the layout has no display_name", () => {
+    render(<App />);
+    act(() => {
+      onLayout({
+        type: "layout",
+        app: "generic-app",
+        jogstrip_enabled: true,
+        widgets: [],
+      });
+    });
+    expect(screen.getByRole("status").textContent).toBe("Layout: generic-app");
+  });
+
+  it("does not announce on the initial render", () => {
+    render(<App />);
+    expect(screen.getByRole("status").textContent).toBe("");
+  });
+});

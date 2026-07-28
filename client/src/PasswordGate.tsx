@@ -35,6 +35,7 @@ export function PasswordGate({
           type="password"
           autoFocus
           autoComplete="current-password"
+          aria-label="Password"
           placeholder="Password"
           value={value}
           onChange={(e) => setValue(e.currentTarget.value)}

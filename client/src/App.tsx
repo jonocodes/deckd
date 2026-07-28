@@ -299,6 +299,41 @@ export function App() {
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
 
+  // Screen-reader heading per surface (issue #63, AC #2).
+  // Each view is mutually exclusive — only one h1 is in the DOM
+  // at a time — so the heading level stays correct.
+  const headingText = useMemo(() => {
+    if (view === "trackpad") return "Manual control";
+    if (view === "mediabrowser") return "Media browser";
+    if (view === "settings") return "Settings";
+    if (layout?.error) return "Layout error";
+    if (layout) return layout.display_name?.trim() || layout.app || "deckd";
+    return "deckd";
+  }, [view, layout]);
+
+  // aria-live announcements for connection state, locked state,
+  // and layout switches (issue #63, AC #4). Each effect fires
+  // only on a genuine transition — not on the initial render —
+  // so the screen reader doesn't double-read the initial page.
+  const [liveText, setLiveText] = useState("");
+  const prevStatus = useRef(status);
+  const prevLayout = useRef(layout);
+  useEffect(() => {
+    if (prevStatus.current === status) return;
+    prevStatus.current = status;
+    if (status === "open") setLiveText("Connected");
+    else if (status === "connecting") setLiveText("Reconnecting");
+    else if (status === "closed") setLiveText("Disconnected");
+    else if (status === "unauthorized") setLiveText("Locked");
+  }, [status]);
+  useEffect(() => {
+    if (prevLayout.current === layout) return;
+    prevLayout.current = layout;
+    if (!layout) return;
+    const app = layout.display_name?.trim() || layout.app || "deckd";
+    setLiveText(`Layout: ${app}`);
+  }, [layout]);
+
   // Chrome app-identity badge (ADR-0007): the daemon relays an
   // optional ``display_name`` / ``theme`` / ``icon`` per layout; the
   // client renders a branded pill in the always-on bottom strip from
@@ -319,18 +354,23 @@ export function App() {
 
   if (status === "unauthorized") {
     return (
-      <PasswordGate
-        retry={attemptedAuth}
-        onSubmit={(password) => {
-          setAttemptedAuth(true);
-          authenticate(password);
-        }}
-      />
+      <>
+        <span role="status" className="sr-only">{liveText}</span>
+        <PasswordGate
+          retry={attemptedAuth}
+          onSubmit={(password) => {
+            setAttemptedAuth(true);
+            authenticate(password);
+          }}
+        />
+      </>
     );
   }
 
   return (
-    <div className="app">
+    <>
+      <span role="status" className="sr-only">{liveText}</span>
+      <div className="app">
       <div className="chrome-page">
         {/* The content-scale var is set here on the layout area only, so grid
             content (buttons + in-grid jogstrip) scales while the persistent
@@ -346,6 +386,7 @@ export function App() {
             } as CSSProperties
           }
         >
+          <h1 className="sr-only">{headingText}</h1>
           {view === "trackpad" ? (
             <ManualControl
               onPad={pad}
@@ -518,5 +559,6 @@ export function App() {
         </Tooltip>
       </footer>
     </div>
+    </>
   );
 }
