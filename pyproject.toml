@@ -2,6 +2,8 @@
 name = "deckd"
 version = "0.0.1"
 description = "App-aware touch control surface daemon"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = [
     "aiohttp>=3.9",
