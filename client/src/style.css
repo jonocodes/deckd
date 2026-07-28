@@ -253,6 +253,13 @@ button:focus-visible {
 .connection-connecting { color: #f59e0b; }
 .connection-closed .connection-dot { background: #f87171; }
 .connection-closed { color: #f87171; }
+/* Unauthorized (locked) state: a distinct violet so the four
+   connection states are each colour-unique, alongside their text
+   label. The text label is the primary carrier of state — the
+   colour is the secondary cue — so a colour-blind user still sees
+   "locked" on the dot. */
+.connection-unauthorized .connection-dot { background: #c084fc; }
+.connection-unauthorized { color: #c084fc; }
 
 @keyframes connection-pulse {
   0%, 100% { opacity: 1; }

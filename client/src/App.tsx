@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
 import { Music as MusicIcon, PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
@@ -28,6 +27,7 @@ import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
 import type { Icon as IconRef, ServerChromeMedia, ServerLayout } from "./protocol";
 import { MPRIS_VIEW_ID } from "./protocol";
+import { isTypingTarget, onActivate } from "./a11y";
 
 type View = "layout" | "trackpad" | "settings" | "mediabrowser";
 type SocketStatus = "connecting" | "open" | "closed" | "unauthorized";
@@ -39,34 +39,6 @@ const CHROME_JOG_ID = "__chrome__";
 const TRACKPAD_ID = "__trackpad__";
 
 const CHROME_JOG_HANDLE: JogHandle = { id: CHROME_JOG_ID };
-
-/** Keyboard activation handler for chrome buttons (issue #60, AC #3).
- * Native ``<button>`` elements fire ``click`` for Enter and Space on
- * the keyboard only when an ``onClick`` handler is attached, so the
- * project's existing ``onPointerDown``-only pattern (kept for fast
- * touch response) misses Enter/Space. This returns a keydown handler
- * that runs the same callback on Enter or Space — wired alongside
- * the existing ``onPointerDown`` so touch and keyboard both work. */
-function onActivate(action: () => void) {
-  return (e: ReactKeyboardEvent<HTMLButtonElement>) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    e.preventDefault();
-    action();
-  };
-}
-
-/** True when a keystroke should land in the focused element rather
- * than trigger a global shortcut. The password gate, the trackpad
- * IME, and the settings text fields are all "typing" surfaces —
- * number keys / Escape belong to them, not to the chrome view
- * switcher. ``contenteditable`` is rare on the client today but is
- * covered for forward-compat. */
-function isTypingTarget(el: HTMLElement): boolean {
-  if (el instanceof HTMLInputElement) return !el.readOnly && el.type !== "checkbox" && el.type !== "radio" && el.type !== "button";
-  if (el instanceof HTMLTextAreaElement) return true;
-  if (el.isContentEditable) return true;
-  return false;
-}
 
 const STATUS_LABEL: Record<SocketStatus, string> = {
   open: "live",

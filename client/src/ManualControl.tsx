@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Keyboard } from "lucide-react";
 
 import { Trackpad } from "./Trackpad";
+import { onActivate } from "./a11y";
 
 type Props = {
   onType: (text: string) => void;
@@ -99,11 +100,7 @@ export function ManualControl({
               e.preventDefault();
               onKey(combo);
             }}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter" && e.key !== " ") return;
-              e.preventDefault();
-              onKey(combo);
-            }}
+            onKeyDown={onActivate(() => onKey(combo))}
           >
             {label}
           </button>
@@ -116,11 +113,7 @@ export function ManualControl({
             e.preventDefault();
             toggleIme();
           }}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter" && e.key !== " ") return;
-            e.preventDefault();
-            toggleIme();
-          }}
+          onKeyDown={onActivate(toggleIme)}
         >
           <Keyboard size={18} />
         </button>

@@ -13,10 +13,19 @@ import { JogStrip } from "./JogStrip";
 
 const WIDGET = { id: "test.jog", label: "jog" };
 
+function getStrip(): HTMLElement {
+  // The JogStrip is a keyboard-focusable ``<div>`` with an
+  // ``aria-label`` describing its purpose; query by label rather
+  // than by role since ARIA doesn't have a great fit for a control
+  // that emits scroll deltas (not actually a scrollbar — the value
+  // isn't a position).
+  return screen.getByLabelText(/scroll strip/i) as HTMLElement;
+}
+
 describe("JogStrip — keyboard alternative", () => {
   afterEach(cleanup);
 
-  it("is reachable via Tab and exposes a scrollbar role", () => {
+  it("is keyboard-focusable via Tab order", () => {
     render(
       <div>
         <button>before</button>
@@ -24,13 +33,9 @@ describe("JogStrip — keyboard alternative", () => {
         <button>after</button>
       </div>,
     );
-    const strip = screen.getByRole("scrollbar", { name: /jog/i });
+    const strip = getStrip();
     expect(strip).toBeTruthy();
     expect(strip.getAttribute("tabindex")).toBe("0");
-    // Programmatic focus is what jsdom supports; the real Tab key
-    // is handled by the browser and isn't simulated here. The
-    // tabindex attribute is what makes the strip keyboard-reachable
-    // in a real browser — verifying both attributes is enough.
     strip.focus();
     expect(document.activeElement).toBe(strip);
   });
@@ -38,23 +43,22 @@ describe("JogStrip — keyboard alternative", () => {
   it("ArrowDown produces a positive delta when invert is off", () => {
     const onJog = vi.fn();
     render(<JogStrip widget={WIDGET} scale={1} invert={false} onJog={onJog} onJogEnd={() => {}} />);
-    fireEvent.keyDown(screen.getByRole("scrollbar"), { key: "ArrowDown" });
+    fireEvent.keyDown(getStrip(), { key: "ArrowDown" });
     expect(onJog).toHaveBeenCalledWith("test.jog", expect.any(Number));
-    // The first call's delta is positive (scroll down).
     expect(onJog.mock.calls[0][1]).toBeGreaterThan(0);
   });
 
   it("ArrowUp produces a negative delta when invert is off", () => {
     const onJog = vi.fn();
     render(<JogStrip widget={WIDGET} scale={1} invert={false} onJog={onJog} onJogEnd={() => {}} />);
-    fireEvent.keyDown(screen.getByRole("scrollbar"), { key: "ArrowUp" });
+    fireEvent.keyDown(getStrip(), { key: "ArrowUp" });
     expect(onJog.mock.calls[0][1]).toBeLessThan(0);
   });
 
   it("the invert prop flips the keyboard delta direction", () => {
     const onJog = vi.fn();
     render(<JogStrip widget={WIDGET} scale={1} invert onJog={onJog} onJogEnd={() => {}} />);
-    fireEvent.keyDown(screen.getByRole("scrollbar"), { key: "ArrowDown" });
+    fireEvent.keyDown(getStrip(), { key: "ArrowDown" });
     // With invert, an ArrowDown (intuitively "go down") should now
     // produce a negative delta — the wheel direction is reversed.
     expect(onJog.mock.calls[0][1]).toBeLessThan(0);
@@ -63,8 +67,8 @@ describe("JogStrip — keyboard alternative", () => {
   it("PageDown produces a larger delta than ArrowDown", () => {
     const onJog = vi.fn();
     render(<JogStrip widget={WIDGET} scale={1} invert={false} onJog={onJog} onJogEnd={() => {}} />);
-    fireEvent.keyDown(screen.getByRole("scrollbar"), { key: "ArrowDown" });
-    fireEvent.keyDown(screen.getByRole("scrollbar"), { key: "PageDown" });
+    fireEvent.keyDown(getStrip(), { key: "ArrowDown" });
+    fireEvent.keyDown(getStrip(), { key: "PageDown" });
     const arrowDelta = Math.abs(onJog.mock.calls[0][1]);
     const pageDelta = Math.abs(onJog.mock.calls[1][1]);
     expect(pageDelta).toBeGreaterThan(arrowDelta);
@@ -73,8 +77,8 @@ describe("JogStrip — keyboard alternative", () => {
   it("Home emits a single big negative delta and End a big positive one", () => {
     const onJog = vi.fn();
     render(<JogStrip widget={WIDGET} scale={1} invert={false} onJog={onJog} onJogEnd={() => {}} />);
-    fireEvent.keyDown(screen.getByRole("scrollbar"), { key: "Home" });
-    fireEvent.keyDown(screen.getByRole("scrollbar"), { key: "End" });
+    fireEvent.keyDown(getStrip(), { key: "Home" });
+    fireEvent.keyDown(getStrip(), { key: "End" });
     expect(onJog.mock.calls[0][1]).toBeLessThan(-1000);
     expect(onJog.mock.calls[1][1]).toBeGreaterThan(1000);
   });
@@ -82,9 +86,9 @@ describe("JogStrip — keyboard alternative", () => {
   it("non-scroll keys don't fire any onJog", () => {
     const onJog = vi.fn();
     render(<JogStrip widget={WIDGET} scale={1} invert={false} onJog={onJog} onJogEnd={() => {}} />);
-    fireEvent.keyDown(screen.getByRole("scrollbar"), { key: "a" });
-    fireEvent.keyDown(screen.getByRole("scrollbar"), { key: "Enter" });
-    fireEvent.keyDown(screen.getByRole("scrollbar"), { key: "Escape" });
+    fireEvent.keyDown(getStrip(), { key: "a" });
+    fireEvent.keyDown(getStrip(), { key: "Enter" });
+    fireEvent.keyDown(getStrip(), { key: "Escape" });
     expect(onJog).not.toHaveBeenCalled();
   });
 });

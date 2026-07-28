@@ -166,11 +166,8 @@ export function JogStrip({
     <div
       className={["cell", "cell-jogstrip", className].filter(Boolean).join(" ")}
       style={style}
-      role="scrollbar"
       tabIndex={0}
       aria-label={accessibleLabel}
-      aria-orientation="vertical"
-      aria-valuenow={0}
       onKeyDown={onKeyDown}
       onKeyUp={onKeyUp}
       onBlur={stopRepeat}
