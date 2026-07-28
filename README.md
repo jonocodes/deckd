@@ -45,7 +45,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Scroll strip** — an always-on right-side jogstrip to scroll the focused window, with release momentum.
 - [x] **Manual control mode** — the phone becomes a trackpad (move, tap, right-click, drag-lock) and a keyboard, so you can type into and point at the focused app for the things layouts don't cover (URL bars, chat boxes, ad-hoc commands).
 - [x] **App badge** — the focused app's name, icon, and accent color show in the bottom bar so you can tell at a glance what you're controlling.
-- [x] **Chrome media indicator** — the media icon tints whenever an MPRIS player is `Playing` (passive playback indicator), independent of the browser view.
+- [x] **Chrome media indicator** — the media icon sprouts a pulsing green dot whenever an MPRIS player is `Playing` (passive playback indicator), independent of the browser view.
 - [x] **Live layout editing** — edit a layout file on the desktop and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
 - [x] **Keep screen awake** while the surface is in use.
@@ -820,12 +820,16 @@ see the bottom chrome exactly as before.
 #### Passive playback indicator
 
 The media icon doubles as a glance affordance for the host's
-playback state (issue #47): it tints to the accent colour whenever
-at least one MPRIS player is `Playing`, and stays outlined
-otherwise. The icon stays useful whether or not the browser view
-is open — the indicator reflects global reality, so a phone on the
-desk reads "something is playing" at a glance without the user
-having to tap the icon and pin the view.
+playback state (issue #47): a small green dot pulses in its
+top-right corner whenever at least one MPRIS player is `Playing`,
+and disappears otherwise. The dot reads as the same "live signal"
+affordance chat apps use for recording indicators, and crucially
+doesn't compete with the cyan accent the icon takes on when the
+view is open — the two states stack cleanly when both are true.
+The icon stays useful whether or not the browser view is open —
+the indicator reflects global reality, so a phone on the desk
+reads "something is playing" at a glance without the user having
+to tap the icon and pin the view.
 
 The daemon pushes a `chrome_media` frame over the WebSocket on the
 two event types that change the indicator's meaning:

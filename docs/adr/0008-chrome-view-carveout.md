@@ -157,21 +157,26 @@ layouts. Future views plug in without daemon or protocol changes.
 ### The chrome media icon's passive state (issue #47)
 
 The carve-out also covers the media icon's *passive* playback state
-— the icon tints to the accent colour whenever at least one MPRIS
-player is `Playing`, and stays outlined otherwise. The signal is a
-new `chrome_media` daemon → client message (`{available, playing,
+— a small green dot in the icon's top-right corner pulses outward
+whenever at least one MPRIS player is `Playing`, and disappears
+otherwise. The dot reads as the same "live signal" affordance chat
+apps use for recording indicators, and deliberately doesn't compete
+with the cyan accent the icon takes on when the view is open — the
+two stack cleanly when both are true. The signal is a new
+`chrome_media` daemon → client message (`{available, playing,
 playing_count}`) the daemon emits on the two event types that change
 the indicator's meaning: `NameOwnerChanged` registration transitions
 (registration, unregistration, handoff) and `PlaybackStatus` changes
 that cross the Playing ↔ non-Playing boundary. Position / Metadata
 updates are filtered out so a 1Hz position poll doesn't flood the
 icon with redundant frames. The icon stays a single glyph; the
-change is a class toggle (`chrome-btn-playing`), not a glyph swap.
+change is a class toggle (`chrome-btn-playing`) and a CSS
+pseudo-element overlay, not a glyph swap.
 
 The indicator reflects global reality — every connected client
 receives the frame regardless of which view it has pinned — so the
 icon is useful as a glance affordance from across the room even when
 the user isn't looking at the browser. On platforms without an
-`MprisBackend` (macOS today), no frames are produced and the icon
-stays in the default outlined state, the same graceful-degradation
-stance the rest of the MPRIS surface takes.
+`MprisBackend` (macOS today), no frames are produced and the dot
+stays hidden, the same graceful-degradation stance the rest of the
+MPRIS surface takes.

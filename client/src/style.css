@@ -249,48 +249,44 @@ button:focus-visible { outline: none; }
 .chrome-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .chrome-btn-active { background: #2a333d; border-color: #3fb1d8; color: #7dd3fc; }
 
-/* Passive playback indicator (issue #47): the media icon pulses with
-   a soft halo whenever at least one MPRIS player is ``Playing``.
-   Independent of ``chrome-btn-active`` (the view-open class): the
-   indicator reflects global playback state whether or not the user
-   has the browser view pinned, so the icon stays useful as a glance
-   affordance from across the room.
+/* Passive playback indicator (issue #47): the media icon stays in
+   its idle outlined / active accent treatment (matching the rest of
+   the chrome), and a small green dot in the top-right corner pulses
+   outward whenever at least one MPRIS player is ``Playing``. The
+   dot reads as the same "live signal" affordance chat apps use for
+   recording indicators, and crucially doesn't compete with the
+   cyan accent of ``chrome-btn-active`` — the icon stays cyan when
+   the view is open, the dot independently tells you something is
+   playing, and the two stack cleanly when both are true.
 
-   The visual deliberately differs from the static accent of the
-   active-view treatment:
-     - the active class is a flat accent border + accent text colour;
-     - the playing class adds motion (a 2.4s opacity pulse) and a
-       cyan glow halo that breathes, so a user looking at the chrome
-       can tell "view is open" from "something is playing" without
-       reading the icon. The two classes coexist when the user opens
-       the view on a currently-playing session — the halo + pulse
-       layer on top of the active border without competing.
-
-   ``prefers-reduced-motion`` users (and the accessibility ticket
-   covering reduced-motion preferences — issue #62) get the static
-   accent border without the animation, keeping the affordance
-   without the motion. */
+   The dot sits on top of the icon's corner instead of replacing
+   anything, so the visual stays calm: the icon itself never moves,
+   and the only motion is a single 7px pulse on a 1.6s loop.
+   ``prefers-reduced-motion`` users (issue #62) get the static dot
+   with no animation, keeping the affordance without the motion. */
 .chrome-btn-playing {
-  color: #7dd3fc;
-  border-color: #3fb1d8;
-  background: #1a2733;
-  box-shadow: 0 0 0 1px #3fb1d8, 0 0 12px rgba(63, 177, 216, 0.45);
-  animation: chrome-media-pulse 2.4s ease-in-out infinite;
+  position: relative;
+}
+.chrome-btn-playing::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+  animation: chrome-media-dot 1.6s ease-in-out infinite;
 }
 
-@keyframes chrome-media-pulse {
-  0%, 100% {
-    box-shadow: 0 0 0 1px #3fb1d8, 0 0 8px rgba(63, 177, 216, 0.3);
-    opacity: 1;
-  }
-  50% {
-    box-shadow: 0 0 0 1px #3fb1d8, 0 0 18px rgba(63, 177, 216, 0.7);
-    opacity: 0.78;
-  }
+@keyframes chrome-media-dot {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+  50%      { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .chrome-btn-playing {
+  .chrome-btn-playing::after {
     animation: none;
   }
 }
