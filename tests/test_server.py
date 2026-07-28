@@ -855,6 +855,10 @@ async def test_start_raises_port_in_use_not_raw_oserror(tmp_path: Path) -> None:
 
     try:
         server, *_ = make_test_server(layouts_dir=tmp_path)
+        # Issue #66: the daemon's bind surface is now a list of
+        # ``_bind_specs``; reset it so the test binds exactly one
+        # address (matching the blocker) and triggers the collision.
+        server._bind_specs = ("127.0.0.1",)
         server.host = "127.0.0.1"
         server.port = busy_port
         with pytest.raises(PortInUseError) as excinfo:

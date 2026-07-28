@@ -48,8 +48,10 @@ run-daemon:
     VLC_HTTP_PASSWORD=dummy deckd --layouts-dir layouts --client-dist client/dist --verbose
 
 # Run the daemon on the LAN without a built client (use dev-client-lan for HMR).
+# Binds to 0.0.0.0 so a phone on the LAN (or Tailscale) can reach it
+# (issue #66). Token auth still gates every non-localhost connection.
 run-daemon-lan:
-    VLC_HTTP_PASSWORD=dummy deckd --host 0.0.0.0 --layouts-dir layouts --verbose
+    VLC_HTTP_PASSWORD=dummy deckd --bind 0.0.0.0 --layouts-dir layouts --verbose
 
 # Kill whatever is bound to the two ports we use: the daemon (:8765) and
 # the Vite dev server (:5173). Handy when a stale daemon still holds the
@@ -112,9 +114,9 @@ dev-daemon:
 
 # Same, but bind the daemon to all interfaces so a phone on the LAN
 # (or Tailscale) can reach it. deckd-dev forwards unknown args to the
-# child, so --host and --verbose end up on the deckd process.
+# child, so --bind and --verbose end up on the deckd process. Issue #66.
 dev-daemon-lan:
-    VLC_HTTP_PASSWORD=dummy deckd-dev --host 0.0.0.0 --verbose
+    VLC_HTTP_PASSWORD=dummy deckd-dev --bind 0.0.0.0 --verbose
 
 # Vite dev server on the LAN. Vite proxies /ws and /health to the local
 # daemon (see vite.config.ts), so the client is same-origin at :5173.
@@ -227,3 +229,27 @@ watch-focus-once:
 # Hit /health.
 status:
     deckctl status
+
+# Hit /diag (issue #70): one-shot machine-readable snapshot of the
+# daemon's focus, input, layouts, sessions, and MPRIS state. Open-auth,
+# so it works without the password. Same shape ``deckctl status``
+# uses, just on a richer endpoint.
+diag:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    deckctl diag
+
+# Hit /layouts (issue #70): enumeration of loaded layouts and safe
+# widget summaries (no action bodies).
+layouts:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    deckctl layouts
+
+# Hit /metrics (issue #71): Prometheus text-format scrape. Open-auth
+# and stdlib-only on the server side; pipe into ``head`` or
+# ``grep deckd_`` for a quick check.
+metrics:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    deckctl metrics

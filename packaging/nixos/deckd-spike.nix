@@ -7,7 +7,7 @@
 #     enable = true;
 #     user = "jono";
 #     projectDir = "/home/jono/src/deckd";
-#     lan = true;
+#     bind = [ "0.0.0.0" ];  # open to LAN; default is localhost-only
 #   };
 #
 # Before starting the service, run once from the checkout:
@@ -17,9 +17,13 @@
 
 let
   cfg = config.services.deckd-spike;
-  hostFlag = if cfg.lan then "--host 0.0.0.0" else "";
+  # Translate the operator's ``bind`` list into one ``--bind ADDR``
+  # flag per spec (issue #66). The CLI is repeatable, so a Nix
+  # listOf passes through cleanly.
+  bindFlags = lib.concatMapStringsSep " " (addr: "--bind ${addr}") cfg.bind;
   deckdStart = pkgs.writeShellScript "deckd-spike-start" ''
-    exec ${cfg.projectDir}/.venv/bin/deckd ${hostFlag} \
+    exec ${cfg.projectDir}/.venv/bin/deckd ${bindFlags} \
+      --port ${toString cfg.port} \
       --layouts ${cfg.projectDir}/layouts/default.yaml \
       --client-dist ${cfg.projectDir}/client/dist \
       --scroll-momentum-friction ${toString cfg.scrollMomentumFriction} \
@@ -43,10 +47,28 @@ in
       description = "Path to the deckd source checkout.";
     };
 
-    lan = lib.mkOption {
-      type = lib.types.bool;
-      default = false;
-      description = "Bind the daemon to 0.0.0.0 for phone/tablet testing.";
+    # Issue #66: replaces the old ``lan = bool`` flag with a richer
+    # list of bind addresses. Defaults to localhost only on both v4
+    # and v6 so a freshly installed daemon is reachable from the
+    # host but invisible on the LAN. Operators opt in to a wider
+    # surface by setting ``bind = [ "0.0.0.0" ]`` (any-address) or
+    # ``bind = [ "iface:wlan0" ]`` (single interface).
+    bind = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [ "127.0.0.1" "::1" ];
+      example = [ "0.0.0.0" ];
+      description = ''
+        Addresses to bind the daemon to. Each entry is either a
+        literal IP (v4 or v6) or ``iface:<name>`` to bind every IP
+        on the named interface. ``127.0.0.1`` + ``::1`` (localhost
+        only) is the default; ``0.0.0.0`` opens all interfaces.
+      '';
+    };
+
+    port = lib.mkOption {
+      type = lib.types.int;
+      default = 8765;
+      description = "Listen port for the daemon (issue #66).";
     };
 
     scrollMomentumFriction = lib.mkOption {

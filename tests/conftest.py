@@ -81,12 +81,23 @@ class FakeFocusBackend:
 
     def __init__(self) -> None:
         self._queue: asyncio.Queue[AppInfo] = asyncio.Queue()
+        self._initial: AppInfo | None = None
 
     async def start(self) -> None:  # mirror PlatformBackend.start no-op
         pass
 
     async def stop(self) -> None:  # mirror PlatformBackend.stop no-op
         pass
+
+    async def get_active_app(self) -> AppInfo | None:
+        """Return the seeded ``initial`` app, or ``None`` when no test
+        value was set. The daemon's :meth:`Server.run_focus_watcher`
+        awaits this once at startup.
+        """
+        return self._initial
+
+    def set_initial(self, app_info: AppInfo | None) -> None:
+        self._initial = app_info
 
     async def push(self, app_info: AppInfo) -> None:
         await self._queue.put(app_info)

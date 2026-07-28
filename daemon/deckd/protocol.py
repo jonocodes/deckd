@@ -131,8 +131,35 @@ class WidgetUpdateMessage(BaseModel):
     stale: bool = False
 
 
+class EventMessage(BaseModel):
+    """Daemon -> client push: a diagnostic event (issue #73).
+
+    Fires on focus changes, layout reloads, action attempts,
+    authentication outcomes, and MPRIS player / playback transitions.
+    The client renders nothing on receipt — the events are observability
+    fodder for an external watcher that has subscribed to this
+    session's stream.
+
+    Unknown ``name`` values are ignored on the client (clients key off
+    a switch in their message dispatcher). ``data`` is event-specific
+    and never carries the shared password or injected input.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["event"]
+    name: str = Field(min_length=1)
+    ts: float
+    data: dict
+    #: When the daemon had a correlation id for the originating
+    #: action / request, it rides along so a watcher can correlate the
+    #: event to log lines / ``/actions/recent`` entries / the
+    #: structured-log feed.
+    trace_id: str | None = None
+
+
 ServerMessage = Annotated[
-    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, ChromeMediaMessage],
+    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, ChromeMediaMessage, EventMessage],
     Field(discriminator="type"),
 ]
 
@@ -151,6 +178,13 @@ class HelloMessage(BaseModel):
     # session to the named layout regardless of host focus, so a demo device can
     # be parked on a view. Ignored if the name doesn't match a loaded layout.
     layout: str | None = None
+    # Issue #73: client-supplied correlation id. When set, every
+    # diagnostic surface touched by this session (recent-action
+    # entries, log fields, event pushes) carries this id so an AI
+    # agent can correlate the connection to its own watcher. The
+    # ``X-Deckd-Trace`` upgrade header takes precedence when both are
+    # present; absent both, the daemon mints a fresh short id.
+    trace: str | None = None
 
 
 class PressMessage(BaseModel):
@@ -264,7 +298,49 @@ class KeyMessage(BaseModel):
     combo: str
 
 
+class EnableEventsMessage(BaseModel):
+    """Client -> daemon: subscribe this session to the diagnostic event
+    stream (issue #73).
+
+    Adds the session to the server's per-session subscriber list. Until
+    the client opts in, no diagnostic events are pushed. A re-sent
+    ``enable_events`` is a no-op. ``events`` is the optional allow-list;
+    when absent, every published event name is delivered.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["enable_events"]
+    events: list[str] | None = None
+
+
+class DisableEventsMessage(BaseModel):
+    """Client -> daemon: stop the diagnostic event stream for this
+    session (issue #73). Mirrors :class:`EnableEventsMessage`."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["disable_events"]
+
+
+class MprisCommandRequest(BaseModel):
+    """Body for ``POST /mpris/{row}/command`` (issue #72).
+
+    Only ``play-pause``, ``next``, ``previous`` are dispatched to the
+    MPRIS backend — the dispatch table is intentionally small enough
+    that a bug or a typo in the wire shape can't invoke arbitrary
+    D-Bus methods. ``raise`` is accepted at the validation layer
+    (the spec's acceptance criterion mentions it) but currently
+    rejected with 400; the dispatch will land alongside MPRIS
+    Raise() support in a follow-up.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    command: Literal["play-pause", "next", "previous", "raise"]
+
+
 ClientMessage = Annotated[
-    Union[HelloMessage, PressMessage, JogMessage, JogEndMessage, PadMessage, PadTapMessage, PadDragMessage, TypeMessage, KeyMessage, MediaCommandMessage, SelectViewMessage, ClearViewMessage],
+    Union[HelloMessage, PressMessage, JogMessage, JogEndMessage, PadMessage, PadTapMessage, PadDragMessage, TypeMessage, KeyMessage, MediaCommandMessage, SelectViewMessage, ClearViewMessage, EnableEventsMessage, DisableEventsMessage],
     Field(discriminator="type"),
 ]

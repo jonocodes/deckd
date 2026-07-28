@@ -11,6 +11,7 @@ from aiohttp import web
 
 from .auth import PasswordError, default_password_path, load_or_create_password
 from .input import LoggingKeySink, LoggingScrollSink, ScrollController, UinputSink
+from .logging_setup import setup_logging
 from .platform import default_backend, default_sensor_manager
 from .media import MediaManager
 from .server import PortInUseError, Server
@@ -44,9 +45,26 @@ def _overlay_dir_for(layouts_dir: Path) -> Path:
 
 
 def main() -> None:
+    from .bind import DEFAULT_BIND
+
     parser = argparse.ArgumentParser(prog="deckd")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765)
+    parser.add_argument(
+        "--bind",
+        action="append",
+        default=None,
+        metavar="ADDR",
+        help=(
+            "Address (or 'iface:<name>') to bind the daemon to. Repeatable. "
+            "Defaults to 127.0.0.1 + ::1 (localhost only). Examples: "
+            "--bind 0.0.0.0, --bind 192.168.1.5, --bind iface:wlan0."
+        ),
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8765,
+        help="Listen port (issue #66). ``0`` asks the kernel to pick one.",
+    )
     parser.add_argument(
         "--layouts-dir",
         type=Path,
@@ -96,16 +114,43 @@ def main() -> None:
         default=20,
         help="Stop momentum when absolute velocity drops below this high-res-wheel-units/sec value",
     )
+    parser.add_argument(
+        "--log-format",
+        choices=("text", "json"),
+        default="text",
+        help="Logging output format. ``json`` is structured (one JSON object per record); ``text`` is the human-readable default.",
+    )
+    parser.add_argument(
+        "--log-file",
+        type=Path,
+        default=None,
+        help="Append logs to this path in addition to stderr (issue #70).",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
     if not 0 <= args.scroll_momentum_friction < 1:
         parser.error("--scroll-momentum-friction must be >= 0 and < 1")
 
-    logging.basicConfig(
+    setup_logging(
         level=logging.DEBUG if args.verbose else logging.INFO,
-        format="%(asctime)s %(name)s %(levelname)s %(message)s",
+        fmt=args.log_format,
     )
+    if args.log_file is not None:
+        # Issue #70: the structured-log feed should be tee'd to a
+        # file so an AI agent tailing the daemon can correlate
+        # against the metrics / events endpoints without re-running
+        # the process. The handler is added on top of the stderr
+        # handler set up by ``setup_logging``; we copy the active
+        # formatter so file output matches stderr exactly.
+        from .logging_setup import JsonFormatter
+
+        file_handler = logging.FileHandler(args.log_file)
+        file_handler.setFormatter(
+            JsonFormatter() if args.log_format == "json"
+            else logging.Formatter("%(asctime)s %(name)s %(levelname)s %(message)s")
+        )
+        logging.getLogger().addHandler(file_handler)
 
     sink: object | None
     scroll_sink: object
@@ -160,7 +205,7 @@ def main() -> None:
 
     server = Server(
         layouts_dir=args.layouts_dir,
-        host=args.host,
+        bind=args.bind if args.bind is not None else list(DEFAULT_BIND),
         port=args.port,
         scroll=ScrollController(
             sink=scroll_sink,

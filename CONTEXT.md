@@ -68,3 +68,11 @@ _Avoid_: OS adapter, backend driver
 **Client**:
 Any process that connects to the daemon over WebSocket and renders a layout. Currently: the web app (phone/tablet browser). Future: ESP32 hardware client. The daemon is agnostic to which client type is connected.
 _Avoid_: frontend, app, device
+
+**Bind**:
+The set of network addresses the daemon's HTTP/WS surface listens on. Configured via the repeatable `--bind ADDR` CLI flag (or the `bind = [...]` NixOS option). Each entry is either a literal IPv4/IPv6 address or `iface:<name>`, which expands to every usable IP on the named interface. The default is `["127.0.0.1", "::1"]` — localhost only on both stacks, so a fresh install is reachable from the host machine but invisible on the LAN. The resolved bind list is exposed on `GET /health` and `GET /diag` as `bind`, `addresses`, and `url`. See ADR-0009.
+_Avoid_: host, listen address, exposed interface
+
+**Pairing URL**:
+The single `http://<bind-host>:<port>/` URL a phone types into its browser to reach the daemon. Surfaced as the `url` field on `/health` and `/diag`, and prepended above the JSON body of `deckctl status`. Prefers IPv4 over IPv6 so a phone on a typical home LAN doesn't get a `http://[::1]:.../` link it can't resolve. The password gate still has to be cleared by every non-localhost client; the pairing URL is a convenience, not a bypass.
+_Avoid_: connection URL, daemon URL

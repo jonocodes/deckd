@@ -9,8 +9,9 @@ import logging
 import os
 import platform
 import socket
+import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Awaitable, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable, Sequence
 
 from aiohttp import WSMsgType, web
 
@@ -21,13 +22,31 @@ from .layouts import Layout, LayoutStore, load_layouts, resolve_layout
 from .media import MediaManager, MediaState, effective_art_token
 from .mpris import ChromeMediaState, DbusMprisBackend, MprisBackend, connect_mpris_backend
 from .mpris_art import resolve_mpris_art_async
+from .diagnostics import (
+    ActionRecord,
+    MprisEventRecord,
+    Metrics,
+    MprisEvents,
+    RecentActions,
+    build_diag_snapshot,
+    build_layouts_snapshot,
+    build_mpris_players_snapshot,
+)
+from .events import (
+    DiagnosticEvent,
+    EventBus,
+    correlation_id_var,
+    correlation_scope,
+    current_correlation_id,
+    new_correlation_id,
+)
 
 if TYPE_CHECKING:
     from dbus_fast import BusType as BusTypeT
     from dbus_fast.aio import MessageBus
 
     from .input import KeySink
-    from .layouts import Widget
+    from .layouts import Action, Widget
     from .platform import AppInfo, PlatformBackend, SensorManager, SensorReading
 
 from . import PASSWORD_HEADER
@@ -103,6 +122,29 @@ def _widget_uses_source(widget: "Widget", source: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
+def _action_primitive(action: "Action | None") -> tuple[str, str | None]:
+    """Map a layout :class:`Action` to ``(primitive, command_text)``.
+
+    Used to populate the recent-action ring buffer and the
+    ``action`` diagnostic event. The returned text is the raw
+    shell/dbus/key value (kept on the local ring only — never
+    serialized on the wire or emitted in an event). ``"press"``
+    is the fallback for an action with no recognised primitive
+    so the metric counter still increments.
+    """
+    if action is None:
+        return "press", None
+    if action.shell is not None:
+        return "shell", action.shell
+    if action.terminal:
+        return "terminal", None
+    if action.key is not None:
+        return "key", action.key
+    if action.dbus is not None:
+        return "dbus", action.dbus
+    return "press", None
+
+
 def _hostname() -> str:
     try:
         return socket.gethostname()
@@ -130,6 +172,98 @@ def _desktop_env() -> str:
     return "unknown"
 
 
+def _url_host_for_log(bind: "ResolvedBind") -> str:
+    """Format a bind address for log lines / URLs.
+
+    IPv6 literals are bracketed so ``http://[::1]:8765/`` reads as
+    one URL, not four ambiguous colons. Issue #66.
+    """
+    return f"[{bind.host}]" if bind.is_ipv6 else bind.host
+
+
+def _open_bind_sockets(
+    binds: list["ResolvedBind"], port: int
+) -> list[socket.socket]:
+    """Pre-create one listening socket per resolved bind.
+
+    All sockets share the same port. When ``port=0`` the kernel
+    assigns an ephemeral port to the first socket, and we re-bind
+    the rest to that exact port — otherwise ``/diag`` would report
+    different ports per address and a phone couldn't pair.
+
+    IPv6 sockets use ``IPV6_V6ONLY`` so a single socket can serve
+    IPv4-mapped IPv6 if needed; we always open separate v4/v6
+    sockets to keep the listener clear and the diagnostic output
+    honest.
+
+    Issue #66. Returns ``[]`` when every socket fails — the caller
+    surfaces the error.
+    """
+    opened: list[socket.socket] = []
+    actual_port: int | None = None
+    failed_host: str | None = None
+    for bind in binds:
+        family = bind.family
+        # Strip the trailing ``%iface`` scope so socket.bind doesn't
+        # reject it; bind only needs the address.
+        host = bind.host
+        try:
+            sock = socket.socket(family, socket.SOCK_STREAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            if family == socket.AF_INET6:
+                sock.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 1)
+            sock.bind((host, actual_port if actual_port is not None else port))
+            sock.listen(128)
+        except OSError as exc:
+            sock.close()
+            if exc.errno == errno.EADDRINUSE:
+                # The first bind against the operator's explicit
+                # port hit a busy one — surface it to the caller
+                # which will raise ``PortInUseError`` with the host
+                # and port that collided. After that, a per-socket
+                # EADDRINUSE is unexpected (we're using the same
+                # port that just succeeded), so just warn and skip.
+                if actual_port is None:
+                    for s in opened:
+                        s.close()
+                    failed_host = host
+                    break
+                log.warning("bind on %s:%d failed: %s", host, port, exc)
+                continue
+            log.warning("bind on %s:%d failed: %s", host, port, exc)
+            continue
+        # Lock the port after the first socket succeeds so every
+        # subsequent bind uses the same number (whether the
+        # operator specified one or the kernel picked one).
+        if actual_port is None:
+            actual_port = int(sock.getsockname()[1])
+        opened.append(sock)
+    if not opened and failed_host is not None:
+        # Stash the failing host on the exception so the caller can
+        # turn it into a ``PortInUseError``. We deliberately raise a
+        # plain ``OSError`` with ``errno=EADDRINUSE`` to keep the
+        # contract simple.
+        raise OSError(
+            errno.EADDRINUSE, f"bind {failed_host}:{port} address already in use"
+        )
+    return opened
+
+
+def _match_resolved(binds: list["ResolvedBind"], host: str) -> "ResolvedBind":
+    """Find the ``ResolvedBind`` whose ``host`` matches ``sockname``.
+
+    Used by :meth:`Server.start` to label ``SockSite`` records with
+    the originating bind spec so the log line keeps ``iface:wlan0``
+    semantics. Falls back to the first bind if nothing matches —
+    better than raising in a startup code path.
+    """
+    host = host.split("%", 1)[0]
+    for b in binds:
+        if b.host == host:
+            return b
+    return binds[0]
+
+
 class Session:
     """Per-WebSocket-connection state."""
 
@@ -146,13 +280,58 @@ class Session:
         # the client's ``select_view`` message; cleared by ``clear_view``.
         # Per-session because the chrome icon's affordance is per-client.
         self.view: str | None = None
+        # Diagnostic-event subscription (issue #73). ``None`` until the
+        # client sends ``enable_events``; a list of event names acts as
+        # an allow-list (empty list means "no events"). The session's
+        # ``events_unsub`` is the bus callback that forwards events to
+        # this client.
+        self.events_enabled: list[str] | None = None
+        self.events_unsub: Callable[[], None] | None = None
+        # Correlation id for this session. Set on connect (from the
+        # hello ``trace`` field, an ``X-Deckd-Trace`` header, or a
+        # generated UUID) and reused for every diagnostic surface that
+        # touches this session — recent-action entries, log fields,
+        # and event pushes carry the id.
+        self.trace_id: str | None = None
 
     @property
     def app_id(self) -> str:
         return self.server.current_app_id
 
     async def send(self, message: p.ServerMessage) -> None:
-        await self.ws.send_json(message.model_dump())
+        # Issue #73: when the message carries a ``trace_id`` (currently
+        # only :class:`p.EventMessage`), stamp this session's id on so
+        # the client can correlate the wire frame back to the
+        # diagnostic surfaces. Other message kinds have no ``trace_id``
+        # field and ride through unchanged.
+        payload = message.model_dump()
+        if isinstance(message, p.EventMessage) and self.trace_id:
+            payload.setdefault("trace_id", self.trace_id)
+        await self.ws.send_json(payload)
+
+    async def send_event(self, event: DiagnosticEvent) -> None:
+        """Push a diagnostic event to this session if subscribed.
+
+        Respects the per-session allow-list (``events_enabled``) and
+        silently drops events the session didn't opt into. Never raises
+        — a dead connection is already torn down by ``push_current``'s
+        caller.
+        """
+        if self.events_enabled is None:
+            return
+        if self.events_enabled and event.name not in self.events_enabled:
+            return
+        msg = p.EventMessage(
+            type="event",
+            name=event.name,
+            ts=event.ts,
+            data=event.data,
+            trace_id=event.correlation_id,
+        )
+        try:
+            await self.send(msg)
+        except (ConnectionResetError, RuntimeError, ConnectionError):
+            pass
 
     async def push_current(self) -> None:
         layout = self.server.current_layout
@@ -233,8 +412,9 @@ class Server:
         self,
         *,
         layouts_dir: Path,
-        host: str,
-        port: int,
+        host: str | None = None,
+        port: int = 8765,
+        bind: Sequence[str] | None = None,
         scroll: ScrollController | None = None,
         key_sink: "KeySink | None" = None,
         dbus_bus_factory: "Callable[[BusTypeT], MessageBus] | None" = None,
@@ -251,7 +431,25 @@ class Server:
         # ``None``/empty disables auth entirely (every connection is treated
         # as authorized). When set, every client must present it.
         self.password = password or None
-        self.host = host
+        # Bind addresses (issue #66). ``bind`` is the modern knob:
+        # a list of address specs (``127.0.0.1``, ``::1``, ``iface:wlan0``,
+        # …). ``host``/``port`` is the legacy single-address shortcut
+        # kept so existing tests and the spike module keep working; if
+        # ``bind`` is supplied it wins and ``host`` is ignored.
+        from .bind import parse_bind_specs
+
+        if bind is not None:
+            self._bind_specs: tuple[str, ...] = parse_bind_specs(bind)
+        elif host is not None:
+            self._bind_specs = parse_bind_specs([host])
+        else:
+            self._bind_specs = parse_bind_specs(None)
+        # ``self.host`` is kept as the first bind's literal address
+        # so legacy code paths (``PortInUseError``, the start-up log
+        # line, anything that reads ``server.host`` directly) keep
+        # working. The full list lives on ``self._bind_resolved`` once
+        # ``start()`` has run.
+        self.host = self._bind_specs[0]
         self.port = port
         self.app = web.Application()
         # The ``/mpris/<row>/art`` proxy uses an injectable resolver so
@@ -261,6 +459,17 @@ class Server:
         self._mpris_art_resolver: Callable[[str | None], Awaitable[tuple[str, bytes] | None]] = (
             mpris_art_resolver or resolve_mpris_art_async
         )
+        # Diagnostic surface (issue #70/71/72/73). Constructed before
+        # ``_setup_routes`` so the route handlers can reference the
+        # metrics / event bus / ring buffers they read from.
+        self.metrics = Metrics()
+        self.events = EventBus()
+        self.recent_actions = RecentActions()
+        self.mpris_events = MprisEvents()
+        self._started_at = self.metrics.uptime_started_at
+        self._last_focus: "AppInfo | None" = None
+        self._focus_started_ok: bool | None = None
+        self._focus_platform: str | None = None
         self._setup_routes()
         self._sessions: set[Session] = set()
         self.layouts: LayoutStore = load_layouts(layouts_dir, overlay_dir)
@@ -290,9 +499,49 @@ class Server:
         # without going through the 1-second media-pump tick.
         if self.mpris is not None:
             self.mpris.set_chrome_media_listener(self._on_chrome_media_change)
+            # Diagnostic ring buffer of MPRIS events (issue #72).
+            # The backend's ``NameOwnerChanged`` and
+            # ``PropertiesChanged`` handlers call this hook; we
+            # translate each into a small redacted event so the
+            # ``/mpris/events/recent`` endpoint can show a timeline
+            # without the watcher needing a live bus.
+            self.mpris.set_diagnostic_listener(self._on_mpris_diagnostic_event)
         self.scroll = scroll if scroll is not None else ScrollController()
         self.key_sink = key_sink
         self.dbus_bus_factory = dbus_bus_factory
+        # Wrap the supplied ``dbus_bus_factory`` so every ``bus.call()``
+        # is timed and the result is recorded on ``self.metrics``. The
+        # wrapper preserves the original factory's signature and bus
+        # object identity so tests that hand-roll a fake factory
+        # (``FakeDbusBusFactory``) keep working unchanged — the
+        # ``call()`` they patch still gets observed.
+        if dbus_bus_factory is not None:
+            from dbus_fast.message import Message as DbusMessage
+
+            original_factory = dbus_bus_factory
+
+            def _timing_factory(bus_type: "BusTypeT") -> "MessageBus":
+                bus = original_factory(bus_type)
+                original_call = bus.call
+
+                async def _timed_call(message: "DbusMessage") -> "DbusMessage":
+                    import asyncio
+                    start = asyncio.get_event_loop().time()
+                    try:
+                        return await original_call(message)
+                    finally:
+                        self.metrics.record_dbcall(
+                            asyncio.get_event_loop().time() - start
+                        )
+
+                # ``bus.call`` accepts a single ``Message`` at runtime;
+                # reassigning the bound method to a wrapper is the
+                # least-bad way to instrument latency from outside
+                # dbus_fast.
+                bus.call = _timed_call  # type: ignore[method-assign,assignment]
+                return bus
+
+            self.dbus_bus_factory = _timing_factory
         self.focus_backend = focus_backend
         self._focus_task: asyncio.Task[None] | None = None
         self._layouts_task: asyncio.Task[None] | None = None
@@ -310,6 +559,12 @@ class Server:
         self.sensors: "SensorManager | None" = sensor_manager
         self._subscribed_sources: set[str] = set()
         self.media = media_manager
+        # ``UinputSink`` is a private class (see input.py) so duck-type
+        # on the device attribute; anything else counts as the
+        # ``LoggingKeySink`` fallback (issue #70 ``input`` block).
+        self.metrics.uinput_available = (
+            1 if (key_sink is not None and hasattr(key_sink, "_device")) else 0
+        )
 
     # -- layout state --------------------------------------------------------
 
@@ -336,10 +591,12 @@ class Server:
         the next push tells the client to render an error state instead of
         the grid. Callers should not have to catch anything.
         """
+        self.metrics.layout_reload_total += 1
         try:
             new_store = load_layouts(self.layouts_dir, self.overlay_dir)
         except SystemExit as exc:
             self._current_error = str(exc)
+            self.metrics.layout_error_total += 1
             log.error("layout reload failed (keeping last-good): %s", exc)
             return
         self.layouts = new_store
@@ -350,6 +607,7 @@ class Server:
             new_layout = self.layouts.default()
         self._current_layout = new_layout
         self._current_error = None
+        self.metrics.layout_reload_ok_total += 1
         # A layout reload can change which meter sources the active
         # layout uses (a meter added in the new YAML, an old one
         # removed). Reconcile subscriptions so the manager polls only
@@ -360,6 +618,26 @@ class Server:
             "reloaded layouts from %s%s",
             self.layouts_dir,
             f" + {self.overlay_dir}" if self.overlay_dir else "",
+        )
+        # Issue #73: emit a diagnostic event so subscribers see the
+        # reload. The ``data`` is the directory pair so an AI agent can
+        # correlate the reload to the user-edited file.
+        asyncio.create_task(
+            self.events.emit(
+                DiagnosticEvent(
+                    name="layout_reload",
+                    ts=time.time(),
+                    data={
+                        "dir": str(self.layouts_dir),
+                        "overlay_dir": str(self.overlay_dir)
+                        if self.overlay_dir
+                        else None,
+                        "current_app_id": self._current_app_id,
+                        "ok": True,
+                    },
+                    correlation_id=current_correlation_id(),
+                )
+            )
         )
 
     async def _push_to_all(self) -> None:
@@ -398,8 +676,10 @@ class Server:
         return title.lower() == "deckd"
 
     async def _on_focus(self, app: "AppInfo") -> None:
+        self._last_focus = app
         if self._is_deckd_window(app):
             self._deckd_window_focused = True
+            self.metrics.focus_deckd_window_guard_total += 1
             log.debug("holding layout; deckd client window focused (%s)", app)
             return
         self._deckd_window_focused = False
@@ -409,6 +689,7 @@ class Server:
         new_app_id = new_layout.id
         if new_app_id == self._current_app_id and new_layout is self._current_layout:
             return
+        self.metrics.focus_events_total += 1
         log.info("focus -> %s (layout=%s)", app, new_app_id)
         self._current_app_id = new_app_id
         self._current_layout = new_layout
@@ -419,6 +700,27 @@ class Server:
         self._sync_sensor_subscriptions()
         self._sync_media_subscriptions()
         await self._push_to_all()
+        # Issue #73: emit a diagnostic event so subscribers see the
+        # focus change. The data is intentionally redacted to the
+        # match tokens the layout resolver consumes (``app_id`` /
+        # ``wm_class``); ``title`` and ``pid`` ride along but no
+        # passwords / typed input.
+        asyncio.create_task(
+            self.events.emit(
+                DiagnosticEvent(
+                    name="focus_change",
+                    ts=time.time(),
+                    data={
+                        "app_id": app.app_id,
+                        "wm_class": app.wm_class,
+                        "title": app.title,
+                        "pid": app.pid,
+                        "new_layout_id": new_app_id,
+                    },
+                    correlation_id=current_correlation_id(),
+                )
+            )
+        )
 
     async def run_focus_watcher(self) -> None:
         """Long-running task: react to focus changes from the backend.
@@ -439,6 +741,10 @@ class Server:
         if self.focus_backend is None:
             return
         backend = self.focus_backend
+        self._focus_platform = (
+            getattr(backend, "platform", None)
+            or getattr(backend, "_platform", None)
+        )
         try:
             await backend.start()
         except Exception as exc:
@@ -447,7 +753,9 @@ class Server:
                 log.warning("focus backend start failed: %s (hint: %s)", exc, hint)
             else:
                 log.warning("focus backend start failed: %s", exc)
+            self._focus_started_ok = False
             return
+        self._focus_started_ok = True
         try:
             initial = await backend.get_active_app()
         except Exception as exc:
@@ -778,6 +1086,53 @@ class Server:
             return
         asyncio.create_task(self._broadcast_chrome_media(state))
 
+    def _on_mpris_diagnostic_event(
+        self, kind: str, row_id: str | None, data: dict[str, object]
+    ) -> None:
+        """Backend diagnostic listener (issue #72).
+
+        Appends one :class:`MprisEventRecord` to the server's bounded
+        ring buffer. Also increments the matching
+        :class:`Metrics` counters so ``/metrics`` reflects the bus
+        activity without needing to scan the ring buffer.
+        """
+        if kind == "player_added":
+            self.metrics.mpris_player_added_total += 1
+        elif kind == "player_removed":
+            self.metrics.mpris_player_removed_total += 1
+        elif kind == "playback_changed":
+            self.metrics.mpris_playback_changed_total += 1
+        elif kind == "metadata_changed":
+            self.metrics.mpris_metadata_changed_total += 1
+        elif kind == "command":
+            pass  # command counter is incremented at the route layer
+        elif kind == "dbus_error":
+            self.metrics.mpris_dbus_error_total += 1
+        elif kind == "art_error":
+            self.metrics.mpris_art_errors_total += 1
+        self.mpris_events.add(
+            MprisEventRecord(ts=time.time(), kind=kind, row_id=row_id, data=data)
+        )
+        # Issue #73: also emit a ``DiagnosticEvent`` so the WebSocket
+        # event stream (``subscribe_to_events``) sees MPRIS changes,
+        # not just the bounded ring buffer. ``data`` carries the same
+        # row id + structured payload as the ring entry, redacted
+        # upstream by the backend (no secret / typed input).
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        asyncio.create_task(
+            self.events.emit(
+                DiagnosticEvent(
+                    name="mpris",
+                    ts=time.time(),
+                    data={"kind": kind, "row_id": row_id, **data},
+                    correlation_id=current_correlation_id(),
+                )
+            )
+        )
+
     async def _broadcast_chrome_media(self, state: "ChromeMediaState") -> None:
         """Push a ``ChromeMediaMessage`` to every connected session.
 
@@ -892,7 +1247,37 @@ class Server:
     def _http_authorized(self, req: web.Request) -> bool:
         if not self._auth_required:
             return True
-        return self._check_password(req.headers.get(PASSWORD_HEADER))
+        ok = self._check_password(req.headers.get(PASSWORD_HEADER))
+        if not ok:
+            self.metrics.http_auth_failures_total += 1
+            self._publish_auth_event(
+                "http_rejected", reason="bad_password", path=req.path
+            )
+        return ok
+
+    def _publish_auth_event(self, name: str, **data: object) -> None:
+        """Issue #73: emit an ``auth`` event when a credentials check fails.
+
+        Subscribed sessions can watch the auth failure stream without
+        having to scrape the metrics counter. The ``reason`` field
+        always rides along; ``path`` rides for HTTP rejections. The
+        event is fire-and-forget — no session alive when it fires
+        simply doesn't get it.
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        asyncio.create_task(
+            self.events.emit(
+                DiagnosticEvent(
+                    name="auth",
+                    ts=time.time(),
+                    data={"outcome": name, **data},
+                    correlation_id=current_correlation_id(),
+                )
+            )
+        )
 
     async def _authenticate_ws(self, ws: web.WebSocketResponse) -> dict | None:
         """Read the first frame and require it to be a ``hello`` carrying the
@@ -909,8 +1294,12 @@ class Server:
         except json.JSONDecodeError:
             return None
         if data.get("type") != "hello":
+            self.metrics.ws_auth_failures_total += 1
+            self._publish_auth_event("ws_rejected", reason="bad_hello_frame")
             return None
         if not self._check_password(data.get("password")):
+            self.metrics.ws_auth_failures_total += 1
+            self._publish_auth_event("ws_rejected", reason="bad_password")
             return None
         return data
 
@@ -939,6 +1328,15 @@ class Server:
     def _setup_routes(self) -> None:
         self.app.router.add_get("/ws", self._ws_handler)
         self.app.router.add_get("/health", self._health)
+        # Diagnostic surface (issue #70). Read-only, unauthenticated
+        # (matches ``/health``'s posture — no secret leak; cross-origin
+        # friendly for the dev client). The route handler builds the
+        # snapshot from the server's live state on every request, so
+        # there is no stale-cache failure mode.
+        self.app.router.add_get("/diag", self._diag)
+        self.app.router.add_get("/layouts", self._layouts_list)
+        self.app.router.add_get("/actions/recent", self._actions_recent)
+        self.app.router.add_get("/metrics", self._metrics)
         self.app.router.add_post("/reload", self._reload)
         self.app.router.add_post("/layout/{layout_id}", self._set_layout)
         # Album-art proxy. Deliberately unauthenticated (art is low-value and
@@ -955,28 +1353,248 @@ class Server:
         # low-value; the proxy's only safety constraint is the one
         # above (the row id is the only thing the URL is keyed on).
         self.app.router.add_get("/mpris/{row_id}/art", self._mpris_art)
+        # MPRIS diagnostic endpoints (issue #72). Players and recent
+        # events stay read-only and unauthenticated; ``POST .../command``
+        # is gated the same as ``/reload`` — the command list is the
+        # validated small set the wire protocol already accepts, so
+        # nothing arbitrary can be invoked.
+        self.app.router.add_get("/mpris/players", self._mpris_players)
+        self.app.router.add_get("/mpris/events/recent", self._mpris_events_recent)
+        self.app.router.add_post("/mpris/{row_id}/command", self._mpris_command)
 
     async def _health(self, _req: web.Request) -> web.Response:
         # The one endpoint left open when auth is on: the web client's
         # Settings panel fetches /health for host-identity diagnostics
         # (often before the user has entered the password), and unlike
         # /reload and /layout it neither mutates state nor injects input.
-        # The only exposure is hostname/OS/desktop/session-count.
+        # The only exposure is hostname/OS/desktop/session-count plus
+        # the bind surface (issue #66) so a phone pairing in via the
+        # same machine can read the URL it should hit.
         #
         # On the Vite dev path (:5173 -> :8765) that fetch is cross-origin,
         # so the browser needs an explicit allow header or it drops the
         # response; ``*`` is fine for a read-only diagnostic.
-        return web.json_response(
-            {
-                "ok": True,
-                "sessions": len(self._sessions),
-                "app": self._current_app_id,
-                "hostname": _hostname(),
-                "os": _os_pretty(),
-                "desktop": _desktop_env(),
-            },
+        from .bind import ResolvedBind, url_for as _bind_url_for
+
+        binds = self._bound_addresses(_req)
+        port = self._bound_port(_req)
+        # Rebuild ResolvedBind records from ``(host, port)`` pairs so
+        # ``url_for`` can apply its IPv4-over-IPv6 preference. The
+        # family is detected from the address itself — the daemon
+        # never needs an explicit AF_INET6 flag because bind
+        # resolution already collapsed v4 vs v6 into the host string.
+        family_lookup = {
+            "127.0.0.1": socket.AF_INET,
+            "0.0.0.0": socket.AF_INET,
+        }
+        resolved_for_url = [
+            ResolvedBind(
+                host=host,
+                family=family_lookup.get(host, socket.AF_INET6 if ":" in host else socket.AF_INET),
+                original=self._bind_specs[i] if i < len(self._bind_specs) else host,
+            )
+            for i, (host, _) in enumerate(binds)
+        ]
+        body = {
+            "ok": True,
+            "sessions": len(self._sessions),
+            "app": self._current_app_id,
+            "hostname": _hostname(),
+            "os": _os_pretty(),
+            "desktop": _desktop_env(),
+            # ``bind`` is the operator-configured bind surface
+            # (``127.0.0.1``, ``::1``, ``iface:wlan0``, …) — what
+            # they asked for, not what got resolved. ``addresses`` is
+            # the post-resolution ``[host:port, …]`` list. ``url`` is
+            # a single pairing URL pointing at the preferred bind
+            # (IPv4 wins; IPv6 only when nothing else is bound).
+            "bind": list(self._bind_specs),
+            "addresses": [f"{_url_host_for_log(b)}:{port}" for b in resolved_for_url],
+            "url": _bind_url_for(resolved_for_url, port),
+        }
+        return web.json_response(body, headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    async def _diag(self, req: web.Request) -> web.Response:
+        # Issue #70: read-only snapshot of every subsystem that
+        # affects a button press or layout switch. Mirrors ``/health``'s
+        # open-auth stance (no secret leak — host identity, focus, input
+        # sink, layouts, sessions, tasks, MPRIS). The dict is built
+        # fresh on every request; intentionally no caching, so a user
+        # watching with ``watch -n1 curl`` sees live values.
+        self.metrics.sessions_active = len(self._sessions)
+        # Resolve the actually-bound port at request time. ``self.port``
+        # holds the configured value; a daemon launched with ``--port 0``
+        # gets a real port from ``site.start()`` and updates it in
+        # place. The runner check covers tests that go through
+        # ``aiohttp.test_utils.TestServer`` and never call ``start()``;
+        # those surface the runner's bound port via ``self._runner``.
+        # The request-transport fallback handles TestServer, which has
+        # its own runner and never sets ``self._runner``.
+        bound_port = self._bound_port(req)
+        body = await build_diag_snapshot(
+            server=self, started_at=self._started_at, bound_port=bound_port
+        )
+        return web.json_response(body, headers={"Access-Control-Allow-Origin": "*"})
+
+    def _bound_port(self, req: web.Request | None = None) -> int:
+        """The port the daemon is actually listening on.
+
+        Tries the runner first (production path: ``start()`` updates
+        ``self.port``), then falls back to the aiohttp runner's
+        first ``SockSite``/``TCPSite`` for the ``TestServer`` path,
+        then to the request transport's ``getsockname()``. ``self.port``
+        itself is the final fallback.
+        """
+        # ``_bind_resolved`` is the post-start source of truth (issue
+        # #66) and contains the actually-listening port already.
+        resolved = getattr(self, "_bind_resolved", None)
+        if resolved:
+            return self.port
+        runner = getattr(self, "_runner", None)
+        if runner is not None and getattr(runner, "sites", None):
+            # ``AppRunner.sites`` is a ``set`` — index access isn't
+            # valid. Sort by the underlying socket's ``getsockname``
+            # so the diagnostic output is deterministic.
+            for site in runner.sites:
+                try:
+                    abstract_server = site._server  # type: ignore[attr-defined]
+                    sockets = (
+                        getattr(abstract_server, "sockets", None)
+                        if abstract_server is not None
+                        else None
+                    )
+                    if sockets:
+                        return int(sockets[0].getsockname()[1])
+                except Exception:  # pragma: no cover -- defensive
+                    continue
+        if req is not None:
+            try:
+                sock = req.transport.get_extra_info("sockname")  # type: ignore[union-attr]
+                if sock:
+                    return int(sock[1])
+            except Exception:
+                pass
+        return self.port
+
+    def _bound_addresses(self, req: web.Request | None = None) -> list[tuple[str, int]]:
+        """The ``(host, port)`` tuples the daemon is currently bound to.
+
+        Returns the resolved bind list after ``start()`` has run.
+        Falls back to ``(self.host, self._bound_port(req))`` when the
+        runner isn't wired yet (TestServer fixtures, ``/health``
+        before ``start()`` returns). The ``req`` argument lets the
+        fallback path learn the actually-listening port from the
+        request's transport when ``self.port`` is still ``0``.
+
+        Issue #66: this is what ``/health`` and ``/diag`` surface so
+        operators can confirm the listening surface matches what
+        they configured.
+        """
+        resolved = getattr(self, "_bind_resolved", None)
+        if resolved:
+            return [(b.host, self.port) for b, _ in resolved]
+        return [(self.host, self._bound_port(req))]
+
+    async def _layouts_list(self, _req: web.Request) -> web.Response:
+        # Issue #70: enumeration of every loaded layout with safe
+        # widget summaries (id, kind, label, grid, has_action, plus
+        # per-kind fields that don't expose raw shell/dbus strings).
+        body = build_layouts_snapshot(self.layouts)
+        return web.json_response(body, headers={"Access-Control-Allow-Origin": "*"})
+
+    async def _actions_recent(self, req: web.Request) -> web.Response:
+        # Issue #70: bounded history of the most recent action
+        # attempts. The wire entries never carry the action's command
+        # text (a typed-string ``type:`` injection could leak keystrokes
+        # via this route); ``/actions/recent`` exposes only ids and
+        # outcomes so an AI agent can answer "did the press happen?"
+        # without seeing the payload.
+        try:
+            limit = int(req.query.get("limit", "64"))
+        except ValueError:
+            limit = 64
+        records = self.recent_actions.snapshot(limit)
+        body = {"ok": True, "events": [r.to_wire() for r in records]}
+        return web.json_response(body, headers={"Access-Control-Allow-Origin": "*"})
+
+    async def _metrics(self, _req: web.Request) -> web.Response:
+        # Issue #71: Prometheus text-format scrape target. The renderer
+        # is intentionally stdlib-only (the format is one page; adding
+        # a client library would pull a multiprocess mode that doesn't
+        # apply to a single-process daemon). Counters live on the
+        # Server's ``metrics`` attribute; tests can construct one and
+        # call ``render()`` directly.
+        self.metrics.sessions_active = len(self._sessions)
+        body = self.metrics.render()
+        return web.Response(
+            text=body,
+            content_type="text/plain",
+            charset="utf-8",
             headers={"Access-Control-Allow-Origin": "*"},
         )
+
+    async def _mpris_players(self, _req: web.Request) -> web.Response:
+        # Issue #72: read-only enumeration of discovered MPRIS players
+        # with redacted state and metadata. ``art_url`` itself never
+        # leaves the daemon (the proxy resolves it). Mirrors
+        # ``/health``'s open-auth stance.
+        body = await build_mpris_players_snapshot(self.mpris)
+        return web.json_response(body, headers={"Access-Control-Allow-Origin": "*"})
+
+    async def _mpris_events_recent(self, req: web.Request) -> web.Response:
+        # Issue #72: bounded history of MPRIS subsystem events.
+        try:
+            limit = int(req.query.get("limit", "64"))
+        except ValueError:
+            limit = 64
+        records = self.mpris_events.snapshot(limit)
+        body = {"ok": True, "events": [r.to_wire() for r in records]}
+        return web.json_response(body, headers={"Access-Control-Allow-Origin": "*"})
+
+    async def _mpris_command(self, req: web.Request) -> web.Response:
+        # Issue #72: dispatch a validated MPRIS command to the named
+        # row. Auth-gated (``X-Deckd-Password``) like ``/reload``. The
+        # command list is the literal set the wire protocol accepts
+        # (``play-pause`` / ``next`` / ``previous`` / ``raise``); anything
+        # else is a 400, so a bug in a caller can't invoke an arbitrary
+        # D-Bus method. ``raise`` is reserved for future MPRIS Raise()
+        # support and currently returns 400 (no-op).
+        if not self._http_authorized(req):
+            self.metrics.http_auth_failures_total += 1
+            return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
+        if self.mpris is None:
+            return web.json_response({"ok": False, "error": "no MPRIS backend"}, status=503)
+        row_id = req.match_info["row_id"]
+        try:
+            payload = p.MprisCommandRequest.model_validate(await req.json() or {})
+        except Exception as exc:
+            return web.json_response(
+                {"ok": False, "error": f"invalid body: {exc}"}, status=400
+            )
+        if payload.command == "raise":
+            # Kept in the model on purpose; the spec's acceptance
+            # criterion mentions ``raise`` so callers sending the
+            # literal get a meaningful ``400`` instead of a 422 from
+            # pydantic. Will land in a follow-up alongside the
+            # MPRIS Raise() support ticket.
+            return web.json_response(
+                {"ok": False, "error": "raise not implemented"}, status=400
+            )
+        trace = req.headers.get("X-Deckd-Trace") or new_correlation_id()
+        with correlation_scope(trace):
+            try:
+                await self.mpris.send_command(row_id, payload.command)
+                self.metrics.record_mpris_command(payload.command, ok=True)
+                return web.json_response(
+                    {"ok": True, "row_id": row_id, "command": payload.command}
+                )
+            except Exception as exc:
+                self.metrics.record_mpris_command(payload.command, ok=False)
+                log.warning("MPRIS command %s on %s failed: %s", payload.command, row_id, exc)
+                return web.json_response(
+                    {"ok": False, "error": repr(exc)}, status=502
+                )
 
     async def _media_art(self, req: web.Request) -> web.StreamResponse:
         widget = self._find_widget(req.match_info["widget_id"])
@@ -1080,6 +1698,13 @@ class Server:
         # layout. The authenticating ``hello`` frame is consumed here;
         # subsequent frames flow through the normal dispatch loop.
         session = Session(ws, self)
+        # Issue #73: bind a correlation id for the lifetime of this
+        # connection. The ``trace`` field on a hello frame (or the
+        # ``X-Deckd-Trace`` header on the upgrade) lets the client
+        # supply its own; absent that we mint a fresh short id. The id
+        # rides on every diagnostic surface touched by the connection
+        # — recent-action entries, log fields, and event pushes.
+        trace = req.headers.get("X-Deckd-Trace")
         if self._auth_required:
             hello = await self._authenticate_ws(ws)
             if hello is None:
@@ -1106,6 +1731,25 @@ class Server:
             # Auth consumed the hello, so apply its demo pin before the initial
             # push. (No-auth clients' hellos arrive via _dispatch instead.)
             self._pin_session(session, hello)
+            if isinstance(hello, dict):
+                if not trace and isinstance(hello.get("trace"), str):
+                    trace = hello["trace"]
+        if not trace:
+            trace = new_correlation_id()
+        session.trace_id = trace
+        token = correlation_id_var.set(trace)
+        try:
+            await self._ws_loop(req, ws, session)
+        finally:
+            correlation_id_var.reset(token)
+            if session.events_unsub is not None:
+                session.events_unsub()
+                session.events_unsub = None
+        return ws
+
+    async def _ws_loop(
+        self, req: web.Request, ws: web.WebSocketResponse, session: Session
+    ) -> None:
         self._sessions.add(session)
         log.info(
             "client connected (%d, app=%s)", len(self._sessions), self._current_app_id
@@ -1134,12 +1778,19 @@ class Server:
         finally:
             self._sessions.discard(session)
             log.info("client disconnected (%d remaining)", len(self._sessions))
-        return ws
 
     async def _dispatch(self, session: Session, data: dict) -> None:
         msg_type = data.get("type")
         if msg_type == "hello":
             log.info("client hello (token=%s)", bool(data.get("token")))
+            # Issue #73: the no-auth path receives the hello here
+            # (after the initial push). A client-supplied ``trace``
+            # field becomes the session's id; absent it the daemon
+            # keeps the id minted at connect time.
+            trace = data.get("trace")
+            if isinstance(trace, str) and trace:
+                session.trace_id = trace
+                correlation_id_var.set(trace)
             # No-auth path: the hello arrives here (after the initial push), so
             # applying a demo pin needs a re-push to switch this client over.
             if self._pin_session(session, data):
@@ -1194,7 +1845,9 @@ class Server:
                     await self.mpris.send_command(
                         media_command.id.removeprefix("mpris."), media_command.command
                     )
+                    self.metrics.record_mpris_command(media_command.command, ok=True)
                 except Exception as exc:
+                    self.metrics.record_mpris_command(media_command.command, ok=False)
                     log.warning("MPRIS command %s failed: %s", media_command.command, exc)
                 return
             widget = self._find_widget(media_command.id)
@@ -1230,9 +1883,50 @@ class Server:
             session.view = None
             await session.push_current()
             return
+        if msg_type == "enable_events":
+            enable = p.EnableEventsMessage.model_validate(data)
+            session.events_enabled = enable.events or []
+            if session.events_unsub is None:
+                async def _forward(event: DiagnosticEvent) -> None:
+                    await session.send_event(event)
+
+                session.events_unsub = self.events.subscribe(_forward)
+            return
+        if msg_type == "disable_events":
+            if session.events_unsub is not None:
+                session.events_unsub()
+                session.events_unsub = None
+            session.events_enabled = None
+            return
         if msg_type != "press":
             log.debug("ignoring %s", msg_type)
             return
+        await self._dispatch_press(session, data)
+
+    def _injection_blocked(self, what: str) -> bool:
+        if not self._deckd_window_focused:
+            return False
+        log.info("[guard] dropping %r; deckd window focused", what)
+        # Issue #70/73: track guard-dropped outcomes so the agent can
+        # tell "button pressed but suppressed because the user focused
+        # the chrome window" apart from "button pressed and ran". A
+        # single recent-actions record per drop keeps the ring-buffer
+        # cost bounded.
+        self.metrics.record_action("press", "guard_dropped")
+        self.recent_actions.add(
+            ActionRecord(
+                ts=time.time(),
+                layout_id=self._current_app_id,
+                widget_id=str(what)[:64],
+                primitive="press",
+                outcome="guard_dropped",
+                command_text=None,
+                error=None,
+            )
+        )
+        return True
+
+    async def _dispatch_press(self, session: Session, data: dict) -> None:
         press = p.PressMessage.model_validate(data)
         widget = self._find_widget(press.id)
         action_widget_id = press.id
@@ -1243,6 +1937,18 @@ class Server:
                 action_widget_id = control
         if widget is None:
             log.warning("press for unknown widget id=%s", press.id)
+            self.metrics.record_action("press", "no_widget")
+            self.recent_actions.add(
+                ActionRecord(
+                    ts=time.time(),
+                    layout_id=self._current_app_id,
+                    widget_id=press.id,
+                    primitive="press",
+                    outcome="no_widget",
+                    command_text=None,
+                    error="unknown widget id",
+                )
+            )
             return
         ctx = ActionContext(
             send_layout=session.push_current,
@@ -1254,6 +1960,7 @@ class Server:
         if action_widget_id in {"previous", "next", "volume_up", "volume_down"}:
             action = getattr(widget, f"{action_widget_id}_action")
             if action is None:
+                self.metrics.record_action("press", "skipped")
                 return
             original = widget.action
             widget.action = action
@@ -1262,13 +1969,39 @@ class Server:
             finally:
                 widget.action = original
             return
+        # Issue #70/73: record every press in the recent-actions ring
+        # and bump the action metric. The primitive / outcome fields
+        # let ``/actions/recent`` answer "which shell/dbus/key was
+        # attempted" without grepping logs.
+        action = widget.action
+        primitive, command_text = _action_primitive(action)
+        self.metrics.record_action(primitive, "ok")
+        self.recent_actions.add(
+            ActionRecord(
+                ts=time.time(),
+                layout_id=self._current_app_id,
+                widget_id=widget.id,
+                primitive=primitive,
+                outcome="ok",
+                command_text=command_text,
+                error=None,
+            )
+        )
+        asyncio.create_task(
+            self.events.emit(
+                DiagnosticEvent(
+                    name="action",
+                    ts=time.time(),
+                    data={
+                        "widget_id": widget.id,
+                        "layout_id": self._current_app_id,
+                        "primitive": primitive,
+                    },
+                    correlation_id=current_correlation_id(),
+                )
+            )
+        )
         await run_action(widget, ctx)
-
-    def _injection_blocked(self, what: str) -> bool:
-        if not self._deckd_window_focused:
-            return False
-        log.info("[guard] dropping %r; deckd window focused", what)
-        return True
 
     def _find_widget(self, widget_id: str) -> Widget | None:
         for w in self._current_layout.widgets:
@@ -1277,17 +2010,71 @@ class Server:
         return None
 
     async def start(self) -> None:
+        from .bind import ResolvedBind, resolve_bind
+
+        # Issue #66: resolve the bind specs into one ``TCPSite`` per
+        # address. ``iface:wlan0`` may expand to multiple addresses
+        # (one IPv4 + one IPv6 link-local); each becomes its own site
+        # so the socket layer is the gate the AC refers to
+        # ("An attempt to connect from a non-bound interface is
+        # refused at the socket level").
+        resolved = resolve_bind(self._bind_specs)
         runner = web.AppRunner(self.app, access_log=None)
         await runner.setup()
-        site = web.TCPSite(runner, self.host, self.port)
+        # Open one socket per resolved bind so they all share the
+        # same port (kernel-assigned when ``port=0``). ``TCPSite``
+        # with the default ``port=0`` lets each site pick its own
+        # ephemeral port, which would mean ``/diag`` reports
+        # different ports for IPv4 and IPv6 — useless for pairing.
+        # Pre-binding the socket ourselves gives us control.
         try:
-            await site.start()
+            server_sockets = _open_bind_sockets(resolved, self.port)
         except OSError as exc:
+            await runner.cleanup()
             if exc.errno == errno.EADDRINUSE:
-                await runner.cleanup()
-                raise PortInUseError(self.host, self.port) from exc
+                raise PortInUseError(resolved[0].host, self.port) from exc
             raise
-        log.info("listening on http://%s:%d (ws=%s/ws)", self.host, self.port, self.host)
+        if not server_sockets:
+            await runner.cleanup()
+            raise OSError(
+                errno.EADDRINUSE,
+                f"could not bind any of: {', '.join(self._bind_specs)}:{self.port}",
+            )
+        # All sockets share the same port (we either used the
+        # operator's ``self.port`` literally, or the first socket's
+        # kernel-assigned port). ``_open_bind_sockets`` already
+        # pulled the port from the first socket.
+        actual_port = int(server_sockets[0].getsockname()[1])
+        if actual_port != self.port:
+            self.port = actual_port
+        opened: list[tuple[ResolvedBind, web.TCPSite]] = []
+        for sock in server_sockets:
+            site = web.SockSite(runner, sock)
+            try:
+                await site.start()
+            except OSError as exc:
+                if exc.errno == errno.EADDRINUSE:
+                    await runner.cleanup()
+                    raise PortInUseError(sock.getsockname()[0], self.port) from exc
+                raise
+            host, _port, *_ = sock.getsockname()
+            # Match back to the originating ``ResolvedBind`` by host
+            # so the log line keeps ``iface:wlan0`` semantics.
+            bind = _match_resolved(resolved, host)
+            opened.append((bind, site))
+        self._bind_resolved = opened
+        # The log line lists every bound address so operators can
+        # see the bind surface at a glance. ``socket.AF_INET6``
+        # addresses are bracketed so the URL is unambiguous.
+        addresses = ", ".join(
+            f"http://{_url_host_for_log(b)}:{self.port}/" for b, _ in opened
+        )
+        log.info(
+            "listening on %s (ws=%s/ws); bind specs: %s",
+            addresses,
+            _url_host_for_log(opened[0][0]),
+            ", ".join(self._bind_specs),
+        )
         self._runner = runner
         # Open the MPRIS session bus before the pump task wakes up,
         # so the first iteration's ``row_ids()`` sees live state

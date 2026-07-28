@@ -349,7 +349,7 @@ The right-side jogstrip stays available for scrolling while you're pointing.
 - **Focus guard.** Injected keystrokes land on whatever window has desktop focus. If that's the deckd client itself (you opened the client on the same machine as the daemon), the daemon drops `type` / `key` messages rather than feed the client's own input back into itself.
 - **Physical keyboards.** A Bluetooth keyboard paired to the phone works through the `keydown` path with no extra setup.
 
-> ⚠️ **Security.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. Every client authenticates with a shared password (see [Client auth](#client-auth)) unless the daemon is started with `--no-auth`. The password is a single shared secret over a plaintext WebSocket, not per-user auth or transport encryption — still expose the daemon (`--host 0.0.0.0`) only on a network you trust, ideally a Tailscale tailnet, and put TLS in front of it if the link isn't already private. (Auth is enforced from the `hello` message, so it holds up behind a proxy — a TLS terminator or the Vite dev proxy — without any `X-Forwarded-For` trust.)
+> ⚠️ **Security.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. Every client authenticates with a shared password (see [Client auth](#client-auth)) unless the daemon is started with `--no-auth`. The password is a single shared secret over a plaintext WebSocket, not per-user auth or transport encryption — still expose the daemon (`--bind 0.0.0.0`) only on a network you trust, ideally a Tailscale tailnet, and put TLS in front of it if the link isn't already private. (Auth is enforced from the `hello` message, so it holds up behind a proxy — a TLS terminator or the Vite dev proxy — without any `X-Forwarded-For` trust.)
 
 
 
@@ -640,6 +640,36 @@ Every client authenticates with a single shared password. There is **no** source
 - **Rotation** is out of scope: edit the file and restart the daemon.
 
 The password is a shared secret over a plaintext WebSocket — it gates access, it does not encrypt the link. Keep the daemon on a trusted network (see the security note above).
+
+### Bind scope (issue #66)
+
+By default the daemon binds to **localhost only** (`127.0.0.1` + `::1`) — a fresh install is reachable from the host machine but invisible on the LAN even before the password gate is configured. To expose it to a phone, a tailnet, or another host, repeat `--bind` with the addresses you want it to listen on:
+
+```sh
+# LAN opt-in: bind to every interface on the IPv4 stack. The password
+# gate still has to be passed by every non-localhost client.
+deckd --bind 0.0.0.0
+
+# Tailnet only: bind to a single Tailscale IP, not the whole LAN.
+deckd --bind 100.64.0.1
+
+# Bind to every IP on a specific interface (handles DHCP
+# re-assignments without editing the command). The name must exist.
+deckd --bind iface:wlan0
+
+# Mixed: localhost + a tailnet address, repeated --bind.
+deckd --bind 127.0.0.1 --bind ::1 --bind 100.64.0.1
+```
+
+Each spec is either a literal IPv4/IPv6 address or `iface:<name>` (every usable IP on that interface). The CLI rejects typos and unknown interfaces at startup — no silent fallback. All bound sockets share one port (`--port 8765` by default; `0` asks the kernel for an ephemeral one).
+
+The active bind surface is exposed for tooling:
+
+- `GET /health` returns `bind`, `addresses`, and `url` (the preferred pairing URL — IPv4 wins, IPv6 only when nothing else is bound).
+- `GET /diag` mirrors the same fields for AI-assisted debugging.
+- `deckctl status` prints the pairing URL above the JSON.
+
+The NixOS spike module (`services.deckd-spike`) takes a list-shaped `bind` option (default `[ "127.0.0.1" "::1" ]`) and translates each entry into a `--bind` flag.
 
 ### Per-platform overlay
 

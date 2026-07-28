@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Callable, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -232,6 +232,27 @@ class MprisBackend(Protocol):
         """
         ...
 
+    def set_diagnostic_listener(
+        self, listener: "Callable[[str, str | None, dict[str, Any]], None] | None"
+    ) -> None:
+        """Register a callback fired on every backend-internal event
+        (issue #72).
+
+        ``listener`` is invoked synchronously from the same task that
+        processes the originating signal (a NameOwnerChanged /
+        PropertiesChanged handler, or a method called from the
+        ``send_command`` path). The arguments are
+        ``(kind, row_id, data)``; ``kind`` is one of ``"player_added"``,
+        ``"player_removed"``, ``"playback_changed"``,
+        ``"metadata_changed"``, ``"command"``, ``"dbus_error"``,
+        ``"art_error"``. ``data`` is event-specific, redacted, and
+        must not contain the shared password or arbitrary URLs.
+
+        ``None`` unregisters the listener. Default is no listener so a
+        backend that doesn't care about diagnostics stays quiet.
+        """
+        ...
+
 
 @dataclass(frozen=True)
 class ChromeMediaState:
@@ -296,12 +317,27 @@ class FakeMprisBackend(MprisBackend):
         # entries here. Keys are row suffixes, values are the raw URL
         # the proxy would serve (``file://…``, ``https://…``, ``data:…``).
         self.art_urls: dict[str, str] = {}
+        # Diagnostic listener (issue #72). The default no-op keeps
+        # tests that don't care about the diagnostic ring buffer out
+        # of the wiring.
+        self._diagnostic_listener: Callable[[str, str | None, dict[str, Any]], None] | None = None
 
     def row_ids(self) -> list[str]:
         return list(self.states)
 
     async def read_state(self, row_id: str) -> MediaState | None:
-        return self.states.get(row_id)
+        state = self.states.get(row_id)
+        if state is None:
+            return None
+        # Mirror the real backend: art_url rides on the same
+        # MediaState so the snapshot helper sees the art flag
+        # without a second lookup. ``dataclasses.replace`` keeps the
+        # state frozen while letting tests inject art URLs without
+        # rebuilding the whole state.
+        art_url = self.art_urls.get(row_id)
+        if art_url is not None and state.art_url != art_url:
+            return replace(state, art_url=art_url)
+        return state
 
     async def send_command(self, row_id: str, command: str) -> None:
         self.commands.append((row_id, command))
@@ -327,6 +363,18 @@ class FakeMprisBackend(MprisBackend):
         correctly ignored by the reducer.
         """
         return compute_chrome_media(self.row_ids(), self.states)
+
+    def set_diagnostic_listener(
+        self, listener: Callable[[str, str | None, dict[str, Any]], None] | None
+    ) -> None:
+        self._diagnostic_listener = listener
+
+    def _emit_diagnostic(
+        self, kind: str, row_id: str | None, data: dict[str, Any]
+    ) -> None:
+        listener = self._diagnostic_listener
+        if listener is not None:
+            listener(kind, row_id, data)
 
 
 class DbusMprisBackend(MprisBackend):
@@ -395,6 +443,23 @@ class DbusMprisBackend(MprisBackend):
         self, listener: Callable[[ChromeMediaState], None] | None
     ) -> None:
         self._chrome_media_listener = listener
+
+    def set_diagnostic_listener(
+        self, listener: Callable[[str, str | None, dict[str, Any]], None] | None
+    ) -> None:
+        # Issue #72: the daemon's diagnostics module listens for
+        # player-add/remove/playback/metadata transitions and writes
+        # them to a bounded ring buffer the ``/mpris/events/recent``
+        # endpoint exposes. ``None`` unregisters (tests that don't
+        # exercise the path stay quiet).
+        self._diagnostic_listener = listener
+
+    def _emit_diagnostic(
+        self, kind: str, row_id: str | None, data: dict[str, Any]
+    ) -> None:
+        listener = getattr(self, "_diagnostic_listener", None)
+        if listener is not None:
+            listener(kind, row_id, data)
 
     def _emit_chrome_media(self) -> None:
         """Snapshot the chrome-media state and fire the listener.
@@ -601,10 +666,18 @@ class DbusMprisBackend(MprisBackend):
             )
         except Exception as exc:
             log.warning("AddMatch %r failed: %s", rule, exc)
+            self._emit_diagnostic(
+                "dbus_error", None, {"op": "AddMatch", "error": repr(exc)}
+            )
             return
         if reply is not None and reply.message_type == MessageType.ERROR:
             log.warning(
                 "AddMatch %r returned error: %s", rule, getattr(reply, "body", None)
+            )
+            self._emit_diagnostic(
+                "dbus_error",
+                None,
+                {"op": "AddMatch", "error": getattr(reply, "body", None)},
             )
 
     def _on_message(self, message: Any) -> None:
@@ -675,6 +748,23 @@ class DbusMprisBackend(MprisBackend):
         if new_owner and suffix not in self._owned_names:
             self._owned_names.append(suffix)
             self._owners[suffix] = new_owner
+            self._emit_diagnostic("player_added", suffix, {"owner": new_owner})
+        elif old_owner and suffix in self._owned_names:
+            # Pure remove (no re-add); the else branch above only
+            # covers the re-add case, so a true removal still needs
+            # its event.
+            self._emit_diagnostic(
+                "player_removed", suffix, {"old_owner": old_owner}
+            )
+        elif new_owner and suffix in self._owned_names:
+            # Handoff: same suffix, new owner. Counts as a player
+            # change for the diagnostic timeline even though the
+            # chrome-media debounce is intentionally quiet on it.
+            self._emit_diagnostic(
+                "player_added",
+                suffix,
+                {"owner": new_owner, "handoff": True},
+            )
         # Issue #47: every ``NameOwnerChanged`` registration transition
         # (registration, unregistration, handoff) flips the chrome icon's
         # ``available`` bit, so emit regardless of direction.
@@ -724,6 +814,23 @@ class DbusMprisBackend(MprisBackend):
                 # observable behaviour and keeps the wire quiet.
                 if previous_playing != next_playing:
                     self._emit_chrome_media()
+                    self._emit_diagnostic(
+                        "playback_changed",
+                        row_id,
+                        {"playing": self._states[row_id].playing},
+                    )
+                elif "Metadata" in changed:
+                    # Track metadata transitions separately so the
+                    # diagnostic timeline reflects track skips without
+                    # duplicating chrome-media frames.
+                    self._emit_diagnostic(
+                        "metadata_changed",
+                        row_id,
+                        {
+                            "title": self._states[row_id].title,
+                            "artist": self._states[row_id].artist,
+                        },
+                    )
                 return
 
     async def read_state(self, row_id: str) -> MediaState | None:
@@ -869,6 +976,7 @@ class DbusMprisBackend(MprisBackend):
                     member=method,
                 )
             )
+            self._emit_diagnostic("command", row_id, {"command": command})
         except Exception as exc:
             log.warning(
                 "MPRIS %s.%s on %s failed: %s",
@@ -876,6 +984,11 @@ class DbusMprisBackend(MprisBackend):
                 method,
                 row_id,
                 exc,
+            )
+            self._emit_diagnostic(
+                "dbus_error",
+                row_id,
+                {"command": command, "error": repr(exc)},
             )
 
 
