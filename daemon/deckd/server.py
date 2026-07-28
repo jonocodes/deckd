@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Awaitable, Callable, Sequence
 from aiohttp import WSMsgType, web
 
 from . import protocol as p
-from .actions import ActionContext, execute as run_action
+from .actions import ActionContext, MacroOutcome, execute as run_action
 from .input import ScrollController, parse_key_combo, text_to_combos
 from .layouts import Layout, LayoutStore, load_layouts, resolve_layout
 from .media import MediaManager, MediaState, effective_art_token
@@ -122,16 +122,18 @@ def _widget_uses_source(widget: "Widget", source: str) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _action_primitive(action: "Action | None") -> tuple[str, str | None]:
-    """Map a layout :class:`Action` to ``(primitive, command_text)``.
+def _action_primitive(action: "Action | None", macro: "Macro | None" = None) -> tuple[str, str | None]:
+    """Map a widget to ``(primitive, command_text)``.
 
     Used to populate the recent-action ring buffer and the
-    ``action`` diagnostic event. The returned text is the raw
-    shell/dbus/key value (kept on the local ring only — never
-    serialized on the wire or emitted in an event). ``"press"``
-    is the fallback for an action with no recognised primitive
-    so the metric counter still increments.
+    ``action`` diagnostic event. When the widget has a macro, the
+    primitive is ``"macro"`` and the command text is the step count.
+    For single actions the primitive is ``shell`` / ``key`` /
+    ``dbus`` / ``terminal``; ``"press"`` is the fallback.
     """
+    from .layouts import Macro
+    if macro is not None:
+        return "macro", f"{len(macro.steps)} steps"
     if action is None:
         return "press", None
     if action.shell is not None:
@@ -1974,7 +1976,8 @@ class Server:
         # let ``/actions/recent`` answer "which shell/dbus/key was
         # attempted" without grepping logs.
         action = widget.action
-        primitive, command_text = _action_primitive(action)
+        macro = widget.macro
+        primitive, command_text = _action_primitive(action, macro)
         self.metrics.record_action(primitive, "ok")
         self.recent_actions.add(
             ActionRecord(
@@ -2001,7 +2004,30 @@ class Server:
                 )
             )
         )
-        await run_action(widget, ctx)
+        outcome = await run_action(widget, ctx)
+        if isinstance(outcome, MacroOutcome) and outcome.outcome != "ok":
+            self.metrics.record_action(primitive, outcome.outcome)
+            self.recent_actions.add(
+                ActionRecord(
+                    ts=time.time(),
+                    layout_id=self._current_app_id,
+                    widget_id=widget.id,
+                    primitive=primitive,
+                    outcome=outcome.outcome,
+                    command_text=command_text,
+                    error=outcome.error,
+                )
+            )
+        if outcome is not None:
+            result_msg = p.MacroResultMessage(
+                type="macro_result",
+                id=widget.id,
+                outcome=outcome.outcome,
+                failed_step=outcome.failed_step,
+                error=outcome.error,
+            )
+            with contextlib.suppress(ConnectionResetError, RuntimeError, ConnectionError):
+                await session.send(result_msg)
 
     def _find_widget(self, widget_id: str) -> Widget | None:
         for w in self._current_layout.widgets:

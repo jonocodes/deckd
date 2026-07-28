@@ -55,6 +55,22 @@ class MetricSpec(BaseModel):
 
 MediaControl = Literal["play", "previous", "next", "volume", "position", "speed"]
 
+MacroStepType = Literal["key", "shell", "dbus", "delay"]
+
+
+class MacroStep(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: MacroStepType
+    value: str = Field(min_length=1)
+
+
+class Macro(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    steps: list[MacroStep] = Field(min_length=1)
+    continue_on_error: bool = False
+
 
 class MediaHttp(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -78,6 +94,7 @@ class Widget(BaseModel):
     # input, so no sanitisation is needed.
     color: str | None = None
     action: "Action | None" = None
+    macro: "Macro | None" = None
     # ``meter`` widgets bind to a daemon-side :class:`SensorSource` by
     # name (e.g. ``cpu_percent``). The daemon pushes ``WidgetUpdateMessage``
     # frames for every meter widget in the active layout whose source

@@ -120,6 +120,18 @@ export type ServerChromeMedia = {
  * got the shared password wrong (issue #16); the socket is closed straight
  * after. The client swaps in the password prompt. */
 export type ServerError = { type: "error"; reason: string };
+/** Sent by the daemon after a macro completes. ``outcome`` is ``ok`` when
+ * every step ran; ``failed-at-step`` means a step failed and the macro
+ * stopped (``continue_on_error`` was false, or there is no more steps).
+ * ``failed_step`` is the zero-based index of the step that failed, or
+ * ``null`` on success. */
+export type ServerMacroResult = {
+  type: "macro_result";
+  id: string;
+  outcome: "ok" | "failed-at-step";
+  failed_step: number | null;
+  error: string | null;
+};
 export type ServerMessage =
   | ServerLayout
   | ServerState
@@ -127,6 +139,7 @@ export type ServerMessage =
   | ServerWidgetUpdate
   | MediaState
   | ServerChromeMedia
+  | ServerMacroResult
   | ServerError;
 
 export type ClientHello = {

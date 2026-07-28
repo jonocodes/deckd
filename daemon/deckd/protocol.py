@@ -158,8 +158,18 @@ class EventMessage(BaseModel):
     trace_id: str | None = None
 
 
+class MacroResultMessage(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["macro_result"]
+    id: str
+    outcome: Literal["ok", "failed-at-step"]
+    failed_step: int | None = Field(default=None, ge=0)
+    error: str | None = None
+
+
 ServerMessage = Annotated[
-    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, ChromeMediaMessage, EventMessage],
+    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, ChromeMediaMessage, EventMessage, MacroResultMessage],
     Field(discriminator="type"),
 ]
 

@@ -5,9 +5,9 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Awaitable, Callable
+from typing import TYPE_CHECKING, Awaitable, Callable, Literal
 
-from .layouts import Action, Widget
+from .layouts import Action, Macro, MacroStep, Widget
 
 if TYPE_CHECKING:
     from dbus_fast import BusType as BusTypeT
@@ -63,11 +63,13 @@ class ActionContext:
 async def execute(
     widget: Widget,
     ctx: ActionContext,
-) -> None:
+) -> MacroOutcome | None:
+    if widget.macro is not None:
+        return await execute_macro(widget.macro, ctx)
     action = widget.action
     if action is None:
         log.debug("widget %s has no action; ignoring", widget.id)
-        return
+        return None
     if action.shell is not None:
         await _run_shell(action.shell)
     elif action.terminal is not None:
@@ -79,6 +81,7 @@ async def execute(
     else:
         log.warning("widget %s action has no recognised primitive: %s",
                     widget.id, action)
+    return None
 
 
 async def _run_shell(command: str) -> None:
@@ -304,4 +307,130 @@ async def _dispatch_dbus(
                 bus.disconnect()
             except Exception as exc:
                 log.debug("[dbus] disconnect error: %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# Macro execution
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class MacroOutcome:
+    outcome: Literal["ok", "failed-at-step"]
+    failed_step: int | None = None
+    error: str | None = None
+
+
+async def execute_macro(macro: Macro, ctx: ActionContext) -> MacroOutcome:
+    steps = macro.steps
+    for i, step in enumerate(steps):
+        try:
+            await _run_step(step, ctx)
+        except Exception as exc:
+            err = f"{type(exc).__name__}: {exc}"
+            log.warning("macro step %d failed: %s", i, err)
+            if macro.continue_on_error:
+                continue
+            return MacroOutcome("failed-at-step", i, err)
+    return MacroOutcome("ok")
+
+
+_StepFunc = Callable[[MacroStep, ActionContext], Awaitable[None]]
+
+
+_STEP_DISPATCH: dict[str, _StepFunc] = {}
+
+
+def _register(kind: str) -> Callable[[_StepFunc], _StepFunc]:
+    def decorator(func: _StepFunc) -> _StepFunc:
+        _STEP_DISPATCH[kind] = func
+        return func
+    return decorator
+
+
+async def _run_step(step: MacroStep, ctx: ActionContext) -> None:
+    handler = _STEP_DISPATCH.get(step.type)
+    if handler is None:
+        raise ValueError(f"unknown macro step type: {step.type!r}")
+    await handler(step, ctx)
+
+
+@_register("delay")
+async def _step_delay(step: MacroStep, _ctx: ActionContext) -> None:
+    try:
+        ms = int(step.value)
+    except ValueError:
+        raise ValueError(f"invalid delay value: {step.value!r}, expected milliseconds as integer") from None
+    if ms < 0:
+        raise ValueError(f"delay must be non-negative, got {ms}")
+    await asyncio.sleep(ms / 1000)
+
+
+@_register("shell")
+async def _step_shell(step: MacroStep, _ctx: ActionContext) -> None:
+    log.info("[macro shell] %s", step.value)
+    await asyncio.create_subprocess_shell(
+        step.value,
+        stdin=asyncio.subprocess.DEVNULL,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+        start_new_session=True,
+    )
+
+
+@_register("key")
+async def _step_key(step: MacroStep, ctx: ActionContext) -> None:
+    from .input import parse_key_combo
+
+    keycodes = parse_key_combo(step.value)
+    if not keycodes:
+        raise ValueError(f"key value {step.value!r} parsed to empty keycode list")
+    sink = ctx.key_sink
+    if sink is not None:
+        sink.emit_key(keycodes)
+        log.info("[macro key] keycodes=%s", keycodes)
+    else:
+        log.info("[macro key log] keycodes=%s (no sink wired)", keycodes)
+
+
+@_register("dbus")
+async def _step_dbus(step: MacroStep, ctx: ActionContext) -> None:
+    factory = ctx.dbus_bus_factory
+    if factory is None:
+        raise RuntimeError("no D-Bus bus factory wired")
+    parsed = _parse_dbus_action(step.value)
+    bus = factory(parsed.bus_type)
+    try:
+        await bus.connect()
+        from dbus_fast.message import Message
+
+        reply = await bus.call(
+            Message(
+                destination=parsed.destination,
+                path=parsed.path,
+                interface=parsed.interface,
+                member=parsed.method,
+                body=parsed.args or [],
+            )
+        )
+        from dbus_fast import MessageType
+
+        if reply is not None and reply.message_type == MessageType.ERROR:
+            raise RuntimeError(
+                f"D-Bus {parsed.interface}.{parsed.method} on "
+                f"{parsed.destination} returned error: {reply.body}"
+            )
+        log.info(
+            "[macro dbus] %s.%s on %s@%s args=%s",
+            parsed.interface,
+            parsed.method,
+            parsed.destination,
+            parsed.path,
+            parsed.args,
+        )
+    finally:
+        try:
+            bus.disconnect()
+        except Exception as exc:
+            log.debug("[macro dbus] disconnect error: %s", exc)
 
