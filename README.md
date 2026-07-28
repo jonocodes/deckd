@@ -41,16 +41,22 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 
 - [x] **Automatic per-app layouts** — focus a window on the desktop and the phone's browser flips to that app's buttons automatically.
 - [x] **Buttons** that fire keystrokes, shell commands, launch a terminal, or call D-Bus methods.
+- [x] **Macros** — chain multiple actions in a single button press, with delays and optional continue-on-error.
 - [x] **Button styling** — bundled icons (Lucide glyphs + Simple Icons brand logos) and per-button background colours, set in YAML.
 - [x] **Scroll strip** — an always-on right-side jogstrip to scroll the focused window, with release momentum.
 - [x] **Manual control mode** — the phone becomes a trackpad (move, tap, right-click, drag-lock) and a keyboard, so you can type into and point at the focused app for the things layouts don't cover (URL bars, chat boxes, ad-hoc commands).
 - [x] **App badge** — the focused app's name, icon, and accent color show in the bottom bar so you can tell at a glance what you're controlling.
 - [x] **Chrome media indicator** — the media icon sprouts a pulsing green dot whenever an MPRIS player is `Playing` (passive playback indicator), independent of the browser view.
+- [x] **MPRIS media browser** — browse and control any MPRIS-compatible player (Spotify, Firefox, VLC, etc.) from a dedicated chrome view, with album art, per-row transport controls, and now-playing metadata.
+- [x] **VLC media widgets** — full VLC control surface with play/pause, seek, volume, album art. Configurable art sources (VLC embedded art + iTunes fallback).
+- [x] **Live sensor widgets** — meter and stats widgets pushed to the client in real time (CPU %, memory %, etc.), bound to daemon-side sensor sources.
 - [x] **Live layout editing** — edit a layout file on the desktop and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
 - [x] **Keep screen awake** while the surface is in use.
 - [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
 - [x] **Password auth** — every client authenticates with a shared password (on by default; `--no-auth` disables it for local development). See [Client auth](#client-auth).
+- [x] **LAN scope control** — bind the daemon to a specific network interface (`--bind iface:wlan0`) or literal address; defaults to localhost-only for safety.
+- [x] **Accessibility** — keyboard navigation, visible focus ring, screen-reader landmarks and live announcements, larger controls, high contrast, and reduced motion.
 - [x] **Runs on Linux: GNOME (Wayland), KDE Plasma (Wayland), X11**
 - [x] **Runs on MacOS (barely tested)**
 
@@ -59,8 +65,6 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [ ] **Screensaver & suspend sync** — dim/lock the surface when the desktop sleeps.
 - [ ] **One-step NixOS install** — a production module instead of the current spike.
 - [ ] **Multiple simultaneous clients** with per-device layouts and resolutions.
-- [ ] **Dashboard widgets** — live readouts pushed from the desktop (CPU temp, media state, etc.).
-- [ ] **On-screen keyboard / custom widget kinds** — richer controls beyond buttons and strips.
 - [ ] **Soundboard** — trigger sound clips from the deck.
 - [ ] **Raise or switch to an already-running app** from the controller.
 - [ ] **Multi-daemon chooser** — pair and pick between several desktops.
