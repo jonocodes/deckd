@@ -6,6 +6,7 @@ import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
 import { ManualControl } from "./ManualControl";
 import { MediaBrowserCell } from "./MediaBrowserCell";
+import { Tooltip } from "./Tooltip";
 import { PasswordGate } from "./PasswordGate";
 import { Settings } from "./Settings";
 import { useMeterStore } from "./meter-store";
@@ -330,27 +331,33 @@ export function App() {
           <span className="connection-dot" />
           <span className="connection-label">{statusLabel}</span>
         </span>
-        <button
-          className={`chrome-btn${view === "trackpad" ? " chrome-btn-active" : ""}`}
-          aria-label="manual control"
-          onPointerDown={() => setView(view === "trackpad" ? "layout" : "trackpad")}
-        >
-          <PointerIcon size={18} />
-        </button>
-        <button
-          className={`chrome-btn${view === "mediabrowser" ? " chrome-btn-active" : ""}${chromeMedia?.playing ? " chrome-btn-playing" : ""}`}
-          aria-label="media browser"
-          onPointerDown={toggleMediaBrowser}
-        >
-          <MusicIcon size={18} />
-        </button>
-        <button
-          className={`chrome-btn${view === "settings" ? " chrome-btn-active" : ""}`}
-          aria-label="settings"
-          onPointerDown={() => setView(view === "settings" ? "layout" : "settings")}
-        >
-          <SettingsIcon size={18} />
-        </button>
+        <Tooltip label="manual control">
+          <button
+            className={`chrome-btn${view === "trackpad" ? " chrome-btn-active" : ""}`}
+            aria-label="manual control"
+            onPointerDown={() => setView(view === "trackpad" ? "layout" : "trackpad")}
+          >
+            <PointerIcon size={18} />
+          </button>
+        </Tooltip>
+        <Tooltip label="media browser">
+          <button
+            className={`chrome-btn${view === "mediabrowser" ? " chrome-btn-active" : ""}${chromeMedia?.playing ? " chrome-btn-playing" : ""}`}
+            aria-label="media browser"
+            onPointerDown={toggleMediaBrowser}
+          >
+            <MusicIcon size={18} />
+          </button>
+        </Tooltip>
+        <Tooltip label="settings">
+          <button
+            className={`chrome-btn${view === "settings" ? " chrome-btn-active" : ""}`}
+            aria-label="settings"
+            onPointerDown={() => setView(view === "settings" ? "layout" : "settings")}
+          >
+            <SettingsIcon size={18} />
+          </button>
+        </Tooltip>
       </footer>
     </div>
   );

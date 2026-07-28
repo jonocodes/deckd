@@ -1482,3 +1482,54 @@ button:focus-visible { outline: none; }
   margin-left: 2px;
 }
 
+
+/* ---------------------------------------------------------------------
+   Accessible tooltip (issue #59).
+   The floating element sits above its host button, centred, with a
+   small arrow. Positioning is via the host's bounding rect so the
+   tooltip can sit outside any local overflow context. The actual
+   positioning is done via inline styles in Tooltip.tsx; this rule
+   block styles the tooltip's appearance only. */
+
+.tooltip-floating {
+  position: fixed;
+  z-index: 1000;
+  /* Centre horizontally above the trigger; default offset is
+     pushed up by ~8px so the arrow visually connects. */
+  transform: translate(-50%, calc(-100% - 8px));
+  background: #f4f6fa;
+  color: #14181d;
+  border: 1px solid #cdd3dc;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+  /* Subtle fade-in — disabled under prefers-reduced-motion (issue
+     #62) so users who opt out of motion don't see the animation. */
+  animation: tooltip-fade-in 120ms ease-out;
+}
+
+@keyframes tooltip-fade-in {
+  from { opacity: 0; transform: translate(-50%, calc(-100% - 4px)); }
+  to   { opacity: 1; transform: translate(-50%, calc(-100% - 8px)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tooltip-floating { animation: none; }
+}
+
+@media (prefers-contrast: more) {
+  /* Same intent as the rest of the chrome: bump border + drop
+     shadow so the tooltip stays readable in high-contrast mode. */
+  .tooltip-floating {
+    background: #ffffff;
+    color: #000000;
+    border: 2px solid #000000;
+    box-shadow: none;
+  }
+}

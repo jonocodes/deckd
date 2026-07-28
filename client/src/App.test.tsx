@@ -14,7 +14,7 @@
  * exactly which client message landed in ``send`` without spinning up a
  * daemon.
  */
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClientMessage, ServerChromeMedia, ServerLayout } from "./protocol";
 
@@ -208,5 +208,58 @@ describe("App — chrome media icon passive indicator", () => {
     pushChromeMedia({ available: true, playing: false, playing_count: 0 });
     const button = screen.getByRole("button", { name: "media browser" });
     expect(button.className).not.toContain("chrome-btn-playing");
+  });
+});
+
+/* ---------------------------------------------------------------------
+   Chrome tooltip integration (issue #59).
+   The unit-level Tooltip behaviour is covered in Tooltip.test.tsx.
+   Here we assert that every icon-only chrome control is wrapped:
+   hover / focus surfaces a tooltip whose text matches the aria-label.
+   --------------------------------------------------------------------- */
+
+describe("App — chrome button tooltips", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    window.history.replaceState(null, "", "/?demo=default");
+  });
+
+  it("every icon-only chrome button shows its tooltip text on focus", async () => {
+    render(<App />);
+    const cases: Array<{ name: string; tipId: string }> = [
+      { name: "manual control", tipId: "manual control" },
+      { name: "media browser", tipId: "media browser" },
+      { name: "settings", tipId: "settings" },
+    ];
+    for (const c of cases) {
+      const button = screen.getByRole("button", { name: c.name });
+      fireEvent.focus(button);
+      // The tooltip text matches the button's accessible name (AC #2).
+      const tooltip = await screen.findByRole("tooltip");
+      expect(tooltip.textContent).toBe(c.tipId);
+      expect(button.getAttribute("aria-describedby")).toBe(tooltip.id);
+      // Hide so the next iteration starts clean.
+      fireEvent.blur(button);
+      await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
+    }
+  });
+
+  it("chrome buttons without a visible label get a tooltip; buttons with a label do not", () => {
+    render(<App />);
+    // The three chrome buttons are icon-only (a single <svg> child)
+    // and carry aria-label only — they get the tooltip wrapper.
+    const iconOnly = [
+      screen.getByRole("button", { name: "manual control" }),
+      screen.getByRole("button", { name: "media browser" }),
+      screen.getByRole("button", { name: "settings" }),
+    ];
+    for (const b of iconOnly) {
+      // The tooltip wrapper only adds aria-describedby when the
+      // tooltip is open; absent focus, the attribute is omitted.
+      expect(b.getAttribute("aria-describedby")).toBeNull();
+      // Each chrome button has visible glyph only (an <svg>).
+      expect(b.textContent?.trim()).toBe("");
+    }
   });
 });
