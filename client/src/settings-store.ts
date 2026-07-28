@@ -20,6 +20,9 @@ const CONTENT_SCALE_KEY = "deckd.contentScale";
 const JOG_WIDTH_KEY = "deckd.jogWidth";
 const BOTTOM_SCALE_KEY = "deckd.bottomScale";
 const LABEL_SCALE_KEY = "deckd.labelScale";
+const LARGER_CONTROLS_KEY = "deckd.largerControls";
+const HIGH_CONTRAST_KEY = "deckd.highContrast";
+const REDUCE_MOTION_KEY = "deckd.reduceMotion";
 
 const WAKE_LOCK_DEFAULT = true;
 
@@ -325,6 +328,53 @@ export function useWakeLockSetting() {
   const setEnabled = useCallback((v: boolean) => {
     setEnabledState(v);
     safeSet(WAKE_LOCK_KEY, String(v));
+  }, []);
+
+  return { enabled, setEnabled };
+}
+
+/** Larger controls: forces minimum 48x48 CSS pixel touch targets across
+ * chrome and widgets. Persisted per-device; defaults to off. */
+export function useLargerControls() {
+  const [enabled, setEnabledState] = useState<boolean>(() =>
+    readInitialBool("largerControls", LARGER_CONTROLS_KEY, false),
+  );
+
+  const setEnabled = useCallback((v: boolean) => {
+    setEnabledState(v);
+    safeSet(LARGER_CONTROLS_KEY, String(v));
+  }, []);
+
+  return { enabled, setEnabled };
+}
+
+/** High contrast: applies a high-contrast palette independent of the OS
+ * ``prefers-contrast: more`` media query. Persisted per-device; defaults
+ * to off. */
+export function useHighContrast() {
+  const [enabled, setEnabledState] = useState<boolean>(() =>
+    readInitialBool("highContrast", HIGH_CONTRAST_KEY, false),
+  );
+
+  const setEnabled = useCallback((v: boolean) => {
+    setEnabledState(v);
+    safeSet(HIGH_CONTRAST_KEY, String(v));
+  }, []);
+
+  return { enabled, setEnabled };
+}
+
+/** Reduce motion: disables transitions and momentum animations independent
+ * of the OS ``prefers-reduced-motion: reduce`` media query. Persisted
+ * per-device; defaults to off. */
+export function useReduceMotion() {
+  const [enabled, setEnabledState] = useState<boolean>(() =>
+    readInitialBool("reduceMotion", REDUCE_MOTION_KEY, false),
+  );
+
+  const setEnabled = useCallback((v: boolean) => {
+    setEnabledState(v);
+    safeSet(REDUCE_MOTION_KEY, String(v));
   }, []);
 
   return { enabled, setEnabled };

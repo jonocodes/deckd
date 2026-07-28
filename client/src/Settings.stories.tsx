@@ -31,6 +31,12 @@ export const Default: Story = () => (
       onLabelScaleChange={noop}
       canDeauthenticate
       onDeauthenticate={noop}
+      largerControls={false}
+      onLargerControlsChange={noop}
+      highContrast={false}
+      onHighContrastChange={noop}
+      reduceMotion={false}
+      onReduceMotionChange={noop}
     />
   </main>
 );

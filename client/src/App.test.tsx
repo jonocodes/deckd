@@ -638,3 +638,58 @@ describe("App — aria-live announcements", () => {
     expect(screen.getByRole("status").textContent).toBe("");
   });
 });
+
+/* ---------------------------------------------------------------------
+   Accessibility CSS classes (issue #65).
+
+   When the larger-controls, high-contrast, or reduce-motion toggles
+   are on, the root .app element carries a corresponding CSS class
+   so the stylesheet can apply the visual treatment independent of
+   the OS-level media queries.
+   --------------------------------------------------------------------- */
+
+describe("App — accessibility CSS classes", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+  });
+
+  it("applies a11y-larger-controls class when larger controls is on", () => {
+    window.history.replaceState(null, "", "/?demo=default&largerControls=1");
+    render(<App />);
+    const app = document.querySelector(".app");
+    expect(app?.classList.contains("a11y-larger-controls")).toBe(true);
+  });
+
+  it("applies a11y-high-contrast class when high contrast is on", () => {
+    window.history.replaceState(null, "", "/?demo=default&highContrast=1");
+    render(<App />);
+    const app = document.querySelector(".app");
+    expect(app?.classList.contains("a11y-high-contrast")).toBe(true);
+  });
+
+  it("applies a11y-reduce-motion class when reduce motion is on", () => {
+    window.history.replaceState(null, "", "/?demo=default&reduceMotion=1");
+    render(<App />);
+    const app = document.querySelector(".app");
+    expect(app?.classList.contains("a11y-reduce-motion")).toBe(true);
+  });
+
+  it("does not apply a11y classes when toggles are off", () => {
+    window.history.replaceState(null, "", "/?demo=default");
+    render(<App />);
+    const app = document.querySelector(".app");
+    expect(app?.classList.contains("a11y-larger-controls")).toBe(false);
+    expect(app?.classList.contains("a11y-high-contrast")).toBe(false);
+    expect(app?.classList.contains("a11y-reduce-motion")).toBe(false);
+  });
+
+  it("applies all three classes when all toggles are on", () => {
+    window.history.replaceState(null, "", "/?demo=default&largerControls=1&highContrast=1&reduceMotion=1");
+    render(<App />);
+    const app = document.querySelector(".app");
+    expect(app?.classList.contains("a11y-larger-controls")).toBe(true);
+    expect(app?.classList.contains("a11y-high-contrast")).toBe(true);
+    expect(app?.classList.contains("a11y-reduce-motion")).toBe(true);
+  });
+});

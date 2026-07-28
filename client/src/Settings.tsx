@@ -46,6 +46,12 @@ type Props = {
   canDeauthenticate?: boolean;
   /** Forget the stored password and drop back to the gate. */
   onDeauthenticate?: () => void;
+  largerControls: boolean;
+  onLargerControlsChange: (v: boolean) => void;
+  highContrast: boolean;
+  onHighContrastChange: (v: boolean) => void;
+  reduceMotion: boolean;
+  onReduceMotionChange: (v: boolean) => void;
 };
 
 type Health = {
@@ -78,6 +84,12 @@ export function Settings({
   onLabelScaleChange,
   canDeauthenticate,
   onDeauthenticate,
+  largerControls,
+  onLargerControlsChange,
+  highContrast,
+  onHighContrastChange,
+  reduceMotion,
+  onReduceMotionChange,
 }: Props) {
   const orientation = useOrientation();
   const standalone = useStandaloneMode();
@@ -221,6 +233,25 @@ export function Settings({
           label="Keep screen awake"
           value={wakeLockEnabled}
           onChange={onWakeLockChange}
+        />
+      </div>
+
+      <h2 className="settings-title settings-title-sub">Accessibility</h2>
+      <div className="settings-controls">
+        <SettingToggle
+          label="Larger controls"
+          value={largerControls}
+          onChange={onLargerControlsChange}
+        />
+        <SettingToggle
+          label="High contrast"
+          value={highContrast}
+          onChange={onHighContrastChange}
+        />
+        <SettingToggle
+          label="Reduce motion"
+          value={reduceMotion}
+          onChange={onReduceMotionChange}
         />
       </div>
 

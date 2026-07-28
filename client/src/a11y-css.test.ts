@@ -53,3 +53,36 @@ describe("Accessibility CSS — issue #62", () => {
     expect(css).toMatch(/prefers-contrast:\s*more[\s\S]*?\.cell-button[\s\S]*?border-width:\s*2px/);
   });
 });
+
+describe("Accessibility CSS — issue #65", () => {
+  it("defines larger controls: min 48x48 touch targets for chrome buttons", () => {
+    expect(css).toMatch(/\.a11y-larger-controls[\s\S]*?\.chrome-btn[\s\S]*?min-width:\s*48px/);
+    expect(css).toMatch(/\.a11y-larger-controls[\s\S]*?\.chrome-btn[\s\S]*?min-height:\s*48px/);
+  });
+
+  it("defines larger controls: min 48x48 touch targets for grid cell buttons", () => {
+    expect(css).toMatch(/\.a11y-larger-controls[\s\S]*?\.cell-button[\s\S]*?min-width:\s*48px/);
+    expect(css).toMatch(/\.a11y-larger-controls[\s\S]*?\.cell-button[\s\S]*?min-height:\s*48px/);
+  });
+
+  it("defines larger controls: larger slider thumb", () => {
+    expect(css).toMatch(/\.a11y-larger-controls[\s\S]*?\.slider::-webkit-slider-thumb[\s\S]*?width:\s*32px/);
+  });
+
+  it("defines high contrast: thicker borders on cells and chrome", () => {
+    expect(css).toMatch(/\.a11y-high-contrast[\s\S]*?\.cell-button[\s\S]*?border-width:\s*2px/);
+    expect(css).toMatch(/\.a11y-high-contrast[\s\S]*?\.chrome-btn[\s\S]*?border-width:\s*2px/);
+  });
+
+  it("defines high contrast: thicker focus ring", () => {
+    expect(css).toMatch(/\.a11y-high-contrast[\s\S]*?button:focus-visible[\s\S]*?box-shadow/);
+  });
+
+  it("defines reduce motion: suppresses connection pulse", () => {
+    expect(css).toMatch(/\.a11y-reduce-motion[\s\S]*?connection-connecting \.connection-dot[\s\S]*?animation:\s*none/);
+  });
+
+  it("defines reduce motion: suppresses press transforms", () => {
+    expect(css).toMatch(/\.a11y-reduce-motion[\s\S]*?transform:\s*none/);
+  });
+});

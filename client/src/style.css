@@ -1703,3 +1703,99 @@ button:focus-visible {
   .connection-closed .connection-dot { background: #f87171; box-shadow: 0 0 0 1px #ffffff; }
   .connection-unauthorized .connection-dot { background: #c084fc; box-shadow: 0 0 0 1px #ffffff; }
 }
+
+/* ---------------------------------------------------------------------
+   Accessibility class-driven overrides (issue #65).
+
+   When the user toggles a setting in the Accessibility section of the
+   settings page, the root .app element carries a CSS class that
+   applies the treatment independent of OS-level media queries. Each
+   class duplicates the intent of the corresponding prefers-* media
+   query so the user can opt in without changing their OS setting.
+   --------------------------------------------------------------------- */
+
+/* Larger controls: minimum 48x48 CSS pixel touch targets across chrome,
+   grid buttons, jogstrip, and trackpad; bigger slider thumbs so they
+   stay east to grip. */
+.a11y-larger-controls .chrome-btn,
+.a11y-larger-controls .kbd-strip-btn {
+  min-width: 48px;
+  min-height: 48px;
+}
+.a11y-larger-controls .cell-button {
+  min-width: 48px;
+  min-height: 48px;
+}
+.a11y-larger-controls .cell-jogstrip {
+  min-width: 48px;
+  min-height: 48px;
+}
+.a11y-larger-controls .slider::-webkit-slider-thumb {
+  width: 32px;
+  height: 32px;
+}
+.a11y-larger-controls .slider::-moz-range-thumb {
+  width: 32px;
+  height: 32px;
+}
+.a11y-larger-controls .toggle {
+  width: 60px;
+  height: 36px;
+}
+.a11y-larger-controls .toggle-thumb {
+  width: 28px;
+  height: 28px;
+}
+
+/* High contrast: thicker borders, brighter backgrounds, and wider focus
+   rings — same palette as prefers-contrast: more but opt-in per-device. */
+.a11y-high-contrast .cell-button,
+.a11y-high-contrast .cell-jogstrip,
+.a11y-high-contrast .cell-meter,
+.a11y-high-contrast .cell-stats,
+.a11y-high-contrast .cell-media,
+.a11y-high-contrast .mediabrowser-row,
+.a11y-high-contrast .app-badge {
+  border-width: 2px;
+  border-color: #6b7785;
+}
+.a11y-high-contrast .chrome-btn,
+.a11y-high-contrast .kbd-strip-btn {
+  border-width: 2px;
+  border-color: #6b7785;
+}
+.a11y-high-contrast .slider,
+.a11y-high-contrast .toggle-track {
+  border-width: 2px;
+  border-color: #6b7785;
+}
+.a11y-high-contrast button:focus-visible {
+  box-shadow:
+    0 0 0 2px #000000,
+    0 0 0 5px #ffffff,
+    0 0 0 7px #000000;
+}
+.a11y-high-contrast .cell-jogstrip:focus-visible,
+.a11y-high-contrast .trackpad:focus-visible {
+  box-shadow:
+    0 0 0 2px #000000,
+    0 0 0 5px #ffffff,
+    0 0 0 7px #000000;
+}
+.a11y-high-contrast .connection-open .connection-dot { box-shadow: 0 0 0 1px #ffffff; }
+.a11y-high-contrast .connection-connecting .connection-dot { box-shadow: 0 0 0 1px #ffffff; }
+.a11y-high-contrast .connection-closed .connection-dot { box-shadow: 0 0 0 1px #ffffff; }
+.a11y-high-contrast .connection-unauthorized .connection-dot { box-shadow: 0 0 0 1px #ffffff; }
+
+/* Reduce motion: disable transition/transform animations (same set as
+   prefers-reduced-motion but opt-in per-device). Keep the static
+   brightness feedback for press — the affordance still reads. */
+.a11y-reduce-motion .connection-connecting .connection-dot { animation: none; }
+.a11y-reduce-motion .chrome-btn-playing::after { animation: none; }
+.a11y-reduce-motion .chrome-btn:active,
+.a11y-reduce-motion .cell-button:active,
+.a11y-reduce-motion .mediabrowser-skip:active:not(:disabled),
+.a11y-reduce-motion .mediabrowser-play:active,
+.a11y-reduce-motion .media-play:active,
+.a11y-reduce-motion .media-skip:active { transform: none; }
+.a11y-reduce-motion .tooltip-floating { animation: none; }

@@ -16,6 +16,9 @@ import {
   useContentScale,
   useJogWidth,
   useLabelScale,
+  useLargerControls,
+  useHighContrast,
+  useReduceMotion,
   useScrollSettings,
   useTrackpadSettings,
   useWakeLockSetting,
@@ -137,6 +140,9 @@ export function App() {
   const jogWidth = useJogWidth();
   const bottomScale = useBottomScale();
   const labelScale = useLabelScale();
+  const largerControls = useLargerControls();
+  const highContrast = useHighContrast();
+  const reduceMotion = useReduceMotion();
   // Hold the wake lock while the user wants it AND the socket is live;
   // a stale surface with no daemon behind it has no reason to keep the
   // screen on. Visibility is handled inside the hook.
@@ -347,6 +353,12 @@ export function App() {
   const appIcon: IconRef | null = layout?.icon ?? null;
   const hasBadge = appTheme !== null || appIcon !== null;
   const badgeClass = hasBadge ? `app-badge${appTheme ? " app-badge-themed" : ""}` : "app-name";
+  const a11yClass = [
+    largerControls.enabled && "a11y-larger-controls",
+    highContrast.enabled && "a11y-high-contrast",
+    reduceMotion.enabled && "a11y-reduce-motion",
+  ].filter(Boolean).join(" ");
+  const appClass = `app${a11yClass ? ` ${a11yClass}` : ""}`;
   const bottomVars = {
     "--bottom-scale": bottomScale.scale,
     ...(appTheme ? { "--badge-theme": appTheme } : {}),
@@ -370,7 +382,7 @@ export function App() {
   return (
     <>
       <span role="status" className="sr-only">{liveText}</span>
-      <div className="app">
+      <div className={appClass}>
       <div className="chrome-page">
         {/* The content-scale var is set here on the layout area only, so grid
             content (buttons + in-grid jogstrip) scales while the persistent
@@ -445,6 +457,12 @@ export function App() {
                 setView("layout");
                 deauthenticate();
               }}
+              largerControls={largerControls.enabled}
+              onLargerControlsChange={largerControls.setEnabled}
+              highContrast={highContrast.enabled}
+              onHighContrastChange={highContrast.setEnabled}
+              reduceMotion={reduceMotion.enabled}
+              onReduceMotionChange={reduceMotion.setEnabled}
             />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">
