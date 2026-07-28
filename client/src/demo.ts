@@ -254,6 +254,67 @@ export const MPRIS_DEMO_STATES: MediaState[] = [
   },
 ];
 
+// Backend-free macro demo. Shows two buttons that declare a macro —
+// a simple two-step sequence and a longer one with a delay. The client
+// renders these the same as any other button (the daemon executes the
+// steps), so ``/?demo=macro`` lets you see how they look in the grid.
+const MACRO: ServerLayout = {
+  type: "layout",
+  app: "macro (demo)",
+  display_name: "Macro",
+  theme: "#a855f7",
+  icon: { source: "lucide", name: "list-ordered" },
+  jogstrip_enabled: true,
+  widgets: [
+    {
+      id: "launcher-then-run",
+      kind: "button",
+      label: "Notify then browser",
+      icon: { source: "lucide", name: "bell" },
+      grid: [0, 0, 2, 1],
+      action: { key: "ctrl+t" },
+      macro: {
+        steps: [
+          { type: "shell", value: "notify-send 'hello from macro'" },
+          { type: "delay", value: "500" },
+          { type: "key", value: "ctrl+t" },
+        ],
+      },
+    },
+    {
+      id: "multi-key",
+      kind: "button",
+      label: "Multi-key",
+      icon: { source: "lucide", name: "keyboard" },
+      grid: [2, 0, 1, 1],
+      macro: {
+        steps: [
+          { type: "key", value: "ctrl+a" },
+          { type: "key", value: "ctrl+c" },
+        ],
+      },
+    },
+    {
+      id: "with-opts",
+      kind: "button",
+      label: "Keep going on error",
+      icon: { source: "lucide", name: "list-checks" },
+      grid: [3, 0, 1, 1],
+      macro: {
+        continue_on_error: true,
+        steps: [
+          { type: "key", value: "ctrl+l" },
+          { type: "delay", value: "200" },
+          { type: "key", value: "super+1" },
+          { type: "key", value: "escape" },
+        ],
+      },
+    },
+    { id: "open-url", kind: "button", label: "example.com", icon: { source: "lucide", name: "globe" }, grid: [0, 1, 1, 1] },
+    { id: "tilix", kind: "button", label: "Terminal", icon: { source: "lucide", name: "square-terminal" }, grid: [1, 1, 1, 1] },
+  ],
+};
+
 const DEMOS: Record<string, ServerLayout> = {
   firefox: FIREFOX,
   default: DEFAULT,
@@ -261,6 +322,7 @@ const DEMOS: Record<string, ServerLayout> = {
   meter: METER,
   vlc: VLC,
   mpris: MPRIS,
+  macro: MACRO,
 };
 
 type DemoView = "layout" | "trackpad" | "settings" | "mediabrowser";

@@ -91,6 +91,25 @@ widgets:
   #   grid: [3, 2, 1, 1]
   #   action:
   #     dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
+  # Macro example (issue #68): chains a shell notification with a
+  # keyboard shortcut. Steps run sequentially; an optional delay pauses
+  # between them. A failing step stops the macro by default; set
+  # ``continue_on_error: true`` to keep going regardless.
+  - id: macro-example
+    kind: button
+    label: Notify + Tab
+    icon:
+      source: lucide
+      name: list-ordered
+    grid: [0, 2, 2, 1]
+    macro:
+      steps:
+        - type: shell
+          value: "notify-send 'deckd macro ran'"
+        - type: delay
+          value: "500"
+        - type: key
+          value: "ctrl+t"
   # Live system stats (issue #40). A bar-less ``stats`` cell showing
   # several psutil-backed sensor values at once — CPU + memory here — so
   # they work identically on Linux + macOS Intel + Apple Silicon with no

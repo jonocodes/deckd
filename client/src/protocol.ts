@@ -49,6 +49,10 @@ export type Widget = {
   grid: [number, number, number, number];
   color?: string | null;
   action?: Record<string, unknown> | null;
+  /** Macro steps: an ordered list of key/shell/dbus/delay actions that the
+   * daemon executes sequentially on press (issue #68). When present,
+   * ``action`` is ignored. */
+  macro?: { steps: { type: string; value: string }[]; continue_on_error?: boolean } | null;
   source?: string | null;
   min?: number | null;
   max?: number | null;
