@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Settings as SettingsIcon } from "lucide-react";
 import { Music as MusicIcon, PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
@@ -38,6 +39,34 @@ const CHROME_JOG_ID = "__chrome__";
 const TRACKPAD_ID = "__trackpad__";
 
 const CHROME_JOG_HANDLE: JogHandle = { id: CHROME_JOG_ID };
+
+/** Keyboard activation handler for chrome buttons (issue #60, AC #3).
+ * Native ``<button>`` elements fire ``click`` for Enter and Space on
+ * the keyboard only when an ``onClick`` handler is attached, so the
+ * project's existing ``onPointerDown``-only pattern (kept for fast
+ * touch response) misses Enter/Space. This returns a keydown handler
+ * that runs the same callback on Enter or Space — wired alongside
+ * the existing ``onPointerDown`` so touch and keyboard both work. */
+function onActivate(action: () => void) {
+  return (e: ReactKeyboardEvent<HTMLButtonElement>) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    action();
+  };
+}
+
+/** True when a keystroke should land in the focused element rather
+ * than trigger a global shortcut. The password gate, the trackpad
+ * IME, and the settings text fields are all "typing" surfaces —
+ * number keys / Escape belong to them, not to the chrome view
+ * switcher. ``contenteditable`` is rare on the client today but is
+ * covered for forward-compat. */
+function isTypingTarget(el: HTMLElement): boolean {
+  if (el instanceof HTMLInputElement) return !el.readOnly && el.type !== "checkbox" && el.type !== "radio" && el.type !== "button";
+  if (el instanceof HTMLTextAreaElement) return true;
+  if (el.isContentEditable) return true;
+  return false;
+}
 
 const STATUS_LABEL: Record<SocketStatus, string> = {
   open: "live",
@@ -167,7 +196,7 @@ export function App() {
   // (settings, trackpad) — that's intentional, mirroring how the
   // existing buttons don't reset each other, and keeps the daemon-side
   // view pinned across a brief settings detour.
-  const toggleMediaBrowser = () => {
+  const toggleMediaBrowser = useCallback(() => {
     if (view === "mediabrowser") {
       setView("layout");
       send({ type: "clear_view" });
@@ -175,7 +204,125 @@ export function App() {
       setView("mediabrowser");
       send({ type: "select_view", view: MPRIS_VIEW_ID });
     }
-  };
+  }, [view, send]);
+  // Trackpad / settings openers: kept named so the keyboard-shortcut
+  // effect below can call them without duplicating the toggle logic.
+  const openTrackpad = useCallback(
+    () => setView((v) => (v === "trackpad" ? "layout" : "trackpad")),
+    [],
+  );
+  const openSettings = useCallback(
+    () => setView((v) => (v === "settings" ? "layout" : "settings")),
+    [],
+  );
+
+  // Focus restoration (issue #60, AC #5). When the user opens a
+  // chrome view via the keyboard, focus jumps to the first interactive
+  // element inside the new view (the IME-toggle button in trackpad,
+  // the first slider in settings, etc.). On close, focus returns to
+  // the chrome button that opened the view — so a keyboard user can
+  // Tab back into the bottom chrome without losing their place.
+  const lastChromeFocus = useRef<HTMLElement | null>(null);
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  // Refs to the chrome buttons themselves, so focus restoration knows
+  // where to land when a view closes.
+  const trackpadBtnRef = useRef<HTMLButtonElement | null>(null);
+  const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
+  const mediaBtnRef = useRef<HTMLButtonElement | null>(null);
+  // Remember the chrome button that opened the current view so a
+  // window-level Escape (where ``e.target`` is the body, not a
+  // button) can still hand focus back to the right place.
+  const viewOriginRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (view === "layout") {
+      // Returning to the layout view: hand focus back to whichever
+      // chrome button opened the overlay (or the app badge if no
+      // overlay is in play). Prefer the view-origin button so a
+      // window-level Escape still finds its target; fall back to
+      // the lastChromeFocus capture for the pointer path.
+      const target = viewOriginRef.current ?? lastChromeFocus.current;
+      viewOriginRef.current = null;
+      lastChromeFocus.current = null;
+      // Defer so the layout area is rendered before we hand focus
+      // back — otherwise focus lands on a button that isn't in the
+      // DOM yet on the very first paint after a view switch.
+      const id = window.setTimeout(() => {
+        target?.focus();
+      }, 0);
+      return () => window.clearTimeout(id);
+    }
+    // Switching into a chrome view: snap focus to the first focusable
+    // child of the surface (slider, trackpad, transport button, etc.).
+    const id = window.setTimeout(() => {
+      const surface = surfaceRef.current;
+      if (!surface) return;
+      const focusable = surface.querySelector<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      focusable?.focus();
+    }, 0);
+    return () => window.clearTimeout(id);
+  }, [view]);
+
+  // Focus restoration when the password gate closes (issue #60,
+  // AC #5). The gate is its own component and grabs focus via
+  // ``autoFocus``; on a successful submit it unmounts and focus
+  // drops to the body. Move focus to the surface so a keyboard
+  // user can Tab into the layout without first clicking anywhere.
+  // Only fires on the unauthorized → other transition, not on
+  // every status update.
+  const wasUnauthorized = useRef(status === "unauthorized");
+  useEffect(() => {
+    const isUnauthorized = status === "unauthorized";
+    if (wasUnauthorized.current && !isUnauthorized) {
+      const id = window.setTimeout(() => {
+        surfaceRef.current?.focus();
+      }, 0);
+      wasUnauthorized.current = false;
+      return () => window.clearTimeout(id);
+    }
+    wasUnauthorized.current = isUnauthorized;
+  }, [status]);
+
+  // Global keyboard shortcuts (issue #60, AC #4). Number keys open
+  // the matching chrome view; Escape returns to the layout. The
+  // handler ignores keystrokes while focus is inside a text input —
+  // the password gate and the trackpad IME both rely on the
+  // character keys landing in their target, so the shortcut layer
+  // has to yield when one of them is focused.
+  useEffect(() => {
+    if (status === "unauthorized") return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && isTypingTarget(target)) return;
+      if (e.key === "Escape" && view !== "layout") {
+        e.preventDefault();
+        setView("layout");
+        if (view === "mediabrowser") send({ type: "clear_view" });
+        return;
+      }
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      if (e.key === "1") {
+        e.preventDefault();
+        viewOriginRef.current = trackpadBtnRef.current;
+        lastChromeFocus.current = trackpadBtnRef.current;
+        openTrackpad();
+      } else if (e.key === "2") {
+        e.preventDefault();
+        viewOriginRef.current = mediaBtnRef.current;
+        lastChromeFocus.current = mediaBtnRef.current;
+        toggleMediaBrowser();
+      } else if (e.key === "3") {
+        e.preventDefault();
+        viewOriginRef.current = settingsBtnRef.current;
+        lastChromeFocus.current = settingsBtnRef.current;
+        openSettings();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [view, openTrackpad, openSettings, toggleMediaBrowser, send, status]);
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
@@ -217,7 +364,9 @@ export function App() {
             content (buttons + in-grid jogstrip) scales while the persistent
             chrome — the sibling jogstrip and the bottom bar — stays fixed. */}
         <main
+          ref={surfaceRef}
           className="surface"
+          tabIndex={-1}
           style={
             {
               "--content-scale": contentScale.scale,
@@ -331,29 +480,66 @@ export function App() {
           <span className="connection-dot" />
           <span className="connection-label">{statusLabel}</span>
         </span>
-        <Tooltip label="manual control">
+        <Tooltip ref={trackpadBtnRef} label="manual control">
           <button
             className={`chrome-btn${view === "trackpad" ? " chrome-btn-active" : ""}`}
             aria-label="manual control"
-            onPointerDown={() => setView(view === "trackpad" ? "layout" : "trackpad")}
+            aria-pressed={view === "trackpad"}
+            onPointerDown={() => {
+              viewOriginRef.current = trackpadBtnRef.current;
+              lastChromeFocus.current = trackpadBtnRef.current;
+              openTrackpad();
+            }}
+            onKeyDown={onActivate(() => {
+              viewOriginRef.current = trackpadBtnRef.current;
+              lastChromeFocus.current = trackpadBtnRef.current;
+              openTrackpad();
+            })}
           >
             <PointerIcon size={18} />
           </button>
         </Tooltip>
-        <Tooltip label="media browser">
+        <Tooltip ref={mediaBtnRef} label="media browser">
           <button
             className={`chrome-btn${view === "mediabrowser" ? " chrome-btn-active" : ""}${chromeMedia?.playing ? " chrome-btn-playing" : ""}`}
-            aria-label="media browser"
-            onPointerDown={toggleMediaBrowser}
+            aria-label={chromeMedia?.playing ? "media browser (now playing)" : "media browser"}
+            aria-pressed={view === "mediabrowser"}
+            onPointerDown={() => {
+              viewOriginRef.current = mediaBtnRef.current;
+              lastChromeFocus.current = mediaBtnRef.current;
+              toggleMediaBrowser();
+            }}
+            onKeyDown={onActivate(() => {
+              viewOriginRef.current = mediaBtnRef.current;
+              lastChromeFocus.current = mediaBtnRef.current;
+              toggleMediaBrowser();
+            })}
           >
             <MusicIcon size={18} />
+            {/* The pulsing green dot is a colour-only state carrier (issue
+                #62, AC #3). The screen-reader-only text below gives
+                assistive tech the same info a sighted user gets from the
+                dot, so the playback state isn't conveyed by colour alone. */}
+            <span className="chrome-btn-sr-status">
+              {chromeMedia?.playing ? "now playing" : "idle"}
+            </span>
           </button>
         </Tooltip>
-        <Tooltip label="settings">
+        <Tooltip ref={settingsBtnRef} label="settings">
           <button
             className={`chrome-btn${view === "settings" ? " chrome-btn-active" : ""}`}
             aria-label="settings"
-            onPointerDown={() => setView(view === "settings" ? "layout" : "settings")}
+            aria-pressed={view === "settings"}
+            onPointerDown={() => {
+              viewOriginRef.current = settingsBtnRef.current;
+              lastChromeFocus.current = settingsBtnRef.current;
+              openSettings();
+            }}
+            onKeyDown={onActivate(() => {
+              viewOriginRef.current = settingsBtnRef.current;
+              lastChromeFocus.current = settingsBtnRef.current;
+              openSettings();
+            })}
           >
             <SettingsIcon size={18} />
           </button>

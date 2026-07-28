@@ -357,4 +357,61 @@ describe("ManualControl", () => {
       expect(onKey).not.toHaveBeenCalled();
     });
   });
+
+  /* ---------------------------------------------------------------------
+     Strip key buttons + IME toggle are keyboard-activatable
+     (issue #60, AC #3). They use ``onPointerDown`` for fast touch
+     response, so the same Enter/Space keydown handler as the chrome
+     buttons makes them reachable without a mouse.
+     --------------------------------------------------------------------- */
+  describe("strip key activation", () => {
+    it("Enter activates a strip key button and fires onKey", () => {
+      const onKey = vi.fn();
+      render(
+        <ManualControl
+          onType={() => {}}
+          onKey={onKey}
+          onPad={() => {}}
+          onTap={() => {}}
+          onDrag={() => {}}
+          sensitivity={1}
+        />,
+      );
+      fireEvent.keyDown(screen.getByRole("button", { name: "esc" }), { key: "Enter" });
+      expect(onKey).toHaveBeenCalledWith("esc");
+    });
+
+    it("Space activates a strip key button and fires onKey", () => {
+      const onKey = vi.fn();
+      render(
+        <ManualControl
+          onType={() => {}}
+          onKey={onKey}
+          onPad={() => {}}
+          onTap={() => {}}
+          onDrag={() => {}}
+          sensitivity={1}
+        />,
+      );
+      fireEvent.keyDown(screen.getByRole("button", { name: "tab" }), { key: " " });
+      expect(onKey).toHaveBeenCalledWith("tab");
+    });
+
+    it("Enter activates the keyboard toggle button", () => {
+      render(
+        <ManualControl
+          onType={() => {}}
+          onKey={() => {}}
+          onPad={() => {}}
+          onTap={() => {}}
+          onDrag={() => {}}
+          sensitivity={1}
+        />,
+      );
+      const imeBtn = screen.getByRole("button", { name: "keyboard" });
+      expect(imeBtn.getAttribute("aria-pressed")).toBe("false");
+      fireEvent.keyDown(imeBtn, { key: "Enter" });
+      expect(imeBtn.getAttribute("aria-pressed")).toBe("true");
+    });
+  });
 });

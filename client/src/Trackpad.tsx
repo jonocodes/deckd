@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import type { KeyboardEvent } from "react";
 
 type Props = {
   onPad: (dx: number, dy: number) => void;
@@ -12,6 +13,15 @@ type Props = {
 const TAP_MAX_MS = 250;
 const TAP_MAX_PX = 10;
 const DOUBLE_TAP_WINDOW_MS = 400;
+/** uinput REL units per arrow-key tap (issue #60). Picked to match
+ * a single pixel at sensitivity = 1, so a single key press moves the
+ * cursor one CSS pixel — the same rate a one-finger touch produces
+ * at the lowest sensitivity. */
+const KEY_STEP = 1;
+/** 16x jump for Page Up / Page Down; matches a small swipe on touch. */
+const BIG_STEP = 16;
+const REPEAT_DELAY_MS = 250;
+const REPEAT_INTERVAL_MS = 50;
 
 type PointerState = {
   startX: number;
@@ -30,6 +40,11 @@ type PointerState = {
  *   - Two-finger tap → ``pad_tap`` fingers=2  (right click)
  *   - Tap-and-a-half (tap, then quickly touch and drag) → ``pad_drag`` start,
  *     pad deltas while dragging, ``pad_drag`` end on lift
+ *   - **Keyboard** (issue #60, AC #6): while focused, arrow keys
+ *     produce small ``pad`` deltas; Page Up / Page Down / numpad
+ *     diagonals produce larger jumps; Space / Enter fires a single
+ *     ``pad_tap`` (left click). Same rhythm as the touch surface so
+ *     a keyboard user can drive the cursor without leaving the keys.
  *
  * All state is held in refs so React re-renders never touch the pointer hot
  * path (see INCEPTION.md §5.2). Pointer capture is set per-pointer so a
@@ -52,6 +67,11 @@ export function Trackpad({ onPad, onTap, onDrag, sensitivity }: Props) {
   // pattern JogStrip uses for scroll deltas.
   const pendingDx = useRef(0);
   const pendingDy = useRef(0);
+  // Held-key auto-repeat. ``repeatDir`` is a {dx, dy} pair so a held
+  // Up+Right combination emits diagonal deltas, mirroring the touch
+  // multi-pointer case.
+  const repeatTimer = useRef<number | null>(null);
+  const repeatDir = useRef<{ dx: number; dy: number } | null>(null);
 
   const flushPad = () => {
     const wx = Math.trunc(pendingDx.current);
@@ -68,9 +88,126 @@ export function Trackpad({ onPad, onTap, onDrag, sensitivity }: Props) {
     pendingDy.current = 0;
   };
 
+  const stopRepeat = () => {
+    if (repeatTimer.current !== null) {
+      window.clearTimeout(repeatTimer.current);
+      repeatTimer.current = null;
+    }
+    repeatDir.current = null;
+  };
+
+  // Keyboard alternative to the pointer gestures (issue #60, AC
+  // #6). Maps arrow keys + numpad to REL deltas; Space / Enter
+  // fires a single left-click ``pad_tap``. The handler is added
+  // to the trackpad div via ``onKeyDown`` so the trackpad has to
+  // be focused (it is — ``tabIndex={0}``) before keys land. The
+  // ``page up / page down`` keys produce larger jumps; holding any
+  // key auto-repeats like a held touch-and-drag.
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    let dx = 0;
+    let dy = 0;
+    let big = false;
+    switch (e.key) {
+      case "ArrowLeft":
+      case "Numpad4":
+        dx = -1;
+        break;
+      case "ArrowRight":
+      case "Numpad6":
+        dx = 1;
+        break;
+      case "ArrowUp":
+      case "Numpad8":
+        dy = -1;
+        break;
+      case "ArrowDown":
+      case "Numpad2":
+        dy = 1;
+        break;
+      case "Numpad7":
+        dx = -1;
+        dy = -1;
+        break;
+      case "Numpad9":
+        dx = 1;
+        dy = -1;
+        break;
+      case "Numpad1":
+        dx = -1;
+        dy = 1;
+        break;
+      case "Numpad3":
+        dx = 1;
+        dy = 1;
+        break;
+      case "PageUp":
+        dy = -1;
+        big = true;
+        break;
+      case "PageDown":
+        dy = 1;
+        big = true;
+        break;
+      case "Home":
+        e.preventDefault();
+        // Big relative jump to the top-left of the screen; daemon
+        // handles it the same way a big touch swipe would.
+        onPad(-10000, -10000);
+        return;
+      case "End":
+        e.preventDefault();
+        onPad(10000, 10000);
+        return;
+      case " ":
+      case "Enter":
+        e.preventDefault();
+        onTap(1);
+        return;
+      default:
+        return;
+    }
+    e.preventDefault();
+    const step = (big ? BIG_STEP : KEY_STEP) * sensRef.current;
+    const fdx = Math.round(dx * step);
+    const fdy = Math.round(dy * step);
+    if (fdx !== 0 || fdy !== 0) onPad(fdx, fdy);
+    // Auto-repeat if the user holds the key. We key the repeat
+    // off the (dx, dy) pair so a held ArrowUp+ArrowRight combo
+    // emits diagonal deltas rather than switching back and forth
+    // between two repeat timers.
+    const dir = { dx, dy };
+    if (
+      repeatTimer.current === null ||
+      !repeatDir.current ||
+      repeatDir.current.dx !== dir.dx ||
+      repeatDir.current.dy !== dir.dy
+    ) {
+      stopRepeat();
+      repeatDir.current = dir;
+      repeatTimer.current = window.setTimeout(() => {
+        repeatTimer.current = window.setInterval(() => {
+          const d = repeatDir.current;
+          if (!d) return;
+          const s = KEY_STEP * sensRef.current;
+          onPad(Math.round(d.dx * s), Math.round(d.dy * s));
+        }, REPEAT_INTERVAL_MS);
+      }, REPEAT_DELAY_MS);
+    }
+  };
+
+  const onKeyUp = () => {
+    stopRepeat();
+  };
+
   return (
     <div
       className="trackpad"
+      role="application"
+      tabIndex={0}
+      aria-label="Trackpad (use arrow keys to move, space or enter to click, page up/down for bigger steps)"
+      onKeyDown={onKeyDown}
+      onKeyUp={onKeyUp}
+      onBlur={stopRepeat}
       onPointerDown={(e) => {
         e.preventDefault();
         e.currentTarget.setPointerCapture(e.pointerId);

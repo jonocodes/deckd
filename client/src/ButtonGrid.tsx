@@ -149,7 +149,13 @@ export function ButtonGrid({
               key={w.id}
               className="cell cell-button"
               style={buttonStyle}
+              aria-label={w.label ?? w.id}
               onPointerDown={() => onPress(w.id)}
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" && e.key !== " ") return;
+                e.preventDefault();
+                onPress(w.id);
+              }}
             >
               {w.icon ? <Icon icon={w.icon} className="icon" /> : null}
               {/* Text is opt-in per button: a widget with a ``label`` shows it,

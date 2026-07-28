@@ -14,7 +14,7 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Tooltip } from "./Tooltip";
 
 afterEach(() => {
@@ -168,5 +168,59 @@ describe("Tooltip", () => {
     const second = screen.getByRole("button", { name: "second" });
     fireEvent.focus(second);
     expect((await screen.findByRole("tooltip")).textContent).toBe("second");
+  });
+});
+
+/* ---------------------------------------------------------------------
+   Ref forwarding (issue #60).
+
+   The tooltip sits between the parent and the wrapped child, so a
+   parent that passes ``ref={someUseRefObject}`` would otherwise see
+   ``null``. The wrapper uses ``forwardRef`` and chains the ref onto
+   the underlying button via ``cloneElement``'s ``ref`` prop, so the
+   parent gets the resolved DOM node back.
+   --------------------------------------------------------------------- */
+describe("Tooltip — ref forwarding", () => {
+  afterEach(cleanup);
+
+  it("forwards a callback ref to the wrapped child", () => {
+    const refCb = vi.fn();
+    render(
+      <Tooltip ref={refCb} label="settings">
+        <button aria-label="settings">x</button>
+      </Tooltip>,
+    );
+    // The ref callback receives the actual button DOM node.
+    expect(refCb).toHaveBeenCalled();
+    const node = refCb.mock.calls[0][0];
+    expect(node?.tagName).toBe("BUTTON");
+  });
+
+  it("forwards a useRef object to the wrapped child", () => {
+    // Render with the ref on the OUTER Tooltip (forwardRef form).
+    // This is the form the chrome buttons use so a parent can
+    // capture the button element for focus restoration.
+    function Harness() {
+      const ref = useRef<HTMLButtonElement | null>(null);
+      // ``useState`` lets us force a re-render after the ref
+      // commits (refs alone don't trigger re-renders), so the
+      // testid span reads the post-commit value.
+      const [, force] = useState(0);
+      // ``useEffect`` runs after the commit; by the time it runs,
+      // the ref callback has fired.
+      useEffect(() => {
+        if (ref.current) force((n) => n + 1);
+      }, []);
+      return (
+        <>
+          <Tooltip ref={ref} label="settings">
+            <button aria-label="settings">x</button>
+          </Tooltip>
+          <span data-testid="ref-current">{ref.current ? "set" : "null"}</span>
+        </>
+      );
+    }
+    render(<Harness />);
+    expect(screen.getByTestId("ref-current").textContent).toBe("set");
   });
 });

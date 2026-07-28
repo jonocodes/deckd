@@ -99,6 +99,11 @@ export function ManualControl({
               e.preventDefault();
               onKey(combo);
             }}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter" && e.key !== " ") return;
+              e.preventDefault();
+              onKey(combo);
+            }}
           >
             {label}
           </button>
@@ -108,6 +113,11 @@ export function ManualControl({
           aria-label="keyboard"
           aria-pressed={imeOpen}
           onPointerDown={(e) => {
+            e.preventDefault();
+            toggleIme();
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" && e.key !== " ") return;
             e.preventDefault();
             toggleIme();
           }}

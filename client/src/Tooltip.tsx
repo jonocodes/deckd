@@ -29,6 +29,7 @@
  */
 import {
   cloneElement,
+  forwardRef,
   isValidElement,
   useCallback,
   useEffect,
@@ -58,8 +59,19 @@ export interface TooltipProps {
 }
 
 /** Wraps a control in an accessible tooltip. See the module docstring
- *  for behaviour. */
-export function Tooltip({ label, children }: TooltipProps) {
+ *  for behaviour.
+ *
+ *  Forwarded ref (issue #60): the tooltip sits between the parent
+ *  component and the wrapped child, so the parent's ``ref`` lands
+ *  here first. We forward it through ``cloneElement``'s ``ref``
+ *  prop so a parent that passes ``ref={someUseRefObject}`` still
+ *  gets the resolved DOM node (React 18 strips the ``ref`` prop
+ *  before it reaches the inner child unless the wrapper is a
+ *  ``forwardRef`` component). */
+export const Tooltip = forwardRef<HTMLElement, TooltipProps>(function Tooltip(
+  { label, children },
+  forwardedRef,
+) {
   const id = useId();
   const tooltipId = `tooltip-${id}`;
   const [open, setOpen] = useState(false);
@@ -196,9 +208,20 @@ export function Tooltip({ label, children }: TooltipProps) {
   const setHostRef = (node: HTMLElement | null) => {
     hostRef.current = node;
   };
+  // Chain THREE refs onto the wrapped child: (a) the parent's
+  // forwarded ref from ``<Tooltip ref={...}>`` (forwardRef form);
+  // (b) the host's own ``ref={...}`` if it was set on the child
+  // directly; (c) the tooltip's internal positioning ref. The
+  // combined ref runs all three on every commit so neither path
+  // observes the wrong node. React 18 strips the ``ref`` from a
+  // child element's props before the parent component sees it, so
+  // path (b) needs ``childProps``'s ``ref`` — which React leaves
+  // intact in some flows and strips in others; we defend in
+  // depth by also writing through ``forwardedRef``.
+  const combinedRef = chainRefs([forwardedRef, childProps.ref, setHostRef]);
   const augmented = cloneElement(children as ReactElement<Record<string, unknown>>, {
     "aria-describedby": open ? tooltipId : undefined,
-    ref: chainRef(childProps.ref, setHostRef),
+    ref: combinedRef,
     onPointerEnter: chain(childProps.onPointerEnter, onPointerEnter),
     onPointerLeave: chain(childProps.onPointerLeave, onPointerLeave),
     onFocus: chain(childProps.onFocus, onFocus),
@@ -229,7 +252,7 @@ export function Tooltip({ label, children }: TooltipProps) {
       ) : null}
     </>
   );
-}
+});
 
 /** Compose two optional single-arg handlers so the wrapped control
  *  can keep its own focus / pointer handlers while the tooltip
@@ -247,22 +270,30 @@ function chain(existing: unknown, added: (...args: never[]) => void): (...args: 
   return added;
 }
 
-/** Compose a forwarded ref with our own internal ref so we can
- *  both position the tooltip and pass through the consumer's ref. */
-function chainRef(
-  existing: unknown,
-  added: (node: HTMLElement | null) => void,
-): (node: HTMLElement | null) => void {
-  if (typeof existing === "function") {
-    return (node) => {
-      (existing as (n: HTMLElement | null) => void)(node);
-      added(node);
-    };
-  }
-  // React 19's ref-as-object form would also need handling, but
-  // the codebase is on React 18 where refs are functions or
-  // ``RefObject``s. We just accept the function shape for now.
-  return added;
+/** Compose several refs (forwarded, host-side, internal) into a
+ *  single callback ref. Each entry is either a callback ``(node) =>
+ *  ...``, a ref object ``{ current: T | null }``, or absent. The
+ *  returned function runs every present entry on every commit so
+ *  neither the parent nor the tooltip's internal positioning
+ *  observe a stale node. */
+function chainRefs(refs: Array<unknown>): (node: HTMLElement | null) => void {
+  const observers = refs.filter((r) => r != null).map((ref) => {
+    if (typeof ref === "function") {
+      return ref as (node: HTMLElement | null) => void;
+    }
+    if (typeof ref === "object" && ref !== null && "current" in ref) {
+      const refObj = ref as { current: HTMLElement | null };
+      return (node: HTMLElement | null) => {
+        refObj.current = node;
+      };
+    }
+    return () => {};
+  });
+  if (observers.length === 0) return () => {};
+  if (observers.length === 1) return observers[0];
+  return (node) => {
+    for (const o of observers) o(node);
+  };
 }
 
 // Re-export the ReactNode prop name for the test so callers can

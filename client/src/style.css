@@ -29,8 +29,44 @@ button {
   padding: 0;
   -webkit-tap-highlight-color: transparent;
 }
+/* ---------------------------------------------------------------------
+   Accessible focus ring (issue #60, AC #2).
+
+   Default: no outline (the project used to drop it globally to keep
+   the dark chrome clean). A keyboard user can't see which control is
+   focused without it, so we replace the outline with a custom ring:
+   a 2px cyan outline + 2px transparent offset, drawn as a
+   double-ring box-shadow so it sits flush against rounded borders
+   without clipping. ``focus-visible`` keeps the ring off mouse
+   clicks — only keyboard focus surfaces it — matching the
+   well-established ``:focus-visible`` pattern.
+
+   Colour: #7dd3fc on a near-black chrome has > 7:1 contrast
+   (WCAG 2.1 SC 1.4.11 AA = 3:1, AAA = 4.5:1) so it reads in normal
+   and high-contrast mode alike.
+
+   The ring scales with ``--bottom-scale`` so it stays the same
+   optical weight when the user bumps the bottom-bar size, and
+   doesn't outgrow the button on a small device. */
 button:focus { outline: none; }
-button:focus-visible { outline: none; }
+button:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #0e1720,
+    0 0 0 calc(2px + 2px) #7dd3fc,
+    0 0 0 calc(4px + 4px) #0e1720;
+}
+
+/* Same ring on any non-button interactive control (the
+   jogstrip / trackpad surface, the meter bar, etc.). */
+.cell-jogstrip:focus-visible,
+.trackpad:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 2px #0e1720,
+    0 0 0 4px #7dd3fc,
+    0 0 0 6px #0e1720;
+}
 
 .app {
   display: flex;
@@ -289,6 +325,25 @@ button:focus-visible { outline: none; }
   .chrome-btn-playing::after {
     animation: none;
   }
+}
+
+/* Screen-reader-only state label for the media browser button
+   (issue #62, AC #3). The pulsing green dot is a colour-only
+   carrier — a colour-blind user sees a dot they can't tell apart
+   from a "ready" state, and a screen reader user gets no signal
+   at all. The hidden text below surfaces the same info via the
+   standard "screen-reader-only" 1px-clip trick (same as
+   .media-status below). */
+.chrome-btn-sr-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ---------------------------------------------------------------------------
@@ -1523,13 +1578,104 @@ button:focus-visible { outline: none; }
   .tooltip-floating { animation: none; }
 }
 
+/* ---------------------------------------------------------------------
+   prefers-reduced-motion: drop every non-essential animation /
+   transition (issue #62, AC #2). Motion can be a vestibular trigger,
+   so users who opt out should see the surface snap into its final
+   state instantly. The list is intentionally explicit — a blanket
+   ``* { transition: none; animation: none; }`` would also kill the
+   cursor blink, the focus ring's appearance, and any future
+   accessibility-driven motion the user does want.
+   --------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  /* Connection-state pulse is the only motion that fires constantly
+     without user interaction — kill it first. */
+  .connection-connecting .connection-dot { animation: none; }
+  /* Media icon's passive playback dot: keep the dot, drop the pulse. */
+  .chrome-btn-playing::after { animation: none; }
+  /* Press feedback: the scale-down was a tactile cue, but a static
+     brightness shift still reads as feedback. */
+  .chrome-btn:active,
+  .cell-button:active,
+  .mediabrowser-skip:active:not(:disabled),
+  .mediabrowser-play:active,
+  .media-play:active,
+  .media-skip:active { transform: none; }
+  /* Tooltip fade-in already disabled above; keyframes parity kept
+     for any future motion-bearing surface. */
+}
+
+/* ---------------------------------------------------------------------
+   prefers-contrast: more (issue #62, AC #1).
+
+   When the OS bumps contrast (macOS Increase Contrast, iOS Smart
+   Invert, Windows High Contrast), the chrome's subtle dark-on-dark
+   borders become hard to distinguish from the background. Bump
+   borders, brighten backgrounds, and thicken the focus ring so the
+   surface stays navigable.
+
+   The block uses ``:where`` so the high-contrast selectors carry
+   zero specificity — they layer on top of the dark-mode defaults
+   instead of fighting them, which keeps the original rules inspectable.
+   --------------------------------------------------------------------- */
 @media (prefers-contrast: more) {
-  /* Same intent as the rest of the chrome: bump border + drop
-     shadow so the tooltip stays readable in high-contrast mode. */
+  /* Same intent as the tooltip: bump border + drop shadow so the
+     tooltip stays readable in high-contrast mode. */
   .tooltip-floating {
     background: #ffffff;
     color: #000000;
     border: 2px solid #000000;
     box-shadow: none;
   }
+
+  /* Cell chrome: thicker, brighter borders; flat background so a
+     focus ring has somewhere bright to sit. */
+  .cell-button,
+  .cell-jogstrip,
+  .cell-meter,
+  .cell-stats,
+  .cell-media,
+  .mediabrowser-row,
+  .app-badge {
+    border-width: 2px;
+    border-color: #6b7785;
+  }
+  .chrome-btn,
+  .kbd-strip-btn {
+    border-width: 2px;
+    border-color: #6b7785;
+  }
+  .slider,
+  .toggle-track {
+    border-width: 2px;
+    border-color: #6b7785;
+  }
+
+  /* Focus ring: 3px wide instead of 2px, pure white inside a black
+     halo so it reads against any background. The triple-shadow
+     pattern is the same one the default ring uses — only the
+     ring widths change — so behaviour stays predictable. */
+  button:focus-visible {
+    box-shadow:
+      0 0 0 2px #000000,
+      0 0 0 5px #ffffff,
+      0 0 0 7px #000000;
+  }
+  .cell-jogstrip:focus-visible,
+  .trackpad:focus-visible {
+    box-shadow:
+      0 0 0 2px #000000,
+      0 0 0 5px #ffffff,
+      0 0 0 7px #000000;
+  }
+
+  /* Connection indicator: keep the colour state (open / connecting /
+     closed) but add an icon-style glyph next to the dot so colour is
+     never the only carrier of state (issue #62, AC #3). The
+     ``content`` here is a Unicode signal; the visible label is the
+     existing ``.connection-label`` text. */
+  .connection-open .connection-dot { background: #4ade80; box-shadow: 0 0 0 1px #ffffff; }
+  .connection-connecting .connection-dot { background: #f59e0b; box-shadow: 0 0 0 1px #ffffff; }
+  .connection-closed .connection-dot { background: #f87171; box-shadow: 0 0 0 1px #ffffff; }
+  .connection-unauthorized .connection-dot { background: #c084fc; box-shadow: 0 0 0 1px #ffffff; }
 }

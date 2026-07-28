@@ -421,6 +421,30 @@ sleep 2 && .venv/bin/python -u scripts/send_scroll.py --velocity 1200
 ```
 
 
+### Accessibility
+
+The client is usable end-to-end without a mouse (issues [#60](https://github.com/jonocodes/deckd/issues/60) and [#62](https://github.com/jonocodes/deckd/issues/62)).
+
+**Keyboard navigation** — `Tab` walks every interactive element in DOM/logical order: the bottom-chrome buttons (manual control / media browser / settings), the layout's widgets, the in-grid jogstrip, the settings sliders and toggles. `Shift+Tab` walks back. The focused element has a high-contrast cyan focus ring (a double-box-shadow; meets WCAG 2.1 SC 1.4.11 contrast); the ring is `focus-visible`-only, so a mouse click doesn't surface it.
+
+**Keyboard activation** — every button (chrome, grid, media, mediabrowser, settings, jog-strip) responds to `Enter` and `Space`. Native `<button>` elements get this for free when they have an `onClick`; the project's `onPointerDown`-only pattern (kept for fast touch response) is paired with a matching `onKeyDown` so the keyboard path is preserved.
+
+**Keyboard alternatives for the pointer surfaces** — the right-side jogstrip and the trackpad each expose a keyboard mode so they aren't pointer-only:
+
+| Surface     | Keys                                                                                            |
+| ----------- | ----------------------------------------------------------------------------------------------- |
+| JogStrip    | `↑/↓/←/→` (small step), `PageUp/PageDown` (large step), `Home`/`End` (jump), held = auto-repeat |
+| Trackpad    | `↑/↓/←/→` (move), `Numpad 1/3/7/9` (diagonals), `PageUp/PageDown` (big step), `Space`/`Enter` (left click) |
+
+**Global shortcuts** — `1` toggles trackpad mode, `2` opens the media browser, `3` opens settings, `Escape` returns to the focused-app layout. Shortcuts are suppressed while a text input is focused, so typing into the password gate or the trackpad IME isn't hijacked.
+
+**Focus restoration** — opening a chrome view (settings, trackpad, media browser) pushes focus into the first interactive element of that view; closing it (via `Escape` or the same button) hands focus back to the chrome button that opened it. The password gate also restores focus to the surface after a successful submit, so a keyboard user can Tab into the layout without clicking anywhere.
+
+**OS-level preferences** — the theme respects `prefers-contrast: more` (thicker focus ring, higher-contrast cell borders, white halo on the connection dot) and `prefers-reduced-motion: reduce` (the connection-state pulse and the media-icon playback dot stop animating; press feedback loses its scale-down but keeps the static brightness shift). Status (connection state, playback state) is conveyed by **icon + text + colour** so it doesn't depend on colour alone: the connection indicator has a visible "live" / "reconnecting" / "disconnected" / "locked" label, and the media icon carries a screen-reader-only "now playing" / "idle" string alongside the pulsing green dot.
+
+**Typography** — labels scale with the browser zoom *and* the existing Text-size slider; cell sizes use `clamp(min, vw, max)` so they grow with the viewport. The Content-size and Bottom-bar sliders affect icon + chrome sizes without clipping adjacent content.
+
+
 
 ### uinput permissions
 
