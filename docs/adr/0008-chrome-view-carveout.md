@@ -153,3 +153,25 @@ layouts. Future views plug in without daemon or protocol changes.
   no daemon config. Future chrome-shaped views are positioned to be
   additive (a new layout + a new chrome button + a new `select_view`
   token, with no daemon or protocol change).
+
+### The chrome media icon's passive state (issue #47)
+
+The carve-out also covers the media icon's *passive* playback state
+— the icon tints to the accent colour whenever at least one MPRIS
+player is `Playing`, and stays outlined otherwise. The signal is a
+new `chrome_media` daemon → client message (`{available, playing,
+playing_count}`) the daemon emits on the two event types that change
+the indicator's meaning: `NameOwnerChanged` registration transitions
+(registration, unregistration, handoff) and `PlaybackStatus` changes
+that cross the Playing ↔ non-Playing boundary. Position / Metadata
+updates are filtered out so a 1Hz position poll doesn't flood the
+icon with redundant frames. The icon stays a single glyph; the
+change is a class toggle (`chrome-btn-playing`), not a glyph swap.
+
+The indicator reflects global reality — every connected client
+receives the frame regardless of which view it has pinned — so the
+icon is useful as a glance affordance from across the room even when
+the user isn't looking at the browser. On platforms without an
+`MprisBackend` (macOS today), no frames are produced and the icon
+stays in the default outlined state, the same graceful-degradation
+stance the rest of the MPRIS surface takes.

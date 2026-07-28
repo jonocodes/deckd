@@ -16,20 +16,35 @@
  */
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ClientMessage } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerLayout } from "./protocol";
 
 /** Replace the real socket hook with a controllable fake. The chrome
  * icon's job is to call ``send`` with the right message; the test
  * asserts on what was sent, not on daemon-side behaviour. */
 const send = vi.fn<(message: ClientMessage) => void>();
+/** Captured ``onChromeMedia`` callback the App registers with the socket
+ * hook (issue #47). Tests invoke it directly to push synthetic
+ * ``chrome_media`` frames and assert on the icon's class. */
+let chromeMediaHandler: ((m: ServerChromeMedia) => void) | null = null;
+const onLayout = vi.fn<(m: ServerLayout) => void>();
 vi.mock("./socket", () => ({
-  useDeckdSocket: () => ({
-    status: "open",
-    send,
-    authenticate: vi.fn(),
-    deauthenticate: vi.fn(),
-    hasPassword: false,
-  }),
+  useDeckdSocket: (
+    layoutCb: (m: ServerLayout) => void,
+    _widgetUpdate: unknown,
+    _mediaState: unknown,
+    chromeMediaCb: ((m: ServerChromeMedia) => void) | undefined,
+    _options: unknown,
+  ) => {
+    onLayout.mockImplementation(layoutCb);
+    chromeMediaHandler = chromeMediaCb ?? null;
+    return {
+      status: "open",
+      send,
+      authenticate: vi.fn(),
+      deauthenticate: vi.fn(),
+      hasPassword: false,
+    };
+  },
 }));
 
 import { App } from "./App";
@@ -129,5 +144,69 @@ describe("App — mediabrowser per-row cell", () => {
       command: "play-pause",
     });
     void view;
+  });
+});
+
+/** Chrome media icon passive playback indicator (issue #47).
+ *
+ * The media icon was a static glyph in v1; issue #47 turns it into a
+ * passive playback-state indicator. The icon tints (filled / accent
+ * colour) when at least one MPRIS player is ``Playing`` and stays
+ * outlined otherwise. The wire surface is a new ``chrome_media``
+ * frame the daemon pushes on ``NameOwnerChanged`` registration
+ * transitions and on ``PlaybackStatus`` boundary crossings.
+ *
+ * The socket hook mock captures the ``onChromeMedia`` callback the App
+ * registers, so these tests can push synthetic frames and assert on
+ * the icon's class without standing up a real daemon.
+ */
+describe("App — chrome media icon passive indicator", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    onLayout.mockReset();
+    chromeMediaHandler = null;
+    window.history.replaceState(null, "", "/?demo=default");
+  });
+
+  function pushChromeMedia(state: {
+    available: boolean;
+    playing: boolean;
+    playing_count: number;
+  }) {
+    act(() => {
+      chromeMediaHandler?.({ type: "chrome_media", ...state });
+    });
+  }
+
+  it("starts outlined when no chrome_media frame has arrived", () => {
+    render(<App />);
+    const button = screen.getByRole("button", { name: "media browser" });
+    // Default outlined state: no playing-class, regardless of any other
+    // chrome-btn classes the icon might carry (active when the view
+    // is open is the orthogonal concern).
+    expect(button.className).not.toContain("chrome-btn-playing");
+  });
+
+  it("tints the icon when a chrome_media frame reports playing=true", () => {
+    render(<App />);
+    pushChromeMedia({ available: true, playing: true, playing_count: 1 });
+    const button = screen.getByRole("button", { name: "media browser" });
+    expect(button.className).toContain("chrome-btn-playing");
+  });
+
+  it("removes the tint when playing flips back to false", () => {
+    render(<App />);
+    pushChromeMedia({ available: true, playing: true, playing_count: 1 });
+    pushChromeMedia({ available: true, playing: false, playing_count: 0 });
+    const button = screen.getByRole("button", { name: "media browser" });
+    expect(button.className).not.toContain("chrome-btn-playing");
+  });
+
+  it("stays outlined when players are available but none are playing", () => {
+    render(<App />);
+    pushChromeMedia({ available: true, playing: false, playing_count: 0 });
+    const button = screen.getByRole("button", { name: "media browser" });
+    expect(button.className).not.toContain("chrome-btn-playing");
   });
 });

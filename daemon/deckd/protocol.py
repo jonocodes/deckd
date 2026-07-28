@@ -76,6 +76,34 @@ class MediaStateMessage(BaseModel):
     app_name: str | None = None
 
 
+class ChromeMediaMessage(BaseModel):
+    """Daemon -> client push: the chrome media icon's passive
+    playback-state snapshot (issue #47).
+
+    Sent by the daemon whenever the meaning of the indicator changes —
+    a player registered / unregistered, or a ``PlaybackStatus`` flipped
+    across the Playing ↔ non-Playing boundary. The client tints the
+    media icon when ``playing`` is true and leaves it outlined
+    otherwise. Position / Metadata updates that don't flip ``playing``
+    never produce a frame (debounce by event type).
+
+    Pushed to every connected session regardless of which view the
+    client has pinned — the indicator is global chrome, not
+    per-session. ``available`` is true when at least one MPRIS
+    player is registered; ``playing`` is true when at least one is
+    in ``PlaybackStatus == Playing``; ``playing_count`` carries the
+    number currently in Playing so a future per-player / count-style
+    indicator has the raw tally without a separate wire message.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["chrome_media"]
+    available: bool
+    playing: bool
+    playing_count: int = Field(ge=0)
+
+
 class WidgetUpdateMessage(BaseModel):
     """Daemon->client push: a meter widget's live value (issue #40).
 
@@ -104,7 +132,7 @@ class WidgetUpdateMessage(BaseModel):
 
 
 ServerMessage = Annotated[
-    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage],
+    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, ChromeMediaMessage],
     Field(discriminator="type"),
 ]
 

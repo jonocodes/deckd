@@ -29,6 +29,14 @@ export default tseslint.config(
         "warn",
         { allowConstantExport: true },
       ],
+      // Test mocks and signatures use the ``_foo`` prefix to mark
+      // intentionally-unused parameters (e.g. ``useDeckdSocket`` mock
+      // accepts more args than the test reads). Treat them as ignored
+      // so the lint stays clean without sprinkling eslint-disable.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+      ],
     },
   },
   // Config / tooling files run in Node, not the browser.

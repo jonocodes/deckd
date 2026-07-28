@@ -200,6 +200,90 @@ class MprisBackend(Protocol):
         when there is no art or the row is unknown (issue #57)."""
         ...
 
+    def set_chrome_media_listener(
+        self, listener: "Callable[[ChromeMediaState], None] | None"
+    ) -> None:
+        """Register a callback fired on the chrome-media indicator's
+        boundary events (issue #47).
+
+        The listener receives the new :class:`ChromeMediaState` snapshot
+        after every ``NameOwnerChanged`` registration transition and
+        after every ``PlaybackStatus`` change that crosses the
+        Playing ↔ non-Playing boundary. Position / Metadata updates
+        that don't flip ``playing`` do not fire the listener (debounce
+        by event-type, no time window).
+
+        ``None`` unregisters the listener. The default is no listener —
+        a backend constructed without one stays quiet, so a test that
+        doesn't care about chrome-media can ignore the path entirely.
+        """
+        ...
+
+    def chrome_media_snapshot(self) -> ChromeMediaState:
+        """Compute the current chrome-media state from the backend's
+        owned-rows set and per-row cached ``playing`` flag (issue #47).
+
+        Used for the just-connected session snapshot path: the
+        broadcast loop only fires on event-type transitions, so a
+        session that joins mid-lifetime would otherwise never see the
+        current ``playing`` / ``available`` until the next event. The
+        snapshot fills that gap with a one-shot frame based on the
+        backend's current view of the bus.
+        """
+        ...
+
+
+@dataclass(frozen=True)
+class ChromeMediaState:
+    """Chrome-icon passive-playback snapshot (issue #47).
+
+    Wire shape: ``{available, playing, playing_count}``. ``available``
+    means at least one ``org.mpris.MediaPlayer2.*`` player is
+    registered on the session bus; ``playing`` is true when at least
+    one is in ``PlaybackStatus == Playing``; ``playing_count`` is the
+    number of players in Playing (so a future 'now playing' indicator
+    has the raw count to work with — today the icon only tints on the
+    boolean ``playing``).
+
+    Frozen so two values computed from the same inputs compare equal
+    by value — the server's broadcast loop debounces against equality,
+    so a frozen dataclass gives that for free.
+    """
+
+    available: bool
+    playing: bool
+    playing_count: int
+
+
+def compute_chrome_media(
+    owned_names: list[str], states: dict[str, MediaState]
+) -> ChromeMediaState:
+    """Pure mapping from the backend's row set + cached states to a
+    :class:`ChromeMediaState` snapshot (issue #47).
+
+    Available reflects the owned-names set (the session bus's
+    ``ListNames`` reply). Playing tally reads each owned row's cached
+    ``playing`` flag — ``True`` only on a confirmed Playing. ``None``
+    or missing cached states count as not-playing: the chrome icon
+    must not tint on unconfirmed state.
+
+    Centralising the rule here keeps the
+    ``_emit_chrome_media`` callback on :class:`DbusMprisBackend`
+    trivially testable (this function is its only logic) and gives the
+    server's media pump a single function to call when it wants a
+    snapshot for any reason (e.g. a late session catching up).
+    """
+    playing_count = 0
+    for suffix in owned_names:
+        state = states.get(suffix)
+        if state is not None and state.playing is True:
+            playing_count += 1
+    return ChromeMediaState(
+        available=bool(owned_names),
+        playing=playing_count > 0,
+        playing_count=playing_count,
+    )
+
 
 @dataclass
 class FakeMprisBackend(MprisBackend):
@@ -225,13 +309,24 @@ class FakeMprisBackend(MprisBackend):
     def art_url(self, row_id: str) -> str | None:
         """The row's current ``mpris:artUrl`` (one of the proxy-servable
         shapes — ``file://`` / ``http(s)://`` / ``data:``), or ``None``
-        when there is no art or the row is unknown (issue #57).
+        when there is no art or the row is unknown.
 
         Tests inject entries into :attr:`art_urls`; production uses
         :class:`DbusMprisBackend`'s implementation, which reads the
         URL the bus's most recent ``Metadata`` carried.
         """
         return self.art_urls.get(row_id)
+
+    def chrome_media_snapshot(self) -> ChromeMediaState:
+        """Snapshot the current chrome-media state (issue #47).
+
+        Mirrors the production implementation: read every cached
+        row's ``playing`` flag from the states map. ``row_ids()`` is
+        the source of truth for which rows are currently on the bus,
+        so a state entry for a row no longer in ``row_ids`` is
+        correctly ignored by the reducer.
+        """
+        return compute_chrome_media(self.row_ids(), self.states)
 
 
 class DbusMprisBackend(MprisBackend):
@@ -287,6 +382,35 @@ class DbusMprisBackend(MprisBackend):
         # shapes (awaitable or plain list) are awaited by
         # :meth:`refresh_names` via ``_is_awaitable``.
         self.list_names: Callable[[], Any] = lambda: []
+        # Chrome-media passive indicator listener (issue #47). The
+        # server wires its broadcast loop in here so the chrome icon
+        # tints on ``NameOwnerChanged`` registration transitions and
+        # on ``PlaybackStatus`` boundary crossings. ``None`` keeps the
+        # backend quiet — a backend constructed without a listener
+        # still works, so tests that don't exercise chrome-media can
+        # leave the slot empty.
+        self._chrome_media_listener: Callable[[ChromeMediaState], None] | None = None
+
+    def set_chrome_media_listener(
+        self, listener: Callable[[ChromeMediaState], None] | None
+    ) -> None:
+        self._chrome_media_listener = listener
+
+    def _emit_chrome_media(self) -> None:
+        """Snapshot the chrome-media state and fire the listener.
+
+        Called from the two event sites the issue names:
+        ``NameOwnerChanged`` registration transitions (every one —
+        registration and unregistration both count, since ``available``
+        changes either way) and ``PlaybackStatus`` boundary crossings.
+        Position / Metadata updates that don't flip ``playing`` skip
+        this path entirely; the listener isn't called, so no frame is
+        produced.
+        """
+        listener = self._chrome_media_listener
+        if listener is None:
+            return
+        listener(compute_chrome_media(self._owned_names, self._states))
 
     def row_ids(self) -> list[str]:
         # The single source of truth for the row order the browser
@@ -551,6 +675,10 @@ class DbusMprisBackend(MprisBackend):
         if new_owner and suffix not in self._owned_names:
             self._owned_names.append(suffix)
             self._owners[suffix] = new_owner
+        # Issue #47: every ``NameOwnerChanged`` registration transition
+        # (registration, unregistration, handoff) flips the chrome icon's
+        # ``available`` bit, so emit regardless of direction.
+        self._emit_chrome_media()
 
     def _handle_properties_changed(self, message: Any) -> None:
         # ``PropertiesChanged`` body is ``(interface, changed,
@@ -572,12 +700,30 @@ class DbusMprisBackend(MprisBackend):
                 previous = self._states.get(row_id) or MediaState(
                     available=True, stale=False
                 )
+                # Capture the prior ``playing`` flag before merging
+                # the new ``changed`` dict — the chrome-media
+                # debounce rule fires only on the boundary crossing,
+                # so a Position-only or Metadata-only update (which
+                # never touches ``playing``) must not emit (issue #47).
+                previous_playing = previous.playing is True
                 # ``_apply_properties_changed`` updates ``art_token`` and
                 # ``art_url`` together from the signal's ``Metadata`` (or
                 # preserves the previous values if Metadata is absent) —
                 # so the proxy's URL always tracks the state cache, no
                 # second cache to keep in sync (issue #57).
                 self._states[row_id] = _apply_properties_changed(previous, changed)
+                next_playing = self._states[row_id].playing is True
+                # Issue #47 chrome-media debounce: emit on every flip of
+                # the boolean ``playing`` flag the icon's tint depends
+                # on. The spec's literal wording covers Paused → Stopped
+                # transitions too, but a Stopped state still maps to
+                # ``playing=False`` — the icon's tint doesn't change,
+                # so firing a frame for the indicator would be a no-op
+                # on the client. We emit only on the Playing ↔
+                # non-Playing boundary, which matches the icon's
+                # observable behaviour and keeps the wire quiet.
+                if previous_playing != next_playing:
+                    self._emit_chrome_media()
                 return
 
     async def read_state(self, row_id: str) -> MediaState | None:
@@ -649,6 +795,20 @@ class DbusMprisBackend(MprisBackend):
         if state is None:
             return None
         return state.art_url
+
+    def chrome_media_snapshot(self) -> ChromeMediaState:
+        """Compute the current chrome-media snapshot (issue #47).
+
+        Reads ``_owned_names`` (the live row set) and the per-row
+        cached ``MediaState.playing`` flag directly — the same
+        inputs the listener-driven path uses, just synchronously from
+        the snapshot caller. A row whose state hasn't been fetched
+        yet counts as not-playing (matching the reducer's rule); the
+        caller renders ``available=True, playing=False`` for an
+        early-connection session, which is the correct
+        conservative state until a real ``Playing`` transition arrives.
+        """
+        return compute_chrome_media(self._owned_names, self._states)
 
     async def _read_identity(self, row_id: str) -> str | None:
         """Fetch (and cache) the player's root-interface ``Identity``.

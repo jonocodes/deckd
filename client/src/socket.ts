@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerLayout, ServerMessage, ServerWidgetUpdate, MediaState } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerLayout, ServerMessage, ServerWidgetUpdate, MediaState } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
 
@@ -44,6 +44,7 @@ export function useDeckdSocket(
   onLayout: (m: ServerLayout) => void,
   onWidgetUpdate: (m: ServerWidgetUpdate) => void,
   onMediaState: (m: MediaState) => void,
+  onChromeMedia?: (m: ServerChromeMedia) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -105,6 +106,15 @@ export function useDeckdSocket(
           if (msg.type === "layout") onLayout(msg);
           else if (msg.type === "widget_update") onWidgetUpdate(msg);
           else if (msg.type === "media_state") onMediaState(msg);
+          // Issue #47: the daemon may push ``chrome_media`` to every
+          // connected client (the indicator is global chrome) even
+          // when a particular client doesn't render the media icon
+          // or hasn't wired a listener yet. The handler is optional
+          // so a test or a future client that doesn't care about
+          // chrome-media state can drop the param without breaking
+          // the dispatch. The defensive guard costs nothing and
+          // keeps the wire surface forward-compatible.
+          else if (msg.type === "chrome_media" && onChromeMedia) onChromeMedia(msg);
           else if (msg.type === "error" && msg.reason === "unauthorized") {
             // Wrong/absent password: stop reconnecting and prompt the user.
             unauthorizedRef.current = true;
@@ -147,7 +157,7 @@ export function useDeckdSocket(
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onLayout, onWidgetUpdate, onMediaState, enabled, gen]);
+  }, [onLayout, onWidgetUpdate, onMediaState, onChromeMedia, enabled, gen]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;

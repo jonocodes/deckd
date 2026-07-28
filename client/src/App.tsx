@@ -24,7 +24,7 @@ import { useWakeLock } from "./wake-lock";
 import { getDemoLayout, getDemoView, MEDIA_DEMO_STATES, MPRIS_DEMO_STATES } from "./demo";
 import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
-import type { Icon as IconRef, ServerLayout } from "./protocol";
+import type { Icon as IconRef, ServerChromeMedia, ServerLayout } from "./protocol";
 import { MPRIS_VIEW_ID } from "./protocol";
 
 type View = "layout" | "trackpad" | "settings" | "mediabrowser";
@@ -103,6 +103,16 @@ export function App() {
   const pushReading = meter.onUpdate;
   const onWidgetUpdate = pushReading;
   const onMediaState = media.onUpdate;
+  // Chrome media icon passive playback indicator (issue #47). The
+  // daemon pushes a ``chrome_media`` frame on event-type transitions
+  // (NameOwnerChanged registration transitions and PlaybackStatus
+  // boundary crossings) plus a snapshot on connect; we mirror the
+  // latest snapshot in state and apply a ``chrome-btn-playing``
+  // class on the media icon when ``playing`` flips true. The default
+  // outlined state holds until the first frame arrives — matches the
+  // daemon's "no players" default on a fresh session.
+  const [chromeMedia, setChromeMedia] = useState<ServerChromeMedia | null>(null);
+  const onChromeMedia = useCallback((m: ServerChromeMedia) => setChromeMedia(m), []);
   // Demo mode has no socket, so seed the media store once on mount with the
   // fixture readings — otherwise a media widget renders as "unavailable".
   const isDemo = demoLayout !== null;
@@ -115,7 +125,7 @@ export function App() {
     for (const state of MPRIS_DEMO_STATES) onMediaState(state);
   }, [isDemo, onMediaState]);
   const { status, send, authenticate, deauthenticate, hasPassword } =
-    useDeckdSocket(onLayout, onWidgetUpdate, onMediaState, { enabled: !demoLayout });
+    useDeckdSocket(onLayout, onWidgetUpdate, onMediaState, onChromeMedia, { enabled: !demoLayout });
   // Track whether we've already handed the socket a password this session, so
   const [attemptedAuth, setAttemptedAuth] = useState(false);
   const scroll = useScrollSettings();
@@ -328,7 +338,7 @@ export function App() {
           <PointerIcon size={18} />
         </button>
         <button
-          className={`chrome-btn${view === "mediabrowser" ? " chrome-btn-active" : ""}`}
+          className={`chrome-btn${view === "mediabrowser" ? " chrome-btn-active" : ""}${chromeMedia?.playing ? " chrome-btn-playing" : ""}`}
           aria-label="media browser"
           onPointerDown={toggleMediaBrowser}
         >

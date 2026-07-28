@@ -19,7 +19,7 @@ from .actions import ActionContext, execute as run_action
 from .input import ScrollController, parse_key_combo, text_to_combos
 from .layouts import Layout, LayoutStore, load_layouts, resolve_layout
 from .media import MediaManager, MediaState, effective_art_token
-from .mpris import DbusMprisBackend, MprisBackend, connect_mpris_backend
+from .mpris import ChromeMediaState, DbusMprisBackend, MprisBackend, connect_mpris_backend
 from .mpris_art import resolve_mpris_art_async
 
 if TYPE_CHECKING:
@@ -279,6 +279,17 @@ class Server:
             default = connect_mpris_backend(self.layouts, dbus_bus_factory)
             if default is not None:
                 self.mpris = default
+        # Issue #47: wire the chrome-media passive indicator listener
+        # on whichever backend is now active. The backend fires the
+        # listener on ``NameOwnerChanged`` transitions and on
+        # ``PlaybackStatus`` boundary crossings; we translate each
+        # snapshot into a ``ChromeMediaMessage`` broadcast to every
+        # connected session. The listener is sync (the bus signals
+        # are too); we schedule the broadcast as a task on the same
+        # event loop so the frame lands on the wire immediately,
+        # without going through the 1-second media-pump tick.
+        if self.mpris is not None:
+            self.mpris.set_chrome_media_listener(self._on_chrome_media_change)
         self.scroll = scroll if scroll is not None else ScrollController()
         self.key_sink = key_sink
         self.dbus_bus_factory = dbus_bus_factory
@@ -717,6 +728,22 @@ class Server:
         fields["art_token"] = effective_art_token(state, art_sources)
         return p.MediaStateMessage(type="media_state", id=widget_id, **fields)
 
+    def _chrome_message(self, state: "ChromeMediaState") -> "p.ChromeMediaMessage":
+        """Build a ``chrome_media`` frame from a backend snapshot (issue #47).
+
+        Extracted so the broadcast and snapshot paths share one
+        constructor — they take different inputs (an event-driven
+        snapshot vs. a just-connected session's current view) but
+        produce the same wire shape. Mirrors :meth:`_media_message`'s
+        role for the per-row ``media_state`` stream.
+        """
+        return p.ChromeMediaMessage(
+            type="chrome_media",
+            available=state.available,
+            playing=state.playing,
+            playing_count=state.playing_count,
+        )
+
     async def _broadcast_media_state(self, widget_id: str, state: MediaState, art_sources: list[str]) -> bool:
         if not self._sessions:
             return False
@@ -732,6 +759,69 @@ class Server:
         for session in dead:
             self._sessions.discard(session)
         return sent > 0
+
+    def _on_chrome_media_change(self, state: "ChromeMediaState") -> None:
+        """Backend listener: schedule a chrome-media broadcast on the
+        running event loop (issue #47).
+
+        The backend's signal handlers are synchronous; the broadcast
+        is async (it iterates sessions and awaits each ``send``).
+        Schedule it as a task so we don't block the bus dispatcher
+        thread. ``create_task`` requires a running loop, which is
+        guaranteed here because the listener only fires from signals
+        delivered through ``dbus_fast.aio.MessageBus`` on the same
+        loop the server runs.
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        asyncio.create_task(self._broadcast_chrome_media(state))
+
+    async def _broadcast_chrome_media(self, state: "ChromeMediaState") -> None:
+        """Push a ``ChromeMediaMessage`` to every connected session.
+
+        The chrome icon is global chrome (acceptance criterion 3):
+        every client receives the frame regardless of which view it
+        has pinned. Sessions whose send fails are dropped from the
+        set, mirroring the per-session cleanup ``_broadcast_media_state``
+        does for the per-row stream.
+
+        No debounce here — the backend already debounces
+        (NameOwnerChanged + Playing-boundary transitions only), so
+        every listener call is meaningful. The server-side loop
+        doesn't add a time window.
+        """
+        if not self._sessions:
+            return
+        msg = self._chrome_message(state)
+        dead: list[Session] = []
+        for session in list(self._sessions):
+            try:
+                await session.send(msg)
+            except (ConnectionResetError, RuntimeError, ConnectionError):
+                dead.append(session)
+        for session in dead:
+            self._sessions.discard(session)
+
+    async def push_chrome_media_snapshot(self, session: Session) -> None:
+        """Replay the current chrome-media state to a just-connected session.
+
+        The chrome-media broadcast fires on event-type transitions
+        only — a session that connects mid-lifetime would never see
+        the current ``playing`` / ``available`` otherwise (e.g. a
+        phone that joins while a track is already playing). Mirrors
+        :meth:`push_media_snapshot` for the per-row stream.
+
+        Empty cache is fine: the snapshot just reports
+        ``available=True`` (or False) and ``playing=False`` until the
+        backend's first ``read_state`` populates the per-row cache.
+        A freshly-started daemon correctly reports non-playing until
+        a real ``Playing`` boundary transition arrives.
+        """
+        if self.mpris is None:
+            return
+        await session.send(self._chrome_message(self.mpris.chrome_media_snapshot()))
 
     async def push_media_snapshot(self, session: Session) -> None:
         """Replay the current MPRIS state to a single just-connected (or
@@ -1027,6 +1117,11 @@ class Server:
             # client sees "no players detected" until the state next
             # changes (which for a steadily-playing MPRIS track is never).
             await self.push_media_snapshot(session)
+            # Issue #47: same snapshot rationale for the chrome-media
+            # indicator. A second client connecting while a track is
+            # already playing would otherwise never see ``playing=true``
+            # until the next boundary transition (which is rare).
+            await self.push_chrome_media_snapshot(session)
             async for raw in ws:
                 if raw.type != WSMsgType.TEXT:
                     continue

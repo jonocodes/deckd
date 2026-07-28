@@ -45,6 +45,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Scroll strip** — an always-on right-side jogstrip to scroll the focused window, with release momentum.
 - [x] **Manual control mode** — the phone becomes a trackpad (move, tap, right-click, drag-lock) and a keyboard, so you can type into and point at the focused app for the things layouts don't cover (URL bars, chat boxes, ad-hoc commands).
 - [x] **App badge** — the focused app's name, icon, and accent color show in the bottom bar so you can tell at a glance what you're controlling.
+- [x] **Chrome media indicator** — the media icon tints whenever an MPRIS player is `Playing` (passive playback indicator), independent of the browser view.
 - [x] **Live layout editing** — edit a layout file on the desktop and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
 - [x] **Keep screen awake** while the surface is in use.
@@ -816,6 +817,39 @@ never shows the music-note button, never opens the session D-Bus, and
 never pays the bus-connect cost. Users who don't enable the feature
 see the bottom chrome exactly as before.
 
+#### Passive playback indicator
+
+The media icon doubles as a glance affordance for the host's
+playback state (issue #47): it tints to the accent colour whenever
+at least one MPRIS player is `Playing`, and stays outlined
+otherwise. The icon stays useful whether or not the browser view
+is open — the indicator reflects global reality, so a phone on the
+desk reads "something is playing" at a glance without the user
+having to tap the icon and pin the view.
+
+The daemon pushes a `chrome_media` frame over the WebSocket on the
+two event types that change the indicator's meaning:
+
+- **Registration transitions** — every `org.mpris.MediaPlayer2.<suffix>`
+  appearing, disappearing, or being handed off fires one frame.
+  `available` flips in step with the owned-names set.
+- **`PlaybackStatus` boundary crossings** — a transition into or
+  out of `Playing` fires one frame. `playing` flips accordingly.
+
+Position and Metadata updates are filtered out at the backend, so
+a 1Hz position poll (or a track skip) doesn't flood the icon with
+redundant frames. The wire is debounce-by-event-type, not
+time-window — the indicator fires precisely when the meaning
+changes, no sooner, no later.
+
+A fresh session receives a snapshot frame on connect (right after
+the layout + per-row `media_state` frames), so a phone that joins
+while a track is already playing tints immediately rather than
+waiting for the next boundary transition. On platforms without an
+`MprisBackend` (macOS today) no frames are produced and the icon
+stays in the default outlined state — the same
+graceful-degradation stance the rest of the MPRIS surface takes.
+
 #### What the view shows
 
 The chrome view is the same `mpris.yaml` layout, rendered with the
@@ -980,10 +1014,6 @@ and not interfering.
 
 #### Future follow-ups
 
-- **Passive playback-state tint on the chrome media icon** — the
-  icon is currently a static music note. A future follow-up will
-  subscribe to the live MPRIS state and tint the icon while a
-  player is `Playing`. See issue #47.
 - **Volume, seek, scrubber** — the v1 browser exposes the three
   transport buttons only. Volume and seek controls (and the
   capability-gated `CanSeek` honouring) are deferred.

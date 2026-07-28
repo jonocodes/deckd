@@ -249,6 +249,21 @@ button:focus-visible { outline: none; }
 .chrome-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .chrome-btn-active { background: #2a333d; border-color: #3fb1d8; color: #7dd3fc; }
 
+/* Passive playback indicator (issue #47): the media icon tints to the
+   accent colour whenever at least one MPRIS player is ``Playing``.
+   Independent of ``chrome-btn-active`` (the view-open class): the
+   indicator reflects global playback state whether or not the user
+   has the browser view pinned, so the icon stays useful as a glance
+   affordance from across the room. The two classes coexist when the
+   user opens the view on a currently-playing session; the accent
+   border + accent colour already match, so the visual stays
+   coherent. */
+.chrome-btn-playing {
+  color: #7dd3fc;
+  border-color: #3fb1d8;
+  background: #1a2733;
+}
+
 /* ---------------------------------------------------------------------------
  * Layout grid area (chrome-excluded)
  * ------------------------------------------------------------------------- */

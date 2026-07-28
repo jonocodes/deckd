@@ -105,6 +105,17 @@ export type ServerWidgetUpdate = {
   unit: string;
   stale: boolean;
 };
+/** Daemon -> client push: the chrome media icon's passive playback-state
+ * snapshot (issue #47). Sent on event-type transitions
+ * (``NameOwnerChanged`` registration transitions and ``PlaybackStatus``
+ * boundary crossings) plus a snapshot on connect. The client tints the
+ * media icon when ``playing`` is true and leaves it outlined otherwise. */
+export type ServerChromeMedia = {
+  type: "chrome_media";
+  available: boolean;
+  playing: boolean;
+  playing_count: number;
+};
 /** Sent by the daemon to a non-loopback client whose ``hello`` omitted or
  * got the shared password wrong (issue #16); the socket is closed straight
  * after. The client swaps in the password prompt. */
@@ -115,6 +126,7 @@ export type ServerMessage =
   | ServerBrightness
   | ServerWidgetUpdate
   | MediaState
+  | ServerChromeMedia
   | ServerError;
 
 export type ClientHello = {
