@@ -37,4 +37,17 @@ widgets:
       dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
   - id: scroll-strip
     kind: jogstrip
-    grid: [0, 1, 4, 1]
+    grid: [0, 2, 4, 1]
+  - id: press-url
+    kind: button
+    label: Press URL
+    grid: [0, 1, 1, 1]
+    action:
+      url: "https://example.com/hello?q=1"
+  - id: press-text
+    kind: button
+    label: Press Text
+    grid: [1, 1, 1, 1]
+    action:
+      text: "hello"
+      text_mode: simulate

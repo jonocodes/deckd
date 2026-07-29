@@ -144,6 +144,11 @@ def _action_primitive(action: "Action | None", macro: "Macro | None" = None) -> 
         return "key", action.key
     if action.dbus is not None:
         return "dbus", action.dbus
+    if action.url is not None:
+        return "url", action.url
+    if action.text is not None:
+        mode = action.text_mode or "simulate"
+        return "text", f"[{mode}] {action.text[:40]}"
     return "press", None
 
 

@@ -78,6 +78,10 @@ async def execute(
         await _dispatch_key(action.key, ctx)
     elif action.dbus is not None:
         await _dispatch_dbus(action.dbus, ctx, widget_id=widget.id)
+    elif action.url is not None:
+        await _dispatch_url(action.url)
+    elif action.text is not None:
+        await _dispatch_text(action, ctx)
     else:
         log.warning("widget %s action has no recognised primitive: %s",
                     widget.id, action)
@@ -310,6 +314,206 @@ async def _dispatch_dbus(
 
 
 # ---------------------------------------------------------------------------
+# URL action dispatch
+# ---------------------------------------------------------------------------
+
+_URL_OPENERS_LINUX: list[tuple[str, ...]] = [
+    ("xdg-open",),
+    ("gio", "open"),
+]
+_URL_OPENERS_MACOS: list[tuple[str, ...]] = [
+    ("open",),
+]
+
+
+def _resolve_url_opener() -> tuple[str, ...] | None:
+    import sys
+
+    candidates = _URL_OPENERS_MACOS if sys.platform == "darwin" else _URL_OPENERS_LINUX
+    for cmd in candidates:
+        if shutil.which(cmd[0]):
+            return cmd
+    return None
+
+
+async def _dispatch_url(url: str) -> None:
+    cmd = _resolve_url_opener()
+    if cmd is None:
+        log.warning("[url] no URL opener found; install xdg-utils or libglib2-bin")
+        return
+    log.info("[url] %s %s", cmd[0], url)
+    try:
+        await asyncio.create_subprocess_exec(
+            *cmd, url,
+            stdin=asyncio.subprocess.DEVNULL,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except OSError as exc:
+        log.error("[url] failed to start %r %r: %s", cmd, url, exc)
+
+
+# ---------------------------------------------------------------------------
+# Text action dispatch
+# ---------------------------------------------------------------------------
+
+
+def _clipboard_read_args(tool: str) -> list[str]:
+    import sys
+
+    if sys.platform == "darwin":
+        return [tool]
+    if "xclip" in tool:
+        return [tool, "-o", "-selection", "clipboard"]
+    if "xsel" in tool:
+        return [tool, "-b"]
+    return [tool]
+
+
+def _clipboard_write_args(tool: str) -> list[str]:
+    import sys
+
+    if sys.platform == "darwin":
+        return [tool]
+    if "xclip" in tool:
+        return [tool, "-selection", "clipboard"]
+    if "xsel" in tool:
+        return [tool, "-b"]
+    return [tool]
+
+
+def _detect_clipboard_tools() -> tuple[str | None, str | None]:
+    import sys
+
+    if sys.platform == "darwin":
+        return ("pbcopy", "pbpaste")
+    copy_tool = shutil.which("wl-copy")
+    paste_tool = None
+    if copy_tool is not None:
+        paste_tool = shutil.which("wl-paste")
+    else:
+        copy_tool = shutil.which("xclip")
+        paste_tool = shutil.which("xclip")
+        if copy_tool is None:
+            copy_tool = shutil.which("xsel")
+            paste_tool = shutil.which("xsel")
+    return (copy_tool, paste_tool)
+
+
+def _text_needs_paste_fallback(text: str, forced_mode: str | None) -> bool:
+    if forced_mode == "simulate":
+        return False
+    if forced_mode == "paste":
+        return True
+    from .input import text_to_combos
+
+    expected = len(text)
+    combos = text_to_combos(text)
+    if len(combos) < expected:
+        return True
+    return False
+
+
+async def _dispatch_text(action: "Action", ctx: ActionContext) -> None:
+    text = action.text
+    if text is None or text == "":
+        return
+
+    mode = action.text_mode or "simulate"
+    needs_fallback = _text_needs_paste_fallback(text, action.text_mode)
+    if needs_fallback and mode == "simulate":
+        log.warning("[text] string contains characters not mappable to keycodes; "
+                     "falling back to paste mode")
+        mode = "paste"
+
+    if mode == "simulate":
+        await _text_simulate(text, ctx)
+    else:
+        await _text_paste(text, ctx, action.restore_clipboard, action.restore_clipboard_delay_ms)
+
+
+async def _text_simulate(text: str, ctx: ActionContext) -> None:
+    from .input import text_to_combos
+
+    combos = text_to_combos(text)
+    sink = ctx.key_sink
+    if sink is None:
+        log.info("[text log] text=%r (no sink wired)", text)
+        return
+    for combo in combos:
+        sink.emit_key(combo)
+    log.info("[text simulate] %d chars", len(combos))
+
+
+async def _text_paste(text: str, ctx: ActionContext, restore_clipboard: bool,
+                       restore_delay_ms: int = 1000) -> None:
+    copy_tool, paste_tool = _detect_clipboard_tools()
+    if copy_tool is None:
+        log.warning("[text paste] no clipboard tool found; falling back to simulate")
+        await _text_simulate(text, ctx)
+        return
+
+    previous: str | None = None
+    if restore_clipboard and paste_tool is not None:
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *_clipboard_read_args(paste_tool),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+            if proc.stdout is not None:
+                stdout, _ = await proc.communicate()
+                previous = stdout.decode("utf-8", errors="replace")
+        except Exception as exc:
+            log.warning("[text paste] failed to read clipboard: %s", exc)
+
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            *_clipboard_write_args(copy_tool),
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        if proc.stdin is not None:
+            proc.stdin.write(text.encode("utf-8"))
+            await proc.stdin.drain()
+            proc.stdin.close()
+            await proc.wait()
+    except Exception as exc:
+        log.warning("[text paste] failed to write clipboard: %s", exc)
+        return
+
+    sink = ctx.key_sink
+    if sink is not None:
+        from .input import parse_key_combo
+
+        ctrlv = parse_key_combo("ctrl+v")
+        sink.emit_key(ctrlv)
+        log.info("[text paste] pasted %d chars via ctrl+v", len(text))
+    else:
+        log.info("[text paste log] text=%r (no sink wired)", text)
+
+    if restore_clipboard and previous is not None and paste_tool is not None:
+        await asyncio.sleep(restore_delay_ms / 1000.0)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *_clipboard_write_args(copy_tool),
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            if proc.stdin is not None:
+                proc.stdin.write(previous.encode("utf-8"))
+                await proc.stdin.drain()
+                proc.stdin.close()
+                await proc.wait()
+        except Exception as exc:
+            log.warning("[text paste] failed to restore clipboard: %s", exc)
+
+
+# ---------------------------------------------------------------------------
 # Macro execution
 # ---------------------------------------------------------------------------
 
@@ -433,4 +637,17 @@ async def _step_dbus(step: MacroStep, ctx: ActionContext) -> None:
             bus.disconnect()
         except Exception as exc:
             log.debug("[macro dbus] disconnect error: %s", exc)
+
+
+@_register("url")
+async def _step_url(step: MacroStep, _ctx: ActionContext) -> None:
+    await _dispatch_url(step.value)
+
+
+@_register("text")
+async def _step_text(step: MacroStep, ctx: ActionContext) -> None:
+    from .layouts import Action
+    a = Action(text=step.value, text_mode=None, restore_clipboard=True,
+               restore_clipboard_delay_ms=1000)
+    await _dispatch_text(a, ctx)
 

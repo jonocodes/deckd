@@ -669,7 +669,143 @@ REPO_LAYOUTS_DIR = Path(__file__).parent.parent / "layouts"
 
 def test_shipping_layouts_load_and_resolve_default() -> None:
     store = load_layouts(REPO_LAYOUTS_DIR)
-    # A default layout must exist with at least one widget, and every shipped
-    # layout must carry a non-empty match list (that's what makes it findable).
     default = store.default()
     assert default.widgets, "shipping default.yaml has no widgets"
+
+
+# ---------------------------------------------------------------------------
+# url: action primitive
+# ---------------------------------------------------------------------------
+
+
+def test_action_url_parses(tmp_path: Path) -> None:
+    """A url: action loads without error."""
+    body = """
+match:
+  - default
+widgets:
+  - id: url-btn
+    kind: button
+    grid: [0, 0, 1, 1]
+    action:
+      url: "https://example.com"
+"""
+    _write(tmp_path, "default.yaml", body)
+    store = load_layouts(tmp_path)
+    assert store.default().widgets[0].action.url == "https://example.com"
+
+
+def test_action_url_rejects_unknown_scheme(tmp_path: Path) -> None:
+    """A non-http/https/file URL is a load-time error."""
+    body = """
+match:
+  - default
+widgets:
+  - id: url-btn
+    kind: button
+    grid: [0, 0, 1, 1]
+    action:
+      url: "ftp://example.com"
+"""
+    _write(tmp_path, "default.yaml", body)
+    with pytest.raises(SystemExit):
+        load_layouts(tmp_path)
+
+
+def test_action_url_accepts_file_scheme(tmp_path: Path) -> None:
+    """file:// URLs are accepted."""
+    body = """
+match:
+  - default
+widgets:
+  - id: url-btn
+    kind: button
+    grid: [0, 0, 1, 1]
+    action:
+      url: "file:///tmp/test.html"
+"""
+    _write(tmp_path, "default.yaml", body)
+    store = load_layouts(tmp_path)
+    assert store.default().widgets[0].action.url == "file:///tmp/test.html"
+
+
+# ---------------------------------------------------------------------------
+# text: action primitive
+# ---------------------------------------------------------------------------
+
+
+def test_action_text_simulate_mode_parses(tmp_path: Path) -> None:
+    """A text: action with text_mode: simulate loads without error."""
+    body = """
+match:
+  - default
+widgets:
+  - id: text-btn
+    kind: button
+    grid: [0, 0, 1, 1]
+    action:
+      text: "hello"
+      text_mode: simulate
+"""
+    _write(tmp_path, "default.yaml", body)
+    store = load_layouts(tmp_path)
+    a = store.default().widgets[0].action
+    assert a.text == "hello"
+    assert a.text_mode == "simulate"
+
+
+def test_action_text_paste_mode_parses(tmp_path: Path) -> None:
+    """A text: action with text_mode: paste loads without error."""
+    body = """
+match:
+  - default
+widgets:
+  - id: text-btn
+    kind: button
+    grid: [0, 0, 1, 1]
+    action:
+      text: "hello world"
+      text_mode: paste
+"""
+    _write(tmp_path, "default.yaml", body)
+    store = load_layouts(tmp_path)
+    a = store.default().widgets[0].action
+    assert a.text == "hello world"
+    assert a.text_mode == "paste"
+    assert a.restore_clipboard is True
+
+
+def test_action_text_defaults_to_simulate(tmp_path: Path) -> None:
+    """When text_mode is omitted, it defaults to None (treated as simulate)."""
+    body = """
+match:
+  - default
+widgets:
+  - id: text-btn
+    kind: button
+    grid: [0, 0, 1, 1]
+    action:
+      text: "hello"
+"""
+    _write(tmp_path, "default.yaml", body)
+    store = load_layouts(tmp_path)
+    a = store.default().widgets[0].action
+    assert a.text == "hello"
+    assert a.text_mode is None
+
+
+def test_action_text_rejects_empty_string(tmp_path: Path) -> None:
+    """An empty text value is a load-time error."""
+    body = """
+match:
+  - default
+widgets:
+  - id: text-btn
+    kind: button
+    grid: [0, 0, 1, 1]
+    action:
+      text: ""
+"""
+    _write(tmp_path, "default.yaml", body)
+    with pytest.raises(SystemExit):
+        load_layouts(tmp_path)

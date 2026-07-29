@@ -46,7 +46,7 @@ _Avoid_: touchpad, pad widget
 ### Actions
 
 **Action**:
-What the daemon does when a widget is activated. Primitives: `key` (uinput keystroke), `shell` (subprocess), `dbus` (D-Bus method call). Nothing app-specific is ever hard-coded; all behavior lives in config.
+What the daemon does when a widget is activated. Primitives: `key` (uinput keystroke), `shell` (subprocess), `dbus` (D-Bus method call), `url` (open URL in default browser), `text` (inject typed string). Nothing app-specific is ever hard-coded; all behavior lives in config.
 _Avoid_: command, handler, binding
 
 ### App identity

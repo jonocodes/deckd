@@ -55,7 +55,7 @@ class MetricSpec(BaseModel):
 
 MediaControl = Literal["play", "previous", "next", "volume", "position", "speed"]
 
-MacroStepType = Literal["key", "shell", "dbus", "delay"]
+MacroStepType = Literal["key", "shell", "dbus", "delay", "url", "text"]
 
 
 class MacroStep(BaseModel):
@@ -228,6 +228,15 @@ class Action(BaseModel):
     # to launch a specific program use ``shell:`` (which is fire-and-forget),
     # so there's exactly one way to launch a named program.
     terminal: bool | None = None
+    # ``url`` opens the given URL in the user's default browser. Accepts
+    # ``http:``, ``https:``, and ``file:`` schemes; other schemes are
+    # rejected at load time with guidance to use ``shell:`` instead.
+    url: str | None = None
+    # ``text`` injects the given string into the focused window.
+    text: str | None = None
+    text_mode: Literal["simulate", "paste"] | None = None
+    restore_clipboard: bool = True
+    restore_clipboard_delay_ms: int = Field(default=1000, ge=0)
 
     @field_validator("terminal", mode="before")
     @classmethod
@@ -238,6 +247,27 @@ class Action(BaseModel):
                 "'terminal: true' to open the auto-detected terminal, or "
                 f"'shell: \"{v}\"' to launch that program directly"
             )
+        return v
+
+    @field_validator("url")
+    @classmethod
+    def _validate_url_scheme(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        allowed = ("http:", "https:", "file:")
+        if not any(v.startswith(p) for p in allowed):
+            raise ValueError(
+                f"url action only accepts http:, https:, and file: schemes; "
+                f"got {v!r}. Use shell: for other schemes (e.g. "
+                f"shell: \"xdg-open {v}\")"
+            )
+        return v
+
+    @field_validator("text")
+    @classmethod
+    def _reject_empty_text(cls, v: str | None) -> str | None:
+        if v is not None and v == "":
+            raise ValueError("text action must not be empty")
         return v
 
 

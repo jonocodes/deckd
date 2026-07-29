@@ -203,6 +203,50 @@ async def test_press_dbus(srv: ServerHandle) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Button press → URL dispatch
+# ---------------------------------------------------------------------------
+
+
+async def test_press_url_opens_url(monkeypatch, srv: ServerHandle) -> None:
+    """A url: action launches the URL opener via create_subprocess_exec."""
+    import deckd.actions as actions_mod
+
+    calls: list[tuple] = []
+
+    async def fake_exec(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(actions_mod.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(actions_mod.shutil, "which", lambda _name: "/usr/bin/xdg-open")
+
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "press", "id": "press-url"}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    assert len(calls) >= 1
+    args, kwargs = calls[0]
+    assert args[:2] == ("xdg-open", "https://example.com/hello?q=1")
+
+
+# ---------------------------------------------------------------------------
+# Button press → Text dispatch
+# ---------------------------------------------------------------------------
+
+
+async def test_press_text_simulate_emits_key_combos(srv: ServerHandle) -> None:
+    """A text: simulate action types each character through key_sink."""
+    async with ws_connected(srv) as (ws, _):
+        await ws.send(json.dumps({"type": "press", "id": "press-text"}))
+        await asyncio.sleep(SIDE_EFFECT_WAIT)
+
+    assert len(srv.key_sink.events) == 5
+    for e in srv.key_sink.events:
+        assert e["type"] == "key"
+    assert srv.key_sink.events[0]["keycodes"] == [35]  # h
+    assert srv.key_sink.events[1]["keycodes"] == [18]  # e
+
+
+# ---------------------------------------------------------------------------
 # Layout override endpoint (T5/issue #11): POST /layout/<name> force-switches
 # all connected clients to a named layout regardless of focus.
 # ---------------------------------------------------------------------------
