@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import logging
 from pathlib import Path
 from typing import Literal
@@ -298,10 +299,33 @@ class Layout(BaseModel):
         special token ``default`` is *not* considered a real match — it is
         only the fallback. Layouts whose ``match`` list is empty never
         match by app identity.
+
+        Web-app prototype (Tier 1): a token of the form ``title:PATTERN`` is
+        a case-insensitive glob matched against the focused window's title.
+        Because desktop focus backends can only see a browser's window title
+        (never the active tab's URL — that needs a browser extension), this
+        lets a layout claim a *site* heuristically, e.g.
+        ``match: ["title:*YouTube*"]``. It is best-effort: it breaks whenever
+        a site changes how it formats ``<title>``.
         """
+        return self.matches_title(app) or self.matches_identity(app)
+
+    def matches_title(self, app: AppInfo) -> bool:
+        """True if a ``title:`` glob token covers the focused window title."""
+        if not app.title:
+            return False
+        for token in self.match:
+            if token.startswith("title:"):
+                pattern = token[len("title:") :]
+                if fnmatch.fnmatch(app.title.casefold(), pattern.casefold()):
+                    return True
+        return False
+
+    def matches_identity(self, app: AppInfo) -> bool:
+        """True if an ``app_id``/``wm_class`` token covers the focused app."""
         if not self.match or self.match == ["default"]:
             return False
-        return (app.app_id in self.match) or (app.wm_class in self.match)
+        return any(token in (app.app_id, app.wm_class) for token in self.match)
 
 
 def load_layout(path: Path) -> Layout:
@@ -379,12 +403,16 @@ class LayoutStore:
 def resolve_layout(store: LayoutStore, app: AppInfo) -> Layout:
     """Pick the layout for the given focused app.
 
-    First layout whose ``match`` list contains the app's ``app_id`` or
-    ``wm_class`` wins. If nothing matches, the layout with ``default`` in
-    its match list is returned.
+    A site (``title:``) match is more specific than a plain app-identity
+    match, so it wins even if a generic browser layout also claims the app
+    and is loaded first. Within each tier it is first-match-wins by load
+    order. If nothing matches, the ``default`` layout is returned.
     """
     for layout in store.layouts:
-        if layout.matches(app):
+        if layout.matches_title(app):
+            return layout
+    for layout in store.layouts:
+        if layout.matches_identity(app):
             return layout
     return store.default()
 

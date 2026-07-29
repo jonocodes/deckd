@@ -1,0 +1,73 @@
+# Web-app prototype (Tier 1): claim Netflix by matching the browser window
+# title. Desktop focus backends only see the window title, never the active
+# tab's URL. Every Netflix page (home, browse, a title page) carries
+# "Netflix" in its <title>, so a broad glob claims the whole site. Heuristic:
+# it breaks if Netflix ever drops "Netflix" from a page title (the in-player
+# page in particular may show only the show name), and the reliable version
+# needs a browser extension reporting the real URL.
+#
+# All actions are Netflix's own built-in player keyboard shortcuts, so no new
+# daemon capability is required — only detection.
+match:
+  - "title:*Netflix*"
+display_name: Netflix
+theme: "#e50914"
+icon:
+  source: simple-icons
+  name: netflix
+widgets:
+  - id: play-pause
+    kind: button
+    label: Play/Pause
+    icon:
+      source: lucide
+      name: play
+    color: "#e50914"
+    grid: [0, 0, 1, 1]
+    action:
+      key: "space"
+  - id: mute
+    kind: button
+    label: Mute
+    icon:
+      source: lucide
+      name: volume-x
+    grid: [1, 0, 1, 1]
+    action:
+      key: "m"
+  - id: fullscreen
+    kind: button
+    label: Fullscreen
+    icon:
+      source: lucide
+      name: maximize
+    grid: [2, 0, 1, 1]
+    action:
+      key: "f"
+  - id: back-10
+    kind: button
+    label: -10s
+    icon:
+      source: lucide
+      name: rewind
+    grid: [0, 1, 1, 1]
+    action:
+      key: "left"
+  - id: fwd-10
+    kind: button
+    label: +10s
+    icon:
+      source: lucide
+      name: fast-forward
+    grid: [1, 1, 1, 1]
+    action:
+      key: "right"
+  - id: skip-intro
+    kind: button
+    label: Skip Intro
+    icon:
+      source: lucide
+      name: skip-forward
+    grid: [2, 1, 1, 1]
+    action:
+      key: "s"

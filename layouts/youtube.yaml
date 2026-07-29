@@ -1,0 +1,71 @@
+# Web-app prototype (Tier 1): claim YouTube by matching the browser window
+# title. Desktop focus backends can only see the window title, never the
+# active tab's URL, so this is a heuristic — it works because YouTube ends
+# its <title> with "- YouTube". It breaks if that format ever changes; the
+# reliable version needs a browser extension reporting the real URL.
+#
+# All actions below are YouTube's own built-in keyboard shortcuts, so no new
+# daemon capability is required — only detection.
+match:
+  - "title:*- YouTube*"
+display_name: YouTube
+theme: "#ff0000"
+icon:
+  source: simple-icons
+  name: youtube
+widgets:
+  - id: play-pause
+    kind: button
+    label: Play/Pause
+    icon:
+      source: lucide
+      name: play
+    color: "#ff0000"
+    grid: [0, 0, 1, 1]
+    action:
+      key: "k"
+  - id: mute
+    kind: button
+    label: Mute
+    icon:
+      source: lucide
+      name: volume-x
+    grid: [1, 0, 1, 1]
+    action:
+      key: "m"
+  - id: fullscreen
+    kind: button
+    label: Fullscreen
+    icon:
+      source: lucide
+      name: maximize
+    grid: [2, 0, 1, 1]
+    action:
+      key: "f"
+  - id: back-10
+    kind: button
+    label: -10s
+    icon:
+      source: lucide
+      name: rewind
+    grid: [0, 1, 1, 1]
+    action:
+      key: "j"
+  - id: fwd-10
+    kind: button
+    label: +10s
+    icon:
+      source: lucide
+      name: fast-forward
+    grid: [1, 1, 1, 1]
+    action:
+      key: "l"
+  - id: captions
+    kind: button
+    label: Captions
+    icon:
+      source: lucide
+      name: captions
+    grid: [2, 1, 1, 1]
+    action:
+      key: "c"

@@ -238,6 +238,71 @@ def test_resolve_layouts_without_match_list_never_resolve(tmp_path: Path) -> Non
     assert layout is store["default"]
 
 
+SITE_LAYOUT = """
+match:
+  - "title:*- YouTube*"
+widgets:
+  - id: play
+    kind: button
+    label: Play
+    grid: [0, 0, 1, 1]
+    action:
+      key: "k"
+"""
+
+
+def test_resolve_matches_on_title_glob(tmp_path: Path) -> None:
+    _write(tmp_path, "youtube.yaml", SITE_LAYOUT)
+    _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)
+    store = load_layouts(tmp_path)
+
+    app = AppInfo(
+        app_id="firefox",
+        wm_class="firefox",
+        title="Some Video - YouTube — Mozilla Firefox",
+    )
+    assert resolve_layout(store, app).id == "title:*- YouTube*"
+
+
+def test_resolve_title_match_is_case_insensitive(tmp_path: Path) -> None:
+    _write(tmp_path, "youtube.yaml", SITE_LAYOUT)
+    _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)
+    store = load_layouts(tmp_path)
+
+    app = AppInfo(app_id="firefox", wm_class="firefox", title="clip - youtube")
+    assert resolve_layout(store, app).id == "title:*- YouTube*"
+
+
+def test_resolve_title_match_wins_over_generic_app_layout(tmp_path: Path) -> None:
+    """A ``title:`` site layout beats a generic browser layout that also
+    matches, regardless of file load order."""
+    # firefox.yaml sorts before youtube.yaml, so without site-priority the
+    # generic firefox layout would win first-match-wins.
+    _write(tmp_path, "firefox.yaml", FIREFOX_LAYOUT)
+    _write(tmp_path, "youtube.yaml", SITE_LAYOUT)
+    _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)
+    store = load_layouts(tmp_path)
+
+    app = AppInfo(
+        app_id="firefox",
+        wm_class="firefox",
+        title="Some Video - YouTube — Mozilla Firefox",
+    )
+    assert resolve_layout(store, app).id == "title:*- YouTube*"
+
+
+def test_resolve_falls_back_to_app_layout_when_title_does_not_match(
+    tmp_path: Path,
+) -> None:
+    _write(tmp_path, "firefox.yaml", FIREFOX_LAYOUT)
+    _write(tmp_path, "youtube.yaml", SITE_LAYOUT)
+    _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)
+    store = load_layouts(tmp_path)
+
+    app = AppInfo(app_id="firefox", wm_class="firefox", title="Hacker News")
+    assert resolve_layout(store, app).id == "firefox"
+
+
 def test_resolve_returns_default_when_app_id_is_unknown(tmp_path: Path) -> None:
     _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)
     store = load_layouts(tmp_path)
