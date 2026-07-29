@@ -52,7 +52,7 @@ widgets:
     color: "black"
     grid: [0, 1, 1, 1]
     action:
-      shell: "xdg-open https://github.com"
+      url: "https://github.com"
 
   - id: tilix
     kind: button
