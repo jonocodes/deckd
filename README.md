@@ -40,6 +40,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 **Working today**
 
 - [x] **Automatic per-app layouts** — focus a window on the desktop and the phone's browser flips to that app's buttons automatically.
+- [x] **Web-app layouts** — treat a website as an app. A layout can claim a site by matching the browser's window title (e.g. YouTube and Netflix media controls), driving each site's own keyboard shortcuts. See [Web-app layouts](#web-app-layouts).
 - [x] **Buttons** that fire keystrokes, shell commands, launch a terminal, or call D-Bus methods.
 - [x] **Macros** — chain multiple actions in a single button press, with delays and optional continue-on-error.
 - [x] **Button styling** — bundled icons (Lucide glyphs + Simple Icons brand logos) and per-button background colours, set in YAML.
@@ -69,6 +70,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [ ] **Raise or switch to an already-running app** from the controller.
 - [ ] **Multi-daemon chooser** — pair and pick between several desktops.
 - [ ] **GUI layout editor** — build layouts without hand-editing YAML.
+- [ ] **Reliable web-app detection** — a browser extension reporting the active tab's real URL, so sites match by domain/path instead of the current window-title heuristic ([#90](https://github.com/jonocodes/deckd/issues/90)).
 - [ ] **Windows support**
 - [ ] **Packing and deployment**
 
@@ -135,6 +137,34 @@ layouts/           Per-app YAML layouts (default.yaml + one per app)
 scripts/smoke.py   End-to-end test that boots the daemon over WS, clicks every button
 docs/INCEPTION.md  Full design doc — source of truth for *what* and *why*
 ```
+
+### Web-app layouts
+
+A layout normally claims a desktop app by putting its `app_id`/`wm_class` in the
+`match:` list. A layout can also claim a **website** with a `title:` token — a
+case-insensitive glob matched against the focused browser's *window title*:
+
+```yaml
+match:
+  - "title:*- YouTube*"   # any tab whose title ends in "- YouTube"
+```
+
+When the focused app is a browser, a `title:` match outranks a generic
+browser layout (so `youtube.yaml` wins over `firefox.yaml`), and falls back to
+the browser layout when no site matches. The buttons are ordinary actions —
+the shipped `layouts/youtube.yaml` and `layouts/netflix.yaml` drive each site's
+own keyboard shortcuts (`key: k`, `key: s`, …), so no special capability is
+needed beyond a layout file.
+
+**This is a heuristic.** Desktop focus backends can only see the browser's
+window title, never the active tab's URL, so:
+
+- a site is only matchable if its name appears in the `<title>`;
+- sub-pages of the same site can't be told apart (both share a title suffix);
+- the match breaks silently if a site changes how it formats its title.
+
+Reliable URL/domain matching is planned via a browser extension
+([#90](https://github.com/jonocodes/deckd/issues/90)).
 
 
 ## Running deckd
