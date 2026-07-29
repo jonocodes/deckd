@@ -16,15 +16,15 @@ import aiohttp
 import pytest
 from aiohttp.test_utils import TestServer
 
-from conftest import ServerHandle
-from deckd.input import ScrollController
-from deckd.server import PortInUseError, Server
-from tests.conftest import (
+from conftest import (
     FakeDbusBusFactory,
     FakePointerSink,
     FakeScrollSink,
     LAYOUTS_DIR,
+    ServerHandle,
 )
+from deckd.input import ScrollController
+from deckd.server import PortInUseError, Server
 
 
 # ---------------------------------------------------------------------------
