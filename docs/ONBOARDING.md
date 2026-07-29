@@ -86,7 +86,8 @@ For an agent or developer new to the codebase, read in this order:
 
 1. **README.md** — Pitch, screenshots, status, setup instructions, config reference.
 2. **CONTEXT.md** — Domain vocabulary (ubiquitous language). Every concept used in code, tests, and docs is defined here.
-3. **docs/INCEPTION.md** — Pre-implementation design. Architecture, core principles, v1 scope, deferred work.
+3. **docs/REFERENCE.md** — Canonical CLI flags, environment variables, diagnostic endpoints, and project status.
+4. **docs/INCEPTION.md** — Pre-implementation design. Architecture, core principles, v1 scope, deferred work.
 4. **docs/adr/README.md** — ADR index with summaries and amend/supersede relationships.
 5. **daemon/deckd/protocol.py** — Wire protocol, the executable contract between client and daemon. All message types in both directions.
 6. **daemon/deckd/layouts.py** — Layout YAML schema (Pydantic models). How layouts are parsed, validated, and matched to focused apps.

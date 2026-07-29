@@ -632,6 +632,8 @@ uv pip install -e ".[dev]"   # installs the websockets test dep
 
 ### CLI
 
+The canonical reference for all flags, commands, environment variables, and diagnostic workflows is [docs/REFERENCE.md](docs/REFERENCE.md). Quick-start:
+
 ```sh
 deckctl status              # hit /health (open — no password needed)
 deckctl reload              # POST /reload — re-read layout YAML and push

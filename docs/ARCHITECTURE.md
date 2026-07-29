@@ -107,6 +107,7 @@ graph TB
 | What | Where | Description |
 |---|---|---|
 | **Domain vocabulary** | [CONTEXT.md](../CONTEXT.md) | Ubiquitous language; defines Layout, Widget, Chrome, Action, AppInfo, Match, Bind, etc. |
+| **Operational reference** | [REFERENCE.md](REFERENCE.md) | Canonical CLI flags, env vars, diagnostic endpoints, project status. |
 | **Product intent** | [INCEPTION.md](INCEPTION.md) | Pre-implementation design: architecture, core principles, v1 scope, deferred work. |
 | **ADR index** | [adr/README.md](adr/README.md) | All architecture decisions with summaries and amend/supersede relationships. |
 | **Spike tracker** | [SPIKES.md](SPIKES.md) | Spike progress and implementation plan (de-risking work). |
@@ -132,6 +133,6 @@ Prose documentation describes intent, vocabulary, and decisions. It does not dup
 - **Flag names and defaults** — see `daemon/deckd/__main__.py` for argparse definitions; the running daemon is self-documenting via `--help`.
 - **Wire message shapes** — see `daemon/deckd/protocol.py` for the executable Pydantic models (`ServerMessage`, `ClientMessage`, and all their variants).
 - **Layout field validation** — see `daemon/deckd/layouts.py` for the Pydantic models (`Layout`, `Widget`, `Action`). Valid YAML is whatever passes `Layout.model_validate()`.
-- **Action dispatch behavior** — see `daemon/deckd/actions.py`. Available primitives are `key`, `shell`, `dbus`, and `terminal`.
+- **Action dispatch behavior** — see `daemon/deckd/actions.py`. Available primitives are `key`, `shell`, `dbus`, `terminal`, `url`, and `text`.
 
 When in doubt, read the code. Tests (`tests/`) are the next best source — they exercise the public interfaces at the agreed seams.
