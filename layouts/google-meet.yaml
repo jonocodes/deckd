@@ -1,0 +1,50 @@
+# Web-app prototype (Tier 1): claim Google Meet by matching the browser
+# window title. Two tokens because Meet uses different titles per state:
+#   - landing / lobby page: "Google Meet"          (verified)
+#   - in a call:            "Meet - abc-defg-hij"   (best guess — the call
+#     code format is unverified without joining a real meeting; check live
+#     and adjust the glob if the in-call title differs).
+# A broad "*Meet*" is deliberately avoided: it would also match unrelated
+# browser tabs like "Meeting notes - Google Docs".
+#
+# Shortcuts are Meet's own browser keybinds (Linux/Windows: Ctrl). On macOS
+# these are Cmd+D / Cmd+E — add a layouts.macos/ overlay if you run Meet
+# there. Note: emoji reactions have NO keyboard shortcut, so they can't be a
+# button here — that needs the browser-extension path (#90).
+match:
+  - "title:*Google Meet*"
+  - "title:Meet - *"
+display_name: Google Meet
+theme: "#00897b"
+icon:
+  source: simple-icons
+  name: googlemeet
+widgets:
+  - id: toggle-mic
+    kind: button
+    label: Mic
+    icon:
+      source: lucide
+      name: mic
+    color: "#00897b"
+    grid: [0, 0, 1, 1]
+    action:
+      key: "ctrl+d"
+  - id: toggle-camera
+    kind: button
+    label: Camera
+    icon:
+      source: lucide
+      name: video
+    grid: [1, 0, 1, 1]
+    action:
+      key: "ctrl+e"
+  - id: raise-hand
+    kind: button
+    label: Raise Hand
+    icon:
+      source: lucide
+      name: hand
+    grid: [2, 0, 1, 1]
+    action:
+      key: "ctrl+alt+h"
