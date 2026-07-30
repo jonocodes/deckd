@@ -146,6 +146,8 @@ Run these in order. Each step must pass before the next.
 
 Step 1 and 3 are cheap type safety gates. Always run at least steps 1–3 before considering changes complete.
 
+Some behaviour sits **above** this ladder — it can only be confirmed by a human on real hardware / a live session (e.g. actual `uinput` injection, focus-watching on a real desktop). When a change is merged but this is its only remaining gate, label the issue `human-verification-required` and keep it open until a human signs off. See [docs/agents/triage-labels.md](agents/triage-labels.md#verification-state-repo-extension).
+
 ## Authoritative artifacts
 
 For each concern, exactly one artifact is authoritative. Others derive from it.
@@ -164,7 +166,7 @@ For each concern, exactly one artifact is authoritative. Others derive from it.
 | HTTP endpoints | `daemon/deckd/server.py` (aiohttp routes) | `/health`, `/diag`, `/layouts`, `/metrics`, `/media/...`, `/mpris/...` |
 | Build/test commands | `Justfile` | All common commands in one place |
 | Client rendering | `client/src/App.tsx` | Root component; widget components render per their kind |
-| Triage labels | `docs/agents/triage-labels.md` | Five-label vocabulary for GitHub Issues |
+| Triage labels | `docs/agents/triage-labels.md` | Five-label triage vocabulary + the `human-verification-required` lifecycle state |
 | Research notes | `docs/research/` | Built-in actions catalog, etc. |
 
 Prose documentation links to code for schematic, flag, endpoint, and behavioral details — it does not duplicate them. The code is the ultimate source of truth for behavior.

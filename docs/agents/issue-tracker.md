@@ -10,6 +10,7 @@ Issues and PRDs for this repo live as GitHub issues. Use the `gh` CLI for all op
 - **Comment on an issue**: `gh issue comment <number> --body "..."`
 - **Apply / remove labels**: `gh issue edit <number> --add-label "..."` / `--remove-label "..."`
 - **Close**: `gh issue close <number> --comment "..."`. Always link the implementing commit with the `owner/repo@sha` shorthand so the reference is clickable on GitHub. Bare SHAs are not auto-linked.
+- **Human verification before closing**: if a change is merged but its correctness can only be confirmed by a human on real hardware / a live session, apply `human-verification-required` (`gh issue edit <n> --add-label human-verification-required`) and **leave the issue open**. Remove the label and close only after a human signs off. See [triage-labels.md](triage-labels.md#verification-state-repo-extension).
 
 Infer the repo from `git remote -v` — `gh` does this automatically when run inside a clone.
 
