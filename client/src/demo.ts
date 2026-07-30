@@ -25,6 +25,26 @@ const FIREFOX: ServerLayout = {
   ],
 };
 
+// A web-app fixture (title-matched site in a browser): the daemon would set
+// ``web_app: true`` so the badge shows a globe. Mirrors layouts/youtube.yaml.
+const YOUTUBE: ServerLayout = {
+  type: "layout",
+  app: "YouTube (demo)",
+  display_name: "YouTube",
+  theme: "#ff0000",
+  icon: { source: "simple-icons", name: "youtube" },
+  web_app: true,
+  jogstrip_enabled: true,
+  widgets: [
+    { id: "play-pause", kind: "button", label: "Play/Pause", icon: { source: "lucide", name: "play" }, color: "#ff0000", grid: [0, 0, 1, 1] },
+    { id: "mute", kind: "button", label: "Mute", icon: { source: "lucide", name: "volume-x" }, grid: [1, 0, 1, 1] },
+    { id: "fullscreen", kind: "button", label: "Fullscreen", icon: { source: "lucide", name: "maximize" }, grid: [2, 0, 1, 1] },
+    { id: "back-10", kind: "button", label: "-10s", icon: { source: "lucide", name: "rewind" }, grid: [0, 1, 1, 1] },
+    { id: "fwd-10", kind: "button", label: "+10s", icon: { source: "lucide", name: "fast-forward" }, grid: [1, 1, 1, 1] },
+    { id: "captions", kind: "button", label: "Captions", icon: { source: "lucide", name: "captions" }, grid: [2, 1, 1, 1] },
+  ],
+};
+
 const DEFAULT: ServerLayout = {
   type: "layout",
   app: "default (demo)",
@@ -317,6 +337,7 @@ const MACRO: ServerLayout = {
 
 const DEMOS: Record<string, ServerLayout> = {
   firefox: FIREFOX,
+  youtube: YOUTUBE,
   default: DEFAULT,
   showcase: SHOWCASE,
   meter: METER,
