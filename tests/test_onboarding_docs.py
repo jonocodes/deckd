@@ -42,10 +42,22 @@ def _resolve(target: str, source_dir: Path) -> Path | None:
             text = resolved.read_text()
         except OSError:
             return resolved
-        pattern = re.compile(rf"^(#+)\s+.*{re.escape(anchor)}", re.MULTILINE | re.IGNORECASE)
-        if not pattern.search(text):
+        headings = re.findall(r"^#+\s+(.*)$", text, re.MULTILINE)
+        if anchor.lower() not in {_slugify(h) for h in headings}:
             return resolved
     return None
+
+
+def _slugify(heading: str) -> str:
+    """Slugify a markdown heading the way GitHub generates anchors:
+    lowercase, drop punctuation (keep word chars, spaces, hyphens), then
+    turn runs of whitespace into single hyphens. E.g.
+    ``Verification state (repo extension)`` -> ``verification-state-repo-extension``.
+    """
+    slug = heading.strip().lower()
+    slug = re.sub(r"[^\w\s-]", "", slug)
+    slug = re.sub(r"\s+", "-", slug)
+    return slug
 
 
 @pytest.mark.parametrize("doc_path", DOCS_TO_CHECK)
