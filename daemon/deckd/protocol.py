@@ -23,6 +23,12 @@ class LayoutMessage(BaseModel):
     display_name: str | None = None
     theme: str | None = None
     icon: Icon | None = None
+    # True when this layout was resolved as a *web app*: it matched the focused
+    # browser's window title (a ``title:`` token) AND the focused app is a
+    # browser. The client renders a small globe on the badge. Derived by the
+    # daemon, never authored in YAML — a plain title match on a non-browser
+    # (or an app-identity match) leaves this false.
+    web_app: bool = False
     # Non-null when the on-disk layouts failed to load. The client renders the
     # message in place of the widget grid; the daemon keeps the last-good
     # layouts live so a fix on disk restores service without a restart.

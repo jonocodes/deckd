@@ -16,6 +16,30 @@ if TYPE_CHECKING:
 log = logging.getLogger("deckd.platform")
 
 
+# Substrings that identify a web browser in an app_id / wm_class, across
+# platforms and packaging (flatpak app-ids, X11 wm_class, macOS process
+# names). Matched case-insensitively as substrings so ``org.mozilla.firefox``,
+# ``firefox-esr`` and ``Navigator`` (Firefox's X11 wm_class) all count. Used
+# only to decide whether a title-matched layout is a *web app* (browser) vs a
+# desktop app that merely matched by title — see ``AppInfo.is_browser``.
+_BROWSER_MARKERS = (
+    "firefox",
+    "navigator",  # Firefox's X11 wm_class
+    "mozilla",
+    "librewolf",
+    "waterfox",
+    "zen",
+    "chrome",
+    "chromium",
+    "brave",
+    "edge",
+    "vivaldi",
+    "opera",
+    "safari",
+    "epiphany",  # GNOME Web
+)
+
+
 @dataclass(frozen=True)
 class AppInfo:
     app_id: str | None
@@ -26,6 +50,18 @@ class AppInfo:
     @property
     def identity(self) -> str:
         return self.app_id or self.wm_class or "unknown"
+
+    @property
+    def is_browser(self) -> bool:
+        """True if this app looks like a web browser.
+
+        Best-effort substring match against a maintained marker list. It only
+        gates the *web app* indicator (a browser-focused title match), never
+        layout resolution, so a miss just means no globe badge — never a wrong
+        layout.
+        """
+        hay = f"{self.app_id or ''} {self.wm_class or ''}".casefold()
+        return any(marker in hay for marker in _BROWSER_MARKERS)
 
 
 @dataclass(frozen=True)

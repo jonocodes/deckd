@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Settings as SettingsIcon } from "lucide-react";
+import { Settings as SettingsIcon, Globe as GlobeIcon } from "lucide-react";
 import { Music as MusicIcon, PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
@@ -351,6 +351,11 @@ export function App() {
   const appName = layout ? layout.display_name?.trim() || layout.app : "deckd";
   const appTheme = layout?.theme?.trim() || null;
   const appIcon: IconRef | null = layout?.icon ?? null;
+  // Web-app marker: the daemon resolved this layout by matching the focused
+  // browser's window title. Shown as a small globe on the badge to signal
+  // the buttons target the current website (and depend on the page, not a
+  // text field, having focus).
+  const isWebApp = layout?.web_app === true;
   const hasBadge = appTheme !== null || appIcon !== null;
   const badgeClass = hasBadge ? `app-badge${appTheme ? " app-badge-themed" : ""}` : "app-name";
   const a11yClass = [
@@ -506,6 +511,13 @@ export function App() {
         <span className={badgeClass}>
           {appIcon ? <Icon icon={appIcon} className="app-badge-icon" /> : null}
           <span className="app-badge-name">{appName}</span>
+          {isWebApp ? (
+            <GlobeIcon
+              className="app-badge-webapp"
+              size={14}
+              aria-label="web app (matched by browser tab title)"
+            />
+          ) : null}
         </span>
         <span className={`connection connection-${status}`}>
           <span className="connection-dot" />

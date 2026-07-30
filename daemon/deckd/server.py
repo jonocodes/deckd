@@ -380,6 +380,16 @@ class Session:
         # on-disk YAML. ``app`` still carries the match token so the chrome
         # can fall back to it when ``display_name`` is None.
         icon = p.Icon.model_validate(layout.icon.model_dump()) if layout.icon else None
+        # Web-app badge: this layout is a *web app* only when the focused app is
+        # a browser AND the layout claimed it by window title. Computed against
+        # the layout actually being sent, so a pinned chrome view (e.g. mpris)
+        # or demo pin — which has no ``title:`` token — stays false.
+        focus_app = self.server.current_app
+        web_app = bool(
+            focus_app is not None
+            and focus_app.is_browser
+            and layout.matches_title(focus_app)
+        )
         if error is not None:
             # Bad on-disk config: send widgets=[] plus the error text so the
             # client swaps the grid for a diagnostic message.
@@ -391,6 +401,7 @@ class Session:
                 display_name=layout.display_name,
                 theme=layout.theme,
                 icon=icon,
+                web_app=web_app,
                 widgets=[],
                 error=error,
             )
@@ -404,6 +415,7 @@ class Session:
                 display_name=layout.display_name,
                 theme=layout.theme,
                 icon=icon,
+                web_app=web_app,
                 widgets=widgets,
                 # View-resolution errors ride alongside the focused-app
                 # widgets so the chrome stays usable while the user sees
@@ -582,6 +594,11 @@ class Server:
     @property
     def current_app_id(self) -> str:
         return self._current_app_id
+
+    @property
+    def current_app(self) -> "AppInfo | None":
+        """The most recent focused app (``None`` before the first focus)."""
+        return self._last_focus
 
     @property
     def current_error(self) -> str | None:

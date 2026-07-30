@@ -89,6 +89,10 @@ export type ServerLayout = {
   /** Optional brand icon rendered alongside the app name. Same
    * ``{source, name}`` dispatch widgets use (ADR-0006). */
   icon?: Icon | null;
+  /** True when the layout was resolved as a web app: the focused browser's
+   * window title matched a ``title:`` token. The client shows a small globe
+   * on the badge. Daemon-derived, never authored in YAML. */
+  web_app?: boolean;
   /** Non-null when the daemon failed to load layouts; the client renders this
    * in place of the grid until the on-disk config is fixed. */
   error?: string | null;

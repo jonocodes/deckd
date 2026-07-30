@@ -218,6 +218,14 @@ button:focus-visible {
   text-overflow: ellipsis;
 }
 
+/* Web-app marker: a subdued globe after the name, signalling the layout was
+   matched by the browser tab title rather than a desktop app identity. */
+.app-badge-webapp {
+  flex: 0 0 auto;
+  margin-left: 0.25em;
+  opacity: 0.6;
+}
+
 /* A theme colour tints the badge border + a thin accent stripe along the
    top edge of the bottom chrome, so the focused app reads at a glance from
    across the room even when the badge itself is off-screen in landscape

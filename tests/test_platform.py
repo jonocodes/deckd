@@ -170,3 +170,38 @@ async def test_focus_backend_unavailable_is_runtime_error() -> None:
     assert isinstance(err, RuntimeError)
     assert err.hint == "do something"
     assert "boom" in str(err)
+
+# ---------------------------------------------------------------------------
+# Browser identity (gates the web-app badge)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "app_id, wm_class",
+    [
+        ("firefox", "firefox"),
+        ("org.mozilla.firefox", None),
+        ("firefox-esr", None),
+        (None, "Navigator"),  # Firefox's X11 wm_class
+        ("google-chrome", "Google-chrome"),
+        ("chromium", "Chromium-browser"),
+        ("brave-browser", None),
+        ("microsoft-edge", None),
+        ("org.gnome.Epiphany", None),
+    ],
+)
+def test_appinfo_is_browser_true(app_id, wm_class) -> None:
+    assert AppInfo(app_id=app_id, wm_class=wm_class, title="x - YouTube").is_browser
+
+
+@pytest.mark.parametrize(
+    "app_id, wm_class",
+    [
+        ("org.gnome.Console", "org.gnome.Console"),
+        ("com.gexperts.Tilix", "Tilix"),
+        ("code", "Code"),
+        (None, None),
+    ],
+)
+def test_appinfo_is_browser_false(app_id, wm_class) -> None:
+    assert not AppInfo(app_id=app_id, wm_class=wm_class, title="x - YouTube").is_browser
