@@ -19,6 +19,8 @@ function renderSettings(overrides: Partial<Parameters<typeof Settings>[0]> = {})
     onWakeLockChange: () => {},
     contentScale: 1,
     onContentScaleChange: () => {},
+    cellSize: 100,
+    onCellSizeChange: () => {},
     jogWidth: 1,
     onJogWidthChange: () => {},
     bottomScale: 1,

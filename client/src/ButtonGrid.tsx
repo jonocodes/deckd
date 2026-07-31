@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 import type { Widget } from "./protocol";
 import { Icon } from "./Icon";
@@ -7,9 +8,14 @@ import { StatsCell } from "./StatsCell";
 import { MediaCell } from "./MediaCell";
 import type { MediaReading } from "./media-store";
 import type { MeterReading } from "./meter-store";
-import { transposeWidgets, useOrientation } from "./orientation";
-import type { Orientation } from "./orientation";
+import { computeReflow } from "./reflow";
+import type { OverflowMode } from "./reflow";
+import { CELL_SIZE_DEFAULT } from "./settings-store";
 import { onActivate } from "./a11y";
+
+/** Gap between cells, in CSS pixels. Kept in sync with ``.grid { gap }`` so the
+ * reflow maths agrees with what the browser actually renders. */
+const GRID_GAP = 8;
 
 type Props = {
   widgets: Widget[];
@@ -18,11 +24,15 @@ type Props = {
   onJogEnd: (id: string, velocity: number) => void;
   scrollScale: number;
   scrollInvert: boolean;
-  /** Override the auto-detected orientation. The live app leaves this unset
-   * (orientation follows the viewport); fixed-size harnesses like the Ladle
-   * device stories pass it so the transpose matches the container's shape
-   * rather than the window's. */
-  orientation?: Orientation;
+  /** Overflow behaviour when widgets exceed the capacity the band yields at
+   * the current viewport (ADR-0010): ``clip`` (default) leaves trailing
+   * widgets off-surface; ``shrink-to-fit`` shrinks cells below the floor so
+   * every widget fits. Comes from the layout's ``overflow`` field. */
+  overflow?: OverflowMode;
+  /** Cell size target (client-side device preference, ADR-0010). Columns are
+   * packed around this value; cells fill the width evenly. Defaults let
+   * harnesses that don't wire settings still render sensibly. */
+  cellSize?: number;
   /** Latest reading per sensor source. Missing sources render with no
    * value (bar empty, "—" numeric). Stale readings show the bar at
    * its last position with a dimmed readout. */
@@ -36,8 +46,6 @@ type Props = {
    * small caption under the label (e.g. ``Ctrl+A``). */
   showKeyHints?: boolean;
 };
-
-const FALLBACK_DIM = 4;
 
 /** Title-case each token of a key combo so ``ctrl+a`` reads as ``Ctrl+A``.
  * Purely presentational — the daemon-side combo string is untouched. */
@@ -60,21 +68,31 @@ function keyHint(w: Widget): string | null {
   return null;
 }
 
-/** Derive grid dimensions from the layout's widget extents so cells fill the
- * chrome-excluded area rather than leaving empty 1fr rows/columns when a
- * layout doesn't use the full 4x4 space (ADR-0003: the client computes
- * cell sizes from available screen space). Falls back to 4x4 when there
- * are no widgets to size against. */
-function deriveDims(widgets: Widget[]): [number, number] {
-  if (widgets.length === 0) return [FALLBACK_DIM, FALLBACK_DIM];
-  let cols = 0;
-  let rows = 0;
-  for (const w of widgets) {
-    const [x, y, wCols, wRows] = w.grid;
-    cols = Math.max(cols, x + wCols);
-    rows = Math.max(rows, y + wRows);
-  }
-  return [Math.max(cols, 1), Math.max(rows, 1)];
+/** A widget's ``[w, h]`` column/row span. ``full`` and absent both collapse to
+ * a single cell for span purposes (a ``full`` widget is placed separately). */
+function spanOf(w: Widget): [number, number] {
+  if (w.size == null || w.size === "full") return [1, 1];
+  const [cw, ch] = w.size;
+  return [Math.max(1, cw), Math.max(1, ch)];
+}
+
+/** Measure the grid area so the reflow maths can compute the column count and
+ * cell size from live pixels (ADR-0003: the client sizes cells from available
+ * screen space). A ``ResizeObserver`` keeps it current as the window is
+ * dragged / the device rotates — no polling. */
+function useMeasuredSize(): [React.RefObject<HTMLDivElement>, { width: number; height: number }] {
+  const ref = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const update = () => setSize({ width: el.clientWidth, height: el.clientHeight });
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return [ref, size];
 }
 
 export function ButtonGrid({
@@ -84,117 +102,129 @@ export function ButtonGrid({
   onJogEnd,
   scrollScale,
   scrollInvert,
-  orientation: orientationOverride,
+  overflow = "shrink-to-fit",
+  cellSize = CELL_SIZE_DEFAULT,
   meterReadings,
   labelScale,
   mediaStates,
   onMediaCommand,
   showKeyHints,
 }: Props) {
-  const autoOrientation = useOrientation();
-  const orientation = orientationOverride ?? autoOrientation;
-  // In portrait, transpose so a landscape-authored grid keeps sensibly-sized
-  // cells (a 4x2 firefox layout becomes 2x4 with taller buttons).
-  const laid = orientation === "portrait" ? transposeWidgets(widgets) : widgets;
-  const [COLS, ROWS] = deriveDims(laid);
-  const filled = Array.from({ length: ROWS }, () => Array(COLS).fill(null) as (Widget | null)[]);
-  for (const w of laid) {
-    const [x, y, wCols, wRows] = w.grid;
-    for (let dy = 0; dy < wRows; dy++) {
-      for (let dx = 0; dx < wCols; dx++) {
-        if (y + dy < ROWS && x + dx < COLS) filled[y + dy][x + dx] = w;
-      }
-    }
-  }
+  const [gridRef, size] = useMeasuredSize();
+
+  // Cells occupied by flow widgets (spans counted), used by shrink-to-fit to
+  // estimate the row count. ``full`` widgets leave the flow, so they don't add.
+  const totalUnits = widgets.reduce((sum, w) => {
+    if (w.size === "full") return sum;
+    const [cw, ch] = spanOf(w);
+    return sum + cw * ch;
+  }, 0);
+
+  const { cols, cellPx } = computeReflow({
+    containerWidth: size.width,
+    containerHeight: size.height,
+    cellSize,
+    gap: GRID_GAP,
+    totalUnits,
+    mode: overflow,
+  });
+
+  // Square, fixed tracks: every column is ``cellPx`` wide and every implicit
+  // row is ``cellPx`` tall, so a cell is square and an ``[w, h]`` span is
+  // exactly ``w`` columns by ``h`` rows (gaps included). Leftover width is
+  // centered and leftover height sits below (both set in ``.grid`` CSS).
+  const gridStyle: CSSProperties = {
+    gridTemplateColumns: `repeat(${cols}, ${cellPx}px)`,
+    gridAutoRows: `${cellPx}px`,
+  };
 
   return (
-    <div
-      className="grid"
-      style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)`, gridTemplateRows: `repeat(${ROWS}, 1fr)` }}
-    >
-      {filled.flatMap((row, y) =>
-        row.map((w, x) => {
-          // ``w.grid`` here already reflects any transpose applied above.
-          if (!w) return <div key={`${x}-${y}`} className="cell cell-empty" />;
-          const [gx, gy, gw, gh] = w.grid;
-          const isOrigin = gx === x && gy === y;
-          if (!isOrigin) return null;
-          const style: CSSProperties = { gridColumn: `span ${gw}`, gridRow: `span ${gh}` };
-          if (w.kind === "jogstrip") {
-            return (
-              <JogStrip
-                key={w.id}
-                widget={w}
-                style={style}
-                scale={scrollScale}
-                invert={scrollInvert}
-                onJog={onJog}
-                onJogEnd={onJogEnd}
-              />
-            );
-          }
-          if (w.kind === "meter") {
-            return (
-              <MeterCell
-                key={w.id}
-                widget={w}
-                reading={(w.source ? meterReadings?.[w.source] : null) ?? null}
-                style={style}
-                labelScale={labelScale ?? 1}
-              />
-            );
-          }
-          if (w.kind === "media") {
-            return (
-              <MediaCell
-                key={w.id}
-                widget={w}
-                state={mediaStates?.[w.id] ?? null}
-                style={style}
-                onPress={onPress}
-                onCommand={onMediaCommand ?? (() => undefined)}
-              />
-            );
-          }
-          if (w.kind === "stats") {
-            return (
-              <StatsCell
-                key={w.id}
-                widget={w}
-                readings={meterReadings ?? {}}
-                style={style}
-                labelScale={labelScale ?? 1}
-              />
-            );
-          }
-          const buttonStyle: CSSProperties = w.color
-            ? { ...style, backgroundColor: w.color }
-            : style;
-          const hint = showKeyHints ? keyHint(w) : null;
+    <div ref={gridRef} className="grid" style={gridStyle}>
+      {widgets.map((w) => {
+        const full = w.size === "full";
+        const [cw, ch] = spanOf(w);
+        // Cap a span at the current column count so a too-wide widget doesn't
+        // force horizontal overflow; strict order (no dense) wraps it down.
+        const style: CSSProperties = full
+          ? { gridColumn: "1 / -1" }
+          : { gridColumn: `span ${Math.min(cw, cols)}`, gridRow: `span ${ch}` };
+
+        if (w.kind === "blank") {
+          // A deliberate gap in the flow: holds its span, renders nothing.
+          return <div key={w.id} className="cell cell-empty" style={style} aria-hidden="true" />;
+        }
+        if (w.kind === "jogstrip") {
           return (
-            <button
+            <JogStrip
               key={w.id}
-              className="cell cell-button"
-              style={buttonStyle}
-              aria-label={w.label ?? w.id}
-              onPointerDown={() => onPress(w.id)}
-              onKeyDown={onActivate(() => onPress(w.id))}
-            >
-              {w.icon ? <Icon icon={w.icon} className="icon" /> : null}
-              {/* Text is opt-in per button: a widget with a ``label`` shows it,
-                  one without is icon-only. The id is only a last-resort
-                  fallback so a widget with neither label nor icon isn't a
-                  blank, unidentifiable button. */}
-              {w.label ? (
-                <span className="label">{w.label}</span>
-              ) : !w.icon ? (
-                <span className="label">{w.id}</span>
-              ) : null}
-              {hint ? <span className="key-hint">{hint}</span> : null}
-            </button>
+              widget={w}
+              style={style}
+              scale={scrollScale}
+              invert={scrollInvert}
+              onJog={onJog}
+              onJogEnd={onJogEnd}
+            />
           );
-        }),
-      )}
+        }
+        if (w.kind === "meter") {
+          return (
+            <MeterCell
+              key={w.id}
+              widget={w}
+              reading={(w.source ? meterReadings?.[w.source] : null) ?? null}
+              style={style}
+              labelScale={labelScale ?? 1}
+            />
+          );
+        }
+        if (w.kind === "media") {
+          return (
+            <MediaCell
+              key={w.id}
+              widget={w}
+              state={mediaStates?.[w.id] ?? null}
+              style={style}
+              onPress={onPress}
+              onCommand={onMediaCommand ?? (() => undefined)}
+            />
+          );
+        }
+        if (w.kind === "stats") {
+          return (
+            <StatsCell
+              key={w.id}
+              widget={w}
+              readings={meterReadings ?? {}}
+              style={style}
+              labelScale={labelScale ?? 1}
+            />
+          );
+        }
+        const buttonStyle: CSSProperties = w.color ? { ...style, backgroundColor: w.color } : style;
+        const hint = showKeyHints ? keyHint(w) : null;
+        return (
+          <button
+            key={w.id}
+            className="cell cell-button"
+            style={buttonStyle}
+            aria-label={w.label ?? w.id}
+            onPointerDown={() => onPress(w.id)}
+            onKeyDown={onActivate(() => onPress(w.id))}
+          >
+            {w.icon ? <Icon icon={w.icon} className="icon" /> : null}
+            {/* Text is opt-in per button: a widget with a ``label`` shows it,
+                one without is icon-only. The id is only a last-resort
+                fallback so a widget with neither label nor icon isn't a
+                blank, unidentifiable button. */}
+            {w.label ? (
+              <span className="label">{w.label}</span>
+            ) : !w.icon ? (
+              <span className="label">{w.id}</span>
+            ) : null}
+            {hint ? <span className="key-hint">{hint}</span> : null}
+          </button>
+        );
+      })}
     </div>
   );
 }

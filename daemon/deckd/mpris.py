@@ -3,9 +3,9 @@ from __future__ import annotations
 import dataclasses
 import logging
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, Any, Callable, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict
 
 from .layouts import MediaBrowserEmptyState
 from .media import MediaState, _art_token
@@ -162,8 +162,9 @@ class MediaBrowser(BaseModel):
 
     - ``id``: the widget id (used as the layout-internal id and surfaced
       to the client so it can correlate per-row updates).
-    - ``grid``: the standard 4-int grid placement, identical to every
-      other widget kind.
+    - ``size``: the standard reflow extent, identical to every other widget
+      kind (ADR-0010) — a ``[w, h]`` span or ``"full"``. Optional; a
+      mediabrowser is typically a full-surface view rendered outside the flow.
     - ``empty_state``: whether the cell still renders a placeholder row
       when no MPRIS player is discovered. ``show`` (default) keeps the
       chrome's icon reachable; ``hide`` collapses the cell so a layout
@@ -178,7 +179,7 @@ class MediaBrowser(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str
-    grid: list[int] = Field(min_length=4, max_length=4)
+    size: list[int] | Literal["full"] | None = None
     empty_state: MediaBrowserEmptyState = "show"
 
 

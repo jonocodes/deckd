@@ -17,6 +17,7 @@ const INVERT_KEY = "deckd.scrollInvert";
 const PAD_SENS_KEY = "deckd.trackpadSensitivity";
 const WAKE_LOCK_KEY = "deckd.wakeLock";
 const CONTENT_SCALE_KEY = "deckd.contentScale";
+const CELL_SIZE_KEY = "deckd.cellSize";
 const JOG_WIDTH_KEY = "deckd.jogWidth";
 const BOTTOM_SCALE_KEY = "deckd.bottomScale";
 const LABEL_SCALE_KEY = "deckd.labelScale";
@@ -31,10 +32,22 @@ export const SCROLL_SCALE_MIN = 1;
 export const SCROLL_SCALE_MAX = 20;
 export const SCROLL_SCALE_DEFAULT = 3;
 
-// Multiplier applied to grid content (button icon + label, in-grid jogstrip)
-// on top of the responsive base size, so the user can dial readability per
-// device. 1.0 reproduces the base look; range/step match the other sliders'
-// conventions. See issue #37 / ADR-0006 (client-side per-device visual prefs).
+// Target cell size (ADR-0010): the square cell edge (CSS px) the grid packs
+// columns around. Cells grow/shrink to fill the width evenly (no separate max
+// cap — more columns simply fit as width grows, keeping the result near the
+// target). A client-side per-device preference (ADR-0006, like content scale)
+// — never authored in the layout YAML. Icon/label size derives from the
+// resolved cell size via CSS container units.
+export const CELL_SIZE_MIN = 64;
+export const CELL_SIZE_MAX = 240;
+export const CELL_SIZE_DEFAULT = 100;
+export const CELL_SIZE_STEP = 4;
+
+// Secondary nudge applied on top of the cell-derived content size (issue #37):
+// 1.0 leaves the derived look, and the user can bias icon/label a little
+// smaller or larger per device without changing the cell band. Kept as its own
+// knob so the two don't fight — the band sets cell (and hence content) size,
+// this only trims it. See ADR-0006 (client-side per-device visual prefs).
 export const CONTENT_SCALE_MIN = 0.75;
 export const CONTENT_SCALE_MAX = 2.5;
 export const CONTENT_SCALE_STEP = 0.1;
@@ -95,6 +108,15 @@ export function clampContentScale(n: number): number {
   if (!Number.isFinite(n)) return CONTENT_SCALE_DEFAULT;
   const clamped = Math.max(CONTENT_SCALE_MIN, Math.min(CONTENT_SCALE_MAX, n));
   return Math.round(clamped / CONTENT_SCALE_STEP) * CONTENT_SCALE_STEP;
+}
+
+function roundToStep(n: number, step: number): number {
+  return Math.round(n / step) * step;
+}
+
+export function clampCellSize(n: number): number {
+  if (!Number.isFinite(n)) return CELL_SIZE_DEFAULT;
+  return roundToStep(Math.max(CELL_SIZE_MIN, Math.min(CELL_SIZE_MAX, n)), CELL_SIZE_STEP);
 }
 
 export function clampJogWidth(n: number): number {
@@ -174,6 +196,33 @@ function readInitialContentScale(): number {
   return CONTENT_SCALE_DEFAULT;
 }
 
+
+function readInitialCellSize(): number {
+  try {
+    const url = new URLSearchParams(window.location.search).get("cellSize");
+    if (url !== null) return clampCellSize(Number(url));
+    const stored = localStorage.getItem(CELL_SIZE_KEY);
+    if (stored !== null) return clampCellSize(Number(stored));
+  } catch {
+    // see readInitialScale.
+  }
+  return CELL_SIZE_DEFAULT;
+}
+
+/** The target cell size (ADR-0010): the square cell edge (CSS px) the grid
+ * packs columns around. Client-side per-device preference; drives the
+ * ``--cell-size`` CSS var and is fed to the reflow maths. */
+export function useCellSize() {
+  const [size, setSizeState] = useState<number>(readInitialCellSize);
+
+  const setSize = useCallback((n: number) => {
+    const clamped = clampCellSize(n);
+    setSizeState(clamped);
+    safeSet(CELL_SIZE_KEY, String(clamped));
+  }, []);
+
+  return { size, setSize };
+}
 
 function readInitialJogWidth(): number {
   try {

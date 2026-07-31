@@ -41,12 +41,18 @@ export type MediaState = {
    * it as a per-row header, matching GNOME. ``null`` for the VLC path. */
   app_name?: string | null;
 };
+/** A widget's extent in the reflow (ADR-0010). ``[w, h]`` is a column/row
+ * span (default ``[1, 1]``); the literal ``"full"`` opts the widget out of
+ * the flow to take the whole chrome-excluded surface. There is no position —
+ * widgets pack in list order, left-to-right, wrapping down. */
+export type WidgetSize = [number, number] | "full";
 export type Widget = {
   id: string;
-  kind: "button" | "jogstrip" | "trackpad" | "meter" | "stats" | "media" | "mediabrowser";
+  kind: "button" | "blank" | "jogstrip" | "trackpad" | "meter" | "stats" | "media" | "mediabrowser";
   label?: string | null;
   icon?: Icon | null;
-  grid: [number, number, number, number];
+  /** Reflow extent (ADR-0010). Absent means a ``[1, 1]`` single cell. */
+  size?: WidgetSize | null;
   color?: string | null;
   action?: Record<string, unknown> | null;
   /** Macro steps: an ordered list of key/shell/dbus/delay actions that the
@@ -77,6 +83,12 @@ export type ServerLayout = {
   /** Optional chrome view identifier; null for focus-driven layouts. */
   view?: string | null;
   widgets: Widget[];
+  /** What happens when the defined widgets exceed the capacity the cell-size
+   * band yields at the current viewport (ADR-0010). ``clip`` (default) leaves
+   * trailing widgets off-surface; ``shrink-to-fit`` allows cells below the
+   * band's floor so every widget fits. The one genuinely per-layout sizing
+   * knob — everything else about cell size is a client-side device pref. */
+  overflow?: "clip" | "shrink-to-fit";
   jogstrip_enabled: boolean;
   /** Human-readable name for the bottom-chrome app badge; falls back to
    * ``app`` (the raw match token) when null. Relayed opaquely by the

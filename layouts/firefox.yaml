@@ -5,6 +5,8 @@ theme: "#ff7139"
 icon:
   source: simple-icons
   name: firefox
+# Widgets reflow in list order (ADR-0010): row-major sequence, wrapping to the
+# viewport. Navigation on the first row, tab/window/find/url on the second.
 widgets:
   - id: back
     kind: button
@@ -13,7 +15,6 @@ widgets:
       source: lucide
       name: arrow-left
     color: "#1e3a8a"
-    grid: [0, 0, 1, 1]
     action:
       key: "alt+Left"
   - id: forward
@@ -23,16 +24,30 @@ widgets:
       source: lucide
       name: arrow-right
     color: "#1e3a8a"
-    grid: [1, 0, 1, 1]
     action:
       key: "alt+Right"
+  - id: reload
+    kind: button
+    # label: Reload
+    icon:
+      source: lucide
+      name: refresh-cw
+    action:
+      key: "ctrl+r"
+  - id: close-tab
+    kind: button
+    # label: Close tab
+    icon:
+      source: lucide
+      name: x
+    action:
+      key: "ctrl+w"
   - id: new-tab
     kind: button
     label: New tab
     icon:
       source: lucide
       name: plus
-    grid: [0, 1, 1, 1]
     action:
       key: "ctrl+t"
   - id: new-window
@@ -41,42 +56,21 @@ widgets:
     icon:
       source: lucide
       name: app-window
-    grid: [1, 1, 1, 1]
     action:
       key: "ctrl+n"
-  - id: reload
-    kind: button
-    # label: Reload
-    icon:
-      source: lucide
-      name: refresh-cw
-    grid: [2, 0, 1, 1]
-    action:
-      key: "ctrl+r"
-  - id: focus-url
-    kind: button
-    label: URL bar
-    icon:
-      source: lucide
-      name: link
-    grid: [3, 1, 1, 1]
-    action:
-      key: "ctrl+l"
   - id: find
     kind: button
     label: Find
     icon:
       source: lucide
       name: search
-    grid: [2, 1, 1, 1]
     action:
       key: "ctrl+f"
-  - id: close-tab
+  - id: focus-url
     kind: button
-    # label: Close tab
+    label: URL bar
     icon:
       source: lucide
-      name: x
-    grid: [3, 0, 1, 1]
+      name: link
     action:
-      key: "ctrl+w"
+      key: "ctrl+l"

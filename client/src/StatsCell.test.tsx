@@ -9,7 +9,6 @@ const SYSTEM_WIDGET: Widget = {
   id: "system",
   kind: "stats",
   label: "System",
-  grid: [0, 0, 1, 1],
   metrics: [
     { source: "cpu_percent", label: "CPU" },
     { source: "mem_percent" }, // label omitted -> derived

@@ -163,13 +163,11 @@ def test_build_layouts_snapshot_hides_action_bodies() -> None:
             Widget(
                 id="button-1",
                 kind="button",
-                grid=[0, 0, 1, 1],
                 action=Action(shell="xdg-open https://secret.example"),
             ),
             Widget(
                 id="meter-1",
                 kind="meter",
-                grid=[1, 0, 1, 1],
                 source="cpu_percent",
             ),
         ],

@@ -13,7 +13,6 @@ widgets:
     icon:
       source: lucide
       name: columns-2
-    grid: [0, 0, 1, 1]
     action:
       key: "ctrl+alt+r"
   - id: split-down
@@ -22,7 +21,6 @@ widgets:
     icon:
       source: lucide
       name: rows-2
-    grid: [1, 0, 1, 1]
     action:
       key: "ctrl+alt+d"
   - id: new-window
@@ -31,7 +29,6 @@ widgets:
     icon:
       source: lucide
       name: app-window
-    grid: [2, 0, 1, 1]
     action:
       key: "ctrl+shift+n"
   - id: next-terminal
@@ -40,7 +37,6 @@ widgets:
     icon:
       source: lucide
       name: arrow-right
-    grid: [3, 0, 1, 1]
     action:
       key: "ctrl+tab"
   - id: close-terminal
@@ -49,7 +45,6 @@ widgets:
     icon:
       source: lucide
       name: x
-    grid: [0, 1, 1, 1]
     action:
       key: "ctrl+shift+w"
   - id: find
@@ -58,6 +53,5 @@ widgets:
     icon:
       source: lucide
       name: search
-    grid: [1, 1, 1, 1]
     action:
       key: "ctrl+shift+f"

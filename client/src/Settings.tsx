@@ -4,6 +4,9 @@ import {
   BOTTOM_SCALE_MAX,
   BOTTOM_SCALE_MIN,
   BOTTOM_SCALE_STEP,
+  CELL_SIZE_MAX,
+  CELL_SIZE_MIN,
+  CELL_SIZE_STEP,
   CONTENT_SCALE_MAX,
   CONTENT_SCALE_MIN,
   CONTENT_SCALE_STEP,
@@ -36,6 +39,8 @@ type Props = {
   onWakeLockChange: (v: boolean) => void;
   contentScale: number;
   onContentScaleChange: (n: number) => void;
+  cellSize: number;
+  onCellSizeChange: (n: number) => void;
   jogWidth: number;
   onJogWidthChange: (n: number) => void;
   bottomScale: number;
@@ -78,6 +83,8 @@ export function Settings({
   onWakeLockChange,
   contentScale,
   onContentScaleChange,
+  cellSize,
+  onCellSizeChange,
   jogWidth,
   onJogWidthChange,
   bottomScale,
@@ -185,12 +192,31 @@ export function Settings({
 
       <h2 className="settings-title settings-title-sub">Display</h2>
       <div className="settings-controls">
+        {/* Cell size target (ADR-0010): the square cell edge (CSS px) the grid
+            packs columns around. Cells fill the width evenly — more columns fit
+            as the viewport widens, keeping the result near the target. */}
         <div className="settings-control">
-          <span className="settings-control-label">Content size</span>
+          <span className="settings-control-label">Cell size</span>
           <input
             type="range"
             className="slider"
-            aria-label="Content size"
+            aria-label="Cell size"
+            min={CELL_SIZE_MIN}
+            max={CELL_SIZE_MAX}
+            step={CELL_SIZE_STEP}
+            value={cellSize}
+            onChange={(e) => onCellSizeChange(Number(e.target.value))}
+          />
+          <span className="settings-control-value" aria-live="polite">
+            {cellSize}px
+          </span>
+        </div>
+        <div className="settings-control">
+          <span className="settings-control-label">Content nudge</span>
+          <input
+            type="range"
+            className="slider"
+            aria-label="Content nudge"
             min={CONTENT_SCALE_MIN}
             max={CONTENT_SCALE_MAX}
             step={CONTENT_SCALE_STEP}

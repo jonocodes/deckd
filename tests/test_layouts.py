@@ -29,7 +29,6 @@ widgets:
   - id: back
     kind: button
     label: Back
-    grid: [0, 0, 1, 1]
     action:
       key: "alt+Left"
 """
@@ -41,7 +40,6 @@ widgets:
   - id: new-tab
     kind: button
     label: New tab
-    grid: [0, 0, 1, 1]
     action:
       key: "ctrl+shift+t"
 """
@@ -53,7 +51,6 @@ widgets:
   - id: home
     kind: button
     label: Home
-    grid: [0, 0, 1, 1]
     action:
       shell: "xdg-open https://example.com"
 """
@@ -64,7 +61,6 @@ widgets:
   - id: orphan
     kind: button
     label: Orphan
-    grid: [0, 0, 1, 1]
 """
 
 
@@ -75,7 +71,6 @@ def test_media_schema_accepts_typed_controls_and_volume_fallback_actions() -> No
         {
             "id": "media",
             "kind": "media",
-            "grid": [0, 0, 1, 1],
             "controls": ["play", "volume"],
             "volume_up_action": {"key": "volumeup"},
             "volume_down_action": {"key": "volumedown"},
@@ -87,13 +82,13 @@ def test_media_schema_accepts_typed_controls_and_volume_fallback_actions() -> No
 @pytest.mark.parametrize("controls", [[], ["play", "play"], ["unknown"]])
 def test_media_schema_rejects_invalid_controls(controls: list[str]) -> None:
     with pytest.raises(ValueError):
-        Widget.model_validate({"id": "media", "kind": "media", "grid": [0, 0, 1, 1], "controls": controls})
+        Widget.model_validate({"id": "media", "kind": "media", "controls": controls})
 
 
 def test_media_schema_rejects_empty_password_ref() -> None:
     with pytest.raises(ValueError):
         Widget.model_validate(
-            {"id": "media", "kind": "media", "grid": [0, 0, 1, 1], "media_http": {"password_ref": ""}}
+            {"id": "media", "kind": "media", "media_http": {"password_ref": ""}}
         )
 
 
@@ -111,7 +106,66 @@ def test_media_schema_rejects_empty_password_ref() -> None:
 )
 def test_media_only_fields_rejected_on_other_widgets(field: str, value: object) -> None:
     with pytest.raises(ValueError, match="media-only"):
-        Widget.model_validate({"id": "button", "kind": "button", "grid": [0, 0, 1, 1], field: value})
+        Widget.model_validate({"id": "button", "kind": "button", field: value})
+
+
+# --- Reflow schema (ADR-0010): size span, blank, overflow ------------------
+
+
+def test_widget_size_defaults_to_none() -> None:
+    """An absent ``size`` is a plain 1x1 cell; there is no ``grid`` field."""
+    w = Widget.model_validate({"id": "b", "kind": "button"})
+    assert w.size is None
+    assert not hasattr(w, "grid")
+
+
+@pytest.mark.parametrize("size", [[2, 1], [1, 3], "full"])
+def test_widget_accepts_valid_size(size: object) -> None:
+    w = Widget.model_validate({"id": "b", "kind": "button", "size": size})
+    assert w.size == size
+
+
+@pytest.mark.parametrize("size", [[0, 1], [1, -2], [1], [1, 2, 3], "big"])
+def test_widget_rejects_bad_size(size: object) -> None:
+    with pytest.raises(ValueError):
+        Widget.model_validate({"id": "b", "kind": "button", "size": size})
+
+
+def test_blank_widget_accepts_only_size() -> None:
+    blank = Widget.model_validate({"id": "gap", "kind": "blank", "size": [2, 1]})
+    assert blank.kind == "blank"
+    assert blank.size == [2, 1]
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("label", "x"),
+        ("icon", {"source": "lucide", "name": "x"}),
+        ("color", "#fff"),
+        ("action", {"key": "a"}),
+    ],
+)
+def test_blank_widget_rejects_content_fields(field: str, value: object) -> None:
+    with pytest.raises(ValueError, match="blank"):
+        Widget.model_validate({"id": "gap", "kind": "blank", field: value})
+
+
+def test_layout_overflow_defaults_to_shrink_to_fit() -> None:
+    layout = Layout.model_validate({"match": ["x"], "widgets": []})
+    assert layout.overflow == "shrink-to-fit"
+
+
+def test_layout_accepts_shrink_to_fit_overflow() -> None:
+    layout = Layout.model_validate(
+        {"match": ["x"], "widgets": [], "overflow": "shrink-to-fit"}
+    )
+    assert layout.overflow == "shrink-to-fit"
+
+
+def test_layout_rejects_unknown_overflow() -> None:
+    with pytest.raises(ValueError):
+        Layout.model_validate({"match": ["x"], "widgets": [], "overflow": "wrap"})
 
 
 
@@ -203,7 +257,6 @@ widgets:
   - id: a
     kind: button
     label: a
-    grid: [0, 0, 1, 1]
 """
     body_b = """
 match:
@@ -213,7 +266,6 @@ widgets:
   - id: b
     kind: button
     label: b
-    grid: [0, 0, 1, 1]
 """
     _write(tmp_path, "01-firefox.yaml", body_a)
     _write(tmp_path, "02-firefox.yaml", body_b)
@@ -245,7 +297,6 @@ widgets:
   - id: play
     kind: button
     label: Play
-    grid: [0, 0, 1, 1]
     action:
       key: "k"
 """
@@ -334,7 +385,6 @@ widgets:
   - id: ext
     kind: button
     label: ext
-    grid: [0, 0, 1, 1]
 """
     _write(tmp_path, "code.yaml", body)
     store = load_layouts(tmp_path)
@@ -357,7 +407,6 @@ widgets:
   - id: split
     kind: button
     label: split
-    grid: [0, 0, 1, 1]
 """
     _write(tmp_path, "tilix.yaml", body)
     store = load_layouts(tmp_path)
@@ -396,7 +445,6 @@ widgets:
     kind: button
     label: Back
     color: "#1e3a8a"
-    grid: [0, 0, 1, 1]
     action:
       key: "alt+Left"
 """,
@@ -424,7 +472,6 @@ widgets:
   - id: home
     kind: button
     label: Home
-    grid: [0, 0, 1, 1]
 """
     _write(tmp_path, "default.yaml", body)
     store = load_layouts(tmp_path)
@@ -467,7 +514,6 @@ widgets:
   - id: back
     kind: button
     label: Back
-    grid: [0, 0, 1, 1]
 """
     _write(tmp_path, "firefox.yaml", body)
     store = load_layouts(tmp_path)
@@ -498,7 +544,6 @@ icon:
 widgets:
   - id: back
     kind: button
-    grid: [0, 0, 1, 1]
 """
     _write(tmp_path, "firefox.yaml", body)
     with pytest.raises(SystemExit):
@@ -515,7 +560,6 @@ themes: "#ff7139"
 widgets:
   - id: home
     kind: button
-    grid: [0, 0, 1, 1]
 """
     _write(tmp_path, "default.yaml", body)
     with pytest.raises(SystemExit):
@@ -530,7 +574,6 @@ match:
 widgets:
   - id: term
     kind: button
-    grid: [0, 0, 1, 1]
     action:
       terminal: true
 """
@@ -548,7 +591,6 @@ match:
 widgets:
   - id: term
     kind: button
-    grid: [0, 0, 1, 1]
     action:
       terminal: "tilix"
 """
@@ -599,7 +641,6 @@ widgets:
   - id: new-tab
     kind: button
     label: New tab
-    grid: [0, 0, 1, 1]
     action:
       key: "super+t"
 """,
@@ -634,7 +675,6 @@ widgets:
   - id: new-tab
     kind: button
     label: New tab
-    grid: [0, 0, 1, 1]
     action:
       key: "super+t"
 """,
@@ -660,7 +700,6 @@ widgets:
   - id: new-tab
     kind: button
     label: New tab
-    grid: [0, 0, 1, 1]
     action:
       key: "super+t"
 """)
@@ -751,7 +790,6 @@ match:
 widgets:
   - id: url-btn
     kind: button
-    grid: [0, 0, 1, 1]
     action:
       url: "https://example.com"
 """
@@ -768,7 +806,6 @@ match:
 widgets:
   - id: url-btn
     kind: button
-    grid: [0, 0, 1, 1]
     action:
       url: "ftp://example.com"
 """
@@ -785,7 +822,6 @@ match:
 widgets:
   - id: url-btn
     kind: button
-    grid: [0, 0, 1, 1]
     action:
       url: "file:///tmp/test.html"
 """
@@ -807,7 +843,6 @@ match:
 widgets:
   - id: text-btn
     kind: button
-    grid: [0, 0, 1, 1]
     action:
       text: "hello"
       text_mode: simulate
@@ -827,7 +862,6 @@ match:
 widgets:
   - id: text-btn
     kind: button
-    grid: [0, 0, 1, 1]
     action:
       text: "hello world"
       text_mode: paste
@@ -848,7 +882,6 @@ match:
 widgets:
   - id: text-btn
     kind: button
-    grid: [0, 0, 1, 1]
     action:
       text: "hello"
 """
@@ -867,7 +900,6 @@ match:
 widgets:
   - id: text-btn
     kind: button
-    grid: [0, 0, 1, 1]
     action:
       text: ""
 """

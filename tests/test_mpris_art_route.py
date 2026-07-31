@@ -49,7 +49,7 @@ class _MprisArtFixture:
 def _mediabrowser_layout() -> Layout:
     return Layout(
         id="mpris",
-        widgets=[Widget(id="browser", kind="mediabrowser", grid=[0, 0, 4, 2])],
+        widgets=[Widget(id="browser", kind="mediabrowser", size=[4, 2])],
     )
 
 

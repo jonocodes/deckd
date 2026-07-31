@@ -88,7 +88,13 @@ class Widget(BaseModel):
     kind: str
     label: str | None = None
     icon: Icon | None = None
-    grid: list[int] = Field(min_length=4, max_length=4)
+    # Reflow extent (ADR-0010). ``[w, h]`` is a column/row span; the literal
+    # ``"full"`` opts the widget out of the flow to take the whole surface.
+    # There is no position — widgets pack in list order, left-to-right,
+    # wrapping down against a client-side cell-size band. Absent means a
+    # ``[1, 1]`` single cell. The old ``grid: [x, y, w, h]`` coordinate field
+    # is gone; migrate by dropping ``x, y`` and keeping ``w, h`` as ``size``.
+    size: list[int] | Literal["full"] | None = None
     # Optional CSS colour string applied as the button's background. Any
     # value the browser accepts is fine ("#1e3a8a", "rebeccapurple",
     # "hsl(...)"). Client trust: layouts are user-owned config, not user
@@ -154,6 +160,21 @@ class Widget(BaseModel):
             raise ValueError("media controls must not contain duplicates")
         return v
 
+    @field_validator("size")
+    @classmethod
+    def _validate_size(cls, v: object) -> object:
+        # ``"full"`` and absent are fine; a span must be exactly two positive
+        # ints (columns, rows). Guard the shape here so a bad ``size: [0, 2]``
+        # or ``size: [1, 2, 3]`` fails at load with a clear message rather than
+        # silently producing a zero-span cell in the client.
+        if v is None or v == "full":
+            return v
+        if not isinstance(v, list) or len(v) != 2:
+            raise ValueError("size span must be a [columns, rows] pair, or the literal \"full\"")
+        if any(not isinstance(n, int) or n < 1 for n in v):
+            raise ValueError(f"size span values must be positive integers; got {v!r}")
+        return v
+
     @field_validator("art_source")
     @classmethod
     def _validate_art_source(cls, v: list[str] | None) -> list[str] | None:
@@ -179,6 +200,27 @@ class Widget(BaseModel):
         mediabrowser_fields = {
             "empty_state": self.empty_state,
         }
+        if self.kind == "blank":
+            # A ``blank`` is a deliberate gap in the reflow (ADR-0010): it
+            # only holds space, honouring an optional ``size`` span. Anything
+            # that would make it interactive or content-bearing is a mistake,
+            # so reject label/icon/color/action and every widget-specific
+            # field rather than silently ignoring them.
+            forbidden = {
+                "label": self.label,
+                "icon": self.icon,
+                "color": self.color,
+                "action": self.action,
+                "macro": self.macro,
+                "source": self.source,
+                "metrics": self.metrics,
+                **media_fields,
+                **mediabrowser_fields,
+            }
+            invalid = sorted(name for name, value in forbidden.items() if value is not None)
+            if invalid:
+                raise ValueError(f"blank widgets take only 'size'; got: {', '.join(invalid)}")
+            return self
         if self.kind == "media" and self.controls is None:
             self.controls = ["play", "volume", "position"]
         if self.kind == "mediabrowser":
@@ -278,6 +320,12 @@ class Layout(BaseModel):
     id: str = ""
     match: list[str] = Field(default_factory=list)
     widgets: list[Widget] = Field(default_factory=list)
+    # What happens when the widgets exceed the capacity the client's cell-size
+    # band yields at the current viewport (ADR-0010). ``clip`` leaves trailing
+    # widgets off-surface; ``shrink-to-fit`` lets cells drop below the band's
+    # floor so all widgets fit. The one genuinely per-layout sizing knob —
+    # every other cell-size concern is a client-side device preference.
+    overflow: Literal["clip", "shrink-to-fit"] = "shrink-to-fit"
     jogstrip: bool = True
     # Chrome app-identity presentation relayed opaquely to the client
     # (ADR-0007). The client renders these in the always-on bottom strip:

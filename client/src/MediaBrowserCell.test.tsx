@@ -38,7 +38,6 @@ import type { Widget } from "./protocol";
 const WIDGET: Widget = {
   id: "browser",
   kind: "mediabrowser",
-  grid: [0, 0, 4, 2],
   empty_state: "show",
 };
 

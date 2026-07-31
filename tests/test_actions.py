@@ -34,7 +34,6 @@ def _widget(dbus_value: str) -> Widget:
         id="dbus-btn",
         kind="button",
         label="dbus",
-        grid=[0, 0, 1, 1],
         action=Action(dbus=dbus_value),
     )
 
@@ -240,7 +239,6 @@ async def test_press_url_opens_via_xdg_open(
     widget = Widget(
         id="url-btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         action=Action(url="https://example.com/path?q=1&frag=#top"),
     )
     await run_action(widget, _ctx_key_sink(FakePointerSink()))
@@ -272,7 +270,6 @@ async def test_press_url_falls_back_to_gio_open(
     widget = Widget(
         id="url-btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         action=Action(url="https://example.com"),
     )
     await run_action(widget, _ctx_key_sink(FakePointerSink()))
@@ -305,7 +302,6 @@ async def test_press_text_simulate_types_chars() -> None:
     widget = Widget(
         id="text-btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         action=Action(text="hello", text_mode="simulate"),
     )
     await run_action(widget, _ctx_key_sink(key_sink))
@@ -326,7 +322,6 @@ async def test_press_text_simulate_defaults_to_simulate() -> None:
     widget = Widget(
         id="text-btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         action=Action(text="ab"),
     )
     await run_action(widget, _ctx_key_sink(key_sink))
@@ -353,7 +348,6 @@ async def test_press_text_falls_back_to_paste_for_multi_byte(
     widget = Widget(
         id="text-btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         action=Action(text="a🎉b"),
     )
     with caplog.at_level(logging.WARNING, logger="deckd.actions"):
@@ -371,7 +365,6 @@ async def test_press_text_explicit_simulate_drops_unknown_chars() -> None:
     widget = Widget(
         id="text-btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         action=Action(text="aéb", text_mode="simulate"),
     )
     await run_action(widget, _ctx_key_sink(key_sink))
@@ -431,7 +424,6 @@ async def test_press_text_paste_writes_clipboard_and_sends_ctrl_v(
     widget = Widget(
         id="text-btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         action=Action(text="hello world", text_mode="paste", restore_clipboard=True),
     )
     await run_action(widget, _ctx_key_sink(key_sink))
@@ -456,7 +448,6 @@ async def test_press_text_paste_no_clipboard_tool_falls_back_to_simulate(
     widget = Widget(
         id="text-btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         action=Action(text="ab", text_mode="paste"),
     )
     await run_action(widget, _ctx_key_sink(key_sink))

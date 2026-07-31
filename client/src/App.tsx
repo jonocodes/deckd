@@ -12,6 +12,8 @@ import { Settings } from "./Settings";
 import { useMeterStore } from "./meter-store";
 import { useMediaStore } from "./media-store";
 import {
+  clampCellSize,
+  useCellSize,
   useBottomScale,
   useContentScale,
   useJogWidth,
@@ -138,6 +140,16 @@ export function App() {
   const trackpad = useTrackpadSettings();
   const wakeLock = useWakeLockSetting();
   const contentScale = useContentScale();
+  const cellSize = useCellSize();
+  // In demo mode, allow the gallery (or any URL-driven caller) to override the
+  // cell size via query param so each frame can be tuned independently.
+  const effectiveCellSize = useMemo(() => {
+    if (!isDemo) return cellSize;
+    const p = new URLSearchParams(window.location.search);
+    const urlSize = p.get("cellSize");
+    if (urlSize === null) return cellSize;
+    return { size: clampCellSize(Number(urlSize)), setSize: cellSize.setSize };
+  }, [isDemo, cellSize]);
   const jogWidth = useJogWidth();
   const bottomScale = useBottomScale();
   const labelScale = useLabelScale();
@@ -402,6 +414,7 @@ export function App() {
             {
               "--content-scale": contentScale.scale,
               "--label-scale": labelScale.scale,
+              "--cell-size": `${effectiveCellSize.size}px`,
             } as CSSProperties
           }
         >
@@ -452,6 +465,8 @@ export function App() {
               onWakeLockChange={wakeLock.setEnabled}
               contentScale={contentScale.scale}
               onContentScaleChange={contentScale.setScale}
+              cellSize={effectiveCellSize.size}
+              onCellSizeChange={effectiveCellSize.setSize}
               jogWidth={jogWidth.width}
               onJogWidthChange={jogWidth.setWidth}
               bottomScale={bottomScale.scale}
@@ -481,6 +496,8 @@ export function App() {
           ) : layout ? (
             <ButtonGrid
               widgets={layout.widgets}
+              overflow={layout.overflow}
+              cellSize={effectiveCellSize.size}
               onPress={press}
               onJog={jog}
               onJogEnd={jogEnd}

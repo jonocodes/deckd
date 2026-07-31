@@ -101,7 +101,6 @@ widgets:
   - id: open-terminal
     kind: button
     label: Open terminal
-    grid: [0, 0, 1, 1]
     action:
       terminal: true
 """
@@ -409,7 +408,6 @@ widgets:
   - id: home
     kind: button
     label: Home
-    grid: [0, 0, 1, 1]
 """
     )
     (tmp_path / "nochrome.yaml").write_text(
@@ -421,7 +419,6 @@ widgets:
   - id: scroll-own
     kind: button
     label: Scroll own
-    grid: [0, 0, 1, 1]
 """
     )
 
@@ -478,7 +475,6 @@ match:
 widgets:
   - id: home
     kind: button
-    grid: [0, 0, 1, 1]
 """
     )
     (tmp_path / "firefox.yaml").write_text(
@@ -493,7 +489,6 @@ icon:
 widgets:
   - id: back
     kind: button
-    grid: [0, 0, 1, 1]
 """
     )
 
@@ -557,7 +552,6 @@ widgets:
   - id: home
     kind: button
     label: Home
-    grid: [0, 0, 1, 1]
 """
     )
 
@@ -722,7 +716,6 @@ widgets:
   - id: home
     kind: button
     label: Home
-    grid: [0, 0, 1, 1]
 """
 
 VALID_DEFAULT_V2 = """
@@ -732,7 +725,6 @@ widgets:
   - id: home-v2
     kind: button
     label: Home v2
-    grid: [0, 0, 1, 1]
 """
 
 INVALID_YAML = """
@@ -741,7 +733,6 @@ match:
 widgets:
   - id: broken
     kind: button
-    grid: [0, 0, 1, 1]
     action:
       key: 42  # wrong type; schema says str
       unknown_field: nope

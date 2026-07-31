@@ -6,7 +6,7 @@ widgets:
   - id: vlc-media
     kind: media
     label: VLC
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
     controls: [play, previous, next, volume, position, speed]
     # Album art sources, in order. 'vlc' uses VLC's own art (embedded tags /
     # its cache); 'itunes' falls back to an online cover-art lookup when VLC

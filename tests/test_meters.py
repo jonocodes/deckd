@@ -84,7 +84,6 @@ widgets:
     source: cpu_percent
     min: 0
     max: 100
-    grid: [0, 0, 1, 1]
 """
     p = Path("/tmp/_meter_layout.yaml")
     p.write_text(yaml)
@@ -108,7 +107,6 @@ match:
 widgets:
   - id: cpu
     kind: meter
-    grid: [0, 0, 1, 1]
 """
     p = Path("/tmp/_meter_layout_bad.yaml")
     p.write_text(yaml)
@@ -131,7 +129,6 @@ widgets:
     source: cpu_percent
     min: 100
     max: 50
-    grid: [0, 0, 1, 1]
 """
     p = Path("/tmp/_meter_layout_bad2.yaml")
     p.write_text(yaml)
@@ -167,7 +164,6 @@ widgets:
     source: cpu_percent
     min: 0
     max: 100
-    grid: [0, 0, 1, 1]
 """
     )
     return tmp_path
@@ -284,7 +280,6 @@ widgets:
   - id: system
     kind: stats
     label: System
-    grid: [0, 0, 1, 1]
     metrics:
       - source: cpu_percent
         label: CPU
@@ -307,7 +302,6 @@ match:
 widgets:
   - id: system
     kind: stats
-    grid: [0, 0, 1, 1]
 """
     )
     with pytest.raises(SystemExit):
@@ -325,7 +319,6 @@ widgets:
   - id: system
     kind: stats
     label: System
-    grid: [0, 0, 1, 1]
     metrics:
       - source: cpu_percent
         label: CPU

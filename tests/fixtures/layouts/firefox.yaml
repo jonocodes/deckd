@@ -12,6 +12,5 @@ widgets:
   - id: back
     kind: button
     label: Back
-    grid: [0, 0, 1, 1]
     action:
       key: "alt+Left"

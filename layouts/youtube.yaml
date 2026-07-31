@@ -21,7 +21,6 @@ widgets:
       source: lucide
       name: play
     color: "#ff0000"
-    grid: [0, 0, 1, 1]
     action:
       key: "k"
   - id: mute
@@ -30,7 +29,6 @@ widgets:
     icon:
       source: lucide
       name: volume-x
-    grid: [1, 0, 1, 1]
     action:
       key: "m"
   - id: fullscreen
@@ -39,7 +37,6 @@ widgets:
     icon:
       source: lucide
       name: maximize
-    grid: [2, 0, 1, 1]
     action:
       key: "f"
   - id: back-10
@@ -48,7 +45,6 @@ widgets:
     icon:
       source: lucide
       name: rewind
-    grid: [0, 1, 1, 1]
     action:
       key: "j"
   - id: fwd-10
@@ -57,7 +53,6 @@ widgets:
     icon:
       source: lucide
       name: fast-forward
-    grid: [1, 1, 1, 1]
     action:
       key: "l"
   - id: captions
@@ -66,6 +61,5 @@ widgets:
     icon:
       source: lucide
       name: captions
-    grid: [2, 1, 1, 1]
     action:
       key: "c"

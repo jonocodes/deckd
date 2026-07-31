@@ -11,7 +11,6 @@ widgets:
       source: lucide
       name: file-code
     color: "#2e328a"
-    grid: [0, 0, 1, 1]
     action:
       shell: code
   - id: firefox
@@ -20,7 +19,6 @@ widgets:
       source: simple-icons
       name: firefox
     color: "#b5641d"
-    grid: [1, 0, 1, 1]
     action:
       shell: "open -a Firefox"
   - id: obsidian
@@ -29,7 +27,6 @@ widgets:
       source: simple-icons
       name: obsidian
     color: "#6d28c8"
-    grid: [2, 0, 1, 1]
     action:
       shell: "open -a Obsidian"
   - id: thunderbird
@@ -38,7 +35,6 @@ widgets:
       source: simple-icons
       name: thunderbird
     color: "#0A84FF"
-    grid: [3, 0, 1, 1]
     action:
       shell: "open -a Thunderbird"
 
@@ -48,7 +44,6 @@ widgets:
       source: simple-icons
       name: github
     color: "black"
-    grid: [0, 1, 1, 1]
     action:
       shell: "open https://github.com"
 
@@ -58,7 +53,6 @@ widgets:
       source: lucide
       name: square-terminal
     color: "#6b0101"
-    grid: [1, 1, 1, 1]
     action:
       # terminal: true
       shell: "open -a iTerm"
@@ -69,14 +63,12 @@ widgets:
     icon:
       source: lucide
       name: keyboard
-    grid: [2, 1, 1, 1]
     action:
       key: "super+t"
 
   - id: system
     kind: stats
     label: System
-    grid: [3, 1, 1, 1]
     metrics:
       - source: cpu_percent
         label: CPU

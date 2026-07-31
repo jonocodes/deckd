@@ -14,40 +14,36 @@ widgets:
   - id: open-url
     kind: button
     label: Open URL
-    grid: [0, 0, 1, 1]
     action:
       shell: "xdg-open https://example.com"
   - id: open-terminal
     kind: button
     label: Terminal
-    grid: [1, 0, 1, 1]
     action:
       terminal: true
   - id: send-key
     kind: button
     label: Send Ctrl+T
-    grid: [2, 0, 1, 1]
     action:
       key: "ctrl+t"
   - id: audio-toggle
     kind: button
     label: VLC Play/Pause
-    grid: [3, 0, 1, 1]
     action:
       dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
-  - id: scroll-strip
-    kind: jogstrip
-    grid: [0, 2, 4, 1]
   - id: press-url
     kind: button
     label: Press URL
-    grid: [0, 1, 1, 1]
     action:
       url: "https://example.com/hello?q=1"
   - id: press-text
     kind: button
     label: Press Text
-    grid: [1, 1, 1, 1]
     action:
       text: "hello"
       text_mode: simulate
+  # Full-width scroll strip: a [4, 1] span won't fit after the two buttons on
+  # its row, so strict-order reflow (ADR-0010) wraps it to a row of its own.
+  - id: scroll-strip
+    kind: jogstrip
+    size: [4, 1]

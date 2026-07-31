@@ -1,6 +1,6 @@
 # Grid layout: ordered-list reflow with a banded cell size
 
-**Supersedes [ADR-0004](0004-orientation-scaling.md).** Tracked in issue #92; not yet implemented at time of writing (the code still stores coordinates and transposes).
+**Supersedes [ADR-0004](0004-orientation-scaling.md).** Tracked in issue #92; **implemented** — the `Widget` schema carries an ordered list with an optional `size` span (no coordinates), the client reflows against a client-side cell-size band, and the transpose is gone.
 
 ADR-0004 authored layouts as a fixed grid of absolute `[x, y, w, h]` coordinates and handled portrait by transposing them diagonally. That model assumes a grid whose shape is known when the layout is written — the Stream Deck premise, where the hardware *is* the grid. deckd's "deck" is an arbitrary browser viewport: a phone, a tablet, a laptop window being dragged narrower, a super-wide-but-short panel. There is no fixed grid shape to author against, so absolute coordinates are the wrong vocabulary. This ADR replaces them.
 
@@ -30,8 +30,8 @@ Crucially, the band is a **client-side per-device preference ([ADR-0006](0006-wi
 
 When the defined widgets exceed the capacity the band yields at the current viewport, the behaviour is:
 
-- **clip** (default) — trailing widgets are off-surface and currently inaccessible. Ten buttons on a surface that fits eight means the last two cannot be reached. **No pagination in v1** (a candidate follow-on).
-- **shrink-to-fit** — allow cells below `MIN` so every widget fits.
+- **shrink-to-fit** (default) — cells may shrink below the readability floor (respecting a hard 16 px floor) so every widget stays on the same surface. When the total widget set already fits at the floor size, the layout behaves exactly like `clip` (the floor is the same).
+- **clip** — trailing widgets are off-surface and currently inaccessible. Ten buttons on a surface that fits eight means the last two cannot be reached. **No pagination in v1** (a candidate follow-on).
 
 This is layout-semantic rather than device-ergonomic, so it may be a layout property (with a global default). It is the only sizing choice the layout author owns.
 

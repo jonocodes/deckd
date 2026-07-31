@@ -14,14 +14,14 @@ const FIREFOX: ServerLayout = {
   icon: { source: "simple-icons", name: "firefox" },
   jogstrip_enabled: true,
   widgets: [
-    { id: "new-tab", kind: "button", label: "New tab", icon: { source: "lucide", name: "plus" }, grid: [0, 0, 1, 1], action: { key: "ctrl+t" } },
-    { id: "new-window", kind: "button", label: "New window", icon: { source: "lucide", name: "app-window" }, grid: [1, 0, 1, 1], action: { key: "ctrl+n" } },
-    { id: "back", kind: "button", label: "Back", icon: { source: "lucide", name: "arrow-left" }, color: "#1e3a8a", grid: [2, 0, 1, 1], action: { key: "alt+left" } },
-    { id: "forward", kind: "button", label: "Forward", icon: { source: "lucide", name: "arrow-right" }, color: "#1e3a8a", grid: [3, 0, 1, 1], action: { key: "alt+right" } },
-    { id: "reload", kind: "button", label: "Reload", icon: { source: "lucide", name: "refresh-cw" }, grid: [0, 1, 1, 1], action: { key: "ctrl+r" } },
-    { id: "focus-url", kind: "button", label: "URL bar", icon: { source: "lucide", name: "link" }, grid: [1, 1, 1, 1], action: { key: "ctrl+l" } },
-    { id: "find", kind: "button", label: "Find", icon: { source: "lucide", name: "search" }, grid: [2, 1, 1, 1], action: { key: "ctrl+f" } },
-    { id: "close-tab", kind: "button", label: "Close tab", icon: { source: "lucide", name: "x" }, grid: [3, 1, 1, 1], action: { key: "ctrl+w" } },
+    { id: "new-tab", kind: "button", label: "New tab", icon: { source: "lucide", name: "plus" }, action: { key: "ctrl+t" } },
+    { id: "new-window", kind: "button", label: "New window", icon: { source: "lucide", name: "app-window" }, action: { key: "ctrl+n" } },
+    { id: "back", kind: "button", label: "Back", icon: { source: "lucide", name: "arrow-left" }, color: "#1e3a8a", action: { key: "alt+left" } },
+    { id: "forward", kind: "button", label: "Forward", icon: { source: "lucide", name: "arrow-right" }, color: "#1e3a8a", action: { key: "alt+right" } },
+    { id: "reload", kind: "button", label: "Reload", icon: { source: "lucide", name: "refresh-cw" }, action: { key: "ctrl+r" } },
+    { id: "focus-url", kind: "button", label: "URL bar", icon: { source: "lucide", name: "link" }, action: { key: "ctrl+l" } },
+    { id: "find", kind: "button", label: "Find", icon: { source: "lucide", name: "search" }, action: { key: "ctrl+f" } },
+    { id: "close-tab", kind: "button", label: "Close tab", icon: { source: "lucide", name: "x" }, action: { key: "ctrl+w" } },
   ],
 };
 
@@ -36,12 +36,12 @@ const YOUTUBE: ServerLayout = {
   web_app: true,
   jogstrip_enabled: true,
   widgets: [
-    { id: "play-pause", kind: "button", label: "Play/Pause", icon: { source: "lucide", name: "play" }, color: "#ff0000", grid: [0, 0, 1, 1], action: { key: "k" } },
-    { id: "mute", kind: "button", label: "Mute", icon: { source: "lucide", name: "volume-x" }, grid: [1, 0, 1, 1], action: { key: "m" } },
-    { id: "fullscreen", kind: "button", label: "Fullscreen", icon: { source: "lucide", name: "maximize" }, grid: [2, 0, 1, 1], action: { key: "f" } },
-    { id: "back-10", kind: "button", label: "-10s", icon: { source: "lucide", name: "rewind" }, grid: [0, 1, 1, 1], action: { key: "j" } },
-    { id: "fwd-10", kind: "button", label: "+10s", icon: { source: "lucide", name: "fast-forward" }, grid: [1, 1, 1, 1], action: { key: "l" } },
-    { id: "captions", kind: "button", label: "Captions", icon: { source: "lucide", name: "captions" }, grid: [2, 1, 1, 1], action: { key: "c" } },
+    { id: "play-pause", kind: "button", label: "Play/Pause", icon: { source: "lucide", name: "play" }, color: "#ff0000", action: { key: "k" } },
+    { id: "mute", kind: "button", label: "Mute", icon: { source: "lucide", name: "volume-x" }, action: { key: "m" } },
+    { id: "fullscreen", kind: "button", label: "Fullscreen", icon: { source: "lucide", name: "maximize" }, action: { key: "f" } },
+    { id: "back-10", kind: "button", label: "-10s", icon: { source: "lucide", name: "rewind" }, action: { key: "j" } },
+    { id: "fwd-10", kind: "button", label: "+10s", icon: { source: "lucide", name: "fast-forward" }, action: { key: "l" } },
+    { id: "captions", kind: "button", label: "Captions", icon: { source: "lucide", name: "captions" }, action: { key: "c" } },
   ],
 };
 
@@ -50,10 +50,10 @@ const DEFAULT: ServerLayout = {
   app: "default (demo)",
   jogstrip_enabled: true,
   widgets: [
-    { id: "open-url", kind: "button", label: "Open example.com", icon: { source: "lucide", name: "globe" }, grid: [0, 0, 1, 1] },
-    { id: "audio-toggle", kind: "button", label: "VLC Play/Pause", icon: { source: "lucide", name: "play" }, grid: [1, 0, 1, 1] },
-    { id: "xterm", kind: "button", label: "xterm", icon: { source: "lucide", name: "terminal" }, grid: [2, 0, 1, 1] },
-    { id: "send-key", kind: "button", label: "Send Ctrl+T", icon: { source: "lucide", name: "keyboard" }, grid: [3, 0, 1, 1], action: { key: "ctrl+t" } },
+    { id: "open-url", kind: "button", label: "Open example.com", icon: { source: "lucide", name: "globe" } },
+    { id: "audio-toggle", kind: "button", label: "VLC Play/Pause", icon: { source: "lucide", name: "play" } },
+    { id: "xterm", kind: "button", label: "xterm", icon: { source: "lucide", name: "terminal" } },
+    { id: "send-key", kind: "button", label: "Send Ctrl+T", icon: { source: "lucide", name: "keyboard" }, action: { key: "ctrl+t" } },
   ],
 };
 
@@ -69,14 +69,14 @@ const SHOWCASE: ServerLayout = {
   theme: "#6d28d9",
   jogstrip_enabled: true,
   widgets: [
-    { id: "firefox", kind: "button", label: "Firefox", icon: { source: "simple-icons", name: "firefox" }, color: "#b5651d", grid: [0, 0, 1, 1] },
-    { id: "vscode", kind: "button", label: "VS Code", icon: { source: "simple-icons", name: "vscodium" }, color: "#1e3a8a", grid: [1, 0, 1, 1] },
-    { id: "signal", kind: "button", label: "Signal", icon: { source: "simple-icons", name: "signal" }, grid: [2, 0, 1, 1] },
-    { id: "search", kind: "button", label: "Search", icon: { source: "lucide", name: "search" }, grid: [3, 0, 1, 1] },
-    { id: "plain", kind: "button", label: "No icon", grid: [0, 1, 1, 1] },
-    { id: "colored", kind: "button", label: "Accent", icon: { source: "lucide", name: "sparkles" }, color: "#6d28d9", grid: [1, 1, 1, 1] },
-    { id: "danger", kind: "button", label: "Danger", icon: { source: "lucide", name: "trash-2" }, color: "#7f1d1d", grid: [2, 1, 1, 1] },
-    { id: "missing", kind: "button", label: "Missing", icon: { source: "lucide", name: "not-a-real-icon" }, grid: [3, 1, 1, 1] },
+    { id: "firefox", kind: "button", label: "Firefox", icon: { source: "simple-icons", name: "firefox" }, color: "#b5651d" },
+    { id: "vscode", kind: "button", label: "VS Code", icon: { source: "simple-icons", name: "vscodium" }, color: "#1e3a8a" },
+    { id: "signal", kind: "button", label: "Signal", icon: { source: "simple-icons", name: "signal" } },
+    { id: "search", kind: "button", label: "Search", icon: { source: "lucide", name: "search" } },
+    { id: "plain", kind: "button", label: "No icon" },
+    { id: "colored", kind: "button", label: "Accent", icon: { source: "lucide", name: "sparkles" }, color: "#6d28d9" },
+    { id: "danger", kind: "button", label: "Danger", icon: { source: "lucide", name: "trash-2" }, color: "#7f1d1d" },
+    { id: "missing", kind: "button", label: "Missing", icon: { source: "lucide", name: "not-a-real-icon" } },
   ],
 };
 
@@ -101,7 +101,7 @@ const METER: ServerLayout = {
       source: "cpu_percent",
       min: 0,
       max: 100,
-      grid: [0, 0, 2, 1],
+      size: [2, 1],
     },
     {
       id: "mem_percent",
@@ -111,11 +111,11 @@ const METER: ServerLayout = {
       source: "mem_percent",
       min: 0,
       max: 100,
-      grid: [0, 1, 2, 1],
+      size: [2, 1],
     },
-    { id: "open-url", kind: "button", label: "example.com", icon: { source: "simple-icons", name: "firefox" }, grid: [2, 0, 1, 1] },
-    { id: "tilix", kind: "button", label: "Tilix", icon: { source: "lucide", name: "square-terminal" }, grid: [3, 0, 1, 1] },
-    { id: "audio-toggle", kind: "button", label: "VLC", icon: { source: "lucide", name: "play" }, grid: [2, 1, 1, 1] },
+    { id: "open-url", kind: "button", label: "example.com", icon: { source: "simple-icons", name: "firefox" } },
+    { id: "tilix", kind: "button", label: "Tilix", icon: { source: "lucide", name: "square-terminal" } },
+    { id: "audio-toggle", kind: "button", label: "VLC", icon: { source: "lucide", name: "play" } },
     // Combined stats cell — reads the same cpu_percent/mem_percent seeds as
     // the bar meters above (readings are keyed by source), so it renders
     // without its own seed entry.
@@ -123,7 +123,6 @@ const METER: ServerLayout = {
       id: "system",
       kind: "stats",
       label: "System",
-      grid: [3, 1, 1, 1],
       metrics: [
         { source: "cpu_percent", label: "CPU" },
         { source: "mem_percent", label: "MEM" },
@@ -160,7 +159,7 @@ const VLC: ServerLayout = {
       id: "vlc-media",
       kind: "media",
       label: "VLC",
-      grid: [0, 0, 4, 2],
+      size: [4, 2],
       controls: ["play", "previous", "next", "volume", "position", "speed"],
     },
   ],
@@ -209,7 +208,7 @@ const MPRIS: ServerLayout = {
     {
       id: "browser",
       kind: "mediabrowser",
-      grid: [0, 0, 4, 2],
+      size: [4, 2],
     },
   ],
 };
@@ -291,7 +290,7 @@ const MACRO: ServerLayout = {
       kind: "button",
       label: "Notify then browser",
       icon: { source: "lucide", name: "bell" },
-      grid: [0, 0, 2, 1],
+      size: [2, 1],
       action: { key: "ctrl+t" },
       macro: {
         steps: [
@@ -306,7 +305,6 @@ const MACRO: ServerLayout = {
       kind: "button",
       label: "Multi-key",
       icon: { source: "lucide", name: "keyboard" },
-      grid: [2, 0, 1, 1],
       macro: {
         steps: [
           { type: "key", value: "ctrl+a" },
@@ -319,7 +317,6 @@ const MACRO: ServerLayout = {
       kind: "button",
       label: "Keep going on error",
       icon: { source: "lucide", name: "list-checks" },
-      grid: [3, 0, 1, 1],
       macro: {
         continue_on_error: true,
         steps: [
@@ -330,8 +327,8 @@ const MACRO: ServerLayout = {
         ],
       },
     },
-    { id: "open-url", kind: "button", label: "example.com", icon: { source: "lucide", name: "globe" }, grid: [0, 1, 1, 1] },
-    { id: "tilix", kind: "button", label: "Terminal", icon: { source: "lucide", name: "square-terminal" }, grid: [1, 1, 1, 1] },
+    { id: "open-url", kind: "button", label: "example.com", icon: { source: "lucide", name: "globe" } },
+    { id: "tilix", kind: "button", label: "Terminal", icon: { source: "lucide", name: "square-terminal" } },
   ],
 };
 

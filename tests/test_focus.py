@@ -35,13 +35,11 @@ widgets:
   - id: back
     kind: button
     label: Back
-    grid: [0, 0, 1, 1]
     action:
       key: "alt+Left"
   - id: forward
     kind: button
     label: Forward
-    grid: [1, 0, 1, 1]
     action:
       key: "alt+Right"
 """
@@ -53,7 +51,6 @@ widgets:
   - id: new-tab
     kind: button
     label: New tab
-    grid: [0, 0, 1, 1]
     action:
       key: "ctrl+shift+t"
 """
@@ -65,7 +62,6 @@ widgets:
   - id: home
     kind: button
     label: Home
-    grid: [0, 0, 1, 1]
     action:
       shell: "xdg-open https://example.com"
 """
@@ -405,7 +401,6 @@ widgets:
   - id: brand-new
     kind: button
     label: Brand new
-    grid: [0, 0, 1, 1]
 """
         )
         async with aiohttp.ClientSession() as http:

@@ -12,7 +12,6 @@ const CPU_WIDGET: Widget = {
   source: "cpu_percent",
   min: 0,
   max: 100,
-  grid: [0, 0, 1, 1],
 };
 
 function renderMeter(widget: Widget, reading: MeterReading | null) {

@@ -618,7 +618,9 @@ def _safe_widget(widget: Any) -> dict[str, Any]:
         "id": widget.id,
         "kind": widget.kind,
         "label": widget.label,
-        "grid": list(widget.grid),
+        # Reflow extent (ADR-0010): a ``[w, h]`` span, ``"full"``, or ``None``
+        # for a default 1x1 cell. There is no position — widgets pack in order.
+        "size": widget.size,
         "has_action": widget.action is not None,
         "kind_specific": _widget_kind_specific(widget),
     }

@@ -45,7 +45,7 @@ match: [default]
 widgets:
   - id: media
     kind: media
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
     media_http:
       host: media.local
       port: 9090

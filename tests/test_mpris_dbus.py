@@ -991,8 +991,8 @@ async def test_connect_mpris_backend_returns_none_when_no_layout_has_mediabrowse
 
     store = _store_with_layouts(
         [
-            ("default", [{"id": "btn", "kind": "button", "grid": [0, 0, 1, 1]}]),
-            ("firefox", [{"id": "btn", "kind": "button", "grid": [0, 0, 1, 1]}]),
+            ("default", [{"id": "btn", "kind": "button"}]),
+            ("firefox", [{"id": "btn", "kind": "button"}]),
         ]
     )
 
@@ -1010,7 +1010,7 @@ async def test_connect_mpris_backend_returns_backend_when_a_layout_has_mediabrow
         [
             (
                 "mpris",
-                [{"id": "browser", "kind": "mediabrowser", "grid": [0, 0, 4, 2]}],
+                [{"id": "browser", "kind": "mediabrowser", "size": [4, 2]}],
             ),
         ]
     )
