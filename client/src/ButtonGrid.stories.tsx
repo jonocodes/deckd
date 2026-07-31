@@ -36,7 +36,8 @@ const contentScaleControl = {
 function Frame({
   name,
   contentScale,
-}: { name: keyof typeof DEMO_LAYOUTS } & ContentScaleArgs) {
+  showKeyHints,
+}: { name: keyof typeof DEMO_LAYOUTS; showKeyHints?: boolean } & ContentScaleArgs) {
   return (
     <div
       style={
@@ -51,6 +52,7 @@ function Frame({
         scrollScale={3}
         scrollInvert={false}
         onMediaCommand={noop}
+        showKeyHints={showKeyHints}
       />
     </div>
   );
@@ -76,3 +78,12 @@ export const Showcase: Story<ContentScaleArgs> = ({ contentScale }) => (
 );
 Showcase.args = contentScaleControl.args;
 Showcase.argTypes = contentScaleControl.argTypes;
+
+/** Key hints on: each button whose action is a key combo shows it as a small
+ * dimmed caption under the label (Firefox's combos map to real shortcuts).
+ * Buttons without a key action (e.g. showcase launchers) render no hint. */
+export const KeyHints: Story<ContentScaleArgs> = ({ contentScale }) => (
+  <Frame name="firefox" contentScale={contentScale} showKeyHints />
+);
+KeyHints.args = contentScaleControl.args;
+KeyHints.argTypes = contentScaleControl.argTypes;

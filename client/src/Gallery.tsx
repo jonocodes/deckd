@@ -23,15 +23,26 @@ const MAX_H = 360;
 
 type Orientation = "landscape" | "portrait";
 
-function Frame({ device, demo, orientation }: { device: Device; demo: string; orientation: Orientation }) {
+function Frame({
+  device,
+  demo,
+  orientation,
+  keyHints,
+}: {
+  device: Device;
+  demo: string;
+  orientation: Orientation;
+  keyHints: boolean;
+}) {
   const [w, h] = orientation === "landscape" ? [device.h, device.w] : [device.w, device.h];
   const scale = Math.min(1, MAX_W / w, MAX_H / h);
+  const src = `${import.meta.env.BASE_URL}?demo=${demo}${keyHints ? "&showKeyHints=1" : ""}`;
   return (
     <figure className="frame">
       <div className="frame-box" style={{ width: w * scale, height: h * scale }}>
         <iframe
           title={`${device.label} ${orientation}`}
-          src={`${import.meta.env.BASE_URL}?demo=${demo}`}
+          src={src}
           style={{
             width: w,
             height: h,
@@ -51,6 +62,7 @@ function Frame({ device, demo, orientation }: { device: Device; demo: string; or
 export function Gallery() {
   const [demo, setDemo] = useState(DEMO_NAMES[0] ?? "firefox");
   const [orientation, setOrientation] = useState<Orientation>("landscape");
+  const [keyHints, setKeyHints] = useState(false);
 
   return (
     <div className="gallery">
@@ -78,10 +90,18 @@ export function Gallery() {
             </button>
           ))}
         </div>
+        <div className="gallery-group">
+          <button
+            className={`gallery-btn${keyHints ? " on" : ""}`}
+            onClick={() => setKeyHints((v) => !v)}
+          >
+            key hints
+          </button>
+        </div>
       </header>
       <div className="gallery-grid">
         {DEVICES.map((d) => (
-          <Frame key={d.label} device={d} demo={demo} orientation={orientation} />
+          <Frame key={d.label} device={d} demo={demo} orientation={orientation} keyHints={keyHints} />
         ))}
       </div>
     </div>

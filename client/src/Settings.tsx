@@ -52,6 +52,8 @@ type Props = {
   onHighContrastChange: (v: boolean) => void;
   reduceMotion: boolean;
   onReduceMotionChange: (v: boolean) => void;
+  showKeyHints: boolean;
+  onShowKeyHintsChange: (v: boolean) => void;
 };
 
 type Health = {
@@ -90,6 +92,8 @@ export function Settings({
   onHighContrastChange,
   reduceMotion,
   onReduceMotionChange,
+  showKeyHints,
+  onShowKeyHintsChange,
 }: Props) {
   const orientation = useOrientation();
   const standalone = useStandaloneMode();
@@ -233,6 +237,11 @@ export function Settings({
           label="Keep screen awake"
           value={wakeLockEnabled}
           onChange={onWakeLockChange}
+        />
+        <SettingToggle
+          label="Show key hints"
+          value={showKeyHints}
+          onChange={onShowKeyHintsChange}
         />
       </div>
 

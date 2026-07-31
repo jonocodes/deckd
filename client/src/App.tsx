@@ -19,6 +19,7 @@ import {
   useLargerControls,
   useHighContrast,
   useReduceMotion,
+  useShowKeyHints,
   useScrollSettings,
   useTrackpadSettings,
   useWakeLockSetting,
@@ -143,6 +144,7 @@ export function App() {
   const largerControls = useLargerControls();
   const highContrast = useHighContrast();
   const reduceMotion = useReduceMotion();
+  const showKeyHints = useShowKeyHints();
   // Hold the wake lock while the user wants it AND the socket is live;
   // a stale surface with no daemon behind it has no reason to keep the
   // screen on. Visibility is handled inside the hook.
@@ -468,6 +470,8 @@ export function App() {
               onHighContrastChange={highContrast.setEnabled}
               reduceMotion={reduceMotion.enabled}
               onReduceMotionChange={reduceMotion.setEnabled}
+              showKeyHints={showKeyHints.enabled}
+              onShowKeyHintsChange={showKeyHints.setEnabled}
             />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">
@@ -486,6 +490,7 @@ export function App() {
               mediaStates={media.states}
               onMediaCommand={mediaCommand}
               labelScale={labelScale.scale}
+              showKeyHints={showKeyHints.enabled}
             />
           ) : (
             <div className="empty">waiting for daemon…</div>
