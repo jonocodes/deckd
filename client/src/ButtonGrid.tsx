@@ -32,9 +32,33 @@ type Props = {
   /** Multiplier for the meter widget's caption label so it scales with
    * the same user-facing "label size" preference as buttons. */
   labelScale?: number;
+  /** When true, buttons whose action is a key combo show that combo as a
+   * small caption under the label (e.g. ``Ctrl+A``). */
+  showKeyHints?: boolean;
 };
 
 const FALLBACK_DIM = 4;
+
+/** Title-case each token of a key combo so ``ctrl+a`` reads as ``Ctrl+A``.
+ * Purely presentational — the daemon-side combo string is untouched. */
+function prettifyCombo(combo: string): string {
+  return combo
+    .split("+")
+    .map((part) => (part.length <= 1 ? part.toUpperCase() : part[0].toUpperCase() + part.slice(1)))
+    .join("+");
+}
+
+/** The key combo a button sends on press, for the optional key-hint caption.
+ * Reads ``action.key`` (the shortcut form) and, for macros, the first ``key``
+ * step. Returns null for buttons whose action isn't a key combo (shell, url,
+ * dbus, …) so those render without a hint. */
+function keyHint(w: Widget): string | null {
+  const actionKey = w.action?.key;
+  if (typeof actionKey === "string" && actionKey.length > 0) return prettifyCombo(actionKey);
+  const step = w.macro?.steps.find((s) => s.type === "key" && s.value);
+  if (step) return prettifyCombo(step.value);
+  return null;
+}
 
 /** Derive grid dimensions from the layout's widget extents so cells fill the
  * chrome-excluded area rather than leaving empty 1fr rows/columns when a
@@ -65,6 +89,7 @@ export function ButtonGrid({
   labelScale,
   mediaStates,
   onMediaCommand,
+  showKeyHints,
 }: Props) {
   const autoOrientation = useOrientation();
   const orientation = orientationOverride ?? autoOrientation;
@@ -145,6 +170,7 @@ export function ButtonGrid({
           const buttonStyle: CSSProperties = w.color
             ? { ...style, backgroundColor: w.color }
             : style;
+          const hint = showKeyHints ? keyHint(w) : null;
           return (
             <button
               key={w.id}
@@ -164,6 +190,7 @@ export function ButtonGrid({
               ) : !w.icon ? (
                 <span className="label">{w.id}</span>
               ) : null}
+              {hint ? <span className="key-hint">{hint}</span> : null}
             </button>
           );
         }),

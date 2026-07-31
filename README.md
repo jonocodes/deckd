@@ -292,7 +292,7 @@ Open `http://<desktop-lan-ip>:8765` on the phone, for example `http://192.168.30
 The client can be viewed and design-iterated without a running daemon:
 
 - **Demo mode** — append `?demo=<name>` to the client URL (`firefox`, `default`, or `showcase`) to render a fixture layout with the WebSocket disabled. The `showcase` fixture exercises every icon path (Lucide glyphs, Simple Icons brand logos, per-button colour, a no-icon button, and the unknown-icon placeholder). Dev-only; adds no cost when the param is absent. (For forcing a *real* daemon layout with a live backend, use the per-client `?layout=<name>` pin — see [Layout override](#dev-ux-auto-ignore--layout-override).)
-- **Responsive gallery** — `cd client && npm run dev`, then open `/gallery.html`. Renders the real client in phone / large-phone / 7" / 10"-tablet iframes at once, with layout and orientation selectors — for checking how a layout reads across screen sizes. Dev-only entry, not in the production build.
+- **Responsive gallery** — `cd client && npm run dev`, then open `/gallery.html`. Renders the real client in phone / large-phone / 7" / 10"-tablet iframes at once, with layout, orientation, and **key hints** selectors — for checking how a layout reads across screen sizes (the key-hints toggle drives each frame's `?showKeyHints=1`). Dev-only entry, not in the production build.
 - **Ladle** (component workbench) — `cd client && npm run ladle`. Browse `ButtonGrid` / `Icon` / `JogStrip` stories in isolation with width/theme controls, plus `Surface → Device sizes` stories that render the grid in fixed phone/tablet frames (size + orientation) for a quick per-component resolution check. Stories live in `src/*.stories.tsx` (Storybook-compatible CSF).
 - **Lint** — `cd client && npm run lint` (ESLint flat config; `npm run build` still runs `tsc --noEmit`).
 
@@ -423,6 +423,7 @@ Tap the `settings` button in the bottom chrome for a control panel:
 - **Text size** (slider, float 0.5×–1.5×, default 1.0×) — multiplier for the button label (the caption under each icon), applied on top of Content size, so the text can be dialled down without shrinking the icon.
 - **Bottom bar** (slider, 40%–100%, default 100%) — size of the persistent bottom chrome bar (app badge, connection indicator, trackpad + settings buttons), so you can shrink it down on devices where it reads as too tall.
 - **Keep screen awake** (toggle, default on) — holds a Screen Wake Lock while the socket is open and the tab is visible, so a phone acting as the surface doesn't sleep mid-use. Released on tab hidden / socket disconnect; re-acquired on visible / reconnect. Unsupported browsers or denied permissions are logged and swallowed.
+- **Show key hints** (toggle, default off) — renders the key combo a button sends (its `action.key`, or the first `key` step of a macro) as a small dimmed caption under the label, e.g. `Ctrl+A`. Buttons whose action isn't a key combo (shell, url, dbus, …) show no hint.
 
 Values persist per-device to `localStorage` — closing and reopening the client keeps your tuning. The persistent right-side jogstrip stays live inside the settings view so you can feel scale/invert changes immediately.
 
@@ -437,6 +438,7 @@ http://<host>:5173/?labelScale=0.7
 http://<host>:5173/?jogWidth=0.6
 http://<host>:5173/?bottomScale=0.7
 http://<host>:5173/?wakeLock=0
+http://<host>:5173/?showKeyHints=1
 ```
 
 Daemon-side flick momentum can be tuned with CLI flags:

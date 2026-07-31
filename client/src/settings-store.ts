@@ -23,6 +23,7 @@ const LABEL_SCALE_KEY = "deckd.labelScale";
 const LARGER_CONTROLS_KEY = "deckd.largerControls";
 const HIGH_CONTRAST_KEY = "deckd.highContrast";
 const REDUCE_MOTION_KEY = "deckd.reduceMotion";
+const SHOW_KEY_HINTS_KEY = "deckd.showKeyHints";
 
 const WAKE_LOCK_DEFAULT = true;
 
@@ -375,6 +376,22 @@ export function useReduceMotion() {
   const setEnabled = useCallback((v: boolean) => {
     setEnabledState(v);
     safeSet(REDUCE_MOTION_KEY, String(v));
+  }, []);
+
+  return { enabled, setEnabled };
+}
+
+/** Show key hints: renders the key combo a button sends (its ``action.key``)
+ * as a small caption under the label, so the user can see which keyboard
+ * shortcut each button triggers. Persisted per-device; defaults to off. */
+export function useShowKeyHints() {
+  const [enabled, setEnabledState] = useState<boolean>(() =>
+    readInitialBool("showKeyHints", SHOW_KEY_HINTS_KEY, false),
+  );
+
+  const setEnabled = useCallback((v: boolean) => {
+    setEnabledState(v);
+    safeSet(SHOW_KEY_HINTS_KEY, String(v));
   }, []);
 
   return { enabled, setEnabled };

@@ -430,6 +430,19 @@ button:focus-visible {
   word-break: break-word;
 }
 
+.cell-button .key-hint {
+  /* The key combo a button sends, shown under the label when the user
+     enables key hints. Deliberately smaller and dimmer than the label so it
+     reads as secondary metadata; monospace so combos line up legibly.
+     Scales with the same content/label preferences as the label. */
+  font-size: calc(clamp(7px, 1.2vw, 10px) * var(--content-scale) * var(--label-scale, 1));
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 500;
+  line-height: 1.1;
+  opacity: 0.6;
+  word-break: break-word;
+}
+
 /* Icon glyph (Lucide / Simple Icons), rendered above the label. The glyph is
    an ``<svg class="icon">`` itself, so size it directly — one fixed box for
    every source regardless of the set's intrinsic viewBox, so icons read at a

@@ -14,14 +14,14 @@ const FIREFOX: ServerLayout = {
   icon: { source: "simple-icons", name: "firefox" },
   jogstrip_enabled: true,
   widgets: [
-    { id: "new-tab", kind: "button", label: "New tab", icon: { source: "lucide", name: "plus" }, grid: [0, 0, 1, 1] },
-    { id: "new-window", kind: "button", label: "New window", icon: { source: "lucide", name: "app-window" }, grid: [1, 0, 1, 1] },
-    { id: "back", kind: "button", label: "Back", icon: { source: "lucide", name: "arrow-left" }, color: "#1e3a8a", grid: [2, 0, 1, 1] },
-    { id: "forward", kind: "button", label: "Forward", icon: { source: "lucide", name: "arrow-right" }, color: "#1e3a8a", grid: [3, 0, 1, 1] },
-    { id: "reload", kind: "button", label: "Reload", icon: { source: "lucide", name: "refresh-cw" }, grid: [0, 1, 1, 1] },
-    { id: "focus-url", kind: "button", label: "URL bar", icon: { source: "lucide", name: "link" }, grid: [1, 1, 1, 1] },
-    { id: "find", kind: "button", label: "Find", icon: { source: "lucide", name: "search" }, grid: [2, 1, 1, 1] },
-    { id: "close-tab", kind: "button", label: "Close tab", icon: { source: "lucide", name: "x" }, grid: [3, 1, 1, 1] },
+    { id: "new-tab", kind: "button", label: "New tab", icon: { source: "lucide", name: "plus" }, grid: [0, 0, 1, 1], action: { key: "ctrl+t" } },
+    { id: "new-window", kind: "button", label: "New window", icon: { source: "lucide", name: "app-window" }, grid: [1, 0, 1, 1], action: { key: "ctrl+n" } },
+    { id: "back", kind: "button", label: "Back", icon: { source: "lucide", name: "arrow-left" }, color: "#1e3a8a", grid: [2, 0, 1, 1], action: { key: "alt+left" } },
+    { id: "forward", kind: "button", label: "Forward", icon: { source: "lucide", name: "arrow-right" }, color: "#1e3a8a", grid: [3, 0, 1, 1], action: { key: "alt+right" } },
+    { id: "reload", kind: "button", label: "Reload", icon: { source: "lucide", name: "refresh-cw" }, grid: [0, 1, 1, 1], action: { key: "ctrl+r" } },
+    { id: "focus-url", kind: "button", label: "URL bar", icon: { source: "lucide", name: "link" }, grid: [1, 1, 1, 1], action: { key: "ctrl+l" } },
+    { id: "find", kind: "button", label: "Find", icon: { source: "lucide", name: "search" }, grid: [2, 1, 1, 1], action: { key: "ctrl+f" } },
+    { id: "close-tab", kind: "button", label: "Close tab", icon: { source: "lucide", name: "x" }, grid: [3, 1, 1, 1], action: { key: "ctrl+w" } },
   ],
 };
 
@@ -36,12 +36,12 @@ const YOUTUBE: ServerLayout = {
   web_app: true,
   jogstrip_enabled: true,
   widgets: [
-    { id: "play-pause", kind: "button", label: "Play/Pause", icon: { source: "lucide", name: "play" }, color: "#ff0000", grid: [0, 0, 1, 1] },
-    { id: "mute", kind: "button", label: "Mute", icon: { source: "lucide", name: "volume-x" }, grid: [1, 0, 1, 1] },
-    { id: "fullscreen", kind: "button", label: "Fullscreen", icon: { source: "lucide", name: "maximize" }, grid: [2, 0, 1, 1] },
-    { id: "back-10", kind: "button", label: "-10s", icon: { source: "lucide", name: "rewind" }, grid: [0, 1, 1, 1] },
-    { id: "fwd-10", kind: "button", label: "+10s", icon: { source: "lucide", name: "fast-forward" }, grid: [1, 1, 1, 1] },
-    { id: "captions", kind: "button", label: "Captions", icon: { source: "lucide", name: "captions" }, grid: [2, 1, 1, 1] },
+    { id: "play-pause", kind: "button", label: "Play/Pause", icon: { source: "lucide", name: "play" }, color: "#ff0000", grid: [0, 0, 1, 1], action: { key: "k" } },
+    { id: "mute", kind: "button", label: "Mute", icon: { source: "lucide", name: "volume-x" }, grid: [1, 0, 1, 1], action: { key: "m" } },
+    { id: "fullscreen", kind: "button", label: "Fullscreen", icon: { source: "lucide", name: "maximize" }, grid: [2, 0, 1, 1], action: { key: "f" } },
+    { id: "back-10", kind: "button", label: "-10s", icon: { source: "lucide", name: "rewind" }, grid: [0, 1, 1, 1], action: { key: "j" } },
+    { id: "fwd-10", kind: "button", label: "+10s", icon: { source: "lucide", name: "fast-forward" }, grid: [1, 1, 1, 1], action: { key: "l" } },
+    { id: "captions", kind: "button", label: "Captions", icon: { source: "lucide", name: "captions" }, grid: [2, 1, 1, 1], action: { key: "c" } },
   ],
 };
 
@@ -53,7 +53,7 @@ const DEFAULT: ServerLayout = {
     { id: "open-url", kind: "button", label: "Open example.com", icon: { source: "lucide", name: "globe" }, grid: [0, 0, 1, 1] },
     { id: "audio-toggle", kind: "button", label: "VLC Play/Pause", icon: { source: "lucide", name: "play" }, grid: [1, 0, 1, 1] },
     { id: "xterm", kind: "button", label: "xterm", icon: { source: "lucide", name: "terminal" }, grid: [2, 0, 1, 1] },
-    { id: "send-key", kind: "button", label: "Send Ctrl+T", icon: { source: "lucide", name: "keyboard" }, grid: [3, 0, 1, 1] },
+    { id: "send-key", kind: "button", label: "Send Ctrl+T", icon: { source: "lucide", name: "keyboard" }, grid: [3, 0, 1, 1], action: { key: "ctrl+t" } },
   ],
 };
 

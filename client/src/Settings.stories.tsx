@@ -37,6 +37,8 @@ export const Default: Story = () => (
       onHighContrastChange={noop}
       reduceMotion={false}
       onReduceMotionChange={noop}
+      showKeyHints={false}
+      onShowKeyHintsChange={noop}
     />
   </main>
 );

@@ -31,6 +31,8 @@ function renderSettings(overrides: Partial<Parameters<typeof Settings>[0]> = {})
     onHighContrastChange: () => {},
     reduceMotion: false,
     onReduceMotionChange: () => {},
+    showKeyHints: false,
+    onShowKeyHintsChange: () => {},
   };
   return render(<Settings {...base} {...overrides} />);
 }
