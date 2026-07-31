@@ -1,5 +1,11 @@
 import { useState } from "react";
 import { DEMO_NAMES } from "./demo";
+import {
+  CELL_SIZE_MIN,
+  CELL_SIZE_MAX,
+  CELL_SIZE_DEFAULT,
+  CELL_SIZE_STEP,
+} from "./settings-store";
 
 /** Dev-only responsive gallery. Renders the real client (via ``?demo=``) in
  * a set of device-sized iframes side by side, so a layout can be eyeballed
@@ -28,15 +34,20 @@ function Frame({
   demo,
   orientation,
   keyHints,
+  cellSize,
 }: {
   device: Device;
   demo: string;
   orientation: Orientation;
   keyHints: boolean;
+  cellSize: number;
 }) {
   const [w, h] = orientation === "landscape" ? [device.h, device.w] : [device.w, device.h];
   const scale = Math.min(1, MAX_W / w, MAX_H / h);
-  const src = `${import.meta.env.BASE_URL}?demo=${demo}${keyHints ? "&showKeyHints=1" : ""}`;
+  const params = new URLSearchParams({ demo });
+  if (keyHints) params.set("showKeyHints", "1");
+  params.set("cellSize", String(cellSize));
+  const src = `${import.meta.env.BASE_URL}?${params}`;
   return (
     <figure className="frame">
       <div className="frame-box" style={{ width: w * scale, height: h * scale }}>
@@ -63,6 +74,7 @@ export function Gallery() {
   const [demo, setDemo] = useState(DEMO_NAMES[0] ?? "firefox");
   const [orientation, setOrientation] = useState<Orientation>("landscape");
   const [keyHints, setKeyHints] = useState(false);
+  const [cellSize, setCellSize] = useState(CELL_SIZE_DEFAULT);
 
   return (
     <div className="gallery">
@@ -99,9 +111,32 @@ export function Gallery() {
           </button>
         </div>
       </header>
+      <div className="gallery-band">
+        <div className="gallery-band-control">
+          <label htmlFor="gallery-cell-size">
+            cell size <span className="gallery-band-val">{cellSize}px</span>
+          </label>
+          <input
+            id="gallery-cell-size"
+            type="range"
+            min={CELL_SIZE_MIN}
+            max={CELL_SIZE_MAX}
+            step={CELL_SIZE_STEP}
+            value={cellSize}
+            onChange={(e) => setCellSize(Number(e.target.value))}
+          />
+        </div>
+      </div>
       <div className="gallery-grid">
         {DEVICES.map((d) => (
-          <Frame key={d.label} device={d} demo={demo} orientation={orientation} keyHints={keyHints} />
+          <Frame
+            key={d.label}
+            device={d}
+            demo={demo}
+            orientation={orientation}
+            keyHints={keyHints}
+            cellSize={cellSize}
+          />
         ))}
       </div>
     </div>

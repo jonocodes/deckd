@@ -23,6 +23,8 @@ export const Default: Story = () => (
       onWakeLockChange={noop}
       contentScale={1}
       onContentScaleChange={noop}
+      cellSize={100}
+      onCellSizeChange={noop}
       jogWidth={1}
       onJogWidthChange={noop}
       bottomScale={1}

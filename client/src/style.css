@@ -382,11 +382,20 @@ button:focus-visible {
  * Layout grid area (chrome-excluded)
  * ------------------------------------------------------------------------- */
 
+/* Ordered-list reflow grid (ADR-0010). ``grid-template-columns`` and
+   ``grid-auto-rows`` are set inline by ``ButtonGrid`` from the measured width
+   and the cell-size band: fixed square ``cellPx`` tracks. Leftover width is
+   centered (``justify-content``) and leftover height sits below the top-
+   aligned rows (``align-content: start``) — horizontal fill only, by choice.
+   ``overflow: hidden`` realises ``clip`` overflow: rows past the fold are cut. */
 .grid {
   display: grid;
   gap: 8px;
+  justify-content: center;
+  align-content: start;
   width: 100%;
   height: 100%;
+  overflow: hidden;
 }
 
 .cell-empty { background: transparent; }
@@ -400,7 +409,9 @@ button:focus-visible {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 12px;
+  /* Relative padding so the content box tracks the cell as it flexes within
+     the band (a fixed 12px eats most of a small cell). */
+  padding: 8%;
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
@@ -408,8 +419,13 @@ button:focus-visible {
   transition: transform 80ms ease, background 80ms ease;
   min-height: 0;
   min-width: 0;
-  /* Clip cleanly: at a high content scale on a dense layout, scaled-up
-     content stays inside the button rather than overflowing neighbours. */
+  /* Size container (ADR-0010): descendants size against the resolved cell via
+     ``cqmin`` units, so icon/label grow with the cell — the band is the
+     primary content-size knob and ``--content-scale`` is only a nudge. */
+  container-type: size;
+  container-name: cell;
+  /* Clip cleanly: scaled-up content stays inside the button rather than
+     overflowing neighbours. */
   overflow: hidden;
 }
 
@@ -421,10 +437,11 @@ button:focus-visible {
 }
 
 .cell-button .label {
-  /* Label text scales with the overall content size and, on top of that, the
-     user's Text-size preference (``--label-scale``, default 1) so the caption
-     under the icon can be dialled down without shrinking the icon. */
-  font-size: calc(clamp(9px, 1.5vw, 12px) * var(--content-scale) * var(--label-scale, 1));
+  /* Label text derives from the resolved cell size (``cqmin``) so it grows
+     with the cell, then the user's Content-nudge (``--content-scale``) and
+     Text-size (``--label-scale``) preferences trim it. Bounded so it stays
+     legible on tiny cells and doesn't dominate huge ones. */
+  font-size: calc(clamp(8px, 15cqmin, 15px) * var(--content-scale) * var(--label-scale, 1));
   font-weight: 600;
   line-height: 1.2;
   word-break: break-word;
@@ -434,8 +451,8 @@ button:focus-visible {
   /* The key combo a button sends, shown under the label when the user
      enables key hints. Deliberately smaller and dimmer than the label so it
      reads as secondary metadata; monospace so combos line up legibly.
-     Scales with the same content/label preferences as the label. */
-  font-size: calc(clamp(7px, 1.2vw, 10px) * var(--content-scale) * var(--label-scale, 1));
+     Same cell-derived sizing as the label, one step smaller. */
+  font-size: calc(clamp(7px, 11cqmin, 11px) * var(--content-scale) * var(--label-scale, 1));
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-weight: 500;
   line-height: 1.1;
@@ -446,11 +463,11 @@ button:focus-visible {
 /* Icon glyph (Lucide / Simple Icons), rendered above the label. The glyph is
    an ``<svg class="icon">`` itself, so size it directly — one fixed box for
    every source regardless of the set's intrinsic viewBox, so icons read at a
-   single consistent size. Inherits the fixed light foreground via
-   ``currentColor``. */
+   single consistent size. Derives from the cell (``cqmin``) so it scales with
+   the band; the Content-nudge trims it. Inherits ``currentColor``. */
 .cell-button .icon {
-  width: calc(clamp(22px, 6vw, 34px) * var(--content-scale));
-  height: calc(clamp(22px, 6vw, 34px) * var(--content-scale));
+  width: calc(clamp(14px, 34cqmin, 44px) * var(--content-scale));
+  height: calc(clamp(14px, 34cqmin, 44px) * var(--content-scale));
   color: currentColor;
 }
 
@@ -460,7 +477,7 @@ button:focus-visible {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: calc(clamp(20px, 5.5vw, 30px) * var(--content-scale));
+  font-size: calc(clamp(14px, 34cqmin, 40px) * var(--content-scale));
   opacity: 0.45;
 }
 

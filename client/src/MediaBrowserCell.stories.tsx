@@ -10,7 +10,6 @@ const noop = () => {};
 const WIDGET: Widget = {
   id: "browser",
   kind: "mediabrowser",
-  grid: [0, 0, 4, 2],
 };
 
 /** A playing-VLC / paused-Spotify / stopped-mystery trio. The

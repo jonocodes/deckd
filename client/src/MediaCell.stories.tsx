@@ -11,7 +11,6 @@ const WIDGET: Widget = {
   id: "vlc-media",
   kind: "media",
   label: "VLC",
-  grid: [0, 0, 4, 2],
   controls: ["play", "previous", "next", "volume", "position", "speed"],
   media_http: {},
 };

@@ -28,7 +28,6 @@ widgets:
       source: lucide
       name: mic
     color: "#00897b"
-    grid: [0, 0, 1, 1]
     action:
       key: "ctrl+d"
   - id: toggle-camera
@@ -37,7 +36,6 @@ widgets:
     icon:
       source: lucide
       name: video
-    grid: [1, 0, 1, 1]
     action:
       key: "ctrl+e"
   - id: raise-hand
@@ -46,7 +44,6 @@ widgets:
     icon:
       source: lucide
       name: hand
-    grid: [2, 0, 1, 1]
     action:
       key: "ctrl+alt+h"
   - id: toggle-chat
@@ -55,7 +52,6 @@ widgets:
     icon:
       source: lucide
       name: message-square
-    grid: [0, 1, 1, 1]
     action:
       key: "ctrl+alt+c"
   - id: toggle-participants
@@ -64,7 +60,6 @@ widgets:
     icon:
       source: lucide
       name: users
-    grid: [1, 1, 1, 1]
     action:
       key: "ctrl+alt+p"
   - id: toggle-captions
@@ -73,6 +68,5 @@ widgets:
     icon:
       source: lucide
       name: captions
-    grid: [2, 1, 1, 1]
     action:
       key: "c"

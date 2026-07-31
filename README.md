@@ -363,7 +363,7 @@ Every layout renders inside a persistent **chrome** shell that the daemon does n
 - **Bottom strip** (always visible): the current app badge (from `LayoutMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the layout's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected), a `manual control` button that swaps the main area for the combined trackpad + IME surface (see [Manual control mode](#manual-control-mode)), a `media browser` button (when enabled — see [MPRIS media browser](#mpris-media-browser); ADR-0008 records the chrome-view carve-out that lets the client pin a specific layout) that asks the daemon for the global MPRIS browser view, and a `settings` button (see [Client tuning](#client-tuning)).
 - **Right-side jogstrip** (always visible): a full-height scroll strip that works the same as the in-grid `jogstrip` widget. A layout can suppress it with `jogstrip: false` at the YAML top level — the daemon forwards this as `jogstrip_enabled` on every `LayoutMessage`.
 
-Layout widget coordinates are relative to the chrome-excluded area; the client computes cell sizes from whatever space remains after the strips are subtracted. Layouts are authored in **landscape** orientation. When the viewport is portrait, the client automatically transposes each widget's grid (`[x, y, w, h] → [y, x, h, w]`) so a 4×2 landscape layout renders as 2×4 in portrait — same buttons, same relative arrangement, cells sized for the taller surface (ADR-0004).
+Widgets in a layout's `widgets:` list are an **ordered list** that reflows against the viewport width (ADR-0010). There are no grid coordinates. The client packs widgets left-to-right and wraps down, computing the column count from the available width against a client-side cell-size band. A widget may carry a `size: [w, h]` span (default `[1, 1]`) for non-uniform cells; the list order is the only positional input. Portrait just fits fewer columns — no transpose, no orientation conventions.
 
 ### Manual control mode
 
@@ -690,7 +690,7 @@ When the daemon runs with auth on, the control endpoints (`/reload`, `/layout`) 
 
 ## Configuration
 
-A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Shipped layouts today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), a `grid: [x, y, w, h]` placement, an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. A layout may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `LayoutMessage`. A layout may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:
+A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Shipped layouts today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), an optional `size: [w, h]` span (default `[1, 1]`; for non-square widgets like wide meters), an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. Widgets pack in list order (ADR-0010); there are no grid coordinates. The special `kind: blank` skips a cell slot for visual gaps. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. A layout may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `LayoutMessage`. A layout may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:
 
 - `shell: "..."` — launch a command, fire-and-forget. The child is detached (its own session) and runs independently; stdin/stdout/stderr are discarded and the daemon does not wait for it or observe its exit code. This is the way to launch a program (`shell: firefox`, `shell: code`, `shell: "xdg-open https://…"`), including a specific terminal (`shell: tilix`).
 - `terminal: true` — open the auto-detected terminal emulator, resolved via `$TERMINAL` then a candidate list (`foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`). This is the only accepted form: `terminal` takes no command string — for a specific program (terminal or otherwise) use `shell:`. A string value is rejected at layout-load time with a message pointing you at `shell:`.
@@ -764,7 +764,6 @@ A layout can include widgets that display values pushed by the daemon in real ti
   source: cpu_percent  # daemon-side sensor name
   min: 0               # bar's left edge (default 0)
   max: 100             # bar's right edge (default 100)
-  grid: [2, 2, 1, 1]
 ```
 
 The daemon polls the bound sensor on a timer and pushes a `widget_update` WebSocket frame every time the value changes (or the source flips stale). The bar fills proportionally between `min` and `max` and is color-graded cool→hot so a glance tells you whether the number is OK before you read it.
@@ -817,7 +816,7 @@ The `media` kind is a single responsive composite widget. It uses configured key
 ```yaml
 - id: vlc-media
   kind: media
-  grid: [0, 0, 4, 2]
+  size: [4, 2]
   controls: [play, volume, position]
   action: {key: space}
   volume_down_action: {key: volumedown}
@@ -898,7 +897,7 @@ display_name: MPRIS
 widgets:
   - id: browser
     kind: mediabrowser
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
 ```
 
 The `match: [mpris]` token is a *synthetic* view name — no real
@@ -1004,7 +1003,7 @@ The `mediabrowser` widget has one optional knob:
 ```yaml
 - id: browser
   kind: mediabrowser
-  grid: [0, 0, 4, 2]
+  size: [4, 2]
   empty_state: show         # or "hide"
 ```
 

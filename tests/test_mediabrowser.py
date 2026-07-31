@@ -41,20 +41,20 @@ from deckd.platform import AppInfo
 
 
 def test_media_browser_defaults() -> None:
-    """The model's required fields are ``id`` and ``grid``; the only
-    optional knob, ``empty_state``, defaults to ``show`` (issue #58
-    removed the ``ordering`` knob)."""
-    widget = MediaBrowser.model_validate({"id": "browser", "grid": [0, 0, 4, 2]})
+    """The model's only required field is ``id``; ``size`` is an optional
+    reflow extent (ADR-0010) and ``empty_state`` defaults to ``show``
+    (issue #58 removed the ``ordering`` knob)."""
+    widget = MediaBrowser.model_validate({"id": "browser", "size": [4, 2]})
 
     assert widget.id == "browser"
-    assert widget.grid == [0, 0, 4, 2]
+    assert widget.size == [4, 2]
     assert widget.empty_state == "show"
 
 
 def test_media_browser_accepts_explicit_knobs() -> None:
     """The ``empty_state`` knob accepts both documented values."""
     hidden = MediaBrowser.model_validate(
-        {"id": "browser", "grid": [0, 0, 4, 2], "empty_state": "hide"}
+        {"id": "browser", "size": [4, 2], "empty_state": "hide"}
     )
     assert hidden.empty_state == "hide"
 
@@ -69,15 +69,14 @@ def test_media_browser_accepts_explicit_knobs() -> None:
 def test_media_browser_rejects_unknown_knobs(field: str, value: str) -> None:
     """Invalid knob values are a schema violation, surfaced as ``ValidationError``."""
     with pytest.raises(ValidationError):
-        MediaBrowser.model_validate({"id": "browser", "grid": [0, 0, 4, 2], field: value})
+        MediaBrowser.model_validate({"id": "browser", "size": [4, 2], field: value})
 
 
-def test_media_browser_rejects_bad_grid() -> None:
-    """The grid field reuses the existing 4-int tuple invariant."""
-    with pytest.raises(ValidationError):
-        MediaBrowser.model_validate({"id": "browser", "grid": [0, 0, 1]})
-    with pytest.raises(ValidationError):
-        MediaBrowser.model_validate({"id": "browser", "grid": [0, 0, 1, 1, 1]})
+def test_media_browser_defaults_size_to_none() -> None:
+    """``size`` is optional (ADR-0010): a mediabrowser is typically a
+    full-surface view rendered outside the flow, so it needs no span."""
+    widget = MediaBrowser.model_validate({"id": "browser"})
+    assert widget.size is None
 
 
 def test_media_browser_rejects_extra_fields() -> None:
@@ -85,7 +84,7 @@ def test_media_browser_rejects_extra_fields() -> None:
     (issue #58: the removed ``ordering`` knob is the most likely typo)."""
     with pytest.raises(ValidationError):
         MediaBrowser.model_validate(
-            {"id": "browser", "grid": [0, 0, 4, 2], "ordring": "stable"}
+            {"id": "browser", "size": [4, 2], "ordring": "stable"}
         )
 
 
@@ -99,7 +98,7 @@ def test_rejects_removed_ordering_knob(model) -> None:
     payload = {
         "id": "browser",
         "kind": "mediabrowser",
-        "grid": [0, 0, 4, 2],
+        "size": [4, 2],
         "ordering": "playing_first",
     }
     with pytest.raises(ValidationError):
@@ -115,7 +114,7 @@ def test_widget_accepts_mediabrowser_kind_with_optional_knobs() -> None:
         {
             "id": "browser",
             "kind": "mediabrowser",
-            "grid": [0, 0, 4, 2],
+            "size": [4, 2],
             "empty_state": "hide",
         }
     )
@@ -127,7 +126,7 @@ def test_widget_accepts_mediabrowser_kind_with_optional_knobs() -> None:
 
 def test_widget_defaults_mediabrowser_knobs() -> None:
     widget = Widget.model_validate(
-        {"id": "browser", "kind": "mediabrowser", "grid": [0, 0, 4, 2]}
+        {"id": "browser", "kind": "mediabrowser", "size": [4, 2]}
     )
     assert widget.empty_state == "show"
 
@@ -140,7 +139,6 @@ def test_widget_rejects_mediabrowser_knobs_on_other_kinds() -> None:
             {
                 "id": "back",
                 "kind": "button",
-                "grid": [0, 0, 1, 1],
                 "empty_state": "hide",
             }
         )
@@ -154,7 +152,7 @@ def test_widget_mediabrowser_round_trips_through_json_wire_shape() -> None:
     receiving the key even when the YAML omits it — issue #58 dropped
     ``ordering``)."""
     widget = Widget.model_validate(
-        {"id": "browser", "kind": "mediabrowser", "grid": [0, 0, 4, 2]}
+        {"id": "browser", "kind": "mediabrowser", "size": [4, 2]}
     )
     # The on-the-wire shape is ``model_dump_json()`` parsed by the TS
     # client — every key the TS union declares must be present so a
@@ -167,7 +165,7 @@ def test_widget_mediabrowser_round_trips_through_json_wire_shape() -> None:
         {
             "id": "browser",
             "kind": "mediabrowser",
-            "grid": [0, 0, 4, 2],
+            "size": [4, 2],
             "empty_state": "hide",
         }
     )
@@ -219,7 +217,7 @@ display_name: MPRIS
 widgets:
   - id: browser
     kind: mediabrowser
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
 """
 
 DEFAULT_LAYOUT = """
@@ -229,7 +227,6 @@ widgets:
   - id: home
     kind: button
     label: Home
-    grid: [0, 0, 1, 1]
 """
 
 
@@ -335,7 +332,6 @@ widgets:
   - id: back
     kind: button
     label: Back
-    grid: [0, 0, 1, 1]
 """,
     )
     _write(tmp_path, "mpris.yaml", MPRIS_LAYOUT)

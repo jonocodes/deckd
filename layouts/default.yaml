@@ -9,7 +9,6 @@ widgets:
       source: lucide
       name: file-code
     color: "#2e328a"
-    grid: [0, 0, 1, 1]
     action:
       shell: code
   - id: firefox
@@ -19,7 +18,6 @@ widgets:
       source: simple-icons
       name: firefox
     color: "#b5641d"
-    grid: [1, 0, 1, 1]
     action:
       shell: "firefox"
   - id: obsidian
@@ -29,7 +27,6 @@ widgets:
       source: simple-icons
       name: obsidian
     color: "#6d28c8"
-    grid: [2, 0, 1, 1]
     action:
       shell: "md.obsidian.Obsidian"
   - id: thunderbird
@@ -39,7 +36,6 @@ widgets:
       source: simple-icons
       name: thunderbird
     color: "#0A84FF"
-    grid: [3, 0, 1, 1]
     action:
       shell: "Thunderbird"
 
@@ -50,7 +46,6 @@ widgets:
       source: simple-icons
       name: github
     color: "black"
-    grid: [0, 1, 1, 1]
     action:
       url: "https://github.com"
 
@@ -61,7 +56,6 @@ widgets:
       source: lucide
       name: square-terminal
     color: "#6b0101"
-    grid: [1, 1, 1, 1]
     action:
       # Open the auto-detected terminal ($TERMINAL, then a candidate list).
       # For a specific emulator, use e.g. shell: "tilix" instead.
@@ -73,43 +67,8 @@ widgets:
     icon:
       source: lucide
       name: keyboard
-    grid: [2, 1, 1, 1]
     action:
       key: "ctrl+t"
-  # Audio / VLC media control. Commented out — the cell is now home
-  # to the live CPU meter (the audio use case is rare from a phone
-  # in practice, and the daemon already sends widget_update frames
-  # for it). Re-enable by removing the leading ``#``s; the grid slot
-  # below is intentionally vacant so adding it back doesn't shift
-  # neighbouring widgets.
-  # - id: audio-toggle
-  #   kind: button
-  #   label: VLC Play/Pause
-  #   icon:
-  #     source: lucide
-  #     name: play
-  #   grid: [3, 2, 1, 1]
-  #   action:
-  #     dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
-  # Macro example (issue #68): chains a shell notification with a
-  # keyboard shortcut. Steps run sequentially; an optional delay pauses
-  # between them. A failing step stops the macro by default; set
-  # ``continue_on_error: true`` to keep going regardless.
-  - id: macro-example
-    kind: button
-    label: Notify + Tab
-    icon:
-      source: lucide
-      name: list-ordered
-    grid: [0, 2, 2, 1]
-    macro:
-      steps:
-        - type: shell
-          value: "notify-send 'deckd macro ran'"
-        - type: delay
-          value: "500"
-        - type: key
-          value: "ctrl+t"
   # Live system stats (issue #40). A bar-less ``stats`` cell showing
   # several psutil-backed sensor values at once — CPU + memory here — so
   # they work identically on Linux + macOS Intel + Apple Silicon with no
@@ -122,9 +81,40 @@ widgets:
   - id: system
     kind: stats
     label: System
-    grid: [3, 1, 1, 1]
     metrics:
       - source: cpu_percent
         label: CPU
       - source: mem_percent
         label: MEM
+  # Audio / VLC media control. Commented out — the cell is now home to the
+  # live CPU stats above (the audio use case is rare from a phone in practice,
+  # and the daemon already sends widget_update frames for it). Re-enable by
+  # removing the leading ``#``s; widgets reflow in list order (ADR-0010), so
+  # it drops in wherever you place it in the sequence.
+  # - id: audio-toggle
+  #   kind: button
+  #   label: VLC Play/Pause
+  #   icon:
+  #     source: lucide
+  #     name: play
+  #   action:
+  #     dbus: "org.mpris.MediaPlayer2.vlc:/org/mpris/MediaPlayer2 org.mpris.MediaPlayer2.Player.PlayPause"
+  # Macro example (issue #68): chains a shell notification with a
+  # keyboard shortcut. Steps run sequentially; an optional delay pauses
+  # between them. A failing step stops the macro by default; set
+  # ``continue_on_error: true`` to keep going regardless.
+  - id: macro-example
+    kind: button
+    label: Notify + Tab
+    icon:
+      source: lucide
+      name: list-ordered
+    size: [2, 1]
+    macro:
+      steps:
+        - type: shell
+          value: "notify-send 'deckd macro ran'"
+        - type: delay
+          value: "500"
+        - type: key
+          value: "ctrl+t"

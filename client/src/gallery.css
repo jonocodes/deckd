@@ -47,6 +47,41 @@
   color: #7dd3fc;
 }
 
+.gallery-band {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  padding: 10px 18px;
+  background: #10151b;
+  border-bottom: 1px solid #232a32;
+}
+
+.gallery-band-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.gallery-band-control label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8a96a3;
+  white-space: nowrap;
+}
+
+.gallery-band-val {
+  display: inline-block;
+  min-width: 36px;
+  color: #7dd3fc;
+  font-variant-numeric: tabular-nums;
+}
+
+.gallery-band-control input[type="range"] {
+  width: 100px;
+  accent-color: #3fb1d8;
+}
+
 .gallery-grid {
   display: flex;
   flex-wrap: wrap;

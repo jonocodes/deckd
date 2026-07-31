@@ -48,7 +48,6 @@ def test_widget_with_macro_loads() -> None:
     widget = Widget(
         id="btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         macro=Macro(steps=[MacroStep(type="key", value="a")]),
     )
     assert widget.macro is not None
@@ -60,7 +59,6 @@ def test_widget_with_action_and_macro_coexist() -> None:
     widget = Widget(
         id="btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         action=Action(shell="echo hi"),
         macro=Macro(steps=[MacroStep(type="key", value="a")]),
     )
@@ -270,7 +268,6 @@ async def test_execute_dispatches_to_macro_over_single_action(monkeypatch) -> No
     widget = Widget(
         id="btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         action=Action(shell="should-not-run"),
         macro=Macro(steps=[MacroStep(type="key", value="ctrl+t")]),
     )
@@ -284,7 +281,6 @@ async def test_execute_falls_back_to_action_when_no_macro() -> None:
     widget = Widget(
         id="btn",
         kind="button",
-        grid=[0, 0, 1, 1],
         action=Action(shell="true"),
     )
     outcome = await run_action(widget, _ctx())
@@ -368,7 +364,6 @@ widgets:
   - id: macro-btn
     kind: button
     label: Macro
-    grid: [0, 0, 1, 1]
     macro:
       steps:
         - type: key
@@ -429,7 +424,6 @@ widgets:
   - id: fail-btn
     kind: button
     label: Fail
-    grid: [0, 0, 1, 1]
     macro:
       steps:
         - type: key

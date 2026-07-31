@@ -51,7 +51,7 @@ match: [default]
 widgets:
   - id: browser
     kind: mediabrowser
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
 """
     )
     server, *_ = make_test_server(
@@ -288,7 +288,7 @@ match: [default]
 widgets:
   - id: pad
     kind: trackpad
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
 """
     )
     (tmp_path / "mpris.yaml").write_text(
@@ -297,7 +297,7 @@ match: [mpris]
 widgets:
   - id: browser
     kind: mediabrowser
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
 """
     )
     server, *_ = make_test_server(

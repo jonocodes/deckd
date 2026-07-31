@@ -37,7 +37,7 @@ def _media_layout() -> Layout:
             Widget(
                 id="vlc-media",
                 kind="media",
-                grid=[0, 0, 4, 2],
+                size=[4, 2],
                 controls=["play", "position"],
                 media_http=MediaHttp(host="127.0.0.1", port=8080),
             )

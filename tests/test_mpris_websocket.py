@@ -31,7 +31,7 @@ match: [default]
 widgets:
   - id: browser
     kind: mediabrowser
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
 """
     )
     backend = FakeMprisBackend(
@@ -83,7 +83,7 @@ match: [default]
 widgets:
   - id: pad
     kind: trackpad
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
 """
     )
     # ...the browser lives only in the separate mpris view layout.
@@ -93,7 +93,7 @@ match: [mpris]
 widgets:
   - id: browser
     kind: mediabrowser
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
 """
     )
     backend = FakeMprisBackend(
@@ -127,7 +127,7 @@ match: [default]
 widgets:
   - id: browser
     kind: mediabrowser
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
 """
     )
     backend = FakeMprisBackend(
@@ -178,7 +178,7 @@ match: [default]
 widgets:
   - id: browser
     kind: mediabrowser
-    grid: [0, 0, 4, 2]
+    size: [4, 2]
 """
     )
     server, *_ = make_test_server(

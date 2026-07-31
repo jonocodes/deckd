@@ -8,7 +8,6 @@ import type { Widget } from "./protocol";
 const WIDGET: Widget = {
   id: "media",
   kind: "media",
-  grid: [0, 0, 4, 2],
   controls: ["play", "previous", "next", "volume", "position", "speed"],
   media_http: {},
 };

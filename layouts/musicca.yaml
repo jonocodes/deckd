@@ -13,6 +13,16 @@
 #
 # Range: one octave F3-F4, the block verified against the live site. The lower
 # octave (z/x/c... rows) can be added once its keys are confirmed the same way.
+#
+# KNOWN LIMITATION (ADR-0010): this layout wants a piano's 2D alignment — black
+# keys sitting *above* the white keys they belong between. The old coordinate
+# grid guaranteed that; reflow does not — the column count now follows the
+# viewport width, so the two rows only line up when the grid happens to render
+# at 8 columns. The keys still all work (they are plain `key:` actions); only
+# the visual black/white registration is best-effort. A `blank` holds the
+# no-black-key gap between B and C so the F#/G#/A# and C#/D# clusters stay
+# grouped in sequence. Faithful piano rendering likely needs a positioned /
+# full-surface widget — tracked as follow-on, not solved here.
 match:
   - "title:*Musicca*"        # piano, synthesizer, and any Musicca keyboard page
   # - "title:*Virtual Piano*"  # example: extend to another site with the same mapping
@@ -28,71 +38,60 @@ widgets:
     kind: button
     label: "F#"
     color: "#1a1a1a"
-    grid: [0, 0, 1, 1]
     action: { key: "2" }
   - id: gs3
     kind: button
     label: "G#"
     color: "#1a1a1a"
-    grid: [1, 0, 1, 1]
     action: { key: "3" }
   - id: as3
     kind: button
     label: "A#"
     color: "#1a1a1a"
-    grid: [2, 0, 1, 1]
     action: { key: "4" }
-  # gap at x=3 (no black key between B and C)
+  # No black key between B and C — a blank keeps the two clusters grouped.
+  - id: gap-b-c
+    kind: blank
   - id: cs4
     kind: button
     label: "C#"
     color: "#1a1a1a"
-    grid: [4, 0, 1, 1]
     action: { key: "6" }
   - id: ds4
     kind: button
     label: "D#"
     color: "#1a1a1a"
-    grid: [5, 0, 1, 1]
     action: { key: "7" }
   # --- White keys (bottom row) F3 G3 A3 B3 C4 D4 E4 F4 ---
   - id: f3
     kind: button
     label: "F"
-    grid: [0, 1, 1, 1]
     action: { key: "q" }
   - id: g3
     kind: button
     label: "G"
-    grid: [1, 1, 1, 1]
     action: { key: "w" }
   - id: a3
     kind: button
     label: "A"
-    grid: [2, 1, 1, 1]
     action: { key: "e" }
   - id: b3
     kind: button
     label: "B"
-    grid: [3, 1, 1, 1]
     action: { key: "r" }
   - id: c4
     kind: button
     label: "C"
-    grid: [4, 1, 1, 1]
     action: { key: "t" }
   - id: d4
     kind: button
     label: "D"
-    grid: [5, 1, 1, 1]
     action: { key: "y" }
   - id: e4
     kind: button
     label: "E"
-    grid: [6, 1, 1, 1]
     action: { key: "u" }
   - id: f4
     kind: button
     label: "F"
-    grid: [7, 1, 1, 1]
     action: { key: "i" }

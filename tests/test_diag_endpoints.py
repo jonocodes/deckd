@@ -270,7 +270,7 @@ match: [default]
 widgets:
   - id: mpris
     kind: mediabrowser
-    grid: [0, 0, 4, 1]
+    size: [4, 1]
 """
     )
 
