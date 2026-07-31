@@ -1,0 +1,98 @@
+# Web-app layout: a portable on-screen musical keyboard.
+#
+# This claims Musicca's keyboard instruments by window title. Musicca maps the
+# computer keyboard's top letter row to white keys and the number row to black
+# keys, and — crucially — every keyboard instrument (piano, synthesizer, ...)
+# uses the *same* mapping. So one layout drives all of them, and it will drive
+# any other site that adopts the same "letters = white, numbers = black" scheme:
+# just add that site's title token to `match:` below.
+#
+# The buttons are ordinary `key:` actions — no new daemon capability, only
+# detection. Known limitation: a tap fires key-down+up momentarily, so notes
+# that decay (piano, plucked) sound right, but a sustained synth pad won't hold.
+#
+# Range: one octave F3-F4, the block verified against the live site. The lower
+# octave (z/x/c... rows) can be added once its keys are confirmed the same way.
+match:
+  - "title:*Musicca*"        # piano, synthesizer, and any Musicca keyboard page
+  # - "title:*Virtual Piano*"  # example: extend to another site with the same mapping
+display_name: Keyboard
+theme: "#7c3aed"
+icon:
+  source: lucide
+  name: piano
+jogstrip: false
+widgets:
+  # --- Black keys (top row) — clustered F#/G#/A#, gap, C#/D# ---
+  - id: fs3
+    kind: button
+    label: "F#"
+    color: "#1a1a1a"
+    grid: [0, 0, 1, 1]
+    action: { key: "2" }
+  - id: gs3
+    kind: button
+    label: "G#"
+    color: "#1a1a1a"
+    grid: [1, 0, 1, 1]
+    action: { key: "3" }
+  - id: as3
+    kind: button
+    label: "A#"
+    color: "#1a1a1a"
+    grid: [2, 0, 1, 1]
+    action: { key: "4" }
+  # gap at x=3 (no black key between B and C)
+  - id: cs4
+    kind: button
+    label: "C#"
+    color: "#1a1a1a"
+    grid: [4, 0, 1, 1]
+    action: { key: "6" }
+  - id: ds4
+    kind: button
+    label: "D#"
+    color: "#1a1a1a"
+    grid: [5, 0, 1, 1]
+    action: { key: "7" }
+  # --- White keys (bottom row) F3 G3 A3 B3 C4 D4 E4 F4 ---
+  - id: f3
+    kind: button
+    label: "F"
+    grid: [0, 1, 1, 1]
+    action: { key: "q" }
+  - id: g3
+    kind: button
+    label: "G"
+    grid: [1, 1, 1, 1]
+    action: { key: "w" }
+  - id: a3
+    kind: button
+    label: "A"
+    grid: [2, 1, 1, 1]
+    action: { key: "e" }
+  - id: b3
+    kind: button
+    label: "B"
+    grid: [3, 1, 1, 1]
+    action: { key: "r" }
+  - id: c4
+    kind: button
+    label: "C"
+    grid: [4, 1, 1, 1]
+    action: { key: "t" }
+  - id: d4
+    kind: button
+    label: "D"
+    grid: [5, 1, 1, 1]
+    action: { key: "y" }
+  - id: e4
+    kind: button
+    label: "E"
+    grid: [6, 1, 1, 1]
+    action: { key: "u" }
+  - id: f4
+    kind: button
+    label: "F"
+    grid: [7, 1, 1, 1]
+    action: { key: "i" }

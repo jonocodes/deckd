@@ -156,6 +156,15 @@ the shipped `layouts/youtube.yaml` and `layouts/netflix.yaml` drive each site's
 own keyboard shortcuts (`key: k`, `key: s`, …), so no special capability is
 needed beyond a layout file.
 
+The same idea also turns a site into an **on-screen musical keyboard**:
+`layouts/musicca.yaml` matches `title:*Musicca*` and fires the letter/number
+keys that [Musicca](https://www.musicca.com/piano)'s keyboard instruments listen
+for (top letter row = white keys, number row = black keys). Because Musicca's
+piano and synthesizer share one mapping, a single layout plays both — and any
+other site using the same mapping, once you add its title to `match:`. It's just
+keystrokes (no MIDI/velocity). See [#96](https://github.com/jonocodes/deckd/issues/96)
+for range/sustain/UI follow-ups.
+
 **This is a heuristic.** Desktop focus backends can only see the browser's
 window title, never the active tab's URL, so:
 
