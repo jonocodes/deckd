@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>deckd — reflow mockup (fixed sizing)</title>
+<style>
+  :root {
+    --min: 104px;       /* cell size band: floor for readability… */
+    --max: 168px;       /* …ceiling so cells don't balloon on big screens */
+    --gap: 12px;
+    --bg: #0e1116;
+    --surface: #161b22;
+    --cell-bg: #21262d;
+    --cell-bg2: #2d333b;
+    --accent: #58a6ff;
+    --text: #e6edf3;
+    --muted: #7d8590;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px;
+    background: var(--bg);
+    color: var(--text);
+    font: 14px/1.4 -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 28px; max-width: 780px; }
+  .row { display: flex; flex-wrap: wrap; gap: 40px; align-items: flex-start; }
+
+  .device { }
+  .device h2 { font-size: 14px; margin: 0 0 2px; }
+  .device .dim { color: var(--muted); font-size: 12px; margin: 0 0 10px; font-variant-numeric: tabular-nums; }
+
+  /* The chrome-excluded surface. overflow:hidden makes off-surface cells vanish
+     (fixed mode, no pagination — the clipping the ticket describes). */
+  .surface {
+    background: var(--surface);
+    border: 1px solid #30363d;
+    border-radius: 14px;
+    padding: var(--gap);
+    overflow: hidden;
+    position: relative;
+  }
+  .grid {
+    display: grid;
+    /* BANDED sizing: as many columns of at least MIN as fit, then all stretch
+       equally (1fr) to consume leftover width — no dead margin. */
+    grid-template-columns: repeat(auto-fill, minmax(var(--min), 1fr));
+    grid-auto-rows: minmax(var(--min), 1fr);
+    gap: var(--gap);
+    justify-content: center;   /* remainder < one column reads as centered padding */
+  }
+  .cell {
+    background: linear-gradient(160deg, var(--cell-bg2), var(--cell-bg));
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 8px;
+    aspect-ratio: 1 / 1;        /* aspect-locked: cells stay square as they flex */
+    max-width: var(--max);      /* growth ceiling; extra becomes centered padding */
+    max-height: var(--max);
+    width: 100%;
+    justify-self: center;
+    user-select: none;
+  }
+  .cell .icon { font-size: 30px; line-height: 1; }
+  .cell .label { font-size: 12px; color: var(--text); font-weight: 600; }
+  .cell .n { position: absolute; }
+  .badge {
+    display: inline-block; margin-top: 10px; font-size: 12px;
+    color: var(--muted);
+  }
+  .badge b { color: var(--accent); }
+  .clip-note { color: #f0883e; }
+</style>
+</head>
+<body>
+  <h1>deckd — reflow preview · banded cell size (104–168px)</h1>
+  <p class="sub">
+    The <b>same 12 buttons</b> in the same order. Cells live in a size <b>band</b>: at least 104px (readability
+    floor), stretching up to 168px to fill leftover width — so there's no dead margin until cells hit the ceiling.
+    Columns are computed from the floor; buttons reflow left-to-right and wrap down, cells stay square.
+    Nothing is repositioned per screen — only the wrap point and cell size change. Where the surface still can't
+    fit all 12, the trailing buttons are off-surface (no pagination yet).
+  </p>
+
+  <div class="row" id="row"></div>
+
+  <script>
+    const BUTTONS = [
+      ["💻","Code"], ["🦊","Firefox"], ["⌨️","Terminal"], ["💬","Slack"],
+      ["🎵","Spotify"], ["🐳","Docker"], ["📁","Files"], ["✉️","Mail"],
+      ["📸","Shot"], ["🔊","Volume"], ["🎙️","Mic"], ["🔒","Lock"],
+    ];
+    const MIN = 104, GAP = 12;   // column count is computed from the MIN of the band
+    // [label, width, height] of the chrome-excluded surface (landscape use).
+    const DEVICES = [
+      ["Phone (landscape)", 560, 288],
+      ["Tablet",            900, 468],
+      ["Laptop (wide-short)", 1180, 360],
+    ];
+
+    const row = document.getElementById("row");
+    for (const [name, w, h] of DEVICES) {
+      const cols = Math.floor((w - GAP) / (MIN + GAP));
+      const rows = Math.floor((h - GAP) / (MIN + GAP));
+      const capacity = cols * rows;
+      const shown = Math.min(BUTTONS.length, capacity);
+      const clipped = BUTTONS.length - shown;
+
+      const dev = document.createElement("div");
+      dev.className = "device";
+      dev.innerHTML = `
+        <h2>${name}</h2>
+        <p class="dim">${w}×${h} surface · ${cols} cols × ${rows} rows = ${capacity} slots</p>
+        <div class="surface" style="width:${w}px;height:${h}px">
+          <div class="grid"></div>
+        </div>
+        <div class="badge">
+          shows <b>${shown}</b> / ${BUTTONS.length} buttons
+          ${clipped ? `· <span class="clip-note">${clipped} off-surface (needs pagination later)</span>` : `· all fit`}
+        </div>`;
+      const grid = dev.querySelector(".grid");
+      BUTTONS.forEach(([icon, label], i) => {
+        const c = document.createElement("div");
+        c.className = "cell";
+        c.innerHTML = `<div class="icon">${icon}</div><div class="label">${label}</div>`;
+        grid.appendChild(c);
+      });
+      row.appendChild(dev);
+    }
+  </script>
+</body>
+</html>
