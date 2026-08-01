@@ -8,6 +8,11 @@ requires-python = ">=3.11"
 dependencies = [
     "aiohttp>=3.9",
     "pyyaml>=6.0",
+    # Comment-preserving YAML round-trip for the layout write API (issues
+    # #84 / #85 / #99): the editor reconciles a client snapshot onto a
+    # fresh on-disk re-read so a hand-authored layout's comments and key
+    # order survive a one-field save. PyYAML stays for the load path.
+    "ruamel.yaml>=0.18",
     "pydantic>=2.6",
     "dbus-fast>=5",
     "watchfiles>=1.0",

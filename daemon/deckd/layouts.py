@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import fnmatch
 import logging
+import os
+import re
+import tempfile
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
@@ -339,6 +342,24 @@ class Layout(BaseModel):
     theme: str | None = None
     icon: Icon | None = None
 
+    @model_validator(mode="after")
+    def _validate_unique_widget_ids(self) -> "Layout":
+        """#85 layout-level duplicate widget-id validator.
+
+        Widget ids are how the WS ``widget_update`` pump and the editor's
+        reconcile address a widget, so two widgets sharing an id is a
+        silent ambiguity rather than a display quirk. Reject at load /
+        save-validation time with a model-level error so the editor can
+        surface it inline. Runs after the per-widget invariants so a
+        malformed widget fails first with its own message.
+        """
+        seen: set[str] = set()
+        for widget in self.widgets:
+            if widget.id in seen:
+                raise ValueError(f"duplicate widget id: {widget.id!r}")
+            seen.add(widget.id)
+        return self
+
     def matches(self, app: AppInfo) -> bool:
         """True if this layout's ``match`` list covers the given app.
 
@@ -403,12 +424,29 @@ class LayoutStore:
     are still loaded but only the default fallback is addressable.
     """
 
-    def __init__(self, layouts: list[Layout]) -> None:
+    def __init__(
+        self,
+        layouts: list[Layout],
+        *,
+        source_paths: dict[str, Path] | None = None,
+    ) -> None:
         self._layouts = list(layouts)
+        # Per-layout on-disk source file, keyed by the layout's id
+        # (= ``match[0]``). The repo decouples filename from id (e.g.
+        # ``tilix.yaml`` holds id ``com.gexperts.Tilix``), so the write API
+        # (PUT /layouts/{id}, POST /layouts) resolves a rewrite target by id
+        # rather than by re-deriving ``<id>.yaml``. A loaded-but-synthetic
+        # store (tests) leaves this empty and the write endpoints treat a
+        # missing path as a 404.
+        self._source_paths: dict[str, Path] = dict(source_paths) if source_paths else {}
 
     @property
     def layouts(self) -> list[Layout]:
         return list(self._layouts)
+
+    def source_path(self, layout_id: str) -> Path | None:
+        """The on-disk YAML file a layout was loaded from, or ``None``."""
+        return self._source_paths.get(layout_id)
 
     def __contains__(self, layout_id: str) -> bool:
         return any(l.id == layout_id for l in self._layouts)
@@ -487,6 +525,15 @@ def load_layouts(
         raise SystemExit(f"layouts directory not found: {layouts_dir}")
 
     layouts: list[Layout] = []
+    source_paths: dict[str, Path] = {}
+
+    def _record(layout: Layout, path: Path) -> None:
+        layouts.append(layout)
+        if layout.id:
+            # Last load wins: the overlay re-records an id it shadows later
+            # via the drop path below, so the path always reflects the live
+            # file the store actually used.
+            source_paths[layout.id] = path
 
     if overlay_dir is not None and overlay_dir.is_dir():
         for path in sorted(overlay_dir.glob("*.y*ml")):
@@ -496,7 +543,7 @@ def load_layouts(
                 layout = load_layout(path)
             except SystemExit as exc:
                 raise SystemExit(f"{exc}") from None
-            layouts.append(layout)
+            _record(layout, path)
 
     overlay_ids = {l.id for l in layouts if l.id}
     for path in sorted(layouts_dir.glob("*.y*ml")):
@@ -509,9 +556,222 @@ def load_layouts(
         if layout.id and layout.id in overlay_ids:
             log.info("layout %r overridden by overlay %s", layout.id, path)
             continue
-        layouts.append(layout)
+        _record(layout, path)
 
-    return LayoutStore(layouts)
+    return LayoutStore(layouts, source_paths=source_paths)
+
+
+# ---------------------------------------------------------------------------
+# Layout write API (issues #99 / #84 / #85)
+# ---------------------------------------------------------------------------
+#
+# These helpers sit below the HTTP write endpoints (``PUT /layouts/{id}`` save
+# and ``POST /layouts`` create). They own three concerns the endpoints share:
+#
+# * turning a layout's primary ``match`` token into a filesystem-safe filename
+#   stem (``slugify_layout_id``);
+# * comment-preserving reconcile of a client-supplied full snapshot onto a
+#   fresh on-disk YAML re-read, widgets matched by ``id`` and maps recursed,
+#   other sequences replaced atomically (``reconcile_and_write_layout``);
+# * the atomic temp-write + ``os.replace`` that lets the ``watchfiles`` watcher
+#   pick up the edit as a single event.
+#
+# The daemon never interprets comments; it only carries them along so a layout
+# the user hand-authored keeps its prose when the editor saves a one-field
+# change. ``ruamel.yaml`` is the round-trip surface; Pydantic validates the
+# snapshot before it reaches here so the data is already schema-conformant.
+
+
+_SLUG_NON_SAFE = re.compile(r"[^a-z0-9._-]+")
+_SLUG_DASH_RUN = re.compile(r"-{2,}")
+
+
+def slugify_layout_id(match_token: str) -> str:
+    """Filesystem-safe filename stem for a layout derived from ``match[0]``.
+
+    Lowercases, replaces every run of characters that aren't ``[a-z0-9._-]``
+    with a single ``-``, collapses repeated dashes, and strips leading /
+    trailing dashes. Dots are kept so reverse-DNS ids (``com.gexperts.Tilix``)
+    stay readable. Raises :class:`ValueError` when the token slugifies to the
+    empty string (a token made only of sigils, e.g. ``***``) — the caller
+    maps that to a ``400`` rather than writing a nameless file.
+    """
+    slug = match_token.casefold()
+    slug = _SLUG_NON_SAFE.sub("-", slug)
+    slug = _SLUG_DASH_RUN.sub("-", slug)
+    slug = slug.strip("-")
+    if not slug:
+        raise ValueError(
+            f"cannot derive a filename from match[0]={match_token!r}: "
+            f"it slugifies to the empty string"
+        )
+    return slug
+
+
+def _yaml_round_trip() -> Any:
+    """A ruamel YAML round-trip instance (block style, safe for ``safe_load``)."""
+    from ruamel.yaml import YAML
+
+    y = YAML()
+    y.preserve_quotes = True
+    y.default_flow_style = False
+    return y
+
+
+def _to_commented(value: Any) -> Any:
+    """Recursively wrap a plain JSON-ish value in ruamel Commented containers.
+
+    New files have no source comments to preserve, but ruamel emits block
+    style and keeps key order only when handed its own ``CommentedMap`` /
+    ``CommentedSeq`` rather than the plain ``dict`` / ``list`` Pydantic and
+    ``json.loads`` produce. This keeps a freshly-created file's field order
+    and style identical to one the reconcile path would write.
+    """
+    from ruamel.yaml.comments import CommentedMap, CommentedSeq
+
+    if isinstance(value, dict):
+        out = CommentedMap()
+        for key, item in value.items():
+            out[key] = _to_commented(item)
+        return out
+    if isinstance(value, list):
+        seq = CommentedSeq()
+        for item in value:
+            seq.append(_to_commented(item))
+        return seq
+    return value
+
+
+# Top-level Layout fields that are maps (recurse) vs. sequences-of-widgets
+# (matched by ``id``) vs. everything else (scalar or atomic-sequence).
+_WIDGET_ID_KEY = "id"
+
+
+def _reconcile_map(existing: Any, snapshot: dict) -> Any:
+    """Reconcile a ``snapshot`` dict into a ruamel ``CommentedMap``.
+
+    ``existing`` is a ruamel ``CommentedMap`` (possibly empty) carrying the
+    on-disk comments and key order. For each snapshot key the value replaces
+    the file's, recursing into nested maps; keys present in the file but
+    absent from the snapshot are dropped (full-snapshot semantics — the
+    editor sends the complete desired state). The special ``widgets`` list
+    is reconciled by widget ``id`` (:func:`_reconcile_widgets`) so a widget's
+    comments ride along across edits, reorder, add, and delete. Comments
+    attached to keys the snapshot keeps are preserved unchanged.
+    """
+    from ruamel.yaml.comments import CommentedMap, CommentedSeq
+
+    if not isinstance(existing, CommentedMap):
+        out = CommentedMap()
+    else:
+        out = existing
+    snap_keys = list(snapshot.keys())
+    # Drop keys the snapshot no longer carries (full-snapshot authoritativeness).
+    for key in list(out.keys()):
+        if key not in snapshot:
+            del out[key]
+    for key in snap_keys:
+        snap_value = snapshot[key]
+        if key == "widgets":
+            out[key] = _reconcile_widgets(out.get(key), snap_value)
+            continue
+        if isinstance(snap_value, dict):
+            out[key] = _reconcile_map(out.get(key) if isinstance(out.get(key), CommentedMap) else None, snap_value)
+        else:
+            # Scalars and non-widget sequences replace atomically; ruamel
+            # wrapping keeps block style and (for lists) any future comments.
+            out[key] = _to_commented(snap_value) if isinstance(snap_value, list) else snap_value
+    return out
+
+
+def _reconcile_widgets(existing: Any, snapshot_widgets: list[dict]) -> Any:
+    """Reconcile the ``widgets`` sequence by widget ``id`` (issue #85).
+
+    Existing widgets are matched to snapshot widgets by ``id``; a matched
+    pair recurses into the widget's map (so a comment on ``label:` survives
+    editing the label), preserving the widget's position in any
+    comment-anchored flow. Snapshot widgets with no on-disk counterpart are
+    appended; on-disk widgets absent from the snapshot are deleted. The
+    final order follows the snapshot, so a reorder in the editor rewrites the
+    sequence while a widget's own comments follow it — ruamel attaches list
+    item comments to the item node, and copying the existing CommentedSeq
+    entry carries them along.
+    """
+    from ruamel.yaml.comments import CommentedMap, CommentedSeq
+
+    out: CommentedSeq = CommentedSeq()
+    if isinstance(existing, CommentedSeq):
+        existing_by_id: dict[str, Any] = {}
+        for item in existing:
+            if isinstance(item, CommentedMap) and _WIDGET_ID_KEY in item:
+                existing_by_id[item[_WIDGET_ID_KEY]] = item
+    else:
+        existing_by_id = {}
+    for snap_widget in snapshot_widgets:
+        wid = snap_widget.get(_WIDGET_ID_KEY)
+        prior = existing_by_id.pop(wid, None) if wid is not None else None
+        out.append(_reconcile_map(prior, snap_widget))
+    return out
+
+
+def reconcile_and_write_layout(path: Path, snapshot: dict) -> None:
+    """Reconcile ``snapshot`` onto a fresh disk re-read and write atomically.
+
+    ``snapshot`` is the post-:class:`Layout`-validation JSON dict from the
+    client (a full-layout snapshot). The layout's ``id`` field is dropped
+    before writing — on disk the canonical id is always ``match[0]`` (see
+    :func:`load_layout`), never a stored ``id:`` key, so the shipping
+    layouts (which omit it) and editor-written layouts round-trip
+    identically.
+
+    On a missing file the snapshot is written fresh. On an existing file the
+    reconcile preserves comments and widget ``id`` identity per #85. The
+    write is atomic (a temp file in the same directory, then ``os.replace``)
+    so the ``watchfiles`` watcher sees one create/modify event instead of a
+    half-written file.
+    """
+    from ruamel.yaml.comments import CommentedMap
+
+    y = _yaml_round_trip()
+    if path.exists():
+        text = path.read_text()
+        loaded = y.load(text)  # type: ignore[assignment]
+        if loaded is None:
+            loaded = CommentedMap()
+    else:
+        loaded = CommentedMap()
+
+    writeable = _reconcile_map(loaded, _snapshot_for_disk(snapshot))
+    tmp = tempfile.NamedTemporaryFile(
+        mode="w",
+        delete=False,
+        suffix=".yaml.tmp",
+        dir=str(path.parent),
+        encoding="utf-8",
+    )
+    try:
+        y.dump(writeable, tmp)
+        tmp.flush()
+        os.replace(tmp.name, path)
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except FileNotFoundError:
+            pass
+
+
+def _snapshot_for_disk(snapshot: dict) -> dict:
+    """Strip the derived ``id`` field so the file's id is always ``match[0]``.
+
+    The editor echoes whatever it parsed, including ``id``; the on-disk
+    convention (every shipping layout) omits ``id:`` and lets
+    :func:`load_layout` derive it from ``match[0]``. Dropping it keeps the
+    canonical re-read, the watcher's reload, and a hand-authored file
+    indistinguishable.
+    """
+    cleaned = dict(snapshot)
+    cleaned.pop("id", None)
+    return cleaned
 
 
 Widget.model_rebuild()

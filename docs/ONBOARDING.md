@@ -163,7 +163,7 @@ For each concern, exactly one artifact is authoritative. Others derive from it.
 | Action dispatch | `daemon/deckd/actions.py` | What happens when a button is pressed |
 | Platform backend interface | `daemon/deckd/platform.py` (`PlatformBackend` Protocol) | OS-specific backends implement this |
 | CLI flags | `daemon/deckd/__main__.py` (argparse) | The running daemon is self-documenting via `--help` |
-| HTTP endpoints | `daemon/deckd/server.py` (aiohttp routes) | `/health`, `/diag`, `/layouts`, `/metrics`, `/media/...`, `/mpris/...` |
+| HTTP endpoints | `daemon/deckd/server.py` (aiohttp routes) | `/health`, `/diag`, `/layouts`, `/metrics`, `/media/...`, `/mpris/...`; mutating: `POST /reload`, `POST /layout/{id}` (runtime override), `PUT /layouts/{id}` (save), `POST /layouts` (create) |
 | Build/test commands | `Justfile` | All common commands in one place |
 | Client rendering | `client/src/App.tsx` | Root component; widget components render per their kind |
 | Triage labels | `docs/agents/triage-labels.md` | Five-label triage vocabulary + the `human-verification-required` lifecycle state |

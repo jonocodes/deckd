@@ -89,8 +89,8 @@ The daemon uses a single shared password for all clients:
 
 - **File:** `~/.config/deckd/password` (mode `0640`). First start generates a random 32-char password and logs it once at WARN.
 - **WebSocket:** Client sends `{"type": "hello", "password": "..."}` in the first frame. Invalid/auth-missing frames get `{"type": "error", "reason": "unauthorized"}` followed by a close (code `4401`).
-- **HTTP:** Control endpoints (`/reload`, `/layout`) require `X-Deckd-Password` header.
-- **Bypass:** `--no-auth` disables all checks. `/health`, `/diag`, `/metrics`, `/layouts`, and the art proxies are always open (read-only, no secret leak).
+- **HTTP:** Control endpoints (`/reload`, `/layout/<id>`, `PUT /layouts/<id>`, `POST /layouts`, `/mpris/<row>/command`) require `X-Deckd-Password` header.
+- **Bypass:** `--no-auth` disables all checks. `/health`, `/diag`, `/metrics`, `GET /layouts`, and the art proxies are always open (read-only, no secret leak).
 - **Rotation:** Edit the password file and restart the daemon.
 
 See [README#client-auth](../README.md#client-auth) for the full flow.
@@ -109,7 +109,9 @@ All are read-only and unauthenticated unless noted.
 | `GET /mpris/players` | Redacted MPRIS player snapshot. |
 | `GET /mpris/events/recent?limit=N` | Bounded ring buffer of MPRIS subsystem events. Default 64. |
 | `POST /reload` | **Auth.** Reload all layouts on disk, push to clients. |
-| `POST /layout/<id>` | **Auth.** Force-switch all clients to the named layout. |
+| `POST /layout/<id>` | **Auth.** Force-switch all clients to the named layout (runtime override, not sticky; singular `/layout` to distinguish from the write API below). |
+| `PUT /layouts/<id>` | **Auth.** Idempotent full-snapshot save of an existing layout (issue #84). URL `<id>` must equal `match[0]`; `409` on a `match[0]` change (rename). `400` sanitized structured Pydantic errors (`loc`/`msg`/`type` only); `404` unknown id. `200` echoes the canonical re-read (`{ok, layout}`); atomic temp-write + `os.replace`, natural `watchfiles` reload. |
+| `POST /layouts` | **Auth.** Create-on-first-save (issue #99). Body = a full layout snapshot; id/filename derived from slugified `match[0]`; `409` if the id (or slugified filename) already exists; `400` on validation failure / empty `match`; `200` echoes the canonical re-read. |
 | `POST /mpris/<row>/command` | **Auth.** Dispatch a play-pause/next/previous command to the named MPRIS row. |
 | `GET /media/<widget_id>/art` | Proxy VLC album art. |
 | `GET /mpris/<row_id>/art` | Proxy MPRIS album art. |

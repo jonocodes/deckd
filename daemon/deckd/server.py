@@ -14,11 +14,20 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Awaitable, Callable, Sequence
 
 from aiohttp import WSMsgType, web
+from pydantic import ValidationError
 
 from . import protocol as p
 from .actions import ActionContext, MacroOutcome, execute as run_action
 from .input import ScrollController, parse_key_combo, text_to_combos
-from .layouts import Layout, LayoutStore, load_layouts, resolve_layout
+from .layouts import (
+    Layout,
+    LayoutStore,
+    load_layout,
+    load_layouts,
+    reconcile_and_write_layout,
+    resolve_layout,
+    slugify_layout_id,
+)
 from .media import MediaManager, MediaState, effective_art_token
 from .mpris import ChromeMediaState, DbusMprisBackend, MprisBackend, connect_mpris_backend
 from .mpris_art import resolve_mpris_art_async
@@ -69,6 +78,46 @@ WS_CLOSE_UNAUTHORIZED = 4401
 # the frame to onmessage as its own event instead of coalescing it with the
 # close frame and dropping it.
 WS_AUTH_REJECT_GRACE_S = 0.25
+
+
+def _validation_failed(exc: ValidationError) -> web.Response:
+    """``400`` with sanitized Pydantic errors (issue #84 / #99).
+
+    The editor highlights the offending field inline from ``details``, so
+    the structure is kept; the values are stripped to ``loc`` / ``msg`` /
+    ``type`` only. Pydantic's raw errors carry ``input`` (the value the
+    client sent) and ``ctx`` (which can echo ``shell`` / ``dbus`` / ``text``
+    action strings), both of which leak payloads across the never-leak
+    rule the #70 HTTP routes enforce — so only the three safe fields ride
+    to the wire.
+    """
+    details = [
+        {"loc": list(err["loc"]), "msg": err["msg"], "type": err["type"]}
+        for err in exc.errors()
+    ]
+    return web.json_response(
+        {"ok": False, "error": "validation failed", "details": details}, status=400
+    )
+
+
+def _derivation_failed(loc: list[str | int], msg: str) -> web.Response:
+    """``400`` for a non-Pydantic derivation failure, in the same sanitized shape.
+
+    ``POST /layouts`` can fail ``match[0]``-to-filename derivation in ways
+    Pydantic doesn't catch (empty ``match``; a token that slugifies to the
+    empty string). #88 requires the create endpoint to mirror ``PUT``'s
+    structured ``400``, so these ride the same ``{ok, error, details}``
+    envelope with a single ``loc``/``msg``/``type`` entry rather than a
+    bare string error.
+    """
+    return web.json_response(
+        {
+            "ok": False,
+            "error": "validation failed",
+            "details": [{"loc": loc, "msg": msg, "type": "value_error"}],
+        },
+        status=400,
+    )
 
 
 class PortInUseError(RuntimeError):
@@ -1365,6 +1414,16 @@ class Server:
         self.app.router.add_get("/metrics", self._metrics)
         self.app.router.add_post("/reload", self._reload)
         self.app.router.add_post("/layout/{layout_id}", self._set_layout)
+        # Layout write API (issues #84 / #99). Save and create sit on the
+        # same authed aiohttp control surface as ``/reload`` / ``_set_layout``
+        # plural ``/layouts`` pairs with the read-only ``GET /layouts`` and
+        # distances the write path from the runtime-override
+        # ``POST /layout/{id}`` (singular). PUT = idempotent full-snapshot
+        # replace of an existing file; POST = create-on-first-save deriving
+        # id/filename from slugified ``match[0]``. Validation, sanitized
+        # structured errors, and the canonical re-read echo are shared.
+        self.app.router.add_put("/layouts/{layout_id}", self._put_layout)
+        self.app.router.add_post("/layouts", self._post_layout)
         # Album-art proxy. Deliberately unauthenticated (art is low-value and
         # an <img> tag can't carry the password header): the daemon fetches
         # the current item's art from VLC's own HTTP interface and streams it
@@ -1703,6 +1762,127 @@ class Server:
         await self._apply_layout_override(layout_id, layout)
         return web.json_response(
             {"ok": True, "app": layout_id, "sessions": len(self._sessions)}
+        )
+
+    # -- layout write API (issues #84 / #99) --------------------------------
+
+    async def _read_and_validate_layout(
+        self, req: web.Request
+    ) -> tuple[dict, Layout] | web.Response:
+        """Shared ``PUT``/``POST`` preamble: auth, JSON parse, schema validate.
+
+        Returns the parsed snapshot and the validated :class:`Layout` on
+        success, or a ready-to-send ``401``/``400`` response. Centralising
+        the auth gate, the JSON-body requirement, and the sanitized
+        validation-error path keeps the never-leak-payloads rule in one
+        place both endpoints share. The validated ``Layout`` is returned
+        alongside even though the reconcile writes the raw snapshot —
+        callers that want coerced/defaults use it; the write path keeps
+        the raw dict for full-snapshot omitted-field semantics (issue #85).
+        """
+        if not self._http_authorized(req):
+            return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
+        try:
+            snapshot = await req.json()
+        except Exception:
+            return web.json_response(
+                {"ok": False, "error": "request body must be JSON"}, status=400
+            )
+        if not isinstance(snapshot, dict):
+            return _derivation_failed([], "request body must be a JSON object")
+        try:
+            layout = Layout.model_validate(snapshot)
+        except ValidationError as exc:
+            return _validation_failed(exc)
+        return snapshot, layout
+
+    async def _put_layout(self, req: web.Request) -> web.Response:
+        """``PUT /layouts/{id}`` — idempotent full-snapshot save (issue #84).
+
+        The URL ``{id}`` is authoritative and must equal the body's
+        ``match[0]``; a ``match[0]`` change is a rename (create-shaped) and
+        is rejected with ``409``. The body is validated as a full
+        :class:`Layout` (so the #85 duplicate-widget-id validator and every
+        per-widget invariant run), reconciled onto a fresh on-disk re-read
+        per #85 (comments ride along, widgets matched by ``id``), and
+        written atomically. The response echoes the canonical re-read; the
+        ``watchfiles`` watcher independently refreshes the live deck.
+        """
+        layout_id = req.match_info["layout_id"]
+        path = self.layouts.source_path(layout_id)
+        if path is None:
+            return web.json_response(
+                {"ok": False, "error": f"unknown layout: {layout_id}"}, status=404
+            )
+        parsed = await self._read_and_validate_layout(req)
+        if isinstance(parsed, web.Response):
+            return parsed
+        snapshot, _layout = parsed
+        match = snapshot.get("match") or []
+        if not match or match[0] != layout_id:
+            return web.json_response(
+                {"ok": False, "error": "match[0] must equal the layout id in the URL; use the create endpoint to rename"},
+                status=409,
+            )
+        return self._write_and_echo(path, snapshot)
+
+    async def _post_layout(self, req: web.Request) -> web.Response:
+        """``POST /layouts`` — create-on-first-save (issue #99).
+
+        Derives id/filename from slugified ``match[0]``; ``409`` if the id
+        (or a slugified filename) already exists. Validation and the
+        canonical re-read echo mirror :meth:`_put_layout`; the brand-new
+        file has no comments to preserve so the reconcile writes the
+        snapshot fresh. Derivation failures (empty ``match``, an
+        unsigilable token) return the same sanitized structured ``400`` as
+        Pydantic validation failures so the editor sees one 400 shape.
+        """
+        parsed = await self._read_and_validate_layout(req)
+        if isinstance(parsed, web.Response):
+            return parsed
+        snapshot, _layout = parsed
+        match = snapshot.get("match") or []
+        if not match:
+            return _derivation_failed(["match"], "match must be non-empty to derive a layout id")
+        try:
+            stem = slugify_layout_id(match[0])
+        except ValueError as exc:
+            return _derivation_failed(["match", 0], str(exc))
+        new_path = self.layouts_dir / f"{stem}.yaml"
+        # The canonical id equals match[0] verbatim (load_layout assigns it
+        # on re-read); collision-check both the in-memory store and the
+        # target file so a differently-cased match token can't shadow an
+        # existing file via the slugified filename.
+        if match[0] in self.layouts or new_path.exists():
+            return web.json_response(
+                {"ok": False, "error": f"layout already exists: {match[0]}"}, status=409
+            )
+        return self._write_and_echo(new_path, snapshot)
+
+    def _write_and_echo(self, path: Path, snapshot: dict) -> web.Response:
+        """Reconcile-and-write ``snapshot`` to ``path``; echo the canonical re-read.
+
+        Shared by ``PUT`` (existing file) and ``POST`` (new file). On a
+        disk/write failure surfaces a ``5xx`` rather than a partial state;
+        the request/response owns editor state-sync while the
+        ``watchfiles`` watcher owns the live-deck reload.
+        """
+        try:
+            reconcile_and_write_layout(path, snapshot)
+            canonical = load_layout(path)
+        except SystemExit as exc:
+            log.error("layout write/re-read failed for %s: %s", path, exc)
+            return web.json_response(
+                {"ok": False, "error": f"layout write failed: {exc}"}, status=500
+            )
+        except OSError as exc:
+            log.error("layout write failed for %s: %s", path, exc)
+            return web.json_response(
+                {"ok": False, "error": f"layout write failed: {exc}"}, status=500
+            )
+        log.info("layout saved -> %s", path)
+        return web.json_response(
+            {"ok": True, "layout": canonical.model_dump()}
         )
 
     async def _apply_layout_override(self, layout_id: str, layout: Layout) -> None:
