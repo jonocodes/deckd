@@ -609,12 +609,21 @@ def slugify_layout_id(match_token: str) -> str:
 
 
 def _yaml_round_trip() -> Any:
-    """A ruamel YAML round-trip instance (block style, safe for ``safe_load``)."""
+    """A ruamel YAML round-trip instance tuned to the repo's hand-authored style.
+
+    ``sequence=2, offset=2`` indents block sequences two spaces under their
+    mapping key (``match:\n  - firefox``) and the item content two more
+    (``    kind: button``), matching every shipping layout. ruamel's default
+    is flush-left sequences (``match:\n- firefox``), which is valid YAML but
+    inconsistent with the convention the editor writes into — so a freshly
+    created file reads identically to a hand-authored one.
+    """
     from ruamel.yaml import YAML
 
     y = YAML()
     y.preserve_quotes = True
     y.default_flow_style = False
+    y.indent(mapping=2, sequence=4, offset=2)
     return y
 
 
@@ -659,7 +668,7 @@ def _reconcile_map(existing: Any, snapshot: dict) -> Any:
     comments ride along across edits, reorder, add, and delete. Comments
     attached to keys the snapshot keeps are preserved unchanged.
     """
-    from ruamel.yaml.comments import CommentedMap, CommentedSeq
+    from ruamel.yaml.comments import CommentedMap
 
     if not isinstance(existing, CommentedMap):
         out = CommentedMap()
@@ -672,16 +681,60 @@ def _reconcile_map(existing: Any, snapshot: dict) -> Any:
             del out[key]
     for key in snap_keys:
         snap_value = snapshot[key]
+        existing = out.get(key)
+        # Skip reassignment when the snapshot value is unchanged. ruamel
+        # attaches comments to a key's node; reassigning the value (even to
+        # an equal one) can drop a leading comment attached to that key and
+        # is unnecessary work. The common editor save edits one widget and
+        # leaves the rest of the layout byte-identical, so this keeps an
+        # unchanged widget's comments and key order intact (issue #85).
         if key == "widgets":
-            out[key] = _reconcile_widgets(out.get(key), snap_value)
+            if existing is None or _widgets_changed(existing, snap_value):
+                out[key] = _reconcile_widgets(existing, snap_value)
             continue
         if isinstance(snap_value, dict):
-            out[key] = _reconcile_map(out.get(key) if isinstance(out.get(key), CommentedMap) else None, snap_value)
+            if not isinstance(existing, CommentedMap) or _plain_dict_changed(existing, snap_value):
+                out[key] = _reconcile_map(existing if isinstance(existing, CommentedMap) else None, snap_value)
+        elif isinstance(snap_value, list):
+            if existing != snap_value:
+                out[key] = _to_commented(snap_value)
         else:
-            # Scalars and non-widget sequences replace atomically; ruamel
-            # wrapping keeps block style and (for lists) any future comments.
-            out[key] = _to_commented(snap_value) if isinstance(snap_value, list) else snap_value
+            if existing != snap_value:
+                out[key] = snap_value
     return out
+
+
+def _plain_dict_changed(existing: Any, snap: dict) -> bool:
+    """True if ``existing`` (a CommentedMap) differs from ``snap`` as a plain dict.
+
+    ruamel ``CommentedMap`` compares by value like a dict, so a cheap
+    equality check decides whether to recurse (and risk disturbing
+    comments) or leave the subtree untouched.
+    """
+    try:
+        return dict(existing) != snap
+    except Exception:
+        return True
+
+
+def _widgets_changed(existing: Any, snap_widgets: list[dict]) -> bool:
+    """True if the on-disk widgets sequence differs from the snapshot.
+
+    Compares the plain-dict rendering of each widget in order so a
+    byte-identical save (the common case: edit one widget, the rest ride
+    along) skips the sequence rewrite and preserves the top-level comment
+    ruamel attaches to the ``widgets`` key.
+    """
+    try:
+        existing_list = list(existing)
+    except TypeError:
+        return True
+    if len(existing_list) != len(snap_widgets):
+        return True
+    for ex, snap in zip(existing_list, snap_widgets):
+        if dict(ex) != snap:
+            return True
+    return False
 
 
 def _reconcile_widgets(existing: Any, snapshot_widgets: list[dict]) -> Any:

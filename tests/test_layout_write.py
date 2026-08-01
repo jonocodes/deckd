@@ -273,3 +273,66 @@ def test_write_removes_top_level_key_dropped_from_snapshot(tmp_path: Path) -> No
     on_disk = _read_yaml(path)
     assert "display_name" not in on_disk
     assert "theme" not in on_disk
+
+
+def test_write_renders_indented_sequences_matching_repo_style(tmp_path: Path) -> None:
+    """A fresh file emits block sequences indented two spaces under their key,
+    matching every shipping layout (``match:\n  - firefox``), not ruamel's
+    default flush-left ``match:\n- firefox``. Valid YAML either way, but the
+    repo's hand-authored style is the convention the editor writes into."""
+    path = tmp_path / "slack.yaml"
+    snap = _layout_dict(["Slack"], [_button("snooze", "Snooze")])
+    reconcile_and_write_layout(path, snap)
+    text = path.read_text()
+    assert "match:\n  - Slack\n" in text
+    assert "  - id: snooze\n" in text
+
+
+def test_write_preserves_comments_and_key_order_on_unchanged_widget(
+    tmp_path: Path,
+) -> None:
+    """A shipping-style widget (comment before a key, keys in declaration
+    order) keeps its comment and order when a *different* widget is edited.
+
+    Regression for the reconcile reassigning every scalar key: reassigning
+    an unchanged value drops ruamel's attached comment and reorders the key
+    to the snapshot's order, mangling hand-authored layouts on save. The
+    fix skips reassignment when the value is unchanged so the original node
+    (comment + position) rides along untouched.
+    """
+    path = tmp_path / "firefox.yaml"
+    path.write_text(
+        "match:\n  - firefox\n"
+        "widgets:\n"
+        "  - id: back\n"
+        "    kind: button\n"
+        "    # label: Back\n"
+        "    label: Back\n"
+        "    action:\n"
+        "      key: alt+Left\n"
+        "  - id: forward\n"
+        "    kind: button\n"
+        "    # label: Forward\n"
+        "    label: Forward\n"
+        "    action:\n"
+        "      key: alt+Right\n"
+    )
+    # Edit only the `back` widget; `forward` is byte-identical to the source.
+    snap = _layout_dict(
+        ["firefox"],
+        [
+            {"id": "back", "kind": "button", "label": "Backward", "action": {"key": "alt+Left"}},
+            {"id": "forward", "kind": "button", "label": "Forward", "action": {"key": "alt+Right"}},
+        ],
+    )
+    reconcile_and_write_layout(path, snap)
+
+    text = path.read_text()
+    # The unchanged widget's comment survives at its original position...
+    assert "    # label: Forward\n    label: Forward\n" in text
+    # ...and its key order is preserved (label before action, not reordered).
+    forward_block = text.split("  - id: forward", 1)[1]
+    assert forward_block.index("label: Forward") < forward_block.index("action:")
+    # The edited widget carries the new value and still parses.
+    assert "label: Backward" in text
+    assert _canonical(path)["id"] == "firefox"
