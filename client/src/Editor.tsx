@@ -1,13 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, Save, X } from "lucide-react";
 import type { ServerLayout, Widget } from "./protocol";
 import { EDITOR_VIEW_ID } from "./protocol";
+import type { OverflowMode } from "./reflow";
+import { EditorCanvas } from "./EditorCanvas";
 
 type LayoutEntry = {
   id: string;
   match: string[];
   display_name?: string | null;
   widgets: Widget[];
+  overflow?: string | null;
 };
 
 type LayoutListResponse = {
@@ -46,6 +49,32 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
+  // Editable widget state: derived from the active layout on mount / selection.
+  const [editWidgets, setEditWidgets] = useState<Widget[]>([]);
+  const [editOverflow, setEditOverflow] = useState<OverflowMode>("shrink-to-fit");
+  const initialisedRef = useRef(false);
+
+  // Initialise editable state from the active layout when it first arrives.
+  useEffect(() => {
+    if (initialisedRef.current) return;
+    if (!activeLayout || !activeLayout.widgets) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEditWidgets(deepCloneWidgets(activeLayout.widgets));
+    setEditOverflow((activeLayout.overflow as OverflowMode) ?? "shrink-to-fit");
+    initialisedRef.current = true;
+  }, [activeLayout]);
+
+  // Re-init when the user switches layouts via the picker.
+  useEffect(() => {
+    if (!selectedId) return;
+    const picked = layouts.find((l) => l.id === selectedId);
+    if (!picked) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEditWidgets(deepCloneWidgets(picked.widgets));
+    setEditOverflow((picked.overflow as OverflowMode) ?? "shrink-to-fit");
+    setSaveStatus("idle");
+  }, [selectedId, layouts]);
+
   useEffect(() => {
     if (mockLayouts) return;
     const base = resolveBaseUrl();
@@ -83,11 +112,18 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setSaveStatus("saving");
     try {
       const base = resolveBaseUrl();
-      const res = await fetch(`${base}/layouts/${encodeURIComponent(selectedId)}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: selectedId }),
-      });
+      const res = await fetch(
+        `${base}/layouts/${encodeURIComponent(selectedId)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: selectedId,
+            widgets: editWidgets,
+            overflow: editOverflow,
+          }),
+        },
+      );
       if (res.ok) {
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2000);
@@ -97,12 +133,38 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     } catch {
       setSaveStatus("error");
     }
-  }, [selectedId]);
+  }, [selectedId, editWidgets, editOverflow]);
 
   const handleExit = useCallback(() => {
     send({ type: "clear_view" });
     onExit();
   }, [send, onExit]);
+
+  const handleReorder = useCallback((from: number, to: number) => {
+    setEditWidgets((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+    setSaveStatus("idle");
+  }, []);
+
+  const handleOverflowChange = useCallback((mode: OverflowMode) => {
+    setEditOverflow(mode);
+    setSaveStatus("idle");
+  }, []);
+
+  const handleWidgetChange = useCallback((index: number, widget: Widget) => {
+    setEditWidgets((prev) => {
+      const next = [...prev];
+      next[index] = widget;
+      return next;
+    });
+    setSaveStatus("idle");
+  }, []);
+
+  const widgetCount = editWidgets.length;
 
   return (
     <div className="editor" role="region" aria-label="layout editor">
@@ -179,22 +241,26 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
         </aside>
         <section className="editor-pane editor-canvas" aria-label="live grid canvas">
           {selectedLayout ? (
-            <div className="editor-canvas-content">
-              <div className="editor-canvas-header">
+            <>
+              <div className="editor-canvas-meta">
                 <span className="editor-canvas-app">
                   {selectedLayout.display_name?.trim() || selectedLayout.id}
                 </span>
                 <span className="editor-canvas-match">
                   match: {selectedLayout.match.join(", ")}
                 </span>
+                <span className="editor-canvas-widget-count">
+                  {widgetCount} widget{widgetCount !== 1 ? "s" : ""}
+                </span>
               </div>
-              <div className="editor-canvas-widget-count">
-                {selectedLayout.widgets.length} widget{selectedLayout.widgets.length !== 1 ? "s" : ""}
-              </div>
-              <div className="editor-canvas-grid">
-                <p className="editor-pane-placeholder">Live canvas — coming soon</p>
-              </div>
-            </div>
+              <EditorCanvas
+                widgets={editWidgets}
+                overflow={editOverflow}
+                onReorder={handleReorder}
+                onWidgetChange={handleWidgetChange}
+                onOverflowChange={handleOverflowChange}
+              />
+            </>
           ) : (
             <p className="editor-pane-placeholder">No layout selected</p>
           )}
@@ -206,4 +272,14 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
       </div>
     </div>
   );
+}
+
+/** Shallow-deep clone of the widget array so edits are independent of the
+ * props. We need a fresh mutable copy — `structuredClone` is fine here. */
+function deepCloneWidgets(widgets: Widget[]): Widget[] {
+  try {
+    return structuredClone(widgets);
+  } catch {
+    return widgets.map((w) => ({ ...w }));
+  }
 }

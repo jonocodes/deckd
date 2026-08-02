@@ -2062,14 +2062,18 @@ button:focus-visible {
 .editor-canvas-content {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
-.editor-canvas-header {
+/* Canvas metadata row (layout name, match, widget count) */
+.editor-canvas-meta {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .editor-canvas-app {
@@ -2087,15 +2091,265 @@ button:focus-visible {
 .editor-canvas-widget-count {
   font-size: 12px;
   color: #8b949e;
-  margin-bottom: 12px;
+  margin-left: auto;
 }
 
+/* Toolbar: overflow toggle + viewport-preview width controls */
+.editor-canvas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.editor-canvas-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.editor-canvas-toolbar-label {
+  font-size: 11px;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 4px;
+}
+
+.editor-canvas-toolbar-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #8b949e;
+  background: transparent;
+  border: 1px solid #30363d;
+  cursor: pointer;
+  transition: background 120ms, border-color 120ms;
+}
+.editor-canvas-toolbar-btn:hover {
+  background: #21262d;
+  border-color: #484f58;
+}
+.editor-canvas-toolbar-btn-active,
+.editor-canvas-toolbar-btn-active:hover {
+  background: #1c3a5c;
+  border-color: #58a6ff;
+  color: #c9d1d9;
+}
+
+/* The draggable grid area */
 .editor-canvas-grid {
   flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border: 1px dashed #21262d;
+  border-radius: 8px;
+  padding: 8px;
+  align-content: start;
+}
+.editor-canvas-grid-preview {
+  margin: 0 auto;
+}
+
+.editor-canvas-grid-empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px dashed #21262d;
-  border-radius: 8px;
-  min-height: 120px;
+  height: 100%;
+  color: #484f58;
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* Grid inside the editor canvas (matches .grid from the main surface) */
+.editor-canvas-grid .grid {
+  display: grid;
+  justify-content: center;
+  gap: 8px;
+  align-content: start;
+}
+
+/* Individual widget cells in the editor canvas */
+.editor-canvas-cell {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: linear-gradient(160deg, #2d333b, #21262d);
+  border: 1px solid #30363d;
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  aspect-ratio: 1 / 1;
+  transition: border-color 120ms, box-shadow 120ms;
+  min-width: 0;
+  overflow: hidden;
+}
+.editor-canvas-cell:hover {
+  border-color: #484f58;
+}
+
+.editor-canvas-cell-blank {
+  background: transparent;
+  border-style: dashed;
+  border-color: #21262d;
+}
+
+.editor-canvas-cell-unsupported {
+  opacity: 0.55;
+  background: linear-gradient(160deg, #1c2128, #161b21);
+  border-style: dashed;
+}
+
+.editor-canvas-cell-unsupported-badge {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #484f58;
+  background: #12161b;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* Drag handle on the top-left of each cell */
+.editor-canvas-cell-drag {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: #484f58;
+  background: transparent;
+  border: none;
+  cursor: grab;
+  opacity: 0;
+  transition: opacity 120ms;
+  z-index: 2;
+}
+.editor-canvas-cell:hover .editor-canvas-cell-drag,
+.editor-canvas-cell-drag:focus-visible {
+  opacity: 1;
+}
+.editor-canvas-cell-drag:active {
+  cursor: grabbing;
+}
+
+.editor-canvas-cell-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  overflow: hidden;
+}
+
+.editor-canvas-cell-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+.editor-canvas-cell-icon .icon {
+  width: 20px;
+  height: 20px;
+}
+
+.editor-canvas-cell-glyph {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.editor-canvas-cell-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: #c9d1d9;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.editor-canvas-cell-kind {
+  position: absolute;
+  bottom: 2px;
+  left: 4px;
+  font-size: 8px;
+  color: #484f58;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Span control: +/- buttons + full toggle, visible on cell hover */
+.editor-canvas-cell-span {
+  position: absolute;
+  bottom: 2px;
+  right: 4px;
+  opacity: 0;
+  transition: opacity 120ms;
+}
+.editor-canvas-cell:hover .editor-canvas-cell-span,
+.editor-canvas-cell-span:focus-within {
+  opacity: 1;
+}
+
+.editor-canvas-cell-span-controls {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  background: #161b21;
+  border: 1px solid #30363d;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.editor-canvas-cell-span-btn,
+.editor-canvas-cell-span-full-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #8b949e;
+  cursor: pointer;
+  height: 16px;
+  min-width: 16px;
+  font-size: 10px;
+  font-family: monospace;
+  transition: background 120ms, color 120ms;
+}
+.editor-canvas-cell-span-btn:hover {
+  background: #21262d;
+  color: #c9d1d9;
+}
+.editor-canvas-cell-span-full-btn {
+  min-width: auto;
+  padding: 0 4px;
+  font-size: 9px;
+  font-weight: 600;
+}
+.editor-canvas-cell-span-full-btn:hover {
+  background: #1c3a5c;
+  color: #58a6ff;
+}
+.editor-canvas-cell-span-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
 }
