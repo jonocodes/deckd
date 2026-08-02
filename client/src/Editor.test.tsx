@@ -685,3 +685,115 @@ describe("Editor — layout editor chrome view", () => {
     expect(screen.getByText("Layout")).toBeTruthy();
   });
 });
+
+describe("Editor — fetch layouts path (no mockLayouts)", () => {
+  afterEach(() => {
+    cleanup();
+    delete (globalThis as Record<string, unknown>).fetch;
+  });
+  beforeEach(() => {
+    send.mockReset();
+    onExit.mockReset();
+  });
+
+  const FETCH_LAYOUTS = [
+    {
+      id: "firefox",
+      match: ["firefox"],
+      display_name: "Firefox",
+      widgets: [{ id: "btn-1", kind: "button" as const, label: "Click" }],
+    },
+    {
+      id: "editor",
+      match: ["editor"],
+      display_name: "Layout Editor",
+      widgets: [],
+    },
+    {
+      id: "terminal",
+      match: ["alacritty"],
+      display_name: "Terminal",
+      widgets: [],
+    },
+  ];
+
+  it("fetches layouts and shows them in the picker", async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn().mockResolvedValue({
+      json: () =>
+        Promise.resolve({ ok: true, layouts: FETCH_LAYOUTS }),
+    });
+
+    render(
+      <Editor layout={null} send={send} onExit={onExit} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Firefox").length).toBeGreaterThan(0);
+    });
+
+    fireEvent.click(screen.getByLabelText("select layout to edit"));
+    // Picker dropdown should show all fetched layouts
+    expect(screen.getByText("Terminal")).toBeTruthy();
+    expect(screen.queryByText("YouTube")).toBeFalsy();
+  });
+
+  it("auto-selects first non-editor layout from fetch response", async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn().mockResolvedValue({
+      json: () =>
+        Promise.resolve({ ok: true, layouts: FETCH_LAYOUTS }),
+    });
+
+    render(
+      <Editor layout={null} send={send} onExit={onExit} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText("Firefox").length).toBeGreaterThan(0);
+    });
+
+    expect(screen.getByText("Click")).toBeTruthy();
+    expect(screen.queryByText("Layout Editor")).toBeFalsy();
+  });
+
+  it("shows 'Select layout' when fetch returns empty list", async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn().mockResolvedValue({
+      json: () =>
+        Promise.resolve({ ok: true, layouts: [] }),
+    });
+
+    render(
+      <Editor layout={null} send={send} onExit={onExit} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Select layout")).toBeTruthy();
+    });
+  });
+
+  it("shows 'Select layout' when fetch returns non-ok", async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn().mockResolvedValueOnce({
+      json: () =>
+        Promise.resolve({ ok: false, layouts: [] }),
+    });
+
+    render(
+      <Editor layout={null} send={send} onExit={onExit} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Select layout")).toBeTruthy();
+    });
+  });
+
+  it("shows 'Select layout' when fetch fails", async () => {
+    (globalThis as Record<string, unknown>).fetch = vi.fn().mockRejectedValueOnce(new Error("network error"));
+
+    render(
+      <Editor layout={null} send={send} onExit={onExit} />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText("Select layout")).toBeTruthy();
+    });
+  });
+});

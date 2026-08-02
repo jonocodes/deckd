@@ -44,6 +44,9 @@ export default defineConfig({
       "/health": daemonUpstream,
       "/reload": daemonUpstream,
       "/media": daemonUpstream,
+      "/layouts": daemonUpstream,
+      "/diag": daemonUpstream,
+      "/actions": daemonUpstream,
       // The MPRIS album-art proxy mirrors ``/media/<id>/art``'s
       // rationale (issue #57): an ``<img>`` tag can't carry the
       // password header, art is low-value, and the URL the proxy
