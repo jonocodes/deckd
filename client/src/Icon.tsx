@@ -29,7 +29,7 @@ type SimpleIcon = { slug: string; path: string; title: string };
 
 // Lazily import the whole Simple Icons set exactly once, indexed by slug.
 let simpleIconsPromise: Promise<Map<string, SimpleIcon>> | null = null;
-function loadSimpleIcons(): Promise<Map<string, SimpleIcon>> {
+export function loadSimpleIcons(): Promise<Map<string, SimpleIcon>> {
   if (!simpleIconsPromise) {
     simpleIconsPromise = import("simple-icons").then((mod) => {
       const m = new Map<string, SimpleIcon>();

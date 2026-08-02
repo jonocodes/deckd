@@ -3,6 +3,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { PropertiesPanel } from "./PropertiesPanel";
 import type { Widget } from "./protocol";
 
+vi.mock("@tanstack/react-virtual", () => ({
+  useVirtualizer: vi.fn().mockImplementation(
+    ({ count }: { count: number }) => {
+      const items: { key: string; index: number; start: number; size: number }[] = [];
+      const visible = Math.min(count, 10);
+      for (let i = 0; i < visible; i++) {
+        items.push({ key: `row-${i}`, index: i, start: i * 56, size: 56 });
+      }
+      return {
+        getVirtualItems: () => items,
+        getTotalSize: () => count * 56,
+        measure: vi.fn(),
+      };
+    },
+  ),
+}));
+
 const baseButton: Widget = {
   id: "btn-1",
   kind: "button",
@@ -430,7 +447,7 @@ describe("PropertiesPanel — opaque pass-through", () => {
     expect(changed.macro).toEqual(widgetWithPassThrough.macro);
   });
 
-  it("icon change updates source/name while preserving unrendered fields", () => {
+  it("icon change opens picker and selects a new icon", () => {
     const onChange = vi.fn();
     render(
       <PropertiesPanel
@@ -440,8 +457,13 @@ describe("PropertiesPanel — opaque pass-through", () => {
         onLayoutFieldChange={vi.fn()}
       />,
     );
-    const nameInput = screen.getByDisplayValue("play");
-    fireEvent.change(nameInput, { target: { value: "pause" } });
+    const changeBtn = screen.getByLabelText("change icon");
+    fireEvent.click(changeBtn);
+
+    const searchInput = screen.getByPlaceholderText("Search Lucide icons…");
+    fireEvent.change(searchInput, { target: { value: "pause" } });
+    fireEvent.click(screen.getByLabelText("pause"));
+
     const changed = onChange.mock.calls[0][0];
     expect(changed.icon).toEqual({ source: "lucide", name: "pause" });
   });

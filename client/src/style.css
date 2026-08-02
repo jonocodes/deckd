@@ -2726,3 +2726,250 @@ select.prop-field-input {
 .editor-creation-btn-cancel:hover {
   background: #30363d;
 }
+
+/* ---- icon picker (#102) ---- */
+
+.icon-picker-trigger {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+.icon-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.icon-picker {
+  width: 400px;
+  max-height: 560px;
+  display: flex;
+  flex-direction: column;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.icon-picker-tabs {
+  display: flex;
+  border-bottom: 1px solid #21262d;
+}
+
+.icon-picker-tab {
+  flex: 1;
+  padding: 8px 0;
+  border: none;
+  background: transparent;
+  color: #8b949e;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 120ms, border-color 120ms;
+}
+
+.icon-picker-tab:hover {
+  color: #c9d1d9;
+}
+
+.icon-picker-tab-active {
+  color: #58a6ff;
+  border-bottom-color: #58a6ff;
+}
+
+.icon-picker-search {
+  padding: 8px;
+  border-bottom: 1px solid #21262d;
+}
+
+.icon-picker-search-input {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+  background: #161b22;
+  color: #c9d1d9;
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.icon-picker-search-input:focus {
+  outline: none;
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+}
+
+.icon-picker-search-input::placeholder {
+  color: #484f58;
+}
+
+.icon-picker-grid {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.icon-picker-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.icon-picker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #c9d1d9;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  transition: background 80ms, border-color 80ms;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.icon-picker-item:hover {
+  background: #161b22;
+  border-color: #30363d;
+}
+
+.icon-picker-item-selected {
+  background: #1c3a5c;
+  border-color: #58a6ff;
+}
+
+.icon-picker-item-glyph {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.icon-picker-item-glyph svg {
+  width: 100%;
+  height: 100%;
+}
+
+.icon-picker-item-name {
+  font-size: 9px;
+  color: #8b949e;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.icon-picker-loading,
+.icon-picker-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #8b949e;
+  font-size: 13px;
+  padding: 24px;
+}
+
+.icon-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-top: 1px solid #21262d;
+  gap: 8px;
+}
+
+.icon-picker-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #c9d1d9;
+  min-width: 0;
+  flex: 1;
+}
+
+.icon-picker-chip-glyph {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.icon-picker-chip-name {
+  font-family: monospace;
+  font-size: 11px;
+  color: #8b949e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.icon-picker-chip-remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #8b949e;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 80ms, color 80ms;
+}
+
+.icon-picker-chip-remove:hover {
+  background: #21262d;
+  color: #da3633;
+}
+
+.icon-picker-chip-empty {
+  font-size: 12px;
+  color: #484f58;
+}
+
+.icon-picker-close {
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+  background: #21262d;
+  color: #c9d1d9;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 120ms;
+  white-space: nowrap;
+}
+
+.icon-picker-close:hover {
+  background: #30363d;
+}

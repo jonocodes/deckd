@@ -1,9 +1,10 @@
-import { useCallback } from "react";
-import { Trash2 } from "lucide-react";
+import { useCallback, useState } from "react";
+import { Search, Trash2 } from "lucide-react";
 import type { Widget, Icon as IconRef } from "./protocol";
 import { ActionEditor } from "./ActionEditor";
 import type { ActionFields } from "./ActionEditor";
 import { Icon as IconGlyph } from "./Icon";
+import { IconPicker } from "./IconPicker";
 
 interface LayoutFields {
   display_name?: string | null;
@@ -300,6 +301,7 @@ function IconField({
   icon: IconRef | null | undefined;
   onChange: (icon: IconRef | null) => void;
 }) {
+  const [pickerOpen, setPickerOpen] = useState(false);
   const handleClear = useCallback(() => onChange(null), [onChange]);
 
   return (
@@ -323,45 +325,31 @@ function IconField({
           <span className="prop-field-icon-name">
             {icon.source}/{icon.name}
           </span>
+          <button
+            type="button"
+            className="prop-field-btn icon-picker-trigger"
+            aria-label="change icon"
+            onClick={() => setPickerOpen(true)}
+          >
+            <Search size={14} />
+          </button>
         </div>
       ) : (
-        <label className="prop-field">
-          <span className="prop-field-label">Source</span>
-          <input
-            className="prop-field-input"
-            type="text"
-            value=""
-            onChange={(e) => {
-              if (e.target.value) {
-                onChange({ source: e.target.value, name: "" });
-              }
-            }}
-            placeholder="lucide or simple-icons"
-          />
-        </label>
+        <button
+          type="button"
+          className="prop-field-btn prop-field-btn-add icon-picker-trigger"
+          onClick={() => setPickerOpen(true)}
+        >
+          <Search size={14} />
+          <span>Browse icons…</span>
+        </button>
       )}
-      {icon && (
-        <>
-          <label className="prop-field">
-            <span className="prop-field-label">Source</span>
-            <input
-              className="prop-field-input"
-              type="text"
-              value={icon.source}
-              onChange={(e) => onChange({ source: e.target.value, name: icon.name })}
-            />
-          </label>
-          <label className="prop-field">
-            <span className="prop-field-label">Name</span>
-            <input
-              className="prop-field-input"
-              type="text"
-              value={icon.name}
-              onChange={(e) => onChange({ source: icon.source, name: e.target.value })}
-            />
-          </label>
-        </>
-      )}
+      <IconPicker
+        value={icon ?? null}
+        onChange={onChange}
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+      />
     </div>
   );
 }
