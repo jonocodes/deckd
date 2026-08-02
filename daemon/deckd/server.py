@@ -439,6 +439,18 @@ class Session:
             and focus_app.is_browser
             and layout.matches_title(focus_app)
         )
+        # Focused-app identity for the editor's new-layout creation flow (#104).
+        # Populated from the daemon's last-known focus; None before the first
+        # focus event. The editor uses this to prefill match tokens in the
+        # detect-and-offer prompt and the browser-vs-site branch.
+        focused_app = None
+        if focus_app is not None:
+            focused_app = p.FocusedAppInfo(
+                app_id=focus_app.app_id,
+                wm_class=focus_app.wm_class,
+                title=focus_app.title,
+                is_browser=focus_app.is_browser,
+            )
         if error is not None:
             # Bad on-disk config: send widgets=[] plus the error text so the
             # client swaps the grid for a diagnostic message.
@@ -452,6 +464,7 @@ class Session:
                 theme=layout.theme,
                 icon=icon,
                 web_app=web_app,
+                focused_app=focused_app,
                 widgets=[],
                 error=error,
             )
@@ -467,6 +480,7 @@ class Session:
                 theme=layout.theme,
                 icon=icon,
                 web_app=web_app,
+                focused_app=focused_app,
                 widgets=widgets,
                 # View-resolution errors ride alongside the focused-app
                 # widgets so the chrome stays usable while the user sees

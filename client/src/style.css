@@ -2353,3 +2353,153 @@ button:focus-visible {
   opacity: 0.3;
   cursor: default;
 }
+
+/* ---- new-layout creation form (#104) ---- */
+
+.editor-picker-separator {
+  height: 1px;
+  background: #30363d;
+  margin: 4px 0;
+  border: none;
+}
+
+.editor-picker-option-new {
+  color: #58a6ff;
+  gap: 6px;
+}
+
+.editor-picker-option.editor-picker-option-new:hover {
+  background: #1c3a5c;
+}
+
+.editor-creation-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 440px;
+  margin: 24px auto;
+  padding: 24px;
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+}
+
+.editor-creation-prompt {
+  margin: 0;
+  font-size: 15px;
+  color: #c9d1d9;
+  line-height: 1.4;
+}
+
+.editor-creation-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.editor-creation-field-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.editor-creation-input {
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+  background: #161b22;
+  color: #c9d1d9;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.editor-creation-input:focus {
+  outline: none;
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.2);
+}
+
+.editor-creation-input::placeholder {
+  color: #484f58;
+}
+
+.editor-creation-alt {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editor-creation-alt-label {
+  font-size: 12px;
+  color: #8b949e;
+}
+
+.editor-creation-alt-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #30363d;
+  background: #161b22;
+  color: #c9d1d9;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+
+.editor-creation-alt-btn:hover {
+  border-color: #58a6ff;
+  background: #1c2128;
+}
+
+.editor-creation-alt-code {
+  font-size: 11px;
+  color: #8b949e;
+  font-family: monospace;
+}
+
+.editor-creation-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.editor-creation-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: background 120ms;
+}
+
+.editor-creation-btn-primary {
+  background: #238636;
+  color: #ffffff;
+  border-color: #2ea043;
+}
+
+.editor-creation-btn-primary:hover:not(:disabled) {
+  background: #2ea043;
+}
+
+.editor-creation-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.editor-creation-btn-cancel {
+  background: #21262d;
+  color: #c9d1d9;
+  border-color: #30363d;
+}
+
+.editor-creation-btn-cancel:hover {
+  background: #30363d;
+}

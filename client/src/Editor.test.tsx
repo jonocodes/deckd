@@ -122,7 +122,7 @@ describe("Editor — layout editor chrome view", () => {
     const listbox = screen.getByRole("listbox");
     expect(listbox).toBeTruthy();
     const options = screen.getAllByRole("option");
-    expect(options).toHaveLength(4);
+    expect(options).toHaveLength(5);
     fireEvent.click(trigger);
     await waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
   });
@@ -296,5 +296,164 @@ describe("Editor — layout editor chrome view", () => {
     expect(body.widgets[0].id).toBe("new-tab");
 
     vi.unstubAllGlobals();
+  });
+
+  // ---- new-layout creation flow tests (issue #104) ----
+
+  it("picker includes a 'New layout' entry with Plus icon", () => {
+    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+    fireEvent.click(trigger);
+    const newOption = screen.getByText("New layout");
+    expect(newOption).toBeTruthy();
+  });
+
+  it("clicking 'New layout' opens the manual creation form", () => {
+    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByText("New layout"));
+    expect(screen.getByText("New layout")).toBeTruthy();
+    // The creation form should show match / display-name inputs.
+    expect(screen.getByPlaceholderText("e.g. firefox or title:*YouTube*")).toBeTruthy();
+    expect(screen.getByPlaceholderText("(optional, derived from match)")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create layout" })).toBeTruthy();
+  });
+
+  it("shows detect-and-offer prompt when app is 'default' with focused app", () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "default",
+          jogstrip_enabled: true,
+          widgets: [{ id: "dummy", kind: "button" as const }],
+          focused_app: { app_id: "org.example.App", wm_class: "example-app", title: "Example App", is_browser: false },
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+    expect(screen.getByText(/No layout for example-app yet/)).toBeTruthy();
+    const matchInput = screen.getByPlaceholderText("e.g. firefox or title:*YouTube*") as HTMLInputElement;
+    expect(matchInput.value).toBe("example-app");
+  });
+
+  it("shows browser branch prompt when focused app is a browser", () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "default",
+          jogstrip_enabled: true,
+          widgets: [{ id: "dummy", kind: "button" as const }],
+          focused_app: { app_id: "firefox", wm_class: "firefox", title: "YouTube", is_browser: true },
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+    expect(screen.getByText(/No layout for.*yet/)).toBeTruthy();
+    // The alternate option for the site should be present.
+    expect(screen.getByText(/Layout for/)).toBeTruthy();
+  });
+
+  it("creates a new layout and saves via POST", async () => {
+    const fetchSpy = vi.fn();
+    fetchSpy.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ok: true,
+        layout: {
+          id: "example-app",
+          match: ["example-app"],
+          display_name: "Example App",
+          widgets: [],
+          overflow: "shrink-to-fit",
+        },
+      }),
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "default",
+          jogstrip_enabled: true,
+          widgets: [{ id: "dummy", kind: "button" as const }],
+          focused_app: { app_id: "org.example.App", wm_class: "example-app", title: "Example App", is_browser: false },
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+
+    // Confirm creation.
+    fireEvent.click(screen.getByRole("button", { name: "Create layout" }));
+
+    // Should now be in new-layout editing mode.
+    expect(screen.getByText("New layout")).toBeTruthy();
+    expect(screen.getByText("match: example-app")).toBeTruthy();
+
+    // Save should POST.
+    fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+    await waitFor(() => {
+      const postCall = fetchSpy.mock.calls.find(
+        (call: unknown[]) => {
+          const arr = call as [string, { method: string; body: string }];
+          return arr[1]?.method === "POST";
+        },
+      );
+      expect(postCall).toBeTruthy();
+      const body = JSON.parse((postCall as [string, { method: string; body: string }])[1].body);
+      expect(body.match).toEqual(["example-app"]);
+    });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("cancel button dismisses creation form", () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "default",
+          jogstrip_enabled: true,
+          widgets: [{ id: "dummy", kind: "button" as const }],
+          focused_app: { app_id: "org.example.App", wm_class: "example-app", title: "Example App", is_browser: false },
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+    expect(screen.getByText(/No layout for/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    // Form should be gone, canvas placeholder shown (since default layout isn't in MOCK_LAYOUTS).
+    expect(screen.queryByText(/No layout for/)).toBeFalsy();
+  });
+
+  it("empty match disables the create button", () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "default",
+          jogstrip_enabled: true,
+          widgets: [{ id: "dummy", kind: "button" as const }],
+          focused_app: { app_id: "org.example.App", wm_class: "example-app", title: "Example App", is_browser: false },
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+    const input = screen.getByPlaceholderText("e.g. firefox or title:*YouTube*") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "" } });
+    expect((screen.getByRole("button", { name: "Create layout" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

@@ -77,6 +77,13 @@ export type Widget = {
   empty_state?: MediaBrowserEmptyState | null;
 };
 
+export type FocusedAppInfo = {
+  app_id?: string | null;
+  wm_class?: string | null;
+  title?: string | null;
+  is_browser: boolean;
+};
+
 export type ServerLayout = {
   type: "layout";
   app: string;
@@ -108,6 +115,10 @@ export type ServerLayout = {
   /** Non-null when the daemon failed to load layouts; the client renders this
    * in place of the grid until the on-disk config is fixed. */
   error?: string | null;
+  /** The currently focused app's identity, populated when the daemon has a
+   * focus backend. ``null`` before the first focus event. The editor's
+   * new-layout creation flow (#104) uses this to prefill match tokens. */
+  focused_app?: FocusedAppInfo | null;
 };
 
 export type ServerState = { type: "state"; locked: boolean };

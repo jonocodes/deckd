@@ -7,6 +7,29 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .layouts import Icon
 
 
+class FocusedAppInfo(BaseModel):
+    """The daemon's best-known identity of the currently focused application.
+
+    Carries the fields the editor's new-layout creation flow (#104) needs to
+    prefill ``match`` tokens for the detect-and-offer prompt and the
+    browser-vs-site branch. None when the daemon has not yet seen a focus
+    event (headless, start-up race).
+
+    ``app_id`` and ``wm_class`` are the desktop-identity tokens the layout
+    matcher compares against ``match`` entries. ``title`` is the raw window
+    title. ``is_browser`` gates the two-prefill browser branch — its value
+    is the daemon's best-effort substring match against a maintained browser
+    marker list (:func:`deckd.platform.AppInfo.is_browser`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    app_id: str | None = None
+    wm_class: str | None = None
+    title: str | None = None
+    is_browser: bool = False
+
+
 class LayoutMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -37,6 +60,12 @@ class LayoutMessage(BaseModel):
     # message in place of the widget grid; the daemon keeps the last-good
     # layouts live so a fix on disk restores service without a restart.
     error: str | None = None
+    # The currently focused app's identity, populated when the daemon has a
+    # focus backend (never in headless mode). ``None`` before the first focus
+    # event arrives. The editor's new-layout creation flow (#104) uses this to
+    # prefill ``match`` tokens for the detect-and-offer prompt and the
+    # browser-vs-site branch.
+    focused_app: FocusedAppInfo | None = None
 
 
 class StateMessage(BaseModel):

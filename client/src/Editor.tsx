@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, Save, X } from "lucide-react";
-import type { ServerLayout, Widget } from "./protocol";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, Plus, Save, X } from "lucide-react";
+import type { FocusedAppInfo, ServerLayout, Widget } from "./protocol";
 import { EDITOR_VIEW_ID } from "./protocol";
 import type { OverflowMode } from "./reflow";
 import { EditorCanvas } from "./EditorCanvas";
@@ -42,6 +42,66 @@ interface EditorProps {
   mockLayouts?: LayoutEntry[];
 }
 
+type CreationFormKind = "detect" | "browser" | "manual";
+
+interface CreationFormState {
+  kind: CreationFormKind;
+  match: string;
+  displayName: string;
+  /** The second prefilled option for the browser branch. */
+  altMatch?: string;
+  altDisplayName?: string;
+  label: string;
+}
+
+const NEW_LAYOUT_SENTINEL = "__new__";
+
+/** Derive a display name from a match token: title-prefix tokens get the
+ * window title part; plain identity tokens are used as-is. */
+function displayNameFromMatch(match: string): string {
+  if (match.startsWith("title:")) {
+    const pattern = match.slice("title:".length);
+    return pattern.replace(/^\*|\*$/g, "").trim() || match;
+  }
+  return match;
+}
+
+/** Build a creation-form state for an automatic detect-and-offer prompt
+ * based on the focused app info. Returns null when there is nothing to
+ * prefill (no app identity available). */
+function buildCreationForm(
+  focusedApp: FocusedAppInfo | null | undefined,
+): CreationFormState | null {
+  if (!focusedApp) return null;
+  const identity = focusedApp.wm_class || focusedApp.app_id;
+  if (!identity) return null;
+
+  if (focusedApp.is_browser) {
+    const browserName = identity;
+    const browserDisplay = displayNameFromMatch(browserName);
+    const titleToken = focusedApp.title
+      ? `title:*${focusedApp.title}*`
+      : "title:*";
+    const titleDisplay = focusedApp.title || "this site";
+
+    return {
+      kind: "browser",
+      match: browserName,
+      displayName: browserDisplay,
+      label: `No layout for ${browserDisplay} yet — create one?`,
+      altMatch: titleToken,
+      altDisplayName: titleDisplay,
+    };
+  }
+
+  return {
+    kind: "detect",
+    match: identity,
+    displayName: identity,
+    label: `No layout for ${identity} yet — create one?`,
+  };
+}
+
 export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: EditorProps) {
   const initialSelectedId = activeLayout?.app ?? (mockLayouts ? (mockLayouts.find((l) => l.id !== EDITOR_VIEW_ID)?.id ?? mockLayouts[0]?.id ?? null) : null);
   const [layouts, setLayouts] = useState<LayoutEntry[]>(mockLayouts ?? []);
@@ -54,26 +114,46 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
   const [editOverflow, setEditOverflow] = useState<OverflowMode>("shrink-to-fit");
   const initialisedRef = useRef(false);
 
-  // Initialise editable state from the active layout when it first arrives.
+  // New-layout creation state (#104).
+  const [draft, setDraft] = useState<{ match: string[]; displayName: string }>({ match: [], displayName: "" });
+
+  // Detect-and-offer: when the editor opens and the resolved layout is
+  // "default" (no real match), pre-seed the creation form from props.
+  // Lazy initializer so it runs exactly once during the first render,
+  // before the widget-initialization effect fires.
+  const [creationForm, setCreationForm] = useState<CreationFormState | null>(() => {
+    if (!activeLayout) return null;
+    if (activeLayout.app !== "default") return null;
+    return buildCreationForm(activeLayout.focused_app ?? null);
+  });
+  const [creationMatchInput, setCreationMatchInput] = useState(() => creationForm?.match ?? "");
+  const [creationDisplayNameInput, setCreationDisplayNameInput] = useState(() => creationForm?.displayName ?? "");
+
+  const isNewLayout = selectedId === NEW_LAYOUT_SENTINEL;
+
+  // Initialise editable state from the active layout when it first arrives
+  // and no creation prompt is showing.
   useEffect(() => {
     if (initialisedRef.current) return;
+    if (creationForm) return;
     if (!activeLayout || !activeLayout.widgets) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditWidgets(deepCloneWidgets(activeLayout.widgets));
     setEditOverflow((activeLayout.overflow as OverflowMode) ?? "shrink-to-fit");
     initialisedRef.current = true;
-  }, [activeLayout]);
+  }, [activeLayout, creationForm]);
 
   // Re-init when the user switches layouts via the picker.
   useEffect(() => {
-    if (!selectedId) return;
+    if (creationForm) return;
+    if (!selectedId || isNewLayout) return;
     const picked = layouts.find((l) => l.id === selectedId);
     if (!picked) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditWidgets(deepCloneWidgets(picked.widgets));
     setEditOverflow((picked.overflow as OverflowMode) ?? "shrink-to-fit");
     setSaveStatus("idle");
-  }, [selectedId, layouts]);
+  }, [selectedId, layouts, isNewLayout, creationForm]);
 
   useEffect(() => {
     if (mockLayouts) return;
@@ -105,9 +185,56 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setSelectedId(id);
     setPickerOpen(false);
     setSaveStatus("idle");
+    setCreationForm(null);
   }, []);
 
   const handleSave = useCallback(async () => {
+    if (isNewLayout) {
+      if (!draft.match.length) return;
+      setSaveStatus("saving");
+      try {
+        const base = resolveBaseUrl();
+        const res = await fetch(`${base}/layouts`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            match: draft.match,
+            display_name: draft.displayName || undefined,
+            widgets: editWidgets,
+            overflow: editOverflow,
+          }),
+        });
+        if (res.ok) {
+          const data = (await res.json()) as { ok: boolean; layout?: { id: string; match: string[]; display_name?: string | null; widgets: Widget[]; overflow?: string | null } };
+          if (data.ok && data.layout) {
+            setSaveStatus("saved");
+            setLayouts((prev) => {
+              const entry: LayoutEntry = {
+                id: data.layout!.id,
+                match: data.layout!.match,
+                display_name: data.layout!.display_name,
+                widgets: data.layout!.widgets,
+                overflow: data.layout!.overflow,
+              };
+              return [...prev, entry];
+            });
+            setSelectedId(data.layout.id);
+            setDraft({ match: [], displayName: "" });
+            setTimeout(() => setSaveStatus("idle"), 2000);
+          } else {
+            setSaveStatus("error");
+          }
+        } else {
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          console.error("create layout failed:", res.status, body.error || "");
+          setSaveStatus("error");
+        }
+      } catch {
+        setSaveStatus("error");
+      }
+      return;
+    }
+
     if (!selectedId) return;
     setSaveStatus("saving");
     try {
@@ -133,12 +260,51 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     } catch {
       setSaveStatus("error");
     }
-  }, [selectedId, editWidgets, editOverflow]);
+  }, [isNewLayout, selectedId, draft, editWidgets, editOverflow]);
 
   const handleExit = useCallback(() => {
+    if (isNewLayout) {
+      if (!window.confirm("Abandon this new layout? Nothing is saved yet.")) {
+        return;
+      }
+      setSelectedId(null);
+      setDraft({ match: [], displayName: "" });
+      setCreationForm(null);
+      setEditWidgets([]);
+    }
     send({ type: "clear_view" });
     onExit();
-  }, [send, onExit]);
+  }, [send, onExit, isNewLayout]);
+
+  // Open the manual "new layout" creation form from the picker.
+  const handleNewLayoutClick = useCallback(() => {
+    setPickerOpen(false);
+    setCreationForm({
+      kind: "manual",
+      match: "",
+      displayName: "",
+      label: "New layout",
+    });
+    setCreationMatchInput("");
+    setCreationDisplayNameInput("");
+  }, []);
+
+  // Confirm creation: enter new-layout editing mode with the entered tokens.
+  const handleCreateConfirm = useCallback(() => {
+    const match = creationMatchInput.trim();
+    if (!match) return;
+    setDraft({ match: [match], displayName: creationDisplayNameInput.trim() || match });
+    setSelectedId(NEW_LAYOUT_SENTINEL);
+    setEditWidgets([]);
+    setEditOverflow("shrink-to-fit");
+    setCreationForm(null);
+    setSaveStatus("idle");
+    initialisedRef.current = true;
+  }, [creationMatchInput, creationDisplayNameInput]);
+
+  const handleCreationCancel = useCallback(() => {
+    setCreationForm(null);
+  }, []);
 
   const handleReorder = useCallback((from: number, to: number) => {
     setEditWidgets((prev) => {
@@ -166,6 +332,36 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
 
   const widgetCount = editWidgets.length;
 
+  // The label shown in the picker trigger.
+  const pickerLabel = useMemo(() => {
+    if (isNewLayout) {
+      return draft.displayName || draft.match[0] || "New layout";
+    }
+    if (selectedLayout) {
+      return selectedLayout.display_name?.trim() || selectedLayout.id;
+    }
+    return "Select layout";
+  }, [isNewLayout, selectedLayout, draft]);
+
+  // The metadata row data for the canvas header.
+  const canvasMeta = useMemo(() => {
+    if (isNewLayout) {
+      return {
+        app: draft.displayName || draft.match[0] || "New layout",
+        match: `match: ${draft.match.join(", ") || "(none)"}`,
+      };
+    }
+    if (selectedLayout) {
+      return {
+        app: selectedLayout.display_name?.trim() || selectedLayout.id,
+        match: `match: ${selectedLayout.match.join(", ")}`,
+      };
+    }
+    return null;
+  }, [isNewLayout, selectedLayout, draft]);
+
+  const canSave = isNewLayout ? draft.match.length > 0 : !!selectedId;
+
   return (
     <div className="editor" role="region" aria-label="layout editor">
       <header className="editor-header">
@@ -177,7 +373,9 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
           >
             <X size={18} />
           </button>
-          <h2 className="editor-title">Edit layout</h2>
+          <h2 className="editor-title">
+            {isNewLayout ? "New layout" : "Edit layout"}
+          </h2>
         </div>
         <div className="editor-header-right">
           <div className="editor-picker">
@@ -188,11 +386,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
               aria-expanded={pickerOpen}
               onClick={() => setPickerOpen((v) => !v)}
             >
-              <span className="editor-picker-label">
-                {selectedLayout
-                  ? selectedLayout.display_name?.trim() || selectedLayout.id
-                  : "Select layout"}
-              </span>
+              <span className="editor-picker-label">{pickerLabel}</span>
               <ChevronDown size={14} />
             </button>
             {pickerOpen && (
@@ -212,13 +406,22 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
                     {l.id === selectedId ? <Check size={14} /> : null}
                   </li>
                 ))}
+                <li className="editor-picker-separator" role="separator" />
+                <li
+                  role="option"
+                  className="editor-picker-option editor-picker-option-new"
+                  onClick={handleNewLayoutClick}
+                >
+                  <Plus size={14} />
+                  <span>New layout</span>
+                </li>
               </ul>
             )}
           </div>
           <button
             className="editor-save-btn"
             aria-label="save layout"
-            disabled={saveStatus === "saving" || !selectedId}
+            disabled={saveStatus === "saving" || !canSave}
             onClick={handleSave}
           >
             <Save size={16} />
@@ -240,19 +443,27 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
           <p className="editor-pane-placeholder">Widget palette — coming soon</p>
         </aside>
         <section className="editor-pane editor-canvas" aria-label="live grid canvas">
-          {selectedLayout ? (
+          {creationForm ? (
+            <CreationFormView
+              form={creationForm}
+              matchInput={creationMatchInput}
+              displayNameInput={creationDisplayNameInput}
+              onMatchChange={setCreationMatchInput}
+              onDisplayNameChange={setCreationDisplayNameInput}
+              onConfirm={handleCreateConfirm}
+              onCancel={handleCreationCancel}
+            />
+          ) : selectedLayout || isNewLayout ? (
             <>
-              <div className="editor-canvas-meta">
-                <span className="editor-canvas-app">
-                  {selectedLayout.display_name?.trim() || selectedLayout.id}
-                </span>
-                <span className="editor-canvas-match">
-                  match: {selectedLayout.match.join(", ")}
-                </span>
-                <span className="editor-canvas-widget-count">
-                  {widgetCount} widget{widgetCount !== 1 ? "s" : ""}
-                </span>
-              </div>
+              {canvasMeta && (
+                <div className="editor-canvas-meta">
+                  <span className="editor-canvas-app">{canvasMeta.app}</span>
+                  <span className="editor-canvas-match">{canvasMeta.match}</span>
+                  <span className="editor-canvas-widget-count">
+                    {widgetCount} widget{widgetCount !== 1 ? "s" : ""}
+                  </span>
+                </div>
+              )}
               <EditorCanvas
                 widgets={editWidgets}
                 overflow={editOverflow}
@@ -269,6 +480,96 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
           <h3 className="editor-pane-title">Properties</h3>
           <p className="editor-pane-placeholder">Properties panel — coming soon</p>
         </aside>
+      </div>
+    </div>
+  );
+}
+
+/** The inline creation form shown in the canvas area for detect-and-offer
+ * and manual new-layout entry. */
+function CreationFormView({
+  form,
+  matchInput,
+  displayNameInput,
+  onMatchChange,
+  onDisplayNameChange,
+  onConfirm,
+  onCancel,
+}: {
+  form: CreationFormState;
+  matchInput: string;
+  displayNameInput: string;
+  onMatchChange: (v: string) => void;
+  onDisplayNameChange: (v: string) => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const canConfirm = matchInput.trim().length > 0;
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && canConfirm) {
+      e.preventDefault();
+      onConfirm();
+    }
+    if (e.key === "Escape") {
+      onCancel();
+    }
+  };
+
+  return (
+    <div className="editor-creation-form" onKeyDown={handleKeyDown}>
+      <p className="editor-creation-prompt">{form.label}</p>
+      <label className="editor-creation-field">
+        <span className="editor-creation-field-label">Match token</span>
+        <input
+          className="editor-creation-input"
+          type="text"
+          value={matchInput}
+          onChange={(e) => onMatchChange(e.target.value)}
+          placeholder="e.g. firefox or title:*YouTube*"
+          autoFocus
+        />
+      </label>
+      <label className="editor-creation-field">
+        <span className="editor-creation-field-label">Display name</span>
+        <input
+          className="editor-creation-input"
+          type="text"
+          value={displayNameInput}
+          onChange={(e) => onDisplayNameChange(e.target.value)}
+          placeholder="(optional, derived from match)"
+        />
+      </label>
+      {form.kind === "browser" && form.altMatch && (
+        <div className="editor-creation-alt">
+          <span className="editor-creation-alt-label">or</span>
+          <button
+            type="button"
+            className="editor-creation-alt-btn"
+            onClick={() => {
+              onMatchChange(form.altMatch!);
+              onDisplayNameChange(form.altDisplayName!);
+            }}
+          >
+            Layout for {form.altDisplayName}
+            <code className="editor-creation-alt-code">{form.altMatch}</code>
+          </button>
+        </div>
+      )}
+      <div className="editor-creation-actions">
+        <button
+          className="editor-creation-btn editor-creation-btn-primary"
+          onClick={onConfirm}
+          disabled={!canConfirm}
+        >
+          Create layout
+        </button>
+        <button
+          className="editor-creation-btn editor-creation-btn-cancel"
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );
