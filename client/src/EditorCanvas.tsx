@@ -28,9 +28,11 @@ const MAX_SPAN = 4;
 type Props = {
   widgets: Widget[];
   overflow: OverflowMode;
+  selectedIndex: number | null;
   onReorder: (from: number, to: number) => void;
   onWidgetChange: (index: number, widget: Widget) => void;
   onOverflowChange: (mode: OverflowMode) => void;
+  onSelectWidget: (index: number | null) => void;
   cellSize?: number;
 };
 
@@ -108,11 +110,15 @@ function SortableCell({
   widget,
   index,
   colSpan,
+  selected,
+  onSelect,
   onWidgetChange,
 }: {
   widget: Widget;
   index: number;
   colSpan: number;
+  selected: boolean;
+  onSelect?: (index: number | null) => void;
   onWidgetChange?: (idx: number, w: Widget) => void;
 }) {
   const {
@@ -151,12 +157,21 @@ function SortableCell({
     [widget, index, onWidgetChange],
   );
 
+  const handleSelect = useCallback(
+    (e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest("button")) return;
+      onSelect?.(index);
+    },
+    [index, onSelect],
+  );
+
   return (
     <div
       ref={setNodeRef}
-      className={`editor-canvas-cell${widget.kind === "blank" ? " editor-canvas-cell-blank" : ""}${isUnsupported ? " editor-canvas-cell-unsupported" : ""}`}
+      className={`editor-canvas-cell${widget.kind === "blank" ? " editor-canvas-cell-blank" : ""}${isUnsupported ? " editor-canvas-cell-unsupported" : ""}${selected ? " editor-canvas-cell-selected" : ""}`}
       style={style}
       data-widget-id={widget.id}
+      onClick={handleSelect}
     >
       <button
         className="editor-canvas-cell-drag"
@@ -228,9 +243,11 @@ const PREVIEW_WIDTHS = [
 export function EditorCanvas({
   widgets,
   overflow,
+  selectedIndex,
   onReorder,
   onWidgetChange,
   onOverflowChange,
+  onSelectWidget,
   cellSize = CELL_SIZE_DEFAULT,
 }: Props) {
   const [gridRef, size] = useMeasuredSize();
@@ -251,8 +268,11 @@ export function EditorCanvas({
       const newIndex = widgets.findIndex((w) => w.id === over.id);
       if (oldIndex === -1 || newIndex === -1) return;
       onReorder(oldIndex, newIndex);
+      if (selectedIndex === oldIndex) {
+        onSelectWidget(newIndex);
+      }
     },
-    [widgets, onReorder],
+    [widgets, onReorder, selectedIndex, onSelectWidget],
   );
 
   const totalUnits = useMemo(
@@ -282,6 +302,14 @@ export function EditorCanvas({
   };
 
   const previewActive = previewWidth > 0;
+
+  const handleGridClick = useCallback(
+    (e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest('[data-widget-id]')) return;
+      onSelectWidget(null);
+    },
+    [onSelectWidget],
+  );
 
   return (
     <div className="editor-canvas-content">
@@ -331,6 +359,7 @@ export function EditorCanvas({
         ref={gridRef}
         className={`editor-canvas-grid${previewActive ? " editor-canvas-grid-preview" : ""}`}
         style={previewActive ? { maxWidth: previewWidth } : undefined}
+        onClick={handleGridClick}
       >
         {widgets.length === 0 ? (
           <div className="editor-canvas-grid-empty">
@@ -353,6 +382,8 @@ export function EditorCanvas({
                     widget={w}
                     index={i}
                     colSpan={cols}
+                    selected={selectedIndex === i}
+                    onSelect={onSelectWidget}
                     onWidgetChange={onWidgetChange}
                   />
                 ))}

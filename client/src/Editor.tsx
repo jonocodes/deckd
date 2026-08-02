@@ -1,14 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Plus, Save, X } from "lucide-react";
-import type { FocusedAppInfo, ServerLayout, Widget } from "./protocol";
+import type { FocusedAppInfo, ServerLayout, Widget, Icon } from "./protocol";
 import { EDITOR_VIEW_ID } from "./protocol";
 import type { OverflowMode } from "./reflow";
 import { EditorCanvas } from "./EditorCanvas";
+import { PropertiesPanel } from "./PropertiesPanel";
 
 type LayoutEntry = {
   id: string;
   match: string[];
   display_name?: string | null;
+  theme?: string | null;
+  icon?: Icon | null;
+  jogstrip?: boolean;
   widgets: Widget[];
   overflow?: string | null;
 };
@@ -113,6 +117,16 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
   const [editWidgets, setEditWidgets] = useState<Widget[]>([]);
   const [editOverflow, setEditOverflow] = useState<OverflowMode>("shrink-to-fit");
   const initialisedRef = useRef(false);
+  const pickerSkipRef = useRef(false);
+
+  // Editable layout-level presentation fields.
+  const [editDisplayName, setEditDisplayName] = useState<string>("");
+  const [editTheme, setEditTheme] = useState<string>("");
+  const [editIcon, setEditIcon] = useState<Icon | null>(null);
+  const [editJogstrip, setEditJogstrip] = useState<boolean>(true);
+
+  // Widget selection: index into editWidgets, or null for layout-level.
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   // New-layout creation state (#104).
   const [draft, setDraft] = useState<{ match: string[]; displayName: string }>({ match: [], displayName: "" });
@@ -140,18 +154,35 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditWidgets(deepCloneWidgets(activeLayout.widgets));
     setEditOverflow((activeLayout.overflow as OverflowMode) ?? "shrink-to-fit");
+    setEditDisplayName(activeLayout.display_name ?? "");
+    setEditTheme(activeLayout.theme ?? "");
+    setEditIcon(activeLayout.icon ?? null);
+    setEditJogstrip(activeLayout.jogstrip_enabled);
     initialisedRef.current = true;
+    pickerSkipRef.current = true;
   }, [activeLayout, creationForm]);
 
   // Re-init when the user switches layouts via the picker.
+  // The first fire is skipped when activeLayout already supplied data
+  // (first effect set pickerSkipRef = true). Subsequent fires when the
+  // user picks a different layout are handled normally.
   useEffect(() => {
     if (creationForm) return;
     if (!selectedId || isNewLayout) return;
+    if (pickerSkipRef.current) {
+      pickerSkipRef.current = false;
+      return;
+    }
     const picked = layouts.find((l) => l.id === selectedId);
     if (!picked) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditWidgets(deepCloneWidgets(picked.widgets));
     setEditOverflow((picked.overflow as OverflowMode) ?? "shrink-to-fit");
+    setEditDisplayName(picked.display_name ?? "");
+    setEditTheme((picked as { theme?: string | null }).theme ?? "");
+    setEditIcon((picked as { icon?: Icon | null }).icon ?? null);
+    setEditJogstrip((picked as { jogstrip?: boolean }).jogstrip ?? true);
+    setSelectedIndex(null);
     setSaveStatus("idle");
   }, [selectedId, layouts, isNewLayout, creationForm]);
 
@@ -239,16 +270,24 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setSaveStatus("saving");
     try {
       const base = resolveBaseUrl();
+      const body: Record<string, unknown> = {
+        id: selectedId,
+        widgets: editWidgets,
+        overflow: editOverflow,
+      };
+      if (editDisplayName) body.display_name = editDisplayName;
+      else body.display_name = null;
+      if (editTheme) body.theme = editTheme;
+      else body.theme = null;
+      if (editIcon) body.icon = editIcon;
+      else body.icon = null;
+      body.jogstrip = editJogstrip;
       const res = await fetch(
         `${base}/layouts/${encodeURIComponent(selectedId)}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            id: selectedId,
-            widgets: editWidgets,
-            overflow: editOverflow,
-          }),
+          body: JSON.stringify(body),
         },
       );
       if (res.ok) {
@@ -260,7 +299,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     } catch {
       setSaveStatus("error");
     }
-  }, [isNewLayout, selectedId, draft, editWidgets, editOverflow]);
+  }, [isNewLayout, selectedId, draft, editWidgets, editOverflow, editDisplayName, editTheme, editIcon, editJogstrip]);
 
   const handleExit = useCallback(() => {
     if (isNewLayout) {
@@ -321,12 +360,40 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setSaveStatus("idle");
   }, []);
 
+  const handleLayoutFieldChange = useCallback((field: string, value: unknown) => {
+    setSaveStatus("idle");
+    switch (field) {
+      case "display_name":
+        setEditDisplayName(String(value ?? ""));
+        break;
+      case "theme":
+        setEditTheme(String(value ?? ""));
+        break;
+      case "icon":
+        setEditIcon(value as Icon | null);
+        break;
+      case "jogstrip":
+        setEditJogstrip(Boolean(value));
+        break;
+    }
+  }, []);
+
+  const handleSelectWidget = useCallback((index: number | null) => {
+    setSelectedIndex(index);
+  }, []);
+
   const handleWidgetChange = useCallback((index: number, widget: Widget) => {
     setEditWidgets((prev) => {
       const next = [...prev];
       next[index] = widget;
       return next;
     });
+    setSaveStatus("idle");
+  }, []);
+
+  const handleDeleteWidget = useCallback((index: number) => {
+    setEditWidgets((prev) => prev.filter((_, i) => i !== index));
+    setSelectedIndex(null);
     setSaveStatus("idle");
   }, []);
 
@@ -467,9 +534,11 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
               <EditorCanvas
                 widgets={editWidgets}
                 overflow={editOverflow}
+                selectedIndex={selectedIndex}
                 onReorder={handleReorder}
                 onWidgetChange={handleWidgetChange}
                 onOverflowChange={handleOverflowChange}
+                onSelectWidget={handleSelectWidget}
               />
             </>
           ) : (
@@ -477,8 +546,25 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
           )}
         </section>
         <aside className="editor-pane editor-properties" role="complementary" aria-label="properties panel">
-          <h3 className="editor-pane-title">Properties</h3>
-          <p className="editor-pane-placeholder">Properties panel — coming soon</p>
+          <PropertiesPanel
+            widget={selectedIndex != null ? editWidgets[selectedIndex] ?? null : null}
+            layoutFields={{
+              display_name: editDisplayName || null,
+              theme: editTheme || null,
+              icon: editIcon,
+              jogstrip: editJogstrip,
+              overflow: editOverflow,
+            }}
+            onWidgetChange={(w) => {
+              if (selectedIndex != null) handleWidgetChange(selectedIndex, w);
+            }}
+            onLayoutFieldChange={handleLayoutFieldChange}
+            onDeleteWidget={
+              selectedIndex != null
+                ? () => handleDeleteWidget(selectedIndex)
+                : undefined
+            }
+          />
         </aside>
       </div>
     </div>

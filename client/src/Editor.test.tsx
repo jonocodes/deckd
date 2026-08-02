@@ -91,7 +91,7 @@ describe("Editor — layout editor chrome view", () => {
     expect(screen.getByRole("complementary", { name: "widget palette" })).toBeTruthy();
     expect(screen.getByRole("complementary", { name: "properties panel" })).toBeTruthy();
     expect(screen.getByText("Palette")).toBeTruthy();
-    expect(screen.getByText("Properties")).toBeTruthy();
+    expect(screen.getByText("Layout")).toBeTruthy();
   });
 
   it("pre-selects the first non-editor layout", () => {
@@ -121,7 +121,7 @@ describe("Editor — layout editor chrome view", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     const listbox = screen.getByRole("listbox");
     expect(listbox).toBeTruthy();
-    const options = screen.getAllByRole("option");
+    const options = listbox.querySelectorAll('[role="option"]');
     expect(options).toHaveLength(5);
     fireEvent.click(trigger);
     await waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
@@ -455,5 +455,233 @@ describe("Editor — layout editor chrome view", () => {
     const input = screen.getByPlaceholderText("e.g. firefox or title:*YouTube*") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "" } });
     expect((screen.getByRole("button", { name: "Create layout" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  // ---- properties panel tests (issue #103) ----
+
+  it("shows layout-level fields in the properties panel when no widget is selected", () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          display_name: "Firefox",
+          theme: "#ff7139",
+          jogstrip_enabled: true,
+          widgets: [{ id: "btn-1", kind: "button" as const, label: "Test" }],
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+    expect(screen.getByText("Layout")).toBeTruthy();
+    expect(screen.getByText("Display name")).toBeTruthy();
+  });
+
+  it("shows widget properties when a canvas cell is clicked", () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          display_name: "Firefox",
+          jogstrip_enabled: true,
+          widgets: [
+            { id: "btn-1", kind: "button" as const, label: "Test button" },
+          ],
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+    const cell = document.querySelector('[data-widget-id="btn-1"]');
+    expect(cell).toBeTruthy();
+    fireEvent.click(cell!);
+    expect(screen.getByText("Button")).toBeTruthy();
+    expect(screen.getByText("ID")).toBeTruthy();
+    expect(screen.getByDisplayValue("btn-1")).toBeTruthy();
+    expect(screen.getByDisplayValue("Test button")).toBeTruthy();
+  });
+
+  it("shows meter fields when a meter widget is selected", () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          jogstrip_enabled: true,
+          widgets: [
+            {
+              id: "meter-1",
+              kind: "meter" as const,
+              label: "CPU",
+              source: "cpu_percent",
+              min: 0,
+              max: 100,
+            },
+          ],
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+    const cell = document.querySelector('[data-widget-id="meter-1"]');
+    fireEvent.click(cell!);
+    expect(screen.getAllByText("Meter").length).toBeGreaterThanOrEqual(1);
+    const sources = screen.getAllByText("Source");
+    expect(sources.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByDisplayValue("cpu_percent")).toBeTruthy();
+  });
+
+  it("shows unsupported placeholder for media widgets", () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          jogstrip_enabled: true,
+          widgets: [
+            { id: "media-1", kind: "media" as const, label: "VLC" },
+          ],
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+    const cell = document.querySelector('[data-widget-id="media-1"]');
+    fireEvent.click(cell!);
+    expect(screen.getByText("Reorder / delete only")).toBeTruthy();
+  });
+
+  it("selected cell has highlight class", () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          jogstrip_enabled: true,
+          widgets: [
+            { id: "btn-1", kind: "button" as const, label: "Test" },
+          ],
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+    const cell = document.querySelector('[data-widget-id="btn-1"]');
+    fireEvent.click(cell!);
+    expect(cell?.className).toContain("editor-canvas-cell-selected");
+  });
+
+  it("save includes layout-level presentation fields", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          display_name: "Firefox",
+          theme: "#ff7139",
+          icon: { source: "lucide", name: "globe" },
+          jogstrip_enabled: true,
+          widgets: [{ id: "new-tab", kind: "button" as const, label: "New tab" }],
+          overflow: "shrink-to-fit",
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+
+    const saveBtn = screen.getByRole("button", { name: "save layout" });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
+    expect(body.display_name).toBe("Firefox");
+    expect(body.theme).toBe("#ff7139");
+    expect(body.jogstrip).toBe(true);
+    expect(body.icon).toEqual({ source: "lucide", name: "globe" });
+
+    vi.unstubAllGlobals();
+  });
+
+  it("save preserves unrendered widget fields (opaque pass-through)", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          jogstrip_enabled: true,
+          widgets: [
+            {
+              id: "btn-1",
+              kind: "button" as const,
+              label: "Macro btn",
+              macro: { steps: [{ type: "key", value: "ctrl+a" }], continue_on_error: false },
+            },
+          ],
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+
+    const saveBtn = screen.getByRole("button", { name: "save layout" });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
+    expect(body.widgets[0].macro).toEqual({
+      steps: [{ type: "key", value: "ctrl+a" }],
+      continue_on_error: false,
+    });
+    expect(body.widgets[0].label).toBe("Macro btn");
+
+    vi.unstubAllGlobals();
+  });
+
+  it("clicking the canvas background deselects widget", () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          jogstrip_enabled: true,
+          widgets: [
+            { id: "btn-1", kind: "button" as const, label: "Test" },
+          ],
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+    // First select the widget
+    const cell = document.querySelector('[data-widget-id="btn-1"]');
+    fireEvent.click(cell!);
+    expect(screen.getByText("Button")).toBeTruthy();
+
+    // Click the grid container outside the cell
+    const grid = document.querySelector(".editor-canvas-grid");
+    fireEvent.click(grid!);
+    expect(screen.getByText("Layout")).toBeTruthy();
   });
 });

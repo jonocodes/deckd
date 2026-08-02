@@ -2059,6 +2059,229 @@ button:focus-visible {
   font-style: italic;
 }
 
+/* ---------------------------------------------------------------------------
+ * Properties panel — field editors (#103)
+ * ------------------------------------------------------------------------- */
+
+.prop-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prop-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px solid #21262d;
+  margin-top: 4px;
+}
+
+.prop-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.prop-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #8b949e;
+}
+
+.prop-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prop-field-label {
+  font-size: 11px;
+  color: #8b949e;
+}
+
+.prop-field-input {
+  padding: 6px 8px;
+  font-size: 13px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #e6e9ef;
+  outline: none;
+}
+
+.prop-field-input:focus {
+  border-color: #58a6ff;
+}
+
+.prop-field-input:read-only {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.prop-field-input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.prop-field-input::-webkit-inner-spin-button,
+.prop-field-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+select.prop-field-input {
+  appearance: none;
+  cursor: pointer;
+}
+
+.prop-field-check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.prop-field-check .prop-field-label {
+  flex: 1;
+}
+
+.prop-field-note {
+  margin: 0;
+  font-size: 12px;
+  color: #484f58;
+  font-style: italic;
+}
+
+.prop-field-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #8b949e;
+  background: #21262d;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.prop-field-btn:hover {
+  color: #e6e9ef;
+  background: #30363d;
+}
+
+.prop-field-btn-remove {
+  color: #da3633;
+  border-color: #da3633;
+  background: transparent;
+}
+
+.prop-field-btn-remove:hover {
+  background: rgba(218, 54, 51, 0.15);
+}
+
+.prop-field-btn-add {
+  color: #3fb950;
+  border-color: #3fb950;
+  background: transparent;
+}
+
+.prop-field-btn-add:hover {
+  background: rgba(63, 185, 80, 0.15);
+}
+
+.prop-field-btn-delete {
+  width: 100%;
+  justify-content: center;
+  color: #da3633;
+  border-color: #da3633;
+  background: transparent;
+  margin-top: 4px;
+}
+
+.prop-field-btn-delete:hover {
+  background: rgba(218, 54, 51, 0.15);
+}
+
+.prop-field-icon-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+}
+
+.prop-field-icon-glyph {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.prop-field-icon-name {
+  font-size: 12px;
+  font-family: monospace;
+  color: #8b949e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.prop-field-size-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prop-field-size-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+
+.prop-field-size-sep {
+  font-size: 12px;
+  color: #484f58;
+}
+
+.prop-field-input-num {
+  width: 100%;
+}
+
+.prop-field-size-label {
+  font-size: 11px;
+  color: #8b949e;
+}
+
+.prop-field-metric-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.prop-field-metric-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+
+.prop-field-metric-fields .prop-field-input {
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+/* Selected canvas cell highlight */
+.editor-canvas-cell-selected {
+  outline: 2px solid #58a6ff;
+  outline-offset: -2px;
+}
+
 .editor-canvas-content {
   display: flex;
   flex-direction: column;
