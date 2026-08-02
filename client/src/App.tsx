@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Settings as SettingsIcon, Globe as GlobeIcon } from "lucide-react";
+import { Pencil as PencilIcon, Settings as SettingsIcon, Globe as GlobeIcon } from "lucide-react";
 import { Music as MusicIcon, PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
@@ -28,14 +28,15 @@ import {
 } from "./settings-store";
 import type { CSSProperties } from "react";
 import { useWakeLock } from "./wake-lock";
-import { getDemoLayout, getDemoView, MEDIA_DEMO_STATES, MPRIS_DEMO_STATES } from "./demo";
+import { getDemoLayout, getDemoView, MEDIA_DEMO_STATES, MPRIS_DEMO_STATES, EDITOR_DEMO_LAYOUTS } from "./demo";
 import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
 import type { Icon as IconRef, ServerChromeMedia, ServerLayout } from "./protocol";
-import { MPRIS_VIEW_ID } from "./protocol";
+import { EDITOR_VIEW_ID, MPRIS_VIEW_ID } from "./protocol";
 import { isTypingTarget, onActivate } from "./a11y";
+import { Editor } from "./Editor";
 
-type View = "layout" | "trackpad" | "settings" | "mediabrowser";
+type View = "layout" | "trackpad" | "settings" | "mediabrowser" | "editor";
 type SocketStatus = "connecting" | "open" | "closed" | "unauthorized";
 
 /** Sentinel ids for the always-on chrome widgets. The daemon's pad / jog
@@ -197,6 +198,18 @@ export function App() {
       send({ type: "select_view", view: MPRIS_VIEW_ID });
     }
   }, [view, send]);
+  // Editor view toggle (issue #100): the edit button in the bottom chrome
+  // sends ``select_view: "editor"`` so the daemon pushes the editor layout;
+  // on close it sends ``clear_view`` to revert to the focused-app layout.
+  const toggleEditor = useCallback(() => {
+    if (view === "editor") {
+      setView("layout");
+      send({ type: "clear_view" });
+    } else {
+      setView("editor");
+      send({ type: "select_view", view: EDITOR_VIEW_ID });
+    }
+  }, [view, send]);
   // Trackpad / settings openers: kept named so the keyboard-shortcut
   // effect below can call them without duplicating the toggle logic.
   const openTrackpad = useCallback(
@@ -221,6 +234,7 @@ export function App() {
   const trackpadBtnRef = useRef<HTMLButtonElement | null>(null);
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const mediaBtnRef = useRef<HTMLButtonElement | null>(null);
+  const editorBtnRef = useRef<HTMLButtonElement | null>(null);
   // Remember the chrome button that opened the current view so a
   // window-level Escape (where ``e.target`` is the body, not a
   // button) can still hand focus back to the right place.
@@ -291,7 +305,7 @@ export function App() {
       if (e.key === "Escape" && view !== "layout") {
         e.preventDefault();
         setView("layout");
-        if (view === "mediabrowser") send({ type: "clear_view" });
+        if (view === "mediabrowser" || view === "editor") send({ type: "clear_view" });
         return;
       }
       if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -310,11 +324,16 @@ export function App() {
         viewOriginRef.current = settingsBtnRef.current;
         lastChromeFocus.current = settingsBtnRef.current;
         openSettings();
+      } else if (e.key === "4") {
+        e.preventDefault();
+        viewOriginRef.current = editorBtnRef.current;
+        lastChromeFocus.current = editorBtnRef.current;
+        toggleEditor();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [view, openTrackpad, openSettings, toggleMediaBrowser, send, status]);
+  }, [view, openTrackpad, openSettings, toggleMediaBrowser, toggleEditor, send, status]);
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
@@ -326,6 +345,7 @@ export function App() {
     if (view === "trackpad") return "Manual control";
     if (view === "mediabrowser") return "Media browser";
     if (view === "settings") return "Settings";
+    if (view === "editor") return "Layout editor";
     if (layout?.error) return "Layout error";
     if (layout) return layout.display_name?.trim() || layout.app || "deckd";
     return "deckd";
@@ -488,6 +508,13 @@ export function App() {
               showKeyHints={showKeyHints.enabled}
               onShowKeyHintsChange={showKeyHints.setEnabled}
             />
+          ) : view === "editor" ? (
+            <Editor
+              layout={layout}
+              send={send}
+              onExit={() => setView("layout")}
+              mockLayouts={isDemo ? EDITOR_DEMO_LAYOUTS : undefined}
+            />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">
               <span className="layout-error-title">Layout error</span>
@@ -513,7 +540,7 @@ export function App() {
             <div className="empty">waiting for daemon…</div>
           )}
         </main>
-        {jogstripEnabled && view !== "settings" && view !== "mediabrowser" && (
+        {jogstripEnabled && view !== "settings" && view !== "mediabrowser" && view !== "editor" && (
           <aside
             className="chrome-jogstrip"
             style={{ "--jog-width": jogWidth.width } as CSSProperties}
@@ -588,6 +615,25 @@ export function App() {
             <span className="chrome-btn-sr-status">
               {chromeMedia?.playing ? "now playing" : "idle"}
             </span>
+          </button>
+        </Tooltip>
+        <Tooltip ref={editorBtnRef} label="layout editor">
+          <button
+            className={`chrome-btn${view === "editor" ? " chrome-btn-active" : ""}`}
+            aria-label="layout editor"
+            aria-pressed={view === "editor"}
+            onPointerDown={() => {
+              viewOriginRef.current = editorBtnRef.current;
+              lastChromeFocus.current = editorBtnRef.current;
+              toggleEditor();
+            }}
+            onKeyDown={onActivate(() => {
+              viewOriginRef.current = editorBtnRef.current;
+              lastChromeFocus.current = editorBtnRef.current;
+              toggleEditor();
+            })}
+          >
+            <PencilIcon size={16} />
           </button>
         </Tooltip>
         <Tooltip ref={settingsBtnRef} label="settings">

@@ -93,6 +93,32 @@ describe("App — chrome media icon", () => {
     expect(button.className).not.toContain("chrome-btn-active");
   });
 
+  it("renders the editor button in the bottom chrome", () => {
+    render(<App />);
+    expect(screen.getByRole("button", { name: "layout editor" })).toBeTruthy();
+  });
+
+  it("sends select_view on editor button click and applies the active class", () => {
+    render(<App />);
+    const button = screen.getByRole("button", { name: "layout editor" });
+    expect(button.className).not.toContain("chrome-btn-active");
+    fireEvent.pointerDown(button);
+    expect(send).toHaveBeenCalledWith({ type: "select_view", view: "editor" });
+    expect(button.className).toContain("chrome-btn-active");
+  });
+
+  it("sends clear_view on a second editor button click and removes the active class", () => {
+    render(<App />);
+    const button = screen.getByRole("button", { name: "layout editor" });
+    fireEvent.pointerDown(button); // open
+    fireEvent.pointerDown(button); // close
+    expect(send.mock.calls.map((c) => c[0])).toEqual([
+      { type: "select_view", view: "editor" },
+      { type: "clear_view" },
+    ]);
+    expect(button.className).not.toContain("chrome-btn-active");
+  });
+
   it("renders the browser placeholder in place of the focused-app layout while open", () => {
     render(<App />);
     const button = screen.getByRole("button", { name: /media browser/i });
@@ -242,6 +268,7 @@ describe("App — chrome button tooltips", () => {
       // (issue #62, AC #3). A regex keeps the tooltip test
       // independent of that detail.
       { name: /media browser/i, tipId: "media browser" },
+      { name: "layout editor", tipId: "layout editor" },
       { name: "settings", tipId: "settings" },
     ];
     for (const c of cases) {
@@ -264,6 +291,7 @@ describe("App — chrome button tooltips", () => {
     const iconOnly = [
       screen.getByRole("button", { name: "manual control" }),
       screen.getByRole("button", { name: /media browser/i }),
+      screen.getByRole("button", { name: "layout editor" }),
       screen.getByRole("button", { name: "settings" }),
     ];
     for (const b of iconOnly) {
@@ -329,6 +357,14 @@ describe("App — chrome keyboard activation", () => {
     expect(send).toHaveBeenCalledWith({ type: "select_view", view: "mpris" });
   });
 
+  it("Enter activates the editor button and sends select_view", () => {
+    render(<App />);
+    const button = screen.getByRole("button", { name: "layout editor" });
+    fireEvent.keyDown(button, { key: "Enter" });
+    expect(button.className).toContain("chrome-btn-active");
+    expect(send).toHaveBeenCalledWith({ type: "select_view", view: "editor" });
+  });
+
   it("non-activation keys do not toggle the chrome view", () => {
     render(<App />);
     const button = screen.getByRole("button", { name: "settings" });
@@ -341,9 +377,11 @@ describe("App — chrome keyboard activation", () => {
     const manual = screen.getByRole("button", { name: "manual control" });
     const settings = screen.getByRole("button", { name: "settings" });
     const media = screen.getByRole("button", { name: /media browser/i });
+    const editor = screen.getByRole("button", { name: "layout editor" });
     expect(manual.getAttribute("aria-pressed")).toBe("false");
     expect(settings.getAttribute("aria-pressed")).toBe("false");
     expect(media.getAttribute("aria-pressed")).toBe("false");
+    expect(editor.getAttribute("aria-pressed")).toBe("false");
     fireEvent.keyDown(manual, { key: "Enter" });
     expect(manual.getAttribute("aria-pressed")).toBe("true");
   });
@@ -388,12 +426,28 @@ describe("App — keyboard shortcuts", () => {
     expect(screen.getByRole("button", { name: "settings" }).className).toContain("chrome-btn-active");
   });
 
+  it("pressing 4 opens the editor view and sends select_view", () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "4" });
+    expect(screen.getByRole("button", { name: "layout editor" }).className).toContain("chrome-btn-active");
+    expect(send).toHaveBeenCalledWith({ type: "select_view", view: "editor" });
+  });
+
   it("Escape returns to the layout view and clears the media browser", () => {
     render(<App />);
     fireEvent.keyDown(window, { key: "2" });
     expect(screen.getByRole("button", { name: /media browser/i }).className).toContain("chrome-btn-active");
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.getByRole("button", { name: /media browser/i }).className).not.toContain("chrome-btn-active");
+    expect(send.mock.calls.map((c) => c[0])).toContainEqual({ type: "clear_view" });
+  });
+
+  it("Escape clears the editor view and sends clear_view", () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "4" });
+    expect(screen.getByRole("button", { name: "layout editor" }).className).toContain("chrome-btn-active");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.getByRole("button", { name: "layout editor" }).className).not.toContain("chrome-btn-active");
     expect(send.mock.calls.map((c) => c[0])).toContainEqual({ type: "clear_view" });
   });
 
@@ -472,6 +526,16 @@ describe("App — focus restoration", () => {
     await new Promise((r) => setTimeout(r, 10));
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "settings" }));
   });
+
+  it("returns focus to the editor button after closing the editor view", async () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "4" });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "Escape" });
+    });
+    await new Promise((r) => setTimeout(r, 100));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "layout editor" }));
+  });
 });
 
 /* ---------------------------------------------------------------------
@@ -536,6 +600,14 @@ describe("App — screen-reader headings", () => {
     fireEvent.keyDown(window, { key: "2" });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
       "Media browser",
+    );
+  });
+
+  it("heading changes to Layout editor when the editor view opens", () => {
+    render(<App />);
+    fireEvent.keyDown(window, { key: "4" });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Layout editor",
     );
   });
 

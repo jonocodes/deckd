@@ -343,7 +343,7 @@ const DEMOS: Record<string, ServerLayout> = {
   macro: MACRO,
 };
 
-type DemoView = "layout" | "trackpad" | "settings" | "mediabrowser";
+type DemoView = "layout" | "trackpad" | "settings" | "mediabrowser" | "editor";
 
 // Demo names that open a chrome *view* (settings / trackpad) rather than a
 // bare layout. They render over a base fixture so the socket stays disabled
@@ -355,17 +355,19 @@ const DEMO_VIEWS: Record<string, DemoView> = {
   settings: "settings",
   trackpad: "trackpad",
   mpris: "mediabrowser",
+  editor: "editor",
 };
 const VIEW_DEMO_BASE = VLC;
 const VIEW_DEMO_BASE_FOR: Record<string, ServerLayout> = {
   mpris: MPRIS,
+  editor: FIREFOX,
 };
 
 /** The demo fixtures, keyed by name — for the gallery and Ladle stories. */
 export const DEMO_LAYOUTS = DEMOS;
 
 /** Names of the available demo pages, for the demo gallery selector — the
- * layout fixtures plus the settings / trackpad view demos. */
+ * layout fixtures plus the settings / trackpad / editor view demos. */
 export const DEMO_NAMES = [...Object.keys(DEMOS), ...Object.keys(DEMO_VIEWS)];
 
 /** Returns the demo layout named by the ``?demo=`` URL param, or ``null``
@@ -390,3 +392,38 @@ export function getDemoView(): DemoView {
   const name = new URLSearchParams(window.location.search).get("demo");
   return (name && DEMO_VIEWS[name]) || "layout";
 }
+
+/** Mock layout list for the editor demo — the same shape as GET /layouts
+ * returns. Passed to the Editor component when in demo mode so the layout
+ * picker renders with sample entries. */
+export const EDITOR_DEMO_LAYOUTS = [
+  {
+    id: "firefox",
+    match: ["firefox", "Firefox", "firefox-esr"],
+    display_name: "Firefox",
+    widgets: FIREFOX.widgets,
+  },
+  {
+    id: "youtube",
+    match: ["firefox", "title:YouTube"],
+    display_name: "YouTube",
+    widgets: YOUTUBE.widgets,
+  },
+  {
+    id: "default",
+    match: ["default"],
+    widgets: DEFAULT.widgets,
+  },
+  {
+    id: "meter",
+    match: ["meter"],
+    display_name: "System meters",
+    widgets: METER.widgets,
+  },
+  {
+    id: "editor",
+    match: ["editor"],
+    display_name: "Layout Editor",
+    widgets: [],
+  },
+];

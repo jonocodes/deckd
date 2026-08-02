@@ -198,6 +198,10 @@ export type ClientClearView = { type: "clear_view" };
  * surface and the layout loader in lockstep: a rename in either place
  * surfaces as a type error or a load failure, not silent breakage. */
 export const MPRIS_VIEW_ID = "mpris";
+/** The wire-side id for the editor chrome view (issue #100). Same pattern
+ * as MPRIS_VIEW_ID: the client sends ``select_view: EDITOR_VIEW_ID`` and
+ * the daemon pushes the editor layout. */
+export const EDITOR_VIEW_ID = "editor";
 export type ClientMessage =
   | ClientHello
   | ClientPress

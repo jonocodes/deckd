@@ -1,0 +1,16 @@
+# Layout editor chrome view (issue #100). This layout is reached from
+# the persistent chrome via the client sending ``select_view: "editor"``
+# — the match token (``editor``) is the synthetic internal token the
+# server uses to address a chrome view, not the identity of any real
+# application. The server's view-resolution hook looks the view up by
+# layout id and sets ``view: "editor"`` on the resulting
+# ``LayoutMessage`` so the chrome stays on this view until the client
+# sends ``clear_view``.
+#
+# The editor renders its own three-pane shell (palette · canvas ·
+# properties) over the layout area; the widget list is empty because
+# the editor surface doesn't use grid widgets.
+match: [editor]
+display_name: Layout Editor
+jogstrip: false
+widgets: []
