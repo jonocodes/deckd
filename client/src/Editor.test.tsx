@@ -501,7 +501,7 @@ describe("Editor — layout editor chrome view", () => {
     const cell = document.querySelector('[data-widget-id="btn-1"]');
     expect(cell).toBeTruthy();
     fireEvent.click(cell!);
-    expect(screen.getByText("Button")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Button" })).toBeTruthy();
     expect(screen.getByText("ID")).toBeTruthy();
     expect(screen.getByDisplayValue("btn-1")).toBeTruthy();
     expect(screen.getByDisplayValue("Test button")).toBeTruthy();
@@ -679,7 +679,7 @@ describe("Editor — layout editor chrome view", () => {
     // First select the widget
     const cell = document.querySelector('[data-widget-id="btn-1"]');
     fireEvent.click(cell!);
-    expect(screen.getByText("Button")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Button" })).toBeTruthy();
 
     // Click the grid container outside the cell
     const grid = document.querySelector(".editor-canvas-grid");
@@ -929,6 +929,31 @@ describe("Editor — full save-cycle integration", () => {
       continue_on_error: false,
     });
     expect(body.widgets[0].label).toBe("Macro");
+  });
+
+  it("clearing a widget field omits it from the PUT body (#89 deletion = omission)", async () => {
+    const { clickSave } = renderAndSave({
+      layout: {
+        type: "layout",
+        app: "firefox",
+        jogstrip_enabled: true,
+        widgets: [
+          { id: "btn-1", kind: "button" as const, label: "Has label", color: "#123456" },
+        ],
+      },
+      edit: async () => {
+        const cell = document.querySelector('[data-widget-id="btn-1"]');
+        fireEvent.click(cell!);
+        await waitFor(() => { expect(screen.getByDisplayValue("Has label")).toBeTruthy(); });
+        fireEvent.change(screen.getByDisplayValue("Has label"), { target: { value: "" } });
+      },
+    });
+
+    const [, req] = await clickSave();
+    const body = JSON.parse(req.body as string);
+    expect("label" in body.widgets[0]).toBe(false);
+    // Untouched fields ride along.
+    expect(body.widgets[0].color).toBe("#123456");
   });
 
   it("PUT body reflects widget delete", async () => {
@@ -1317,5 +1342,121 @@ describe("Editor — full save-cycle integration", () => {
     expect(w.icon).toEqual({ source: "lucide", name: "play" });
     expect(w.id).toBe("btn-1");
     expect(w.label).toBe("Test");
+  });
+});
+
+describe("Editor — widget palette (issue #103)", () => {
+  beforeEach(() => {
+    send.mockReset();
+    onExit.mockReset();
+  });
+
+  afterEach(() => {
+    cleanup();
+    delete (globalThis as Record<string, unknown>).fetch;
+  });
+
+  /** Find the PUT call among fetch invocations and parse its body. */
+  async function saveAndParsePut(fetchSpy: ReturnType<typeof vi.fn>) {
+    fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+    await waitFor(() => { expect(fetchSpy).toHaveBeenCalled(); });
+    const putCall = fetchSpy.mock.calls.find(
+      (call) => (call as [string, RequestInit])[1]?.method === "PUT",
+    ) as [string, RequestInit];
+    return JSON.parse(putCall[1].body as string);
+  }
+
+  it("renders the palette with the insertable kinds", () => {
+    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    // #89: button / meter / stats / blank are palette-insertable; the media
+    // family is not.
+    expect(screen.getByRole("button", { name: "add button" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "add meter" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "add stats" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "add blank" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "add media" })).toBeFalsy();
+    expect(screen.queryByRole("button", { name: "add media browser" })).toBeFalsy();
+  });
+
+  it("clicking a palette item appends a minted widget and selects it", async () => {
+    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    // Firefox starts with 1 widget ("new-tab").
+    expect(screen.getByText("1 widget")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "add button" }));
+
+    await waitFor(() => { expect(screen.getByText("2 widgets")).toBeTruthy(); });
+    expect(document.querySelector('[data-widget-id="button-1"]')).toBeTruthy();
+    // The new widget is selected so its minted id is immediately editable.
+    expect(screen.getByDisplayValue("button-1")).toBeTruthy();
+  });
+
+  it("minted ids avoid collisions with existing widget ids", async () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          jogstrip_enabled: true,
+          widgets: [{ id: "button-1", kind: "button" as const }],
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "add button" }));
+
+    await waitFor(() => { expect(screen.getByText("2 widgets")).toBeTruthy(); });
+    expect(document.querySelector('[data-widget-id="button-2"]')).toBeTruthy();
+    expect(screen.getByDisplayValue("button-2")).toBeTruthy();
+  });
+
+  it("minted ids are per-kind", async () => {
+    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "add meter" }));
+    await waitFor(() => { expect(screen.getByDisplayValue("meter-1")).toBeTruthy(); });
+    fireEvent.click(screen.getByRole("button", { name: "add blank" }));
+    await waitFor(() => { expect(screen.getByDisplayValue("blank-1")).toBeTruthy(); });
+  });
+
+  it("the minted id is editable and persists via save", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    (globalThis as Record<string, unknown>).fetch = fetchSpy;
+
+    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "add button" }));
+    await waitFor(() => { expect(screen.getByDisplayValue("button-1")).toBeTruthy(); });
+
+    fireEvent.change(screen.getByDisplayValue("button-1"), { target: { value: "my-btn" } });
+    const body = await saveAndParsePut(fetchSpy);
+    const ids = body.widgets.map((w: { id: string }) => w.id);
+    expect(ids).toContain("my-btn");
+    expect(ids).not.toContain("button-1");
+  });
+
+  it("an added blank widget carries only id and kind in the PUT body", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    (globalThis as Record<string, unknown>).fetch = fetchSpy;
+
+    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "add blank" }));
+    await waitFor(() => { expect(screen.getByText("2 widgets")).toBeTruthy(); });
+
+    const body = await saveAndParsePut(fetchSpy);
+    const blank = body.widgets.find((w: { id: string }) => w.id === "blank-1");
+    expect(blank).toEqual({ id: "blank-1", kind: "blank" });
+  });
+
+  it("palette items are disabled when no layout is selected", () => {
+    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={[]} />);
+    expect(screen.getByText("Select layout")).toBeTruthy();
+    expect(
+      (screen.getByRole("button", { name: "add button" }) as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 });

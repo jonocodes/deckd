@@ -621,38 +621,28 @@ def build_layouts_snapshot(store: "LayoutStore", *, full: bool = False) -> dict[
 
 
 def _safe_widget(widget: Any, *, full: bool = False) -> dict[str, Any]:
-    """Widget summary safe to send on ``/layouts``."""
-    w = {
-        "id": widget.id,
-        "kind": widget.kind,
-        "label": widget.label,
-        "icon": widget.icon.model_dump() if widget.icon else None,
-        "color": widget.color,
-        # Reflow extent (ADR-0010): a ``[w, h]`` span, ``"full"``, or ``None``
-        # for a default 1x1 cell. There is no position — widgets pack in order.
-        "size": widget.size,
-        "has_action": widget.action is not None,
-        "kind_specific": _widget_kind_specific(widget),
-    }
+    """Widget summary safe to send on ``/layouts``.
+
+    ``exclude_defaults=True`` keeps the editor's save round-trip faithful
+    to the human-owned YAML (#85): optional fields the author never set
+    (``label``, ``icon``, ``color``, ``size``, ``source``, ``min``,
+    ``max``, ``metrics``) are not materialised. Fields without a default
+    (``id``, ``kind``) and authored non-default values always ride
+    through. Action and macro bodies use ``exclude_unset`` so an
+    ``Action``'s ``restore_clipboard`` / ``restore_clipboard_delay_ms``
+    defaults and ``Macro``'s ``continue_on_error`` default don't
+    materialise into the dump either.
+    """
+    w = widget.model_dump(exclude_defaults=True, exclude={"action", "macro"})
+    w["has_action"] = widget.action is not None
+    w["kind_specific"] = _widget_kind_specific(widget)
     if full:
-        w["action"] = widget.action.model_dump() if widget.action else None
-        w["macro"] = widget.macro.model_dump() if widget.macro else None
-    # Per-kind fields the daemon's Widget model requires for PUT/POST
-    # round-trip. They're safe to expose (configuration names, not action
-    # bodies) but aren't on every widget — they live in kind_specific too.
-    kind = widget.kind
-    if kind == "meter":
-        w["source"] = widget.source
-        w["min"] = widget.min
-        w["max"] = widget.max
-    elif kind == "stats":
-        w["metrics"] = [
-            {"source": m.source, "label": m.label} for m in (widget.metrics or [])
-        ]
-    elif kind == "media":
-        w["controls"] = list(widget.controls or [])
-    elif kind == "mediabrowser":
-        w["empty_state"] = widget.empty_state
+        w["action"] = (
+            widget.action.model_dump(exclude_unset=True) if widget.action else None
+        )
+        w["macro"] = (
+            widget.macro.model_dump(exclude_unset=True) if widget.macro else None
+        )
     return w
 
 

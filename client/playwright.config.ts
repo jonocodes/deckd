@@ -13,7 +13,7 @@ export default defineConfig({
   reporter: [["list"]],
   timeout: 30000,
   use: {
-    baseURL: "http://localhost:8765",
+    baseURL: "http://localhost:8975",
     trace: "retain-on-failure",
   },
   projects: [
@@ -26,10 +26,13 @@ export default defineConfig({
     },
   ],
   webServer: {
+    // Copy the repo layouts into a throwaway tmp dir so an e2e save cycle
+    // never mutates the human-owned YAML. Port 8975 (not the daemon default
+    // 8765) so e2e can run alongside a live dev/user daemon.
     command:
-      'cd .. && rm -f client/e2e/.daemon.log && PYTHONUNBUFFERED=1 PYTHONPATH=scripts/no-evdev .venv/bin/deckd --layouts-dir layouts --client-dist client/dist --no-auth --verbose > client/e2e/.daemon.log 2>&1',
+      'cd .. && rm -rf /tmp/deckd-e2e-layouts && cp -r layouts /tmp/deckd-e2e-layouts && rm -f client/e2e/.daemon.log && PYTHONUNBUFFERED=1 PYTHONPATH=scripts/no-evdev .venv/bin/deckd --layouts-dir /tmp/deckd-e2e-layouts --client-dist client/dist --no-auth --port 8975 --verbose > client/e2e/.daemon.log 2>&1',
     cwd: __dirname,
-    port: 8765,
+    port: 8975,
     reuseExistingServer: false,
     timeout: 30000,
   },

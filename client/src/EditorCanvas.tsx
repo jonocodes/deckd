@@ -367,7 +367,7 @@ export function EditorCanvas({
       >
         {widgets.length === 0 ? (
           <div className="editor-canvas-grid-empty">
-            No widgets. Drag from the palette or add a new widget.
+            No widgets. Add one from the palette.
           </div>
         ) : (
           <DndContext

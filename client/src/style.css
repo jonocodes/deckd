@@ -2116,6 +2116,62 @@ button:focus-visible {
 }
 
 /* ---------------------------------------------------------------------------
+ * Widget palette — insertable kinds (#103)
+ * ------------------------------------------------------------------------- */
+
+.editor-palette-items {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.editor-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px;
+  background: #161b22;
+  border: 1px solid #21262d;
+  border-radius: 6px;
+  color: #c9d1d9;
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms, border-color 120ms;
+}
+
+.editor-palette-item:hover:not(:disabled) {
+  background: #1c2129;
+  border-color: #30363d;
+}
+
+.editor-palette-item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.editor-palette-item-icon {
+  flex-shrink: 0;
+  color: #8b949e;
+}
+
+.editor-palette-item-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.editor-palette-item-label {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.editor-palette-item-hint {
+  font-size: 10px;
+  color: #8b949e;
+}
+
+/* ---------------------------------------------------------------------------
  * Properties panel — field editors (#103)
  * ------------------------------------------------------------------------- */
 

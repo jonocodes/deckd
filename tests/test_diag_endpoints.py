@@ -17,6 +17,8 @@ import pytest
 
 from conftest import ServerHandle
 
+from deckd import PASSWORD_HEADER
+
 
 # ---------------------------------------------------------------------------
 # /diag
@@ -107,7 +109,10 @@ async def test_diag_layouts_block_lists_loaded_layout_ids(srv: ServerHandle) -> 
 
 
 async def test_layouts_endpoint_hides_action_bodies(srv: ServerHandle) -> None:
-    """``/layouts`` is safe to expose: widget summaries, no shell/dbus strings."""
+    """``/layouts`` is safe to expose without the password: widget summaries,
+    no shell/dbus strings. The editor's full dump (action/macro bodies) is
+    gated on auth so the diagnostics page stays safe to open."""
+    srv.server.password = "hunter2"
     async with aiohttp.ClientSession() as http:
         async with http.get(f"{srv.http_url}/layouts") as r:
             body = await r.json()
@@ -127,6 +132,28 @@ async def test_layouts_endpoint_hides_action_bodies(srv: ServerHandle) -> None:
     raw = json.dumps(body)
     assert "xdg-open" not in raw  # the shell action value
     assert "ctrl+t" not in raw  # the key action value
+
+
+async def test_layouts_endpoint_includes_action_bodies_when_authenticated(
+    srv: ServerHandle,
+) -> None:
+    """The editor's opaque pass-through (#89) needs the unrendered fields:
+    an authenticated ``GET /layouts`` includes action/macro bodies."""
+    srv.server.password = "hunter2"
+    async with aiohttp.ClientSession() as http:
+        async with http.get(
+            f"{srv.http_url}/layouts", headers={PASSWORD_HEADER: "hunter2"}
+        ) as r:
+            body = await r.json()
+    assert body["ok"] is True
+    default_layout = next(l for l in body["layouts"] if l["id"] == "default")
+    with_action = [w for w in default_layout["widgets"] if w.get("action")]
+    assert with_action, "expected at least one widget with an action body"
+    raw = json.dumps(body)
+    assert "xdg-open" in raw  # the shell action value is now visible
+    # Unset defaults are not materialised (#85 round-trip fidelity).
+    assert "restore_clipboard" not in raw
+    assert "restore_clipboard_delay_ms" not in raw
 
 
 async def test_layouts_endpoint_includes_kind_specific_fields(srv: ServerHandle) -> None:

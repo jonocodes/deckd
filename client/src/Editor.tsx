@@ -4,7 +4,20 @@ import type { FocusedAppInfo, ServerLayout, Widget, Icon } from "./protocol";
 import { EDITOR_VIEW_ID } from "./protocol";
 import type { OverflowMode } from "./reflow";
 import { EditorCanvas } from "./EditorCanvas";
+import { EditorPalette } from "./EditorPalette";
+import type { PaletteKind } from "./EditorPalette";
 import { PropertiesPanel } from "./PropertiesPanel";
+
+/** Mint a collision-free id for a new widget: ``<kind>-<n>`` with the
+ * lowest free ``n`` (#87: "``button-<n>`` minted by the palette"). The id
+ * is editable afterwards; the daemon's #85 uniqueness validator backstops
+ * hand-edited duplicates at save time. */
+function mintWidgetId(kind: PaletteKind, existing: Widget[]): string {
+  const ids = new Set(existing.map((w) => w.id));
+  let n = 1;
+  while (ids.has(`${kind}-${n}`)) n += 1;
+  return `${kind}-${n}`;
+}
 
 type LayoutEntry = {
   id: string;
@@ -437,6 +450,18 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setSaveStatus("idle");
   }, []);
 
+  // Palette insert (#103): append the minted widget and select it so its
+  // id is immediately editable in the properties panel. New widgets are
+  // bare — no default icon/color/label (#83); a meter's ``source`` and a
+  // stats widget's ``metrics`` are filled in via the properties panel,
+  // with the daemon's validators backstopping an early save.
+  const handleAddWidget = useCallback((kind: PaletteKind) => {
+    dirtyRef.current = true;
+    setSaveStatus("idle");
+    setEditWidgets([...editWidgets, { id: mintWidgetId(kind, editWidgets), kind }]);
+    setSelectedIndex(editWidgets.length);
+  }, [editWidgets]);
+
   const widgetCount = editWidgets.length;
 
   // The label shown in the picker trigger.
@@ -552,7 +577,10 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
       <div className="editor-panes">
         <aside className="editor-pane editor-palette" role="complementary" aria-label="widget palette">
           <h3 className="editor-pane-title">Palette</h3>
-          <p className="editor-pane-placeholder">Widget palette — coming soon</p>
+          <EditorPalette
+            onAdd={handleAddWidget}
+            disabled={!!creationForm || (!selectedLayout && !isNewLayout)}
+          />
         </aside>
         <section className="editor-pane editor-canvas" aria-label="live grid canvas">
           {creationForm ? (

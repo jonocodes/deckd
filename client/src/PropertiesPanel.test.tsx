@@ -209,6 +209,23 @@ describe("PropertiesPanel — button widget", () => {
     expect(onChange).toHaveBeenCalledWith({ ...baseButton, label: "New label" });
   });
 
+  it("clearing the label removes the key (deletion = omission, #89)", () => {
+    const onChange = vi.fn();
+    render(
+      <PropertiesPanel
+        widget={baseButton}
+        layoutFields={layoutFields}
+        onWidgetChange={onChange}
+        onLayoutFieldChange={vi.fn()}
+      />,
+    );
+    const labelInput = screen.getByDisplayValue("Click me");
+    fireEvent.change(labelInput, { target: { value: "" } });
+    const changed = onChange.mock.calls[0][0];
+    expect("label" in changed).toBe(false);
+    expect(changed.color).toBe("#1e3a8a");
+  });
+
   it("edits widget color", () => {
     const onChange = vi.fn();
     render(

@@ -191,6 +191,172 @@ def test_build_layouts_snapshot_hides_action_bodies() -> None:
     assert widgets[1]["kind_specific"]["source"] == "cpu_percent"
 
 
+def test_build_layouts_snapshot_omits_unset_widget_fields() -> None:
+    """The widget summary uses ``exclude_defaults=True`` so optional fields
+    the author never set (``label``, ``icon``, ``color``, ``size``,
+    ``source``, ``min``, ``max``, ``metrics``) are not materialised. This
+    is what makes the editor's opaque pass-through round-trip truly
+    faithful — a bare button or a labelled button both round-trip
+    cleanly without editor-save noise (#103 done-when)."""
+    from deckd.layouts import Action, Layout, Widget
+
+    layout = Layout(
+        id="test",
+        match=["test"],
+        widgets=[
+            Widget(id="bare", kind="button"),
+            Widget(id="labelled", kind="button", label="Hi", color="#ff0000"),
+            Widget(
+                id="meter-1",
+                kind="meter",
+                source="cpu_percent",
+                min=0,
+                max=100,
+            ),
+            Widget(
+                id="stats-1",
+                kind="stats",
+                metrics=[{"source": "cpu_percent", "label": "CPU"}],
+            ),
+        ],
+    )
+
+    class _Store:
+        def __init__(self, layouts: list[Layout]) -> None:
+            self._layouts = layouts
+
+        @property
+        def layouts(self) -> list[Layout]:
+            return list(self._layouts)
+
+    snap = build_layouts_snapshot(_Store([layout]), full=True)
+    widgets = {w["id"]: w for w in snap["layouts"][0]["widgets"]}
+
+    # Bare button: no optional fields at all.
+    assert widgets["bare"] == {
+        "id": "bare",
+        "kind": "button",
+        "has_action": False,
+        "kind_specific": {},
+        "action": None,
+        "macro": None,
+    }
+
+    # Authored label/color ride through; icon/size still unset → omitted.
+    assert widgets["labelled"]["label"] == "Hi"
+    assert widgets["labelled"]["color"] == "#ff0000"
+    assert "icon" not in widgets["labelled"]
+    assert "size" not in widgets["labelled"]
+
+    # Meter with authored source/min/max ride through.
+    meter = widgets["meter-1"]
+    assert meter["source"] == "cpu_percent"
+    assert meter["min"] == 0
+    assert meter["max"] == 100
+
+    # Stats with authored metrics ride through (label included).
+    stats = widgets["stats-1"]
+    assert stats["metrics"] == [{"source": "cpu_percent", "label": "CPU"}]
+
+
+def test_build_layouts_snapshot_full_omits_unset_action_defaults() -> None:
+    """Full dump uses ``model_dump(exclude_unset=True)`` so an authored
+    action like ``shell: xdg-open ...`` echoes only ``shell`` — not the
+    ``Action`` model's ``restore_clipboard`` / ``restore_clipboard_delay_ms``
+    defaults. Otherwise every editor save materialises defaults into the
+    human-owned YAML, violating #85 round-trip fidelity (#103 done-when:
+    unrendered fields survive a save untouched)."""
+    from deckd.layouts import Action, Layout, Widget
+
+    layout = Layout(
+        id="test",
+        match=["test"],
+        widgets=[
+            Widget(
+                id="button-1",
+                kind="button",
+                action=Action(shell="xdg-open https://secret.example"),
+            ),
+        ],
+    )
+
+    class _Store:
+        def __init__(self, layouts: list[Layout]) -> None:
+            self._layouts = layouts
+
+        @property
+        def layouts(self) -> list[Layout]:
+            return list(self._layouts)
+
+    snap = build_layouts_snapshot(_Store([layout]), full=True)
+    action = snap["layouts"][0]["widgets"][0]["action"]
+    assert action == {"shell": "xdg-open https://secret.example"}
+    assert "restore_clipboard" not in action
+    assert "restore_clipboard_delay_ms" not in action
+    assert "key" not in action  # None + unset, excluded
+
+
+def test_build_layouts_snapshot_full_omits_unset_macro_default() -> None:
+    """A macro authored with only ``steps`` echoes only ``steps`` — the
+    ``continue_on_error: false`` default is not materialised."""
+    from deckd.layouts import Layout, Macro, MacroStep, Widget
+
+    layout = Layout(
+        id="test",
+        match=["test"],
+        widgets=[
+            Widget(
+                id="button-1",
+                kind="button",
+                macro=Macro(steps=[MacroStep(type="key", value="ctrl+a")]),
+            ),
+        ],
+    )
+
+    class _Store:
+        def __init__(self, layouts: list[Layout]) -> None:
+            self._layouts = layouts
+
+        @property
+        def layouts(self) -> list[Layout]:
+            return list(self._layouts)
+
+    snap = build_layouts_snapshot(_Store([layout]), full=True)
+    macro = snap["layouts"][0]["widgets"][0]["macro"]
+    assert macro == {"steps": [{"type": "key", "value": "ctrl+a"}]}
+    assert "continue_on_error" not in macro
+
+
+def test_build_layouts_snapshot_full_preserves_authored_default() -> None:
+    """When the author DID set a default-valued field, ``exclude_unset``
+    keeps it — the round-trip preserves intentional configuration."""
+    from deckd.layouts import Action, Layout, Widget
+
+    layout = Layout(
+        id="test",
+        match=["test"],
+        widgets=[
+            Widget(
+                id="button-1",
+                kind="button",
+                action=Action(shell="firefox", restore_clipboard=False),
+            ),
+        ],
+    )
+
+    class _Store:
+        def __init__(self, layouts: list[Layout]) -> None:
+            self._layouts = layouts
+
+        @property
+        def layouts(self) -> list[Layout]:
+            return list(self._layouts)
+
+    snap = build_layouts_snapshot(_Store([layout]), full=True)
+    action = snap["layouts"][0]["widgets"][0]["action"]
+    assert action["restore_clipboard"] is False
+
+
 def test_build_mpris_players_snapshot_handles_no_backend() -> None:
     snap = asyncio.run(build_mpris_players_snapshot(None))
     assert snap == {"ok": True, "available": False, "players": []}
