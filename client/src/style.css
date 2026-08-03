@@ -2009,6 +2009,20 @@ button:focus-visible {
   cursor: default;
 }
 
+.editor-save-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.editor-save-error {
+  margin: 0;
+  font-size: 11px;
+  color: #da3633;
+  white-space: nowrap;
+}
+
 .editor-panes {
   display: flex;
   flex: 1;

@@ -122,6 +122,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveError, setSaveError] = useState<string>("");
 
   // Editable widget state: derived from the active layout on mount / selection.
   const [editWidgets, setEditWidgets] = useState<Widget[]>([]);
@@ -134,6 +135,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
   const [editTheme, setEditTheme] = useState<string>("");
   const [editIcon, setEditIcon] = useState<Icon | null>(null);
   const [editJogstrip, setEditJogstrip] = useState<boolean>(true);
+  const [editMatch, setEditMatch] = useState<string[]>([]);
 
   // Widget selection: index into editWidgets, or null for layout-level.
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -168,6 +170,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setEditTheme(activeLayout.theme ?? "");
     setEditIcon(activeLayout.icon ?? null);
     setEditJogstrip(activeLayout.jogstrip_enabled);
+    setEditMatch([activeLayout.app]);
     initialisedRef.current = true;
     pickerSkipRef.current = true;
   }, [activeLayout, creationForm]);
@@ -192,8 +195,10 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setEditTheme((picked as { theme?: string | null }).theme ?? "");
     setEditIcon((picked as { icon?: Icon | null }).icon ?? null);
     setEditJogstrip((picked as { jogstrip?: boolean }).jogstrip ?? true);
+    setEditMatch(picked.match ?? []);
     setSelectedIndex(null);
     setSaveStatus("idle");
+    setSaveError("");
   }, [selectedId, layouts, isNewLayout, creationForm]);
 
   useEffect(() => {
@@ -267,10 +272,11 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
           }
         } else {
           const body = await res.json().catch(() => ({})) as { error?: string };
-          console.error("create layout failed:", res.status, body.error || "");
+          setSaveError(body.error || `Status ${res.status}`);
           setSaveStatus("error");
         }
-      } catch {
+      } catch (e) {
+        setSaveError(String(e));
         setSaveStatus("error");
       }
       return;
@@ -278,10 +284,11 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
 
     if (!selectedId) return;
     setSaveStatus("saving");
+    setSaveError("");
     try {
       const base = resolveBaseUrl();
       const body: Record<string, unknown> = {
-        id: selectedId,
+        match: editMatch,
         widgets: editWidgets,
         overflow: editOverflow,
       };
@@ -304,12 +311,15 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2000);
       } else {
+        const errBody = await res.json().catch(() => ({})) as { error?: string };
+        setSaveError(errBody.error || `Status ${res.status}`);
         setSaveStatus("error");
       }
-    } catch {
+    } catch (e) {
+      setSaveError(String(e));
       setSaveStatus("error");
     }
-  }, [isNewLayout, selectedId, draft, editWidgets, editOverflow, editDisplayName, editTheme, editIcon, editJogstrip]);
+  }, [isNewLayout, selectedId, draft, editWidgets, editOverflow, editDisplayName, editTheme, editIcon, editJogstrip, editMatch]);
 
   const handleExit = useCallback(() => {
     if (isNewLayout) {
@@ -495,6 +505,8 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
               </ul>
             )}
           </div>
+        </div>
+        <div className="editor-save-group">
           <button
             className="editor-save-btn"
             aria-label="save layout"
@@ -512,6 +524,9 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
                     : "Save"}
             </span>
           </button>
+          {saveError && (
+            <p className="editor-save-error">{saveError}</p>
+          )}
         </div>
       </header>
       <div className="editor-panes">

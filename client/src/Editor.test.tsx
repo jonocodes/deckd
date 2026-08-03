@@ -292,7 +292,7 @@ describe("Editor — layout editor chrome view", () => {
 
     const callArgs = fetchSpy.mock.calls[0];
     const body = JSON.parse(callArgs[1].body as string);
-    expect(body.id).toBe("firefox");
+    expect(body.match).toEqual(["firefox"]);
     expect(body.overflow).toBe("shrink-to-fit");
     expect(Array.isArray(body.widgets)).toBe(true);
     expect(body.widgets[0].id).toBe("new-tab");
