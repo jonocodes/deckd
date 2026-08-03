@@ -170,7 +170,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setEditDisplayName(activeLayout.display_name ?? "");
     setEditTheme(activeLayout.theme ?? "");
     setEditIcon(activeLayout.icon ?? null);
-    setEditJogstrip(activeLayout.jogstrip_enabled);
+    setEditJogstrip(activeLayout.jogstrip_enabled ?? true);
     setEditMatch([activeLayout.app]);
     initialisedRef.current = true;
     pickerSkipRef.current = true;
