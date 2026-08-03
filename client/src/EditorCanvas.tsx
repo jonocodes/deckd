@@ -195,6 +195,9 @@ function SortableCell({
       {isUnsupported && (
         <span className="editor-canvas-cell-unsupported-badge">placeholder</span>
       )}
+      {widget.macro && (
+        <span className="editor-canvas-cell-macro-badge" title={String(widget.macro.steps.length) + " step(s)"}>macro</span>
+      )}
       <div className="editor-canvas-cell-kind">{widget.kind}</div>
       {onWidgetChange && (
         <div className="editor-canvas-cell-span">

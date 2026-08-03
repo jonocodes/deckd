@@ -2501,6 +2501,19 @@ select.prop-field-input {
   border-radius: 3px;
 }
 
+.editor-canvas-cell-macro-badge {
+  position: absolute;
+  top: 3px;
+  left: 28px;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #d2991d;
+  background: #272115;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
 /* Drag handle on the top-left of each cell */
 .editor-canvas-cell-drag {
   position: absolute;

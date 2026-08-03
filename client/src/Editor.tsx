@@ -129,6 +129,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
   const [editOverflow, setEditOverflow] = useState<OverflowMode>("shrink-to-fit");
   const initialisedRef = useRef(false);
   const pickerSkipRef = useRef(false);
+  const dirtyRef = useRef(false);
 
   // Editable layout-level presentation fields.
   const [editDisplayName, setEditDisplayName] = useState<string>("");
@@ -199,6 +200,8 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setSelectedIndex(null);
     setSaveStatus("idle");
     setSaveError("");
+    setSaveError("");
+    dirtyRef.current = false;
   }, [selectedId, layouts, isNewLayout, creationForm]);
 
   useEffect(() => {
@@ -253,6 +256,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
         if (res.ok) {
           const data = (await res.json()) as { ok: boolean; layout?: { id: string; match: string[]; display_name?: string | null; widgets: Widget[]; overflow?: string | null } };
           if (data.ok && data.layout) {
+            dirtyRef.current = false;
             setSaveStatus("saved");
             setLayouts((prev) => {
               const entry: LayoutEntry = {
@@ -308,6 +312,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
         },
       );
       if (res.ok) {
+        dirtyRef.current = false;
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2000);
       } else {
@@ -326,10 +331,12 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
       if (!window.confirm("Abandon this new layout? Nothing is saved yet.")) {
         return;
       }
-      setSelectedId(null);
-      setDraft({ match: [], displayName: "" });
-      setCreationForm(null);
-      setEditWidgets([]);
+      send({ type: "clear_view" });
+      onExit();
+      return;
+    }
+    if (dirtyRef.current && !window.confirm("You have unsaved changes. Leave anyway?")) {
+      return;
     }
     send({ type: "clear_view" });
     onExit();
@@ -372,15 +379,18 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
       next.splice(to, 0, moved);
       return next;
     });
+    dirtyRef.current = true;
     setSaveStatus("idle");
   }, []);
 
   const handleOverflowChange = useCallback((mode: OverflowMode) => {
+    dirtyRef.current = true;
     setEditOverflow(mode);
     setSaveStatus("idle");
   }, []);
 
   const handleLayoutFieldChange = useCallback((field: string, value: unknown) => {
+    dirtyRef.current = true;
     setSaveStatus("idle");
     switch (field) {
       case "display_name":
@@ -395,6 +405,9 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
       case "jogstrip":
         setEditJogstrip(Boolean(value));
         break;
+      case "overflow":
+        setEditOverflow(value as OverflowMode);
+        break;
     }
   }, []);
 
@@ -403,6 +416,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
   }, []);
 
   const handleWidgetChange = useCallback((index: number, widget: Widget) => {
+    dirtyRef.current = true;
     setEditWidgets((prev) => {
       const next = [...prev];
       next[index] = widget;
@@ -412,6 +426,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
   }, []);
 
   const handleDeleteWidget = useCallback((index: number) => {
+    dirtyRef.current = true;
     setEditWidgets((prev) => prev.filter((_, i) => i !== index));
     setSelectedIndex(null);
     setSaveStatus("idle");
