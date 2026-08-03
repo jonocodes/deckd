@@ -374,13 +374,24 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
   }, []);
 
   // Confirm creation: enter new-layout editing mode with the entered tokens.
+  // Reset the layout-level edit state so the properties panel doesn't show
+  // stale values from a previously-loaded layout (#88: a brand-new layout
+  // has no theme/icon/jogstrip override — the panel must reflect that),
+  // and prefill the display_name to match the draft (#88 "prefilled
+  // display_name").
   const handleCreateConfirm = useCallback(() => {
     const match = creationMatchInput.trim();
     if (!match) return;
-    setDraft({ match: [match], displayName: creationDisplayNameInput.trim() || match });
+    const displayName = creationDisplayNameInput.trim() || match;
+    setDraft({ match: [match], displayName });
     setSelectedId(NEW_LAYOUT_SENTINEL);
     setEditWidgets([]);
     setEditOverflow("shrink-to-fit");
+    setEditDisplayName(displayName);
+    setEditTheme("");
+    setEditIcon(null);
+    setEditJogstrip(true);
+    setSelectedIndex(null);
     setCreationForm(null);
     setSaveStatus("idle");
     initialisedRef.current = true;

@@ -459,6 +459,114 @@ describe("Editor — layout editor chrome view", () => {
     expect((screen.getByRole("button", { name: "Create layout" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("entering new-layout mode resets layout-level edit fields (#104)", () => {
+    // The layout-level properties panel (display_name/theme/icon/jogstrip)
+    // must not inherit stale values from a previously-loaded layout when
+    // entering new-layout mode — a brand-new layout has none of those
+    // (#88: "no theme"), and showing stale fields would be misleading.
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          display_name: "Firefox",
+          theme: "#ff7139",
+          icon: { source: "simple-icons", name: "firefox" },
+          jogstrip_enabled: false,
+          widgets: [{ id: "btn-1", kind: "button" as const }],
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+
+    // Select the firefox layout (loaded with display_name/theme/icon set).
+    expect(screen.getByDisplayValue("Firefox")).toBeTruthy();
+    expect(screen.getByDisplayValue("#ff7139")).toBeTruthy();
+
+    // Open the manual creation form, confirm with a match token.
+    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByText("New layout"));
+    const matchInput = screen.getByPlaceholderText("e.g. firefox or title:*YouTube*");
+    fireEvent.change(matchInput, { target: { value: "newapp" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create layout" }));
+
+    // The layout-level properties panel must now show the prefilled
+    // display_name (#88 "prefilled display_name") and empty/default
+    // theme/icon — not the stale Firefox values.
+    const displayNameInput = screen.getByPlaceholderText("(derived from match)") as HTMLInputElement;
+    expect(displayNameInput.value).toBe("newapp");
+    const themeInput = screen.getByPlaceholderText("e.g. #ff7139 or hsl(...)") as HTMLInputElement;
+    expect(themeInput.value).toBe("");
+    const iconButton = screen.getByRole("button", { name: "Browse icons…" });
+    expect(iconButton).toBeTruthy();
+    // Jogstrip defaults to true (#88: no override for a brand-new layout).
+    const jogstripCheckbox = screen.getByRole("checkbox") as HTMLInputElement;
+    expect(jogstripCheckbox.checked).toBe(true);
+  });
+
+  it("clicking the browser alt-button swaps match and display-name inputs", () => {
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "default",
+          jogstrip_enabled: true,
+          widgets: [{ id: "dummy", kind: "button" as const }],
+          focused_app: {
+            app_id: "firefox",
+            wm_class: "firefox",
+            title: "YouTube",
+            is_browser: true,
+          },
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+
+    const matchInput = screen.getByPlaceholderText("e.g. firefox or title:*YouTube*") as HTMLInputElement;
+    expect(matchInput.value).toBe("firefox");
+    const altBtn = screen.getByRole("button", { name: /Layout for/ });
+    fireEvent.click(altBtn);
+    expect(matchInput.value).toBe("title:*YouTube*");
+    const displayNameInput = screen.getByPlaceholderText("(optional, derived from match)") as HTMLInputElement;
+    expect(displayNameInput.value).toBe("YouTube");
+  });
+
+  it("exit in new-layout mode shows the abandon confirm (#104)", () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
+
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "default",
+          jogstrip_enabled: true,
+          widgets: [{ id: "dummy", kind: "button" as const }],
+          focused_app: { app_id: "org.example.App", wm_class: "example-app", title: "Example App", is_browser: false },
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+
+    // Enter new-layout mode via the detect-and-offer prompt.
+    fireEvent.click(screen.getByRole("button", { name: "Create layout" }));
+
+    // Exit must ask before abandoning the not-yet-saved draft.
+    fireEvent.click(screen.getByRole("button", { name: "close editor" }));
+    expect(confirmSpy).toHaveBeenCalledWith("Abandon this new layout? Nothing is saved yet.");
+    expect(send).not.toHaveBeenCalledWith({ type: "clear_view" });
+    expect(onExit).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
+  });
+
   // ---- properties panel tests (issue #103) ----
 
   it("shows layout-level fields in the properties panel when no widget is selected", () => {
