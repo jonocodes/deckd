@@ -618,7 +618,7 @@ def build_layouts_snapshot(store: "LayoutStore") -> dict[str, Any]:
 
 def _safe_widget(widget: Any) -> dict[str, Any]:
     """Widget summary safe to send on ``/layouts``: no action bodies."""
-    return {
+    w = {
         "id": widget.id,
         "kind": widget.kind,
         "label": widget.label,
@@ -630,6 +630,23 @@ def _safe_widget(widget: Any) -> dict[str, Any]:
         "has_action": widget.action is not None,
         "kind_specific": _widget_kind_specific(widget),
     }
+    # Per-kind fields the daemon's Widget model requires for PUT/POST
+    # round-trip. They're safe to expose (configuration names, not action
+    # bodies) but aren't on every widget — they live in kind_specific too.
+    kind = widget.kind
+    if kind == "meter":
+        w["source"] = widget.source
+        w["min"] = widget.min
+        w["max"] = widget.max
+    elif kind == "stats":
+        w["metrics"] = [
+            {"source": m.source, "label": m.label} for m in (widget.metrics or [])
+        ]
+    elif kind == "media":
+        w["controls"] = list(widget.controls or [])
+    elif kind == "mediabrowser":
+        w["empty_state"] = widget.empty_state
+    return w
 
 
 def _widget_kind_specific(widget: Any) -> dict[str, Any]:
