@@ -249,7 +249,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
           body: JSON.stringify({
             match: draft.match,
             display_name: draft.displayName || undefined,
-            widgets: editWidgets,
+            widgets: editWidgets.map(stripReadOnly),
             overflow: editOverflow,
           }),
         });
@@ -275,8 +275,11 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
             setSaveStatus("error");
           }
         } else {
-          const body = await res.json().catch(() => ({})) as { error?: string };
-          setSaveError(body.error || `Status ${res.status}`);
+          const body = await res.json().catch(() => ({})) as { error?: string; details?: { loc: (string | number)[]; msg: string }[] };
+          const msg = body.details?.length
+            ? body.details.map((d) => `${d.loc.join(".")}: ${d.msg}`).join("; ")
+            : body.error || `Status ${res.status}`;
+          setSaveError(msg);
           setSaveStatus("error");
         }
       } catch (e) {
@@ -293,7 +296,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
       const base = resolveBaseUrl();
       const body: Record<string, unknown> = {
         match: editMatch,
-        widgets: editWidgets,
+        widgets: editWidgets.map(stripReadOnly),
         overflow: editOverflow,
       };
       if (editDisplayName) body.display_name = editDisplayName;
@@ -316,8 +319,11 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2000);
       } else {
-        const errBody = await res.json().catch(() => ({})) as { error?: string };
-        setSaveError(errBody.error || `Status ${res.status}`);
+        const errBody = await res.json().catch(() => ({})) as { error?: string; details?: { loc: (string | number)[]; msg: string }[] };
+        const msg = errBody.details?.length
+          ? errBody.details.map((d) => `${d.loc.join(".")}: ${d.msg}`).join("; ")
+          : errBody.error || `Status ${res.status}`;
+        setSaveError(msg);
         setSaveStatus("error");
       }
     } catch (e) {
@@ -699,6 +705,14 @@ function CreationFormView({
       </div>
     </div>
   );
+}
+
+/** Strip GET-read-only keys from a widget before sending in a PUT/POST body.
+ * The daemon's Widget model has ``extra="forbid"`` so fields like ``has_action``
+ * and ``kind_specific`` (added by ``GET /layouts``) must be removed. */
+function stripReadOnly(widget: Widget): Record<string, unknown> {
+  const { has_action, kind_specific, ...rest } = widget as Widget & { has_action?: boolean; kind_specific?: Record<string, unknown> };
+  return rest as Record<string, unknown>;
 }
 
 /** Shallow-deep clone of the widget array so edits are independent of the
