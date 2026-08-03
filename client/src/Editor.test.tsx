@@ -15,7 +15,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Editor } from "./Editor";
-import type { ClientMessage, ServerLayout } from "./protocol";
+import type { ClientMessage, ServerLayout, Widget } from "./protocol";
 
 const send = vi.fn<(msg: ClientMessage | { type: "select_view"; view: string } | { type: "clear_view" }) => void>();
 const onExit = vi.fn();
@@ -1232,5 +1232,90 @@ describe("Editor — full save-cycle integration", () => {
     const macroBadge = cell?.querySelector(".editor-canvas-cell-macro-badge");
     expect(macroBadge).toBeTruthy();
     expect(macroBadge?.textContent).toBe("macro");
+  });
+
+  it("PUT body preserves per-kind fields (metrics for stats, source for meter)", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    (globalThis as Record<string, unknown>).fetch = fetchSpy;
+
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          jogstrip_enabled: true,
+          widgets: [
+            {
+              id: "stats-1",
+              kind: "stats" as const,
+              label: "System",
+              metrics: [{ source: "cpu_percent", label: "CPU" }],
+            },
+            {
+              id: "meter-1",
+              kind: "meter" as const,
+              label: "Temp",
+              source: "cpu_temp",
+              min: 0,
+              max: 100,
+            },
+          ],
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+    await waitFor(() => { expect(fetchSpy).toHaveBeenCalled(); });
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
+
+    const statsWidget = body.widgets.find((w: { id: string }) => w.id === "stats-1");
+    expect(statsWidget.metrics).toEqual([{ source: "cpu_percent", label: "CPU" }]);
+
+    const meterWidget = body.widgets.find((w: { id: string }) => w.id === "meter-1");
+    expect(meterWidget.source).toBe("cpu_temp");
+    expect(meterWidget.min).toBe(0);
+    expect(meterWidget.max).toBe(100);
+  });
+
+  it("stripReadOnly removes has_action and kind_specific but preserves other fields", async () => {
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
+    (globalThis as Record<string, unknown>).fetch = fetchSpy;
+
+    render(
+      <Editor
+        layout={{
+          type: "layout",
+          app: "firefox",
+          jogstrip_enabled: true,
+          widgets: [
+            {
+              id: "btn-1",
+              kind: "button" as const,
+              label: "Test",
+              has_action: true,    // GET-read-only field — should be stripped
+              kind_specific: {},   // GET-read-only field — should be stripped
+              icon: { source: "lucide", name: "play" },
+            } as unknown as Widget,
+          ],
+        }}
+        send={send}
+        onExit={onExit}
+        mockLayouts={MOCK_LAYOUTS}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+    await waitFor(() => { expect(fetchSpy).toHaveBeenCalled(); });
+    const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
+
+    const w = body.widgets[0];
+    expect(w.has_action).toBeUndefined();
+    expect(w.kind_specific).toBeUndefined();
+    expect(w.icon).toEqual({ source: "lucide", name: "play" });
+    expect(w.id).toBe("btn-1");
+    expect(w.label).toBe("Test");
   });
 });
