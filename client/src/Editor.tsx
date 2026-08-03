@@ -200,7 +200,6 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setSelectedIndex(null);
     setSaveStatus("idle");
     setSaveError("");
-    setSaveError("");
     dirtyRef.current = false;
   }, [selectedId, layouts, isNewLayout, creationForm]);
 
@@ -208,7 +207,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     if (mockLayouts) return;
     const base = resolveBaseUrl();
     let cancelled = false;
-    fetch(`${base}/layouts`)
+    fetch(`${base}/layouts`, { headers: getAuthHeaders() })
       .then((r) => r.json())
       .then((data: LayoutListResponse) => {
         if (!cancelled && data.ok && Array.isArray(data.layouts)) {
@@ -708,8 +707,9 @@ function CreationFormView({
 }
 
 /** Strip GET-read-only keys from a widget before sending in a PUT/POST body.
- * The daemon's Widget model has ``extra="forbid"`` so fields like ``has_action``
- * and ``kind_specific`` (added by ``GET /layouts``) must be removed. */
+ * ``has_action`` and ``kind_specific`` are diagnostics-only fields not in the
+ * daemon's Widget model (extra="forbid"). The authenticated editor receives
+ * full ``action`` and ``macro`` bodies — those are NOT stripped. */
 function stripReadOnly(widget: Widget): Record<string, unknown> {
   const { has_action, kind_specific, ...rest } = widget as Widget & { has_action?: boolean; kind_specific?: Record<string, unknown> };
   return rest as Record<string, unknown>;

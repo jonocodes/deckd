@@ -1595,11 +1595,12 @@ class Server:
             return [(b.host, self.port) for b, _ in resolved]
         return [(self.host, self._bound_port(req))]
 
-    async def _layouts_list(self, _req: web.Request) -> web.Response:
-        # Issue #70: enumeration of every loaded layout with safe
-        # widget summaries (id, kind, label, grid, has_action, plus
-        # per-kind fields that don't expose raw shell/dbus strings).
-        body = build_layouts_snapshot(self.layouts)
+    async def _layouts_list(self, req: web.Request) -> web.Response:
+        # Authenticated editors need full widget data (including action/macro
+        # bodies). Unauthenticated callers (diagnostics page) get the safe
+        # summary: no shell/dbus/key strings.
+        full = self._http_authorized(req)
+        body = build_layouts_snapshot(self.layouts, full=full)
         return web.json_response(body, headers={"Access-Control-Allow-Origin": "*"})
 
     async def _actions_recent(self, req: web.Request) -> web.Response:

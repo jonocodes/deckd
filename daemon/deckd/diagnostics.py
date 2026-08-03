@@ -597,8 +597,12 @@ async def build_mpris_diag(backend: "MprisBackend | None") -> dict[str, Any]:
     return out
 
 
-def build_layouts_snapshot(store: "LayoutStore") -> dict[str, Any]:
-    """Snapshot the loaded ``LayoutStore`` for ``GET /layouts``."""
+def build_layouts_snapshot(store: "LayoutStore", *, full: bool = False) -> dict[str, Any]:
+    """Snapshot the loaded ``LayoutStore`` for ``GET /layouts``.
+
+    When ``full`` is True (authenticated editor), widgets include their
+    action and macro bodies. Otherwise the response is safe to expose
+    on the public diagnostics page (no shell/dbus/key strings)."""
     layouts = []
     for layout in store.layouts:
         layouts.append(
@@ -610,14 +614,14 @@ def build_layouts_snapshot(store: "LayoutStore") -> dict[str, Any]:
                 "icon": layout.icon.model_dump() if layout.icon else None,
                 "jogstrip": layout.jogstrip,
                 "overflow": layout.overflow,
-                "widgets": [_safe_widget(w) for w in layout.widgets],
+                "widgets": [_safe_widget(w, full=full) for w in layout.widgets],
             }
         )
     return {"ok": True, "layouts": layouts}
 
 
-def _safe_widget(widget: Any) -> dict[str, Any]:
-    """Widget summary safe to send on ``/layouts``: no action bodies."""
+def _safe_widget(widget: Any, *, full: bool = False) -> dict[str, Any]:
+    """Widget summary safe to send on ``/layouts``."""
     w = {
         "id": widget.id,
         "kind": widget.kind,
@@ -630,6 +634,9 @@ def _safe_widget(widget: Any) -> dict[str, Any]:
         "has_action": widget.action is not None,
         "kind_specific": _widget_kind_specific(widget),
     }
+    if full:
+        w["action"] = widget.action.model_dump() if widget.action else None
+        w["macro"] = widget.macro.model_dump() if widget.macro else None
     # Per-kind fields the daemon's Widget model requires for PUT/POST
     # round-trip. They're safe to expose (configuration names, not action
     # bodies) but aren't on every widget — they live in kind_specific too.
