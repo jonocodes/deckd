@@ -2057,12 +2057,54 @@ button:focus-visible {
   background: #0d1117;
 }
 
+/* Mobile: stack panes vertically, shrink side panels, allow scroll.
+   Below ~700px the two fixed sidebars (180+220=400px) can't coexist
+   with a legible canvas grid, so they share width with the canvas. */
+@media screen and (max-width: 700px) {
+  .editor-header {
+    flex-wrap: wrap;
+  }
+
+  .editor-header-left {
+    flex-basis: 100%;
+  }
+
+  .editor-panes {
+    flex-direction: column;
+    overflow-y: auto;
+    min-height: 0;
+    flex: 1 1 auto;
+  }
+
+  .editor-pane {
+    overflow-y: visible;
+  }
+
+  .editor-palette {
+    display: none;
+  }
+
+  .editor-canvas {
+    min-height: 320px;
+    flex: 1 0 auto;
+  }
+
+  .editor-properties {
+    width: 100%;
+    max-height: 220px;
+    flex-shrink: 1;
+    border-left: none;
+    border-top: 1px solid #21262d;
+  }
+}
+
 .editor-pane-title {
   margin: 0 0 8px 0;
   font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
   color: #8b949e;
 }
 
