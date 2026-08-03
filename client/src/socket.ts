@@ -151,7 +151,18 @@ export function useDeckdSocket(
       };
     };
 
-    connect();
+    // Gate the first WebSocket attempt on a /health check so the browser
+    // doesn't log a connection error when the daemon is still starting up
+    // (the `just dev` recipe starts daemon and Vite simultaneously).
+    const healthUrl = resolve_health_url();
+    setStatus("connecting");
+    fetch(healthUrl)
+      .then(() => connect())
+      .catch(() => {
+        if (!stopped) {
+          timer = window.setTimeout(() => connect(), 1000);
+        }
+      });
     return () => {
       stopped = true;
       if (timer) window.clearTimeout(timer);
@@ -187,6 +198,10 @@ export function useDeckdSocket(
   }, []);
 
   return { status, send, authenticate, deauthenticate, hasPassword };
+}
+
+function resolve_health_url(): string {
+  return new URL("/health", window.location.href).toString();
 }
 
 function resolve_ws_url(): string {
