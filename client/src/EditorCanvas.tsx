@@ -136,6 +136,7 @@ function SortableCell({
     gridColumn: `span ${Math.min(spanOf(widget)[0], colSpan)}`,
     opacity: isDragging ? 0.5 : undefined,
     zIndex: isDragging ? 10 : undefined,
+    ...(widget.color ? { backgroundColor: widget.color } : {}),
   };
 
   const isUnsupported = UNSUPPORTED_KINDS.has(widget.kind);
