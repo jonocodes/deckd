@@ -606,6 +606,10 @@ def build_layouts_snapshot(store: "LayoutStore") -> dict[str, Any]:
                 "id": layout.id,
                 "match": list(layout.match),
                 "display_name": layout.display_name,
+                "theme": layout.theme,
+                "icon": layout.icon.model_dump() if layout.icon else None,
+                "jogstrip": layout.jogstrip,
+                "overflow": layout.overflow,
                 "widgets": [_safe_widget(w) for w in layout.widgets],
             }
         )
@@ -618,6 +622,8 @@ def _safe_widget(widget: Any) -> dict[str, Any]:
         "id": widget.id,
         "kind": widget.kind,
         "label": widget.label,
+        "icon": widget.icon.model_dump() if widget.icon else None,
+        "color": widget.color,
         # Reflow extent (ADR-0010): a ``[w, h]`` span, ``"full"``, or ``None``
         # for a default 1x1 cell. There is no position — widgets pack in order.
         "size": widget.size,

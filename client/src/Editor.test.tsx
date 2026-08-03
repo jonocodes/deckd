@@ -25,8 +25,10 @@ const MOCK_LAYOUTS = [
     id: "firefox",
     match: ["firefox", "Firefox"],
     display_name: "Firefox",
+    theme: "#ff7139",
+    icon: { source: "simple-icons", name: "firefox" },
     widgets: [
-      { id: "new-tab", kind: "button" as const, label: "New tab" },
+      { id: "new-tab", kind: "button" as const, label: "New tab", icon: { source: "lucide", name: "plus" }, color: "#1e3a8a" },
     ],
   },
   {
@@ -701,7 +703,9 @@ describe("Editor — fetch layouts path (no mockLayouts)", () => {
       id: "firefox",
       match: ["firefox"],
       display_name: "Firefox",
-      widgets: [{ id: "btn-1", kind: "button" as const, label: "Click" }],
+      theme: "#ff7139",
+      icon: { source: "simple-icons", name: "firefox" },
+      widgets: [{ id: "btn-1", kind: "button" as const, label: "Click", icon: { source: "lucide", name: "mouse-pointer-click" }, color: "#1e3a8a" }],
     },
     {
       id: "editor",

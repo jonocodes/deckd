@@ -37,6 +37,16 @@ function resolveBaseUrl(): string {
   return window.location.origin;
 }
 
+function getAuthHeaders(): Record<string, string> {
+  try {
+    const pw = window.localStorage.getItem("deckd.password") ?? "";
+    if (!pw) return {};
+    return { "X-Deckd-Password": pw };
+  } catch {
+    return {};
+  }
+}
+
 interface EditorProps {
   layout: ServerLayout | null;
   send: (msg: { type: "select_view"; view: string } | { type: "clear_view" }) => void;
@@ -227,7 +237,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
         const base = resolveBaseUrl();
         const res = await fetch(`${base}/layouts`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify({
             match: draft.match,
             display_name: draft.displayName || undefined,
@@ -286,7 +296,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
         `${base}/layouts/${encodeURIComponent(selectedId)}`,
         {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify(body),
         },
       );
