@@ -7,7 +7,7 @@ App-aware touch control surface for your desktop. A Stream Deck-like deck of but
 - Control your desktop from your phone, or tablet, or laptop
 - Control multiple computers from one surface
 - Control slides/presentations
-- Get custom controls for each app you are using
+- Get custom controls for each app you are using — including **websites**: play/pause and skip on YouTube or Netflix, or turn a site into an on-screen piano (see [Web-app layouts](#web-app-layouts); title-based, so best-effort today)
 - Automatically switch display depending on which app is active
 - Expose hotkeys for launching apps, or keyboard shortcuts
 - Use phone as a mouse, scrollbar, and keyboard controller
@@ -51,7 +51,8 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **MPRIS media browser** — browse and control any MPRIS-compatible player (Spotify, Firefox, VLC, etc.) from a dedicated chrome view, with album art, per-row transport controls, and now-playing metadata.
 - [x] **VLC media widgets** — full VLC control surface with play/pause, seek, volume, album art. Configurable art sources (VLC embedded art + iTunes fallback).
 - [x] **Live sensor widgets** — meter and stats widgets pushed to the client in real time (CPU %, memory %, etc.), bound to daemon-side sensor sources.
-- [x] **Live layout editing** — edit a layout file on the desktop and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
+- [x] **GUI layout editor** — build and edit layouts from the browser without hand-editing YAML: a widget palette, a drag-to-reorder reflow canvas with span and overflow controls, a properties panel (labels, icons via a searchable picker, colours, actions and macros), and new-layout creation — saved back to disk over the write API. In development, but usable today. See [Layout editor](#layout-editor).
+- [x] **Live layout editing** — edit a layout file on the desktop (by hand or via the GUI editor) and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
 - [x] **Keep screen awake** while the surface is in use.
 - [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
@@ -69,7 +70,6 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [ ] **Soundboard** — trigger sound clips from the deck.
 - [ ] **Raise or switch to an already-running app** from the controller.
 - [ ] **Multi-daemon chooser** — pair and pick between several desktops.
-- [ ] **GUI layout editor** — build layouts without hand-editing YAML.
 - [ ] **Reliable web-app detection** — a browser extension reporting the active tab's real URL, so sites match by domain/path instead of the current window-title heuristic ([#90](https://github.com/jonocodes/deckd/issues/90)).
 - [ ] **Windows support**
 - [ ] **Packing and deployment**
@@ -395,6 +395,17 @@ The right-side jogstrip stays available for scrolling while you're pointing.
 > ⚠️ **Security.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. Every client authenticates with a shared password (see [Client auth](#client-auth)) unless the daemon is started with `--no-auth`. The password is a single shared secret over a plaintext WebSocket, not per-user auth or transport encryption — still expose the daemon (`--bind 0.0.0.0`) only on a network you trust, ideally a Tailscale tailnet, and put TLS in front of it if the link isn't already private. (Auth is enforced from the `hello` message, so it holds up behind a proxy — a TLS terminator or the Vite dev proxy — without any `X-Forwarded-For` trust.)
 
 
+
+### Layout editor
+
+Tap the **layout editor** button in the bottom chrome (next to media browser / settings) to build and edit layouts in the browser — no hand-editing YAML. Like manual control and the media browser, it's a chrome view that swaps in over the button grid.
+
+- **Palette** — pick a widget kind (button, jogstrip, meter, stats, media, blank, …) to append it to the layout.
+- **Reflow canvas** — widgets render exactly as the live deck does (ADR-0010, ordered-list reflow). Drag to reorder, adjust a widget's `size` span, and toggle the layout's `overflow` mode; the canvas repacks as you go.
+- **Properties panel** — edit the selected widget's `label`, `icon` (via a searchable Lucide / Simple Icons picker), `color`, and its `action` or `macro`. Fields the editor doesn't model yet are passed through opaquely, so editing a layout never drops hand-authored config.
+- **New layouts** — create a layout from scratch, setting its `match:` list; the filename is derived from the primary match token on first save.
+
+Saving writes back to disk over the authed write API (`PUT`/`POST /layouts`, below), preserving YAML comments and widget identity; `watchfiles` then hot-reloads every connected client. The editor is in active development — most YAML is round-trippable today, but hand-editing remains the escape hatch for anything it doesn't yet surface.
 
 ### Chrome app badge
 
