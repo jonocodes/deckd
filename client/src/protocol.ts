@@ -75,6 +75,18 @@ export type Widget = {
    * Row order follows the daemon's ``row_ids`` (the session bus's
    * ``ListNames`` reply order — matching GNOME Shell — issue #58). */
   empty_state?: MediaBrowserEmptyState | null;
+  /** Confirmation opt-in (issues #69 / #108). When ``true``, pressing
+   * the widget withholds execution on the daemon; the daemon mints a
+   * ``confirm_id``, sends a ``confirm_request`` to this client, and
+   * only runs the action / macro on a matching ``confirm_response``
+   * with ``decision: "confirm"``. Valid only on widgets that carry
+   * an ``action`` or a ``macro``; the daemon emits the field on
+   * every widget (`confirm: false` is the default). Optional in the
+   * TS shape for the same reason ``empty_state`` is: real daemon
+   * layouts always carry it, but mock / test fixtures routinely
+   * omit it; consumers use ``=== true`` so an absent field falls
+   * back to ``false`` at the comparison. */
+  confirm?: boolean;
 };
 
 export type FocusedAppInfo = {
@@ -163,6 +175,19 @@ export type ServerMacroResult = {
   failed_step: number | null;
   error: string | null;
 };
+/** Daemon -> client push: ask for a confirmation before running an action
+ * (issues #69 / #107). Fires on a ``confirm: true`` press instead of
+ * running the action. The client renders a modal naming the widget
+ * (label / icon), then sends a ``ConfirmResponse`` with its verdict.
+ * ``widget_id`` lets the client look up its own display copy (label,
+ * icon) from the last ``ServerLayout`` — the daemon never sends
+ * command text on the wire. Unknown / expired ``confirm_id`` is a
+ * silent no-op on the daemon. */
+export type ServerConfirmRequest = {
+  type: "confirm_request";
+  confirm_id: string;
+  widget_id: string;
+};
 export type ServerMessage =
   | ServerLayout
   | ServerState
@@ -171,6 +196,7 @@ export type ServerMessage =
   | MediaState
   | ServerChromeMedia
   | ServerMacroResult
+  | ServerConfirmRequest
   | ServerError;
 
 export type ClientHello = {
@@ -201,6 +227,18 @@ export type ClientMediaCommand =
 export type ClientSelectView = { type: "select_view"; view: string };
 /** Undo a previous ``select_view`` for this session only. */
 export type ClientClearView = { type: "clear_view" };
+/** Client -> daemon: the user's verdict on a pending ``confirm_request``
+ * (issues #69 / #107). The daemon looks up the pending action by
+ * ``confirm_id``: an unknown / expired / superseded token is a no-op
+ * (the action never runs). ``"confirm"`` re-enters the daemon's run
+ * path; ``"cancel"`` drops the pending action with no side effects.
+ * A literal verb rather than a bare bool, mirroring
+ * ``MediaCommandMessage``'s ``"play-pause"`` idiom. */
+export type ClientConfirmResponse = {
+  type: "confirm_response";
+  confirm_id: string;
+  decision: "confirm" | "cancel";
+};
 
 /** The wire-side id for the MPRIS chrome view (issue #51). The daemon
  * resolves ``select_view: MPRIS_VIEW_ID`` to the layout whose id is the
@@ -225,4 +263,5 @@ export type ClientMessage =
   | ClientKey
   | ClientMediaCommand
   | ClientSelectView
-  | ClientClearView;
+  | ClientClearView
+  | ClientConfirmResponse;

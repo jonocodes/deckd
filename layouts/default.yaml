@@ -118,3 +118,18 @@ widgets:
           value: "500"
         - type: key
           value: "ctrl+t"
+  # Confirmation example (issue #69): the daemon withholds this press
+  # and asks the client to confirm before running the shell command.
+  # The client shows a persistent red border + ⚠ badge on the
+  # resting widget, and a centered card modal on press; ``confirm:
+  # true`` is the explicit opt-in for dangerous actions — see README.
+  - id: confirm-example
+    kind: button
+    label: Confirm first
+    icon:
+      source: lucide
+      name: alert-triangle
+    color: "#7f1d1d"
+    confirm: true
+    action:
+      shell: "notify-send 'deckd: confirmed action ran'"

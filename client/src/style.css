@@ -3098,3 +3098,160 @@ select.prop-field-input {
 .icon-picker-close:hover {
   background: #30363d;
 }
+
+/* ---------------------------------------------------------------------------
+ * Confirmation modal + danger affordance (issues #69 / #107 / #109).
+ *
+ * Variant A: centered card modal — dim+blur backdrop, ~440px card
+ * with a red border, a warning badge (⚠) at the top, two buttons
+ * (Cancel / Confirm). Keyboard contract is Enter=Confirm, Esc=Cancel.
+ * The modal auto-dismisses after ~30s (matching the daemon's
+ * CONFIRM_TIMEOUT_S backstop) so a visible prompt is always a live
+ * one — a zombie prompt's button would silently no-op on the daemon.
+ *
+ * Dangerous widgets also carry a persistent red border + ⚠ badge in
+ * their resting state on the grid (the daemon relays ``widget.confirm``
+ * on the pushed layout), so a user can spot danger before pressing.
+ * ------------------------------------------------------------------------- */
+
+/* Danger affordance on the grid: a 2px red border around the cell, plus
+   a small ⚠ badge in the top-right corner. Read from the daemon's
+   ``widget.confirm`` field on every layout push (issues #69 / #108). */
+.cell-danger {
+  border-color: #b91c1c;
+  box-shadow: 0 0 0 1px rgba(185, 28, 28, 0.4);
+  position: relative;
+}
+
+.cell-danger-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #b91c1c;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.cell-danger-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Backdrop dims and blurs the surface so the modal reads as the
+   primary focus. Click-outside is intentionally not implemented — a
+   modal that vanishes on backdrop-click is a usability footgun for
+   destructive actions, the same way system permission dialogs don't
+   dismiss on outside-click. The Esc / Cancel buttons are the
+   explicit dismiss path. */
+.confirm-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
+
+.confirm-modal-card {
+  background: #161b21;
+  border: 2px solid #b91c1c;
+  border-radius: 16px;
+  padding: 24px;
+  width: 100%;
+  max-width: 440px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  color: #e6e9ef;
+}
+
+.confirm-modal-badge {
+  align-self: flex-start;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #b91c1c;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confirm-modal-badge-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.confirm-modal-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.confirm-modal-body {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.5;
+  color: #c9d1d9;
+}
+
+.confirm-modal-body strong {
+  color: #fff;
+  font-weight: 600;
+}
+
+.confirm-modal-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.confirm-modal-button {
+  font: inherit;
+  padding: 12px 20px;
+  border-radius: 10px;
+  border: 1px solid #2a333d;
+  font-weight: 600;
+  cursor: pointer;
+  min-width: 96px;
+}
+
+.confirm-modal-cancel {
+  background: #21262d;
+  color: #e6e9ef;
+}
+
+.confirm-modal-cancel:hover,
+.confirm-modal-cancel:focus-visible {
+  background: #2a333d;
+}
+
+.confirm-modal-confirm {
+  background: #b91c1c;
+  color: #fff;
+  border-color: #b91c1c;
+}
+
+.confirm-modal-confirm:hover,
+.confirm-modal-confirm:focus-visible {
+  background: #991b1b;
+}
+
+.confirm-modal-confirm:focus-visible,
+.confirm-modal-cancel:focus-visible {
+  outline: 2px solid #4b91f1;
+  outline-offset: 2px;
+}

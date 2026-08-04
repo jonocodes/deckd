@@ -8,8 +8,10 @@ import json
 import logging
 import os
 import platform
+import secrets
 import socket
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Awaitable, Callable, Sequence
 
@@ -67,6 +69,14 @@ DEFAULT_APP_ID = "default"
 # How long a WebSocket has to send its authenticating ``hello`` before we
 # drop it. Generous — a real client sends it immediately on open.
 WS_AUTH_TIMEOUT_S = 10.0
+
+# Backstop timeout for the confirmation handshake (issues #69 / #107).
+# The daemon-withheld action is dropped after this elapses with no
+# ``confirm_response`` from the client; the client mirrors the same
+# window so its modal auto-dismisses in lockstep. Generous by design
+# (~30 s) so a careful user has time to read the prompt; see
+# ``Session._pending_confirms`` for the per-token task bookkeeping.
+CONFIRM_TIMEOUT_S = 30.0
 
 # Application-defined WebSocket close code (private-use range 4000-4999)
 # meaning "auth rejected". Mnemonic for HTTP 401. The client keys off this
@@ -320,6 +330,38 @@ def _match_resolved(binds: list["ResolvedBind"], host: str) -> "ResolvedBind":
     return binds[0]
 
 
+# ---------------------------------------------------------------------------
+# Confirmation-handshake pending state (issues #69 / #107).
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PendingConfirm:
+    """A withheld ``confirm: true`` press waiting on the client's verdict.
+
+    Lives on the originating :class:`Session`, keyed by ``confirm_id``
+    (which is what the wire frame carries — not the widget id, so
+    overlapping presses of the same widget stay distinct). The
+    ``timeout_task`` is a scheduled coroutine that fires
+    ``CONFIRM_TIMEOUT_S`` after the press; cancelling it (on response,
+    supersession, or session close) prevents the timeout path. ``ctx``
+    is the :class:`ActionContext` the dispatch loop built; it's
+    captured here so the response handler can re-enter the run path
+    without rebuilding plumbing.
+
+    The dataclass is mutable by design: ``record_event`` etc. don't
+    need it to be frozen, and we don't hash / share it across tasks.
+    """
+
+    confirm_id: str
+    widget_id: str
+    widget: "Widget"
+    ctx: "ActionContext"
+    primitive: str
+    command_text: str | None
+    timeout_task: asyncio.Task[None]
+
+
 class Session:
     """Per-WebSocket-connection state."""
 
@@ -349,6 +391,13 @@ class Session:
         # touches this session — recent-action entries, log fields,
         # and event pushes carry the id.
         self.trace_id: str | None = None
+        # Pending confirmation presses (issues #69 / #107). Keyed by
+        # ``confirm_id`` so a stale response whose token has already
+        # been superseded degrades to an unknown-id no-op on lookup.
+        # All timeout tasks here are cancelled on session teardown
+        # (see ``_ws_loop``'s ``finally``) so a disconnect mid-confirm
+        # drops the pending action without executing it.
+        self.pending_confirms: dict[str, PendingConfirm] = {}
 
     @property
     def app_id(self) -> str:
@@ -1998,6 +2047,15 @@ class Server:
                 await self._dispatch(session, data)
         finally:
             self._sessions.discard(session)
+            # Issue #69 / #107: cancel every pending confirmation's
+            # timeout task so a mid-confirm disconnect never lets a
+            # dangerous action slip through after the timeout window
+            # (the action was already withheld; this is the second
+            # line of defence in case ``_dispatch_press``'s finally
+            # ordering changes in a future refactor).
+            for pending in list(session.pending_confirms.values()):
+                pending.timeout_task.cancel()
+            session.pending_confirms.clear()
             log.info("client disconnected (%d remaining)", len(self._sessions))
 
     async def _dispatch(self, session: Session, data: dict) -> None:
@@ -2119,6 +2177,10 @@ class Server:
                 session.events_unsub = None
             session.events_enabled = None
             return
+        if msg_type == "confirm_response":
+            response = p.ConfirmResponseMessage.model_validate(data)
+            await self._handle_confirm_response(session, response)
+            return
         if msg_type != "press":
             log.debug("ignoring %s", msg_type)
             return
@@ -2179,6 +2241,13 @@ class Server:
             dbus_bus_factory=self.dbus_bus_factory,
         )
         if action_widget_id in {"previous", "next", "volume_up", "volume_down"}:
+            # Media sub-actions are intentionally NEVER gated by
+            # ``widget.confirm`` (issue #108): transport is high-frequency
+            # / low-stakes and a confirm on "next track" is absurd. The
+            # ``confirm`` field itself is rejected on media widgets at
+            # load time; this branch is the runtime guard for the
+            # ``confirm: true`` on a non-media widget whose transport
+            # sub-actions are also obviously not dangerous.
             action = getattr(widget, f"{action_widget_id}_action")
             if action is None:
                 self.metrics.record_action("press", "skipped")
@@ -2190,10 +2259,197 @@ class Server:
             finally:
                 widget.action = original
             return
+        # Issue #69 / #108: a ``confirm: true`` press is withheld at
+        # the seam BEFORE the action runs AND before any of the
+        # recording / event bookkeeping fires (the ring buffer and the
+        # ``action`` event both describe a real execution; a withheld
+        # press hasn't happened). The handshake (minted token,
+        # ``ConfirmRequestMessage``, timeout) lives on
+        # ``_handle_confirm_response`` and the timeout task; nothing
+        # about the press is recorded here.
+        if widget.confirm:
+            await self._begin_confirm(session, widget, ctx)
+            return
         # Issue #70/73: record every press in the recent-actions ring
         # and bump the action metric. The primitive / outcome fields
         # let ``/actions/recent`` answer "which shell/dbus/key was
         # attempted" without grepping logs.
+        await self._run_confirmed_action(session, widget, ctx)
+
+    async def _begin_confirm(
+        self, session: Session, widget: "Widget", ctx: ActionContext
+    ) -> None:
+        """Issue the confirmation request and arm a timeout (issues #69 / #107).
+
+        Side effects on the session:
+
+        - supersedes any existing pending confirm for the same widget
+          (cancels the old timeout; the old ``confirm_id`` becomes a
+          no-op lookup on any late response);
+        - emits a ``confirm{outcome: "requested"}`` diagnostic event
+          carrying the new ``confirm_id`` so watchers can correlate the
+          round-trip;
+        - sends ``ConfirmRequestMessage`` to the originating client.
+        """
+        confirm_id = secrets.token_urlsafe(12)
+        primitive, command_text = _action_primitive(widget.action, widget.macro)
+        # Supersession: a second press on the same widget cancels the
+        # prior pending token's timeout. The old token's response (if
+        # it ever arrives) degrades to an unknown-id no-op, which the
+        # response handler turns into silence.
+        for old in [
+            p for p in session.pending_confirms.values() if p.widget_id == widget.id
+        ]:
+            old.timeout_task.cancel()
+            session.pending_confirms.pop(old.confirm_id, None)
+        timeout_task = asyncio.create_task(
+            self._confirm_timeout(session, confirm_id, widget.id)
+        )
+        pending = PendingConfirm(
+            confirm_id=confirm_id,
+            widget_id=widget.id,
+            widget=widget,
+            ctx=ctx,
+            primitive=primitive,
+            command_text=command_text,
+            timeout_task=timeout_task,
+        )
+        session.pending_confirms[confirm_id] = pending
+        self._emit_confirm_event(pending, "requested")
+        # Best-effort send: a session that drops between the press and
+        # the response will be reaped by the disconnect path; the
+        # pending task is cancelled and the action never runs.
+        with contextlib.suppress(ConnectionResetError, RuntimeError, ConnectionError):
+            await session.send(
+                p.ConfirmRequestMessage(
+                    type="confirm_request",
+                    confirm_id=confirm_id,
+                    widget_id=widget.id,
+                )
+            )
+
+    async def _confirm_timeout(
+        self, session: Session, confirm_id: str, widget_id: str
+    ) -> None:
+        """Backstop: drop the pending confirm after ``CONFIRM_TIMEOUT_S``.
+
+        Sleeps in cancellable steps so a ``Task.cancel()`` (from a
+        confirm response, supersession, or disconnect) returns control
+        promptly instead of waiting out the full timeout. On fire:
+        record an ``expired`` ring entry and emit the matching event;
+        the action never runs — silence = no dangerous action.
+        """
+        try:
+            await asyncio.sleep(CONFIRM_TIMEOUT_S)
+        except asyncio.CancelledError:
+            return
+        # Look the pending entry up by id; supersession removes it
+        # by id (not widget id), so a stale widget_id param can't
+        # accidentally hit a freshly-replaced token.
+        pending = session.pending_confirms.pop(confirm_id, None)
+        if pending is None:
+            return
+        self._record_confirm_outcome(pending, "expired")
+
+    async def _handle_confirm_response(
+        self, session: Session, response: p.ConfirmResponseMessage
+    ) -> None:
+        """Client answered a ``confirm_request`` (issues #69 / #107).
+
+        Unknown / expired / superseded tokens are a silent no-op — they
+        never execute. A matching token cancels its timeout, removes
+        itself from the session's pending map, and either runs the
+        action (decision ``"confirm"``) or records the cancelled ring
+        entry (decision ``"cancel"``). The diagnostic event's outcome
+        is ``"confirmed"`` / ``"cancelled"``; only the confirmed path
+        also emits the normal ``action`` event.
+        """
+        pending = session.pending_confirms.pop(response.confirm_id, None)
+        if pending is None:
+            # Unknown / expired / already-resolved token — silence.
+            log.debug("confirm_response for unknown id=%s; dropping", response.confirm_id)
+            return
+        pending.timeout_task.cancel()
+        if response.decision == "confirm":
+            # Emit the confirm/confirmed event before running so an
+            # event-stream watcher sees the verdict land first; the
+            # normal ``action`` event (with ``confirm_id`` tagged)
+            # follows from ``_run_confirmed_action``.
+            self._emit_confirm_event(pending, "confirmed")
+            await self._run_confirmed_action(
+                session, pending.widget, pending.ctx, confirm_id=pending.confirm_id
+            )
+            return
+        # decision == "cancel"
+        self._record_confirm_outcome(pending, "cancelled")
+
+    def _record_confirm_outcome(self, pending: PendingConfirm, outcome: str) -> None:
+        """Ring + event bookkeeping for ``cancelled`` / ``expired``.
+
+        ``confirmed`` is the normal execution record emitted by
+        ``_run_confirmed_action`` (with the ``ok`` outcome); the
+        confirm/confirmed event is emitted separately by
+        ``_handle_confirm_response`` so a watcher sees the verdict
+        first. Here we only handle the two outcomes that need a
+        distinct ring record (the action never ran, so ``outcome``
+        carries the verdict rather than the execution result).
+        """
+        assert outcome in {"cancelled", "expired"}
+        self.recent_actions.add(
+            ActionRecord(
+                ts=time.time(),
+                layout_id=self._current_app_id,
+                widget_id=pending.widget_id,
+                primitive=pending.primitive,
+                outcome=outcome,
+                command_text=pending.command_text,
+                error=None,
+            )
+        )
+        self._emit_confirm_event(pending, outcome)
+
+    def _emit_confirm_event(self, pending: PendingConfirm, outcome: str) -> None:
+        """Fan out one ``confirm`` diagnostic event.
+
+        Every lifecycle point (requested / confirmed / cancelled /
+        expired) uses the same wire shape so a watcher can branch on
+        ``data.outcome`` alone. The ``confirm_id`` rides along on
+        every event so a single round-trip's three lifecycle points
+        can be joined in a stream consumer.
+        """
+        asyncio.create_task(
+            self.events.emit(
+                DiagnosticEvent(
+                    name="confirm",
+                    ts=time.time(),
+                    data={
+                        "outcome": outcome,
+                        "widget_id": pending.widget_id,
+                        "layout_id": self._current_app_id,
+                        "confirm_id": pending.confirm_id,
+                    },
+                    correlation_id=current_correlation_id(),
+                )
+            )
+        )
+
+    async def _run_confirmed_action(
+        self,
+        session: Session,
+        widget: "Widget",
+        ctx: ActionContext,
+        *,
+        confirm_id: str | None = None,
+    ) -> None:
+        """The shared "action really runs" path (issues #69 / #107).
+
+        Used directly by ``_dispatch_press`` for non-confirm widgets
+        and by ``_handle_confirm_response`` for the confirmed branch.
+        Records the ``ok`` ring entry, emits the ``action`` event
+        (optionally tagged with ``confirm_id`` for cross-surface
+        correlation), runs the action, and forwards the macro result
+        to the client when applicable.
+        """
         action = widget.action
         macro = widget.macro
         primitive, command_text = _action_primitive(action, macro)
@@ -2209,16 +2465,19 @@ class Server:
                 error=None,
             )
         )
+        action_event_data: dict[str, object] = {
+            "widget_id": widget.id,
+            "layout_id": self._current_app_id,
+            "primitive": primitive,
+        }
+        if confirm_id is not None:
+            action_event_data["confirm_id"] = confirm_id
         asyncio.create_task(
             self.events.emit(
                 DiagnosticEvent(
                     name="action",
                     ts=time.time(),
-                    data={
-                        "widget_id": widget.id,
-                        "layout_id": self._current_app_id,
-                        "primitive": primitive,
-                    },
+                    data=action_event_data,
                     correlation_id=current_correlation_id(),
                 )
             )

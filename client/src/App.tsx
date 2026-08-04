@@ -35,6 +35,8 @@ import type { Icon as IconRef, ServerChromeMedia, ServerLayout } from "./protoco
 import { EDITOR_VIEW_ID, MPRIS_VIEW_ID } from "./protocol";
 import { isTypingTarget, onActivate } from "./a11y";
 import { Editor } from "./Editor";
+import { ConfirmModal } from "./ConfirmModal";
+import type { Widget } from "./protocol";
 
 type View = "layout" | "trackpad" | "settings" | "mediabrowser" | "editor";
 type SocketStatus = "connecting" | "open" | "closed" | "unauthorized";
@@ -133,8 +135,59 @@ export function App() {
     // fixture doesn't leak into the browser.
     for (const state of MPRIS_DEMO_STATES) onMediaState(state);
   }, [isDemo, onMediaState]);
+  // Confirmation handshake state (issues #69 / #107). The daemon
+  // sends ``confirm_request`` instead of running a ``confirm: true``
+  // action; this state holds the pending prompt and drives a modal
+  // that names the widget, with Enter=Confirm / Esc=Cancel (Variant
+  // A). The ~30 s auto-dismiss lives on ``ConfirmModal`` itself —
+  // it matches the daemon's backstop so a visible prompt is always
+  // a live one.
+  const [pendingConfirm, setPendingConfirm] = useState<
+    { confirmId: string; widgetId: string } | null
+  >(null);
+  const onConfirmRequest = useCallback(
+    (m: { confirm_id: string; widget_id: string }) =>
+      setPendingConfirm({ confirmId: m.confirm_id, widgetId: m.widget_id }),
+    [],
+  );
   const { status, send, authenticate, deauthenticate, hasPassword } =
-    useDeckdSocket(onLayout, onWidgetUpdate, onMediaState, onChromeMedia, { enabled: !demoLayout });
+    useDeckdSocket(
+      onLayout,
+      onWidgetUpdate,
+      onMediaState,
+      onChromeMedia,
+      onConfirmRequest,
+      { enabled: !demoLayout },
+    );
+  // Look the pressed widget up in the active layout so the modal
+  // can show its label / icon (the daemon doesn't send command text
+  // on the wire). If the layout has rotated away between the press
+  // and the modal showing, fall back to a synthetic widget with
+  // just the id so the prompt still names something concrete.
+  const pendingWidget: Widget | null = pendingConfirm
+    ? layout?.widgets.find((w) => w.id === pendingConfirm.widgetId) ?? {
+        id: pendingConfirm.widgetId,
+        kind: "button",
+        confirm: true,
+      }
+    : null;
+  const onConfirmResponse = useCallback(
+    (confirmId: string, decision: "confirm" | "cancel") => {
+      send({ type: "confirm_response", confirm_id: confirmId, decision });
+      // The modal closes on its own dispatch; the next server-side
+      // ``confirm_request`` (or the timer firing) sets a fresh entry.
+      setPendingConfirm(null);
+    },
+    [send, setPendingConfirm],
+  );
+  const onConfirm = useCallback(
+    (confirmId: string) => onConfirmResponse(confirmId, "confirm"),
+    [onConfirmResponse],
+  );
+  const onCancel = useCallback(
+    (confirmId: string) => onConfirmResponse(confirmId, "cancel"),
+    [onConfirmResponse],
+  );
   // Track whether we've already handed the socket a password this session, so
   const [attemptedAuth, setAttemptedAuth] = useState(false);
   const scroll = useScrollSettings();
@@ -655,8 +708,23 @@ export function App() {
             <SettingsIcon size={18} />
           </button>
         </Tooltip>
-      </footer>
-    </div>
+        </footer>
+      </div>
+      {/* Confirmation modal for ``confirm: true`` widgets (issues #69
+          / #109 Variant A). Sits over the chrome on a dim+blur
+          backdrop so the user can't miss it; the modal auto-dismisses
+          in sync with the daemon's backstop so a visible prompt is
+          always a live one. The modal renders only while a request is
+          pending — between requests the surface returns to its normal
+          grid view. */}
+      {pendingConfirm && pendingWidget ? (
+        <ConfirmModal
+          confirmId={pendingConfirm.confirmId}
+          widget={pendingWidget}
+          onConfirm={onConfirm}
+          onCancel={onCancel}
+        />
+      ) : null}
     </>
   );
 }

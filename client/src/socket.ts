@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerChromeMedia, ServerLayout, ServerMessage, ServerWidgetUpdate, MediaState } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerLayout, ServerMessage, ServerWidgetUpdate, MediaState } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
 
@@ -45,6 +45,7 @@ export function useDeckdSocket(
   onWidgetUpdate: (m: ServerWidgetUpdate) => void,
   onMediaState: (m: MediaState) => void,
   onChromeMedia?: (m: ServerChromeMedia) => void,
+  onConfirmRequest?: (m: ServerConfirmRequest) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -115,6 +116,7 @@ export function useDeckdSocket(
           // the dispatch. The defensive guard costs nothing and
           // keeps the wire surface forward-compatible.
           else if (msg.type === "chrome_media" && onChromeMedia) onChromeMedia(msg);
+          else if (msg.type === "confirm_request" && onConfirmRequest) onConfirmRequest(msg);
           else if (msg.type === "error" && msg.reason === "unauthorized") {
             // Wrong/absent password: stop reconnecting and prompt the user.
             unauthorizedRef.current = true;
@@ -168,7 +170,7 @@ export function useDeckdSocket(
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onLayout, onWidgetUpdate, onMediaState, onChromeMedia, enabled, gen]);
+  }, [onLayout, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, enabled, gen]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;

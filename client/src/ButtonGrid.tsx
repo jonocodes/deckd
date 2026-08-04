@@ -202,15 +202,29 @@ export function ButtonGrid({
         }
         const buttonStyle: CSSProperties = w.color ? { ...style, backgroundColor: w.color } : style;
         const hint = showKeyHints ? keyHint(w) : null;
+        // ``confirm: true`` widgets carry a persistent danger affordance
+        // (issue #69 / #109): red border + small ⚠ badge so a user can
+        // spot danger before pressing. The widget record the daemon
+        // relays on every layout push carries the field verbatim.
+        const isDangerous = w.confirm === true;
+        const cellClassName = isDangerous
+          ? "cell cell-button cell-danger"
+          : "cell cell-button";
         return (
           <button
             key={w.id}
-            className="cell cell-button"
+            className={cellClassName}
             style={buttonStyle}
             aria-label={w.label ?? w.id}
+            data-confirm-dangerous={isDangerous ? "true" : undefined}
             onPointerDown={() => onPress(w.id)}
             onKeyDown={onActivate(() => onPress(w.id))}
           >
+            {isDangerous ? (
+              <span className="cell-danger-badge" aria-hidden="true">
+                <Icon icon={{ source: "lucide", name: "alert-triangle" }} />
+              </span>
+            ) : null}
             {w.icon ? <Icon icon={w.icon} className="icon" /> : null}
             {/* Text is opt-in per button: a widget with a ``label`` shows it,
                 one without is icon-only. The id is only a last-resort

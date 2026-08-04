@@ -761,7 +761,40 @@ A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` f
 - `url: "https://…"` — open a URL in the user's default browser (`xdg-open` on Linux, `open` on macOS). Accepts `http:`, `https:`, and `file:` schemes; other schemes are rejected at load time with guidance to use `shell:` instead. The URL is passed directly to the opener binary (no shell quoting), so query strings, fragments, and percent-encoded paths survive unchanged.
 - `text: "hello world"` — inject a string into the focused window. Two modes: **simulate** (default) emits each character as a synthetic key event through the existing keyboard injection path; **paste** (`text_mode: paste`) writes the string to the clipboard, emits `ctrl+v`, and restores the previous clipboard contents after one second (set `restore_clipboard: false` to skip restoration). When a string contains characters not mappable to keycodes (multi-byte emoji, control chars) and the mode isn't explicitly forced to `simulate`, it automatically falls back to paste with a warning.
 
+#### Confirming dangerous actions (`confirm: true`)
 
+Mark a button (or a macro widget) as dangerous by adding `confirm: true`. On press the daemon **withholds** the action, mints a short token, and pushes a confirmation prompt to the client; the action runs only when the client confirms. The client also carries a persistent red border + ⚠ badge on the widget in its resting state so danger reads at a glance before any press.
+
+```yaml
+- id: rm-all
+  kind: button
+  label: Remove all
+  confirm: true                # require a confirmation before running
+  action:
+    shell: "rm -rf ~/Downloads/tmp"
+
+# A macro is gated as a whole — one confirm covers every step.
+- id: full-reset
+  kind: button
+  label: Full reset
+  confirm: true
+  macro:
+    steps:
+      - type: key
+        value: "ctrl+alt+Delete"
+      - type: shell
+        value: "systemctl --user restart deckd"
+```
+
+Rules:
+
+- `confirm` is a plain boolean (default `false`). Opt-in only — the daemon never auto-classifies an action as dangerous.
+- Valid only on a widget that has an `action` or a `macro`. Rejected at load on `blank`, `meter`, `stats`, `media`, and `mediabrowser` (media sub-actions are intentionally ungated; nothing dangerous runs there).
+- Gates the main press only. The same widget's transport / sub-actions still fire without a prompt.
+- The confirmation round-trip is **daemon-authoritative**: silence = no dangerous action. The daemon never runs the action until the client confirms. A ~30 s backstop discards the pending action if the client doesn't reply (silently, no-op) and the client modal auto-dismisses in lockstep so a visible prompt is always a live one.
+- Outcomes are recorded in the diagnostic surfaces: a `confirm` diagnostic event carries the lifecycle (`requested` / `confirmed` / `cancelled` / `expired`), and `cancelled` / `expired` land as distinct recent-action ring records. `confirmed` is the normal execution record (no double-counting).
+
+The keyboard contract for the modal is `Enter` = Confirm, `Esc` = Cancel.
 
 ### Client auth
 

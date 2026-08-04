@@ -76,6 +76,7 @@ const SHOWCASE: ServerLayout = {
     { id: "plain", kind: "button", label: "No icon" },
     { id: "colored", kind: "button", label: "Accent", icon: { source: "lucide", name: "sparkles" }, color: "#6d28d9" },
     { id: "danger", kind: "button", label: "Danger", icon: { source: "lucide", name: "trash-2" }, color: "#7f1d1d" },
+    { id: "confirm-rm", kind: "button", label: "Confirm remove", icon: { source: "lucide", name: "alert-triangle" }, color: "#7f1d1d", confirm: true, action: { key: "Delete" } },
     { id: "missing", kind: "button", label: "Missing", icon: { source: "lucide", name: "not-a-real-icon" } },
   ],
 };

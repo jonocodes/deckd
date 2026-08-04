@@ -207,8 +207,29 @@ class MacroResultMessage(BaseModel):
     error: str | None = None
 
 
+class ConfirmRequestMessage(BaseModel):
+    """Daemon -> client push: ask for a confirmation before running an
+    action (issues #69 / #107).
+
+    Fires on a ``confirm: true`` press *instead of* running the action.
+    The daemon mints ``confirm_id``, stores the pending action in
+    session-scoped state, and waits up to ~30 seconds for a matching
+    :class:`ConfirmResponseMessage`. The client renders a confirmation
+    prompt naming the widget (``widget_id``); the widget's action /
+    command text is *not* sent over the wire — the client already holds
+    it from the last ``LayoutMessage`` and generates the prompt text
+    locally (no custom copy from the daemon).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["confirm_request"]
+    confirm_id: str = Field(min_length=1)
+    widget_id: str = Field(min_length=1)
+
+
 ServerMessage = Annotated[
-    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, ChromeMediaMessage, EventMessage, MacroResultMessage],
+    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, ChromeMediaMessage, EventMessage, MacroResultMessage, ConfirmRequestMessage],
     Field(discriminator="type"),
 ]
 
@@ -347,6 +368,25 @@ class KeyMessage(BaseModel):
     combo: str
 
 
+class ConfirmResponseMessage(BaseModel):
+    """Client -> daemon: the user's verdict on a pending
+    :class:`ConfirmRequestMessage` (issues #69 / #107).
+
+    ``decision`` is a literal verb over a bare bool, mirroring the
+    ``MediaCommandMessage`` idiom (``"play-pause"`` not ``True``). The
+    daemon looks up the pending action by ``confirm_id``: an unknown /
+    expired / superseded token is a no-op (the action never runs). On
+    ``"confirm"`` the daemon re-enters the normal ``run_action`` path;
+    on ``"cancel"`` the pending action is dropped without side effects.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["confirm_response"]
+    confirm_id: str = Field(min_length=1)
+    decision: Literal["confirm", "cancel"]
+
+
 class EnableEventsMessage(BaseModel):
     """Client -> daemon: subscribe this session to the diagnostic event
     stream (issue #73).
@@ -390,6 +430,6 @@ class MprisCommandRequest(BaseModel):
 
 
 ClientMessage = Annotated[
-    Union[HelloMessage, PressMessage, JogMessage, JogEndMessage, PadMessage, PadTapMessage, PadDragMessage, TypeMessage, KeyMessage, MediaCommandMessage, SelectViewMessage, ClearViewMessage, EnableEventsMessage, DisableEventsMessage],
+    Union[HelloMessage, PressMessage, JogMessage, JogEndMessage, PadMessage, PadTapMessage, PadDragMessage, TypeMessage, KeyMessage, MediaCommandMessage, SelectViewMessage, ClearViewMessage, EnableEventsMessage, DisableEventsMessage, ConfirmResponseMessage],
     Field(discriminator="type"),
 ]

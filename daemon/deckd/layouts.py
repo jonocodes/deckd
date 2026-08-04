@@ -140,6 +140,21 @@ class Widget(BaseModel):
     # per-layout knob (issue #58). Mirrors the existing media-only-field
     # rule: only valid when ``kind == "mediabrowser"``.
     empty_state: MediaBrowserEmptyState | None = None
+    # Confirmation opt-in (issues #69 / #108). When ``True`` the daemon
+    # withholds execution on press, mints a ``confirm_id``, sends a
+    # ``confirm_request`` to the client, and only runs the action /
+    # macro on a matching ``confirm_response`` with ``decision="confirm"``.
+    # The daemon-authoritative handshake is what makes the gate
+    # trustworthy (client-only cosmetics can be bypassed); see
+    # ``server.py::_dispatch_press`` for the seam. Valid only on a
+    # widget with an ``action`` or a ``macro`` — rejected at load by
+    # the ``_validate_confirm_invariant`` model validator below
+    # (blank / meter / stats / media / mediabrowser all reject
+    # ``confirm: true``; ``confirm: false``/absent is harmless
+    # everywhere and stays the default). Emit-always via plain
+    # ``model_dump`` so the client can read ``widget.confirm`` to
+    # render a danger affordance before any press happens.
+    confirm: bool = False
 
     @field_validator("kind")
     @classmethod
@@ -260,6 +275,22 @@ class Widget(BaseModel):
                 "stats widgets require a non-empty 'metrics' list, each "
                 "naming a 'source' (e.g. metrics: [{source: cpu_percent}])"
             )
+        if self.confirm:
+            # ``confirm: true`` requires an executable action or macro to
+            # gate. A bare label-only button, a non-interactive kind
+            # (``blank`` / ``meter`` / ``stats``), or a composite media
+            # surface (``media`` / ``mediabrowser`` — issue #108's
+            # clarification) has nothing to confirm; rejecting at load
+            # is clearer than silently ignoring the field.
+            forbidden_confirm_kinds = {"blank", "meter", "stats", "media", "mediabrowser"}
+            if self.kind in forbidden_confirm_kinds:
+                raise ValueError(
+                    f"confirm: true is not valid on kind={self.kind!r} widgets"
+                )
+            if self.action is None and self.macro is None:
+                raise ValueError(
+                    "confirm: true requires an 'action' or 'macro'"
+                )
         return self
 
 
