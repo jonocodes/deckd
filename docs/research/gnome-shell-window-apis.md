@@ -36,8 +36,12 @@ directly via the `global` object.
 - **`Shell.WindowTracker.get_default().get_window_app(win)`** — maps a window to
   a `Shell.App`; `app.get_id()` returns the `.desktop` file id, which is the
   best cross-session-stable identity when a desktop file exists. It uses
-  heuristics (sandboxed id → gtk app id → wm_class → pid) internally, so it is
-  strictly better than hand-rolling wm_class matching.
+  heuristics internally — per `src/shell-window-tracker.c` the priority order
+  is: sandboxed app id → GTK application id → WM_CLASS (StartupWMClass, then
+  desktop files by instance, then class) → PID → startup-notification id →
+  X11 window group → synthetic fallback app — so it is strictly better than
+  hand-rolling wm_class matching.
+  Source: https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/main/src/shell-window-tracker.c
   `Shell.AppSystem.get_default().get_running()` enumerates running `Shell.App`s
   (grouped by app, not by window; each app has `get_windows()`).
   Source: https://gjs-docs.gnome.org/shell17~17/ (Shell.WindowTracker, Shell.AppSystem)
@@ -92,9 +96,13 @@ https://gjs-docs.gnome.org/meta17~17/meta.window
   (mutter MetaContext). So "just Eval JS over D-Bus" is not viable; a real
   extension is required. Sources: https://extensions.gnome.org/review/26639,
   https://github.com/linushdot/unsafe-mode-menu
-- **`org.gnome.Shell.Introspect`** (`GetWindows()`) exists but is allowlisted
-  (xdg-desktop-portal, xdotool-like tools) and gives no activation; not usable
-  by deckd without unsafe-mode.
+- **`org.gnome.Shell.Introspect`** (`GetWindows()` + `WindowsChanged` signal;
+  added in gnome-shell MR !326) exists but the shell checks the D-Bus sender
+  against an allowlist (the XDG desktop portals) or requires unsafe mode, and
+  it gives no activation; not usable by deckd without unsafe-mode.
+  Sources: https://gitlab.gnome.org/GNOME/gnome-shell/-/merge_requests/326,
+  https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/main/data/dbus-interfaces/org.gnome.Shell.Introspect.xml,
+  https://discourse.gnome.org/t/unable-to-call-the-remote-getwindows-gnome-method-via-dbus/21201
 
 ## Prior art: Window Calls (github.com/ickyicky/window-calls)
 
