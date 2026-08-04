@@ -64,7 +64,9 @@
     display: flex; align-items: center; justify-content: center; font-weight: 700;
   }
 
-  .vA .backdrop {
+  /* Variant A's modal is appended to <body>, not #app, so its styles must NOT
+     be variant-scoped — the .vA ancestor on #app doesn't reach here. */
+  .backdrop {
     position: fixed; inset: 0; background: rgba(1,4,9,.72);
     backdrop-filter: blur(6px); z-index: 100;
     display: flex; align-items: center; justify-content: center;
@@ -410,6 +412,9 @@
       a.href = `?v=${a.dataset.v}`;
     });
     if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; pendingWidget = null; }
+    // Mirror the variant class on <body> too — modal/sheet DOM is appended
+    // to <body>, not #app, so variant-scoped styles need to reach there.
+    document.body.className = `v${variant}`;
     (variant === "A" ? renderA : variant === "B" ? renderB : renderC)();
   }
   render();
