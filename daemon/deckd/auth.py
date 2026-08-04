@@ -120,7 +120,9 @@ def _create(path: Path) -> str:
         "\n"
         "  SAVE THIS — it won't be shown again.\n"
         "  Stored (plaintext, mode 0640) at: %s\n"
-        "  Local connections (127.0.0.1 / ::1) need no password.\n"
+        "  Every client needs this password — no source-address exemption,\n"
+        "  so local (127.0.0.1 / ::1) connections must present it too.\n"
+        "  Start with --no-auth to disable auth entirely.\n"
         "==================================================================",
         password,
         path,
