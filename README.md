@@ -701,6 +701,55 @@ DECKD_PASSWORD="$PW" deckctl --host desktop.tailnet.ts.net layout firefox
 
 When the daemon runs with auth on, the control endpoints (`/reload`, `/layout`) require the password — supply it with `--password` or the `DECKD_PASSWORD` env var. `deckctl` deliberately does **not** read the daemon's password file itself (it may be pointed at a remote daemon whose file it can't see). `deckctl status` hits `/health`, which is left open, so it always works. For frictionless local work, run the daemon with `--no-auth`.
 
+## Running in production
+
+The commands above are for a foreground / development run. To have deckd start with your desktop and stay running, install it as a per-user session service.
+
+**deckd is a per-user desktop-session daemon, not a detachable backend.** One process both runs the logic and serves the built web client (there is no separate frontend server in production — `--client-dist client/dist` is served at `:8765`). Because it watches the focused window through a compositor plugin, injects input, and calls your **session** D-Bus bus, it must run **inside your logged-in graphical session**. That makes a **systemd _user_ service** (Linux) or a **launchd LaunchAgent** (macOS) the right vehicle — not a system daemon (no session bus/display) and **not Docker** (it would need host `/dev/uinput`, the host session-bus socket, and the host display, and still couldn't host the compositor plugin — so containerising buys no isolation).
+
+**1. Build the client the daemon serves** (one-time; re-run after upgrading):
+
+```sh
+just setup && just build-client
+```
+
+**2. Set up input + the focus watcher** for your platform:
+
+- **Linux** — grant `/dev/uinput` write access (udev rule + `input` group, per [uinput permissions](#uinput-permissions); without it injection is a silent no-op), then install the focus watcher for your desktop:
+
+  ```sh
+  just install-focus-extension    # GNOME Shell
+  just install-focus-kwin         # KDE Plasma Wayland (see the KDE section for prerequisites)
+  ```
+
+- **macOS** — no udev/uinput; the first focus change pops a one-time **TCC prompt** for System Events (accept it once). See the [macOS](#macos) section for the focus/injection capability matrix.
+
+**3. Install the service** — OS-aware, like `just setup`: the systemd user unit on Linux, the launchd agent on macOS:
+
+```sh
+just install-service
+```
+
+On Linux this installs [`packaging/systemd/deckd.service`](packaging/systemd/deckd.service) (with your checkout path substituted for `@PROJECT_DIR@`) to `~/.config/systemd/user/`, then `systemctl --user enable --now deckd` — `WantedBy=graphical-session.target`, so it starts on login and restarts on failure. On macOS it installs [`packaging/launchd/com.deckd.daemon.plist`](packaging/launchd/com.deckd.daemon.plist) to `~/Library/LaunchAgents/` and `launchctl load`s it (`RunAtLoad` + `KeepAlive`).
+
+Auth is on by default — the shared password is read from (or generated at) `~/.config/deckd/password` on first start; the bind is localhost-only unless you add `--bind 0.0.0.0` (or `--bind iface:wlan0`) to the unit's `ExecStart` / the plist's `ProgramArguments`.
+
+```sh
+# Linux
+systemctl --user status deckd           # check it's running
+journalctl --user -u deckd -f           # follow logs
+systemctl --user restart deckd          # only after a code/unit change — layout YAML hot-reloads
+sudo loginctl enable-linger $USER       # optional: keep running while logged out (headless deck host)
+
+# macOS
+launchctl list | grep deckd             # confirm it's loaded
+tail -f deckd.log                       # follow logs (written in the checkout)
+```
+
+**Prefer not to use `just`?** The recipes are thin wrappers you can run by hand — `install-service` is a path-substituting `sed` into `~/.config/systemd/user/` (or `~/Library/LaunchAgents/`) followed by the `systemctl --user enable --now` / `launchctl load` above; `install-focus-extension` is `gnome-extensions pack/install/enable` on `packaging/gnome-shell/deckd-focus@local`. See the `Justfile` for the exact commands.
+
+**NixOS** users can skip all of the above — import the module at [`packaging/nixos/deckd-spike.nix`](packaging/nixos/deckd-spike.nix), which declares the same user service plus the uinput udev rule and `input` group. See its header for options (`bind`, `port`, …).
+
 ## Configuration
 
 A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Shipped layouts today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), an optional `size: [w, h]` span (default `[1, 1]`; for non-square widgets like wide meters), an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. Widgets pack in list order (ADR-0010); there are no grid coordinates. The special `kind: blank` skips a cell slot for visual gaps. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. A layout may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `LayoutMessage`. A layout may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:

@@ -218,6 +218,35 @@ install-focus-kwin:
     echo "deckd-focus KWin script installed, enabled, and hot-started."
     echo "Run 'just watch-focus' to confirm focus events land."
 
+# Install deckd as a per-user session service so it starts with your desktop.
+#
+# OS-aware (like `just setup`): on Linux installs the systemd *user* unit
+# (packaging/systemd/deckd.service) to ~/.config/systemd/user and enables it;
+# on macOS installs the launchd LaunchAgent (packaging/launchd/...) to
+# ~/Library/LaunchAgents and loads it. Both substitute this checkout's path in.
+# deckd is a per-user desktop-session daemon, hence a *user* service, not a
+# system one. Run `just setup && just build-client` and set up the focus watcher
+# (`just install-focus-extension` / `install-focus-kwin`) first. Re-run anytime.
+install-service:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    project_dir="$(pwd)"
+    if [ "$(uname)" = "Darwin" ]; then
+        dest="$HOME/Library/LaunchAgents/com.deckd.daemon.plist"
+        sed "s|@PROJECT_DIR@|${project_dir}|g" packaging/launchd/com.deckd.daemon.plist > "$dest"
+        launchctl unload "$dest" 2>/dev/null || true
+        launchctl load "$dest"
+        echo "com.deckd.daemon LaunchAgent installed and loaded. Logs: tail -f ${project_dir}/deckd.log"
+    else
+        dest_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
+        mkdir -p "$dest_dir"
+        sed "s|@PROJECT_DIR@|${project_dir}|g" packaging/systemd/deckd.service > "$dest_dir/deckd.service"
+        systemctl --user daemon-reload
+        systemctl --user enable --now deckd.service
+        echo "deckd.service installed and started. Logs: journalctl --user -u deckd -f"
+        echo "Optional: 'sudo loginctl enable-linger $USER' keeps it running when you're logged out."
+    fi
+
 # Print active app/window changes for Spike #2.
 watch-focus:
     python -u scripts/watch_focus.py

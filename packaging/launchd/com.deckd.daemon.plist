@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  deckd — launchd LaunchAgent (macOS).
+
+  The macOS equivalent of the systemd *user* service: a per-user LaunchAgent,
+  loaded into your GUI login session so deckd can watch the frontmost app
+  (osascript + System Events) and inject keys/pointer events. It must run as a
+  user agent (~/Library/LaunchAgents), not a system daemon.
+
+  Do not edit in place. Copy this to ~/Library/LaunchAgents/com.deckd.daemon.plist
+  with @PROJECT_DIR@ replaced by your checkout path, then:
+    launchctl load ~/Library/LaunchAgents/com.deckd.daemon.plist
+
+  First run pops a TCC prompt (System Events) — accept it once. Auth is on by
+  default (~/.config/deckd/password); add a bind flag to ProgramArguments
+  (e.g. 0.0.0.0) to expose it on the LAN.
+-->
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.deckd.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>@PROJECT_DIR@/.venv/bin/deckd</string>
+        <string>--layouts-dir</string>
+        <string>@PROJECT_DIR@/layouts</string>
+        <string>--client-dist</string>
+        <string>@PROJECT_DIR@/client/dist</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>@PROJECT_DIR@</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <dict>
+        <key>SuccessfulExit</key>
+        <false/>
+    </dict>
+    <key>StandardOutPath</key>
+    <string>@PROJECT_DIR@/deckd.log</string>
+    <key>StandardErrorPath</key>
+    <string>@PROJECT_DIR@/deckd.log</string>
+</dict>
+</plist>
