@@ -164,6 +164,11 @@ ladle:
 # Run the test suite.
 test:
     pytest
+    node scripts/test_focus_wire_shape.mjs
+
+# Run the GNOME focus JSON producer contract independently.
+test-focus-wire:
+    node scripts/test_focus_wire_shape.mjs
 
 # Run the client test suite (Vitest unit tests + Playwright e2e). The e2e
 # half boots the daemon with PYTHONPATH=scripts/no-evdev so its uinput sink

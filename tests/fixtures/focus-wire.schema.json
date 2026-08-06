@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["active_window", "window"],
+  "properties": {
+    "active_window": { "$ref": "#/$defs/active_window" },
+    "window": { "$ref": "#/$defs/window" }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "active_window": {
+      "type": "object",
+      "required": ["app_id", "wm_class", "title", "pid"],
+      "properties": {
+        "app_id": { "type": ["string", "null"] },
+        "wm_class": { "type": ["string", "null"] },
+        "title": { "type": ["string", "null"] },
+        "pid": { "type": ["integer", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "window": {
+      "type": "object",
+      "required": ["window_id", "wm_class", "gtk_application_id", "sandboxed_app_id", "app_name", "title", "workspace", "minimized"],
+      "properties": {
+        "window_id": { "type": "string" },
+        "wm_class": { "type": ["string", "null"] },
+        "gtk_application_id": { "type": ["string", "null"] },
+        "sandboxed_app_id": { "type": ["string", "null"] },
+        "app_name": { "type": ["string", "null"] },
+        "title": { "type": ["string", "null"] },
+        "workspace": { "type": ["integer", "null"] },
+        "minimized": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

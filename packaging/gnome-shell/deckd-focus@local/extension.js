@@ -3,6 +3,7 @@ import GLib from "gi://GLib";
 import Meta from "gi://Meta";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import {Extension} from "resource:///org/gnome/shell/extensions/extension.js";
+import {activeWindowPayload, windowPayload} from "./wire-shape.js";
 
 const BUS_NAME = "org.deckd.Focus";
 const OBJECT_PATH = "/org/deckd/Focus";
@@ -202,40 +203,11 @@ ListWindows() {
   }
 
   _activeWindowJson() {
-    const win = global.display.focus_window;
-    if (!win) {
-      return JSON.stringify({
-        app_id: null,
-        wm_class: null,
-        title: null,
-        pid: null,
-      });
-    }
-
-    return JSON.stringify({
-      app_id: this._callOrNull(win, "get_gtk_application_id"),
-      wm_class: this._callOrNull(win, "get_wm_class"),
-      title: this._callOrNull(win, "get_title"),
-      pid: this._callOrNull(win, "get_pid"),
-    });
+    return JSON.stringify(activeWindowPayload(global.display.focus_window, this._callOrNull.bind(this)));
   }
 
   _windowJson(metaWindow) {
-    const id = this._callOrNull(metaWindow, "get_id");
-    if (id === null) return null;
-    const workspace = this._callOrNull(metaWindow, "get_workspace");
-    const sandboxed = this._sandboxedAppId(metaWindow);
-    const app = metaWindow.get_app ? metaWindow.get_app() : null;
-    return {
-      window_id: String(id),
-      wm_class: this._callOrNull(metaWindow, "get_wm_class"),
-      gtk_application_id: this._callOrNull(metaWindow, "get_gtk_application_id"),
-      sandboxed_app_id: sandboxed,
-      app_name: app && typeof app.get_name === "function" ? app.get_name() : null,
-      title: this._callOrNull(metaWindow, "get_title"),
-      workspace: workspace !== null && typeof workspace.index === "number" ? workspace.index : null,
-      minimized: this._callOrNull(metaWindow, "minimized") === true,
-    };
+    return windowPayload(metaWindow, this._callOrNull.bind(this), this._sandboxedAppId.bind(this));
   }
 
   _focusedWindowId(focused) {

@@ -1,0 +1,18 @@
+{
+  "active_window": {
+    "app_id": "org.mozilla.firefox",
+    "wm_class": "firefox",
+    "title": "YouTube - Mozilla Firefox",
+    "pid": 4242
+  },
+  "window": {
+    "window_id": "42",
+    "wm_class": "firefox",
+    "gtk_application_id": "org.mozilla.firefox",
+    "sandboxed_app_id": "org.mozilla.Firefox",
+    "app_name": "Firefox",
+    "title": "YouTube - Mozilla Firefox",
+    "workspace": 1,
+    "minimized": false
+  }
+}

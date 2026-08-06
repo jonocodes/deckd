@@ -10,6 +10,9 @@ seam the GNOME backend uses) rather than touching ``subprocess``.
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from deckd import platform as plat
@@ -393,6 +396,55 @@ def test_window_info_from_payload_full_shape() -> None:
         workspace=1,
         minimized=False,
     )
+
+
+def test_focus_wire_fixture_parses_into_both_domain_models() -> None:
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures" / "focus-wire.json").read_text()
+    )
+    schema = json.loads(
+        (Path(__file__).parent / "fixtures" / "focus-wire.schema.json").read_text()
+    )
+    _assert_focus_wire_schema(fixture, schema)
+    assert plat._app_info_from_payload(fixture["active_window"]) == AppInfo(
+        app_id="org.mozilla.firefox",
+        wm_class="firefox",
+        title="YouTube - Mozilla Firefox",
+        pid=4242,
+    )
+    assert plat._window_info_from_payload(fixture["window"]) == WindowInfo(
+        window_id="42",
+        wm_class="firefox",
+        app_name="Firefox",
+        gtk_application_id="org.mozilla.firefox",
+        sandboxed_app_id="org.mozilla.Firefox",
+        title="YouTube - Mozilla Firefox",
+        workspace=1,
+        minimized=False,
+    )
+
+
+def _assert_focus_wire_schema(value: dict, schema: dict) -> None:
+    assert set(value) == set(schema["required"])
+    for name, definition in schema["properties"].items():
+        payload = value[name]
+        shape = schema["$defs"][definition["$ref"].rsplit("/", 1)[-1]]
+        assert set(payload) == set(shape["required"])
+        for key, property_schema in shape["properties"].items():
+            item = payload[key]
+            allowed = property_schema["type"]
+            if not isinstance(allowed, list):
+                allowed = [allowed]
+            assert any(
+                item is None
+                if kind == "null"
+                else isinstance(item, str)
+                if kind == "string"
+                else isinstance(item, bool)
+                if kind == "boolean"
+                else isinstance(item, int) and not isinstance(item, bool)
+                for kind in allowed
+            )
 
 
 def test_window_info_from_payload_handles_missing_keys() -> None:
