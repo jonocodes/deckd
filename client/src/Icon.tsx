@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { icons as lucideIcons } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Icon as IconRef } from "./protocol";
+import { loadSimpleIcons } from "./icons";
 
 /** Renders a widget ``{source, name}`` icon reference by dispatching on
  * ``source`` to a bundled icon set (ADR-0006). The registry of known
@@ -23,26 +24,6 @@ function toPascal(name: string): string {
     .filter(Boolean)
     .map((w) => w[0].toUpperCase() + w.slice(1))
     .join("");
-}
-
-type SimpleIcon = { slug: string; path: string; title: string };
-
-// Lazily import the whole Simple Icons set exactly once, indexed by slug.
-let simpleIconsPromise: Promise<Map<string, SimpleIcon>> | null = null;
-export function loadSimpleIcons(): Promise<Map<string, SimpleIcon>> {
-  if (!simpleIconsPromise) {
-    simpleIconsPromise = import("simple-icons").then((mod) => {
-      const m = new Map<string, SimpleIcon>();
-      for (const value of Object.values(mod)) {
-        if (value && typeof value === "object" && "slug" in value && "path" in value) {
-          const icon = value as SimpleIcon;
-          m.set(icon.slug, icon);
-        }
-      }
-      return m;
-    });
-  }
-  return simpleIconsPromise;
 }
 
 function MissingIcon({ icon, className }: { icon: IconRef; className?: string }) {

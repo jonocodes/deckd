@@ -3,7 +3,8 @@ import { icons as lucideIcons } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Icon as IconRef } from "./protocol";
-import { Icon as IconGlyph, loadSimpleIcons } from "./Icon";
+import { Icon as IconGlyph } from "./Icon";
+import { loadSimpleIcons } from "./icons";
 
 const lucideByName = lucideIcons as Record<string, LucideIcon>;
 
@@ -70,6 +71,10 @@ export function IconPicker({ value, onChange, open, onClose }: Props) {
 
   const rowCount = Math.ceil(filtered.length / COLS);
 
+  // TanStack Virtual's API returns non-memoizable functions (the virtualizer
+  // exposes .scrollToIndex etc. that capture mutable scroll state). The
+  // React Compiler can't memoize the returned object, so disable the lint.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: rowCount,
     getScrollElement: () => parentRef.current,
