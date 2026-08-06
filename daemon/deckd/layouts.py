@@ -561,6 +561,15 @@ def _window_to_app(win: WindowInfo) -> AppInfo:
     )
 
 
+def _humanize_identity(identity: str) -> str:
+    """Turn a machine app identity into a readable window label."""
+    name = identity.rsplit(".", 1)[-1]
+    name = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", name)
+    name = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name)
+    name = re.sub(r"[-_]", " ", name)
+    return " ".join(word if word.isupper() else word.capitalize() for word in name.split())
+
+
 def label_for_window(store: LayoutStore, win: WindowInfo) -> str:
     """Compute a single row label for one enumerated window (issues
     #119 / #120 / #126).
@@ -569,8 +578,9 @@ def label_for_window(store: LayoutStore, win: WindowInfo) -> str:
     ``title:`` match wins even if a generic browser layout also claims
     the window's identity. Match → matched layout's ``display_name``
     (falls back to ``id`` so a layout without an explicit display name
-    still renders something meaningful). No match → raw identity
-    fallback: ``wm_class``, then ``gtk_application_id``, then
+    still renders something meaningful). No match → ``app_name`` when
+    supplied, then a humanized identity fallback: ``wm_class``, then
+    ``gtk_application_id``, then
     ``sandboxed_app_id``, then ``title`` — the same three-key identity
     the matcher compares against ``match`` tokens (#117 / #118), with
     ``title`` as the last-resort visible string.
@@ -585,8 +595,9 @@ def label_for_window(store: LayoutStore, win: WindowInfo) -> str:
     """
     layout = resolve_layout(store, _window_to_app(win))
     if layout is not store.default():
-        return layout.display_name or layout.id or "unknown"
-    return win.wm_class or win.gtk_application_id or win.sandboxed_app_id or win.title or "unknown"
+        return layout.display_name or _humanize_identity(layout.id) or "unknown"
+    identity = win.wm_class or win.gtk_application_id or win.sandboxed_app_id
+    return win.app_name or (_humanize_identity(identity) if identity else None) or win.title or "unknown"
 
 
 def icon_for_window(store: LayoutStore, win: WindowInfo) -> "Icon | None":

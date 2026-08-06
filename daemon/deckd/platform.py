@@ -90,6 +90,7 @@ class WindowInfo:
     title: str | None
     workspace: int | None
     minimized: bool
+    app_name: str | None = None
 
 
 @dataclass(frozen=True)
@@ -647,6 +648,7 @@ def _window_info_from_payload(data: dict) -> WindowInfo:
     return WindowInfo(
         window_id=str(data.get("window_id", "")),
         wm_class=data.get("wm_class"),
+        app_name=data.get("app_name"),
         gtk_application_id=data.get("gtk_application_id"),
         sandboxed_app_id=data.get("sandboxed_app_id"),
         title=data.get("title"),

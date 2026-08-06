@@ -23,6 +23,7 @@ from deckd.layouts import (
     LayoutStore,
     Layout,
     Widget,
+    _humanize_identity,
     icon_for_window,
     label_for_window,
     load_layouts,
@@ -34,6 +35,7 @@ def _window(
     *,
     window_id: str = "win1",
     wm_class: str | None = "xterm",
+    app_name: str | None = None,
     gtk_application_id: str | None = None,
     sandboxed_app_id: str | None = None,
     title: str | None = "bash",
@@ -43,6 +45,7 @@ def _window(
     return WindowInfo(
         window_id=window_id,
         wm_class=wm_class,
+        app_name=app_name,
         gtk_application_id=gtk_application_id,
         sandboxed_app_id=sandboxed_app_id,
         title=title,
@@ -107,7 +110,29 @@ def test_label_for_window_identity_match_falls_back_to_layout_id() -> None:
         )
     )
     win = _window(wm_class="xterm")
-    assert label_for_window(store, win) == "xterm"
+    assert label_for_window(store, win) == "Xterm"
+
+
+@pytest.mark.parametrize(
+    ("identity", "expected"),
+    [
+        ("org.gnome.TextEditor", "Text Editor"),
+        ("com.gexperts.Tilix", "Tilix"),
+        ("VLC", "VLC"),
+        ("VLCMediaPlayer", "VLC Media Player"),
+        ("thunderbird", "Thunderbird"),
+        ("firefox-esr", "Firefox Esr"),
+        ("my_app", "My App"),
+    ],
+)
+def test_humanize_identity(identity: str, expected: str) -> None:
+    assert _humanize_identity(identity) == expected
+
+
+def test_label_for_window_app_name_wins_over_identity_fallback() -> None:
+    store = _layout_store_with(Layout(match=["firefox"], widgets=[Widget(id="noop", kind="blank")]))
+    win = _window(wm_class="org.gnome.TextEditor", app_name="Text Editor")
+    assert label_for_window(store, win) == "Text Editor"
 
 
 def test_label_for_window_title_match_wins_over_identity() -> None:
@@ -141,7 +166,7 @@ def test_label_for_window_default_fallback_returns_wm_class() -> None:
         ),
     )
     win = _window(wm_class="xterm")
-    assert label_for_window(store, win) == "xterm"
+    assert label_for_window(store, win) == "Xterm"
 
 
 def test_label_for_window_falls_back_to_gtk_app_id() -> None:
@@ -155,7 +180,7 @@ def test_label_for_window_falls_back_to_gtk_app_id() -> None:
         ),
     )
     win = _window(wm_class=None, gtk_application_id="com.gexperts.Tilix")
-    assert label_for_window(store, win) == "com.gexperts.Tilix"
+    assert label_for_window(store, win) == "Tilix"
 
 
 def test_label_for_window_falls_back_to_sandboxed_app_id() -> None:
@@ -174,7 +199,7 @@ def test_label_for_window_falls_back_to_sandboxed_app_id() -> None:
         gtk_application_id=None,
         sandboxed_app_id="org.flathub.Firefox",
     )
-    assert label_for_window(store, win) == "org.flathub.Firefox"
+    assert label_for_window(store, win) == "Firefox"
 
 
 def test_label_for_window_falls_back_to_title() -> None:
@@ -305,7 +330,7 @@ def test_icon_for_window_re_derives_after_layout_reload(tmp_path) -> None:
     "kwargs,expected",
     [
         ({"wm_class": "firefox"}, "Firefox"),  # identity match wins
-        ({"wm_class": "unknown-app"}, "unknown-app"),  # default fallback
+        ({"wm_class": "unknown-app"}, "Unknown App"),  # default fallback
         ({"title": "YouTube — Watch", "wm_class": "firefox"}, "Firefox"),  # identity vs no-title layout
     ],
 )

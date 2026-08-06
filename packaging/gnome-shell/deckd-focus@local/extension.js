@@ -225,11 +225,13 @@ ListWindows() {
     if (id === null) return null;
     const workspace = this._callOrNull(metaWindow, "get_workspace");
     const sandboxed = this._sandboxedAppId(metaWindow);
+    const app = metaWindow.get_app ? metaWindow.get_app() : null;
     return {
       window_id: String(id),
       wm_class: this._callOrNull(metaWindow, "get_wm_class"),
       gtk_application_id: this._callOrNull(metaWindow, "get_gtk_application_id"),
       sandboxed_app_id: sandboxed,
+      app_name: app && typeof app.get_name === "function" ? app.get_name() : null,
       title: this._callOrNull(metaWindow, "get_title"),
       workspace: workspace !== null && typeof workspace.index === "number" ? workspace.index : null,
       minimized: this._callOrNull(metaWindow, "minimized") === true,

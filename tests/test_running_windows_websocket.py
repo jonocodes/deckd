@@ -155,7 +155,7 @@ async def test_running_windows_emits_on_snapshot_change(tmp_path: Path) -> None:
                         "label": "Firefox",
                         "icon": {"source": "simple-icons", "name": "firefox"},
                     },
-                    {"window_id": "2", "label": "xterm", "icon": None},
+                    {"window_id": "2", "label": "Xterm", "icon": None},
                 ],
             }
     finally:
@@ -305,7 +305,7 @@ async def test_running_windows_broadcasts_to_all_sessions(tmp_path: Path) -> Non
             frame_a = await _next_running_windows(first)
             frame_b = await _next_running_windows(second)
             assert frame_a == frame_b
-            assert frame_a["windows"][0]["label"] == "xterm"
+            assert frame_a["windows"][0]["label"] == "Xterm"
     finally:
         await server.stop()
         await test_server.close()

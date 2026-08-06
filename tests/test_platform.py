@@ -375,6 +375,7 @@ def test_window_info_from_payload_full_shape() -> None:
         {
             "window_id": "42",
             "wm_class": "firefox",
+            "app_name": "Firefox",
             "gtk_application_id": "org.mozilla.firefox",
             "sandboxed_app_id": "org.flathub.Firefox",
             "title": "YouTube",
@@ -385,6 +386,7 @@ def test_window_info_from_payload_full_shape() -> None:
     assert info == WindowInfo(
         window_id="42",
         wm_class="firefox",
+        app_name="Firefox",
         gtk_application_id="org.mozilla.firefox",
         sandboxed_app_id="org.flathub.Firefox",
         title="YouTube",
@@ -401,6 +403,7 @@ def test_window_info_from_payload_handles_missing_keys() -> None:
     info = plat._window_info_from_payload({})
     assert info.window_id == ""
     assert info.wm_class is None
+    assert info.app_name is None
     assert info.gtk_application_id is None
     assert info.sandboxed_app_id is None
     assert info.title is None
