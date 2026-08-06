@@ -75,14 +75,27 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [ ] **Windows support**
 - [ ] **Packing and deployment**
 
-## Inspiration
+## Inspiration and Comparison
 
-- [Steam Deck](https://www.elgato.com/us/en/s/explore-stream-deck)
-- [KDE Connect](https://kdeconnect.kde.org/)
-- [Apple Touch Bar](https://support.apple.com/guide/mac-help/use-the-touch-bar-mchlbfd5b039/mac)
-- [Remote Touchpad](https://github.com/Unrud/remote-touchpad)
-- [OpenDeck](https://github.com/nekename/OpenDeck#showcase)
-- [Boatswain](https://flathub.org/en/apps/com.feaneron.Boatswain)
+The original inspiration was the Stream Deck, and I like all these projects. I wanted something that could do more, have open ended controls, and work across platforms.
+
+
+| Feature | [deckd](https://github.com/jonocodes/deckd/issues) | [Stream Deck](https://www.elgato.com/us/en/s/explore-stream-deck)* | [KDE Connect](https://kdeconnect.kde.org/) | [Apple Touch Bar](https://support.apple.com/guide/mac-help/use-the-touch-bar-mchlbfd5b039/mac) | [Remote Touchpad](https://github.com/Unrud/remote-touchpad) |
+|---|---|---|---|---|---|
+| Controller agnostic | ✅ | ❌ | ✅ | ❌ | ✅ |
+| Cross platform | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Connection | Browser (WiFi) | USB | WiFi | Built-in | WiFi |
+| Custom layouts | ✅ | ✅ | ❌ | 🟡 | ❌ |
+| Custom layouts for web apps* | ✅ | ❌ | ❌| ❌ |❌ |
+| Open source | ✅ | 🟡† | ✅ | ❌ | ✅ |
+| Browser-based client | ✅ | ❌ | ❌ | ❌ | ✅ |
+| Keyboard command triggering | ✅ | ✅ | 🟡 | 🟡 | ❌ |
+| Global media control | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Mouse/touchpad control | ✅ | ❌ | ✅ | ❌ | ✅ |
+
+\*Make layouts for any website with keyboard controls. Examples: YouTube, Google Meet, Twitch
+
+†[OpenDeck](https://github.com/nekename/OpenDeck#showcase), and [Boatswain](https://flathub.org/en/apps/com.feaneron.Boatswain) are open source; Elgato's SDK is not
 
 ## Architecture
 
