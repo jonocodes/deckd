@@ -123,6 +123,7 @@ graph TB
 | **Daemon CLI** | [daemon/deckd/__main__.py](../daemon/deckd/__main__.py) | Argparse: --layouts-dir, --client-dist, --bind, --no-auth, --verbose. |
 | **deckctl CLI** | [daemon/deckd/cli.py](../daemon/deckd/cli.py) | status, reload, layout, metrics subcommands. |
 | **Build/test commands** | [Justfile](../Justfile) | All common commands: setup, dev, test, build, smoke. |
+| **Testing strategy** | [TESTING.md](TESTING.md) | Testing layers, what each fakes, and the planned desktop-integration tier. |
 | **README** | [README.md](../README.md) | Human-facing: pitch, screenshots, status, setup, config reference. |
 
 ## Code owns behavior

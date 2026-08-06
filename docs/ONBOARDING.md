@@ -148,6 +148,10 @@ Step 1 and 3 are cheap type safety gates. Always run at least steps 1–3 before
 
 Some behaviour sits **above** this ladder — it can only be confirmed by a human on real hardware / a live session (e.g. actual `uinput` injection, focus-watching on a real desktop). When a change is merged but this is its only remaining gate, label the issue `human-verification-required` and keep it open until a human signs off. See [docs/agents/triage-labels.md](agents/triage-labels.md#verification-state-repo-extension).
 
+The full picture — what each layer covers, what it fakes, and the planned
+desktop-integration tier that would automate parts of the human step — is in
+[docs/TESTING.md](TESTING.md).
+
 ## Authoritative artifacts
 
 For each concern, exactly one artifact is authoritative. Others derive from it.
