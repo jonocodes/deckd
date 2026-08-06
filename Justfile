@@ -158,6 +158,9 @@ build-pages:
     mkdir -p dist/ladle
     npm run ladle:build -- --base /deckd/ladle/ --outDir dist/ladle
 
+ladle:
+    cd client && npm run ladle
+
 # Run the test suite.
 test:
     pytest
