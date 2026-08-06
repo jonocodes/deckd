@@ -437,11 +437,11 @@ class GnomeShellFocusBackend(PlatformBackend):
 
     def capabilities(self) -> frozenset[str]:
         # Stage 2 (#120): enumeration of every open window joins the
-        # legacy focus-only surface. The KDE backend inherits this
-        # unchanged for the poll path; it advertises the same flag set
-        # (the KWin script can feed both ``UpdateActiveWindow`` and a
-        # parallel window list, mirroring the GNOME extension's dual
-        # ``GetActiveWindow`` / ``ListWindows``).
+        # legacy focus-only surface. GNOME-only today — the KDE subclass
+        # reuses this class for the *poll* path but overrides
+        # ``capabilities()`` back down to focus-only (#133), since it has
+        # no KWin-side enumeration/raise implementation to back these
+        # flags.
         return frozenset({"watch_active_app", "watch_windows", "raise_window", "raise_app"})
 
     async def get_active_app(self) -> AppInfo:
@@ -806,6 +806,25 @@ class KdeFocusBackend(GnomeShellFocusBackend):
         self._service: DeckdFocusDBusService | None = None
         self._bus: "MessageBus | None" = None
         self._started = False
+
+    def capabilities(self) -> frozenset[str]:
+        """Focus-only — the honest surface for KDE today (#133).
+
+        ``KdeFocusBackend`` subclasses :class:`GnomeShellFocusBackend`
+        for the *poll* path only. The KWin script can push focus in
+        (``UpdateActiveWindow``) but there is no KDE-side implementation
+        of enumeration or raise, so advertising the GNOME backend's
+        ``watch_windows`` / ``raise_window`` / ``raise_app`` flags would
+        be dishonest advertisement: the daemon would start those
+        surfaces and the client would sit on a perpetually-empty list
+        (issue #120, decision 8). Override back down to focus-only so
+        each unsupported surface stays in its designed empty state.
+        Matches the ``## Capability matrix`` in
+        ``docs/PLATFORM-PARITY.md``; ``tests/test_platform_parity.py``
+        enforces the agreement. Enumeration/raise parity is future work
+        (the eventual KWin-side implementation re-adds the flags here).
+        """
+        return frozenset({"watch_active_app"})
 
     @property
     def cache(self) -> DeckdFocusCache:

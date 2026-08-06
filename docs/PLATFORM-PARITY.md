@@ -9,15 +9,18 @@ this table exists to make drift between backends visible at a glance.
 
 > Keep this in sync when a backend gains or loses a capability. If a row here
 > disagrees with `capabilities()`, the code wins — and that disagreement is a
-> bug (it's how #133 was found).
+> bug (it's how #133 was found). The three compositor-axis rows
+> (`watch_active_app`, `watch_windows`, `raise_window`) are enforced by
+> `tests/test_platform_parity.py`, which parses this table and asserts it
+> matches every backend's `capabilities()` — so drift fails CI (#136).
 
 ## Capability matrix
 
 | Capability | GNOME (Wayland/X11) | KDE Plasma (Wayland) | X11 (generic) | macOS |
 |---|---|---|---|---|
 | Focus detection (`watch_active_app`) | ✓ GNOME Shell extension over `org.deckd.Focus` | ✓ KWin script pushes into daemon-owned cache (#31) | ✓ `xdotool` poll | ✓ `osascript` + System Events |
-| Window enumeration (`watch_windows`) | ✓ extension `ListWindows` | ✗ — **advertised but unimplemented, see [#133](https://github.com/jonocodes/deckd/issues/133)** | ✗ | ✓ Quartz `CGWindowList` |
-| Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✗ — **advertised but unimplemented, see [#133](https://github.com/jonocodes/deckd/issues/133)** | ✗ | ✓ AppKit + Accessibility |
+| Window enumeration (`watch_windows`) | ✓ extension `ListWindows` | ✗ — not advertised; KWin-side impl is future work ([#133](https://github.com/jonocodes/deckd/issues/133)) | ✗ | ✓ Quartz `CGWindowList` |
+| Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✗ — not advertised; KWin-side impl is future work ([#133](https://github.com/jonocodes/deckd/issues/133)) | ✗ | ✓ AppKit + Accessibility |
 | Raise app (`raise:`) | ✓ extension `RaiseApp` (#137) | ✗ | ✗ | ✗ |
 | Key injection — printable | ✓ `uinput` (evdev) | ✓ `uinput` | ✓ `uinput` | ✓ `osascript keystroke` |
 | Key injection — non-printable / special | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ◑ partial — `osascript key code` map |
@@ -55,9 +58,11 @@ case where KDE advertises two capabilities it can't fulfil.
 - **KDE Plasma** — `KdeFocusBackend` subclasses the GNOME backend and reuses its
   poll path, but the daemon (not a KDE extension) owns `org.deckd.Focus`; the
   KWin script can only *push* focus in (`UpdateActiveWindow`), so the exported
-  interface implements focus only. Enumeration/raise parity is future work
-  ([#133](https://github.com/jonocodes/deckd/issues/133) tracks both the honest
-  capability advertisement and the eventual KWin-side implementation).
+  interface implements focus only, so `KdeFocusBackend.capabilities()`
+  overrides the inherited GNOME set back down to focus-only. Enumeration/raise
+  parity is future work
+  ([#133](https://github.com/jonocodes/deckd/issues/133) tracks the eventual
+  KWin-side implementation that would re-add the flags).
 - **X11** — `xdotool`-based focus polling; no enumeration/raise. Input via
   `uinput` like every Linux path.
 - **macOS** — `osascript` + System Events focus detection; Quartz supplies
