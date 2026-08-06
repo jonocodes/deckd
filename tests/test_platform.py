@@ -17,6 +17,7 @@ from deckd.platform import (
     AppInfo,
     FocusBackendUnavailable,
     GnomeShellFocusBackend,
+    RaiseWindowFailed,
     UnimplementedCapability,
     WindowInfo,
     X11FocusBackend,
@@ -236,8 +237,52 @@ def test_gnome_backend_advertises_watch_windows() -> None:
     """GNOME today implements both surfaces; the windows watcher is
     started at daemon boot and the chrome list gets a real snapshot."""
     assert GnomeShellFocusBackend().capabilities() == frozenset(
-        {"watch_active_app", "watch_windows"}
+        {"watch_active_app", "watch_windows", "raise_window"}
     )
+
+
+@pytest.mark.asyncio
+async def test_gnome_raise_window_calls_gdbus_and_succeeds_on_true(monkeypatch) -> None:
+    """The GNOME backend shells out to ``RaiseWindow`` and treats a
+    ``(true,)`` reply as success (no exception) — the id resolved to a
+    live window (#122)."""
+    calls: list[tuple] = []
+
+    async def fake_run(*args: str) -> str:
+        calls.append(args)
+        assert args[0] == "gdbus"
+        return "(true,)\n"
+
+    monkeypatch.setattr(plat, "_run", fake_run)
+    await GnomeShellFocusBackend().raise_window("42")
+    # The window id rides as the last positional arg of the gdbus call.
+    assert calls[0][-1] == "42"
+    assert any("RaiseWindow" in part for part in calls[0])
+
+
+@pytest.mark.asyncio
+async def test_gnome_raise_window_raises_on_false(monkeypatch) -> None:
+    """A ``(false,)`` reply means the id retired between enumeration and
+    tap; the backend raises :class:`RaiseWindowFailed` carrying the id so
+    the server can emit a ``raise_failed`` diagnostic (#73)."""
+    async def fake_run(*args: str) -> str:
+        return "(false,)\n"
+
+    monkeypatch.setattr(plat, "_run", fake_run)
+    with pytest.raises(RaiseWindowFailed) as excinfo:
+        await GnomeShellFocusBackend().raise_window("gone")
+    assert excinfo.value.window_id == "gone"
+
+
+@pytest.mark.asyncio
+async def test_base_raise_window_raises_unimplemented_capability() -> None:
+    """The base backend refuses to raise — only enumerating backends
+    implement it. The exception names the missing capability."""
+    from deckd.platform import PlatformBackend
+
+    with pytest.raises(UnimplementedCapability) as excinfo:
+        await PlatformBackend().raise_window("1")
+    assert excinfo.value.capability == "raise_window"
 
 
 @pytest.mark.asyncio

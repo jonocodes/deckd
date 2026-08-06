@@ -1,6 +1,7 @@
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import Meta from "gi://Meta";
+import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import {Extension} from "resource:///org/gnome/shell/extensions/extension.js";
 
 const BUS_NAME = "org.deckd.Focus";
@@ -15,6 +16,10 @@ const DBUS_XML = `
     <method name="ListWindows">
       <arg type="s" name="windows_json" direction="out"/>
     </method>
+    <method name="RaiseWindow">
+      <arg type="s" name="window_id" direction="in"/>
+      <arg type="b" name="raised" direction="out"/>
+    </method>
     <signal name="ActiveWindowChanged">
       <arg type="s" name="window_json"/>
     </signal>
@@ -23,6 +28,14 @@ const DBUS_XML = `
 
 export default class DeckdFocusExtension extends Extension {
   enable() {
+    // id (String(Meta.Window.get_id())) -> Meta.Window, populated on
+    // every ListWindows() enumeration (the daemon polls it at the focus
+    // cadence) and pruned when a window is unmanaged. RaiseWindow(id)
+    // resolves through this table; a retired id returns false (#122).
+    this._windowMap = new Map();
+    // Per-window ``unmanaging`` handler ids so we can disconnect on
+    // disable() and when a window retires — no leaked signal handlers.
+    this._unmanagingIds = new Map();
     // Export the object FIRST (on the connection's unique name), then acquire the
     // well-known name with the 6-arg standalone helper. The method-style
     // Gio.DBus.session.own_name(...) used here previously was removed on GNOME 50
@@ -48,6 +61,21 @@ export default class DeckdFocusExtension extends Extension {
   }
 
   disable() {
+    if (this._unmanagingIds) {
+      for (const [metaWindow, handlerId] of this._unmanagingIds) {
+        try {
+          metaWindow.disconnect(handlerId);
+        } catch (_e) {
+          // window already gone; nothing to disconnect
+        }
+      }
+      this._unmanagingIds.clear();
+      this._unmanagingIds = null;
+    }
+    if (this._windowMap) {
+      this._windowMap.clear();
+      this._windowMap = null;
+    }
     if (this._focusSignalId) {
       global.display.disconnect(this._focusSignalId);
       this._focusSignalId = 0;
@@ -83,7 +111,10 @@ ListWindows() {
       const metaWindow = actor.meta_window;
       if (!metaWindow) continue;
       const entry = this._windowJson(metaWindow);
-      if (entry) entries.push(entry);
+      if (entry) {
+        entries.push(entry);
+        this._trackWindow(entry.window_id, metaWindow);
+      }
     }
     entries.sort((a, b) => {
       if (a.window_id === this._focusedWindowId(focused)) return -1;
@@ -91,6 +122,44 @@ ListWindows() {
       return 0;
     });
     return JSON.stringify(entries);
+  }
+
+  // Raise (activate) the window carrying ``window_id``. Returns true when
+  // the id resolves to a live window, false when it's unknown/retired —
+  // the daemon logs the false and emits a diagnostic ``raise_failed``
+  // event (#122). ``Main.activateWindow`` handles unminimize + workspace
+  // switch + focus in one call.
+  RaiseWindow(window_id) {
+    const metaWindow = this._windowMap ? this._windowMap.get(window_id) : undefined;
+    if (!metaWindow) return false;
+    Main.activateWindow(metaWindow);
+    return true;
+  }
+
+  // Record id -> Meta.Window and, once per window, wire its
+  // ``unmanaging`` signal so the entry is pruned the instant the window
+  // closes (rather than lingering until the next enumeration tick).
+  _trackWindow(windowId, metaWindow) {
+    if (!this._windowMap) return;
+    this._windowMap.set(windowId, metaWindow);
+    if (this._unmanagingIds && !this._unmanagingIds.has(metaWindow)) {
+      const handlerId = metaWindow.connect("unmanaging", () => {
+        this._forgetWindow(windowId, metaWindow);
+      });
+      this._unmanagingIds.set(metaWindow, handlerId);
+    }
+  }
+
+  _forgetWindow(windowId, metaWindow) {
+    if (this._windowMap) this._windowMap.delete(windowId);
+    if (this._unmanagingIds && this._unmanagingIds.has(metaWindow)) {
+      try {
+        metaWindow.disconnect(this._unmanagingIds.get(metaWindow));
+      } catch (_e) {
+        // already disconnected
+      }
+      this._unmanagingIds.delete(metaWindow);
+    }
   }
 
   _emitActiveWindowChanged() {

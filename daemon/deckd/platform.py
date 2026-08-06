@@ -401,6 +401,26 @@ class PlatformBackend:
             capability="watch_windows",
         )
 
+    async def raise_window(self, window_id: str) -> None:
+        """Raise (focus) the window carrying ``window_id`` (#122).
+
+        The id is the opaque token the backend minted into a
+        :meth:`watch_windows` snapshot (#119). Only backends that
+        enumerate windows implement this; the default refuses with
+        :class:`UnimplementedCapability` so a legacy backend (X11,
+        macOS, headless) — which never produced a windows list, so the
+        client never offers a tappable row — stays consistent.
+
+        Backends that raise fire-and-forget: a stale/unknown id or a
+        transient bus failure is surfaced to the server (which emits a
+        diagnostic ``raise_failed`` event, #73), never propagated to
+        the user as an error.
+        """
+        raise UnimplementedCapability(
+            "this backend does not implement raise_window",
+            capability="raise_window",
+        )
+
 
 class GnomeShellFocusBackend(PlatformBackend):
     BUS_NAME = "org.deckd.Focus"
@@ -414,7 +434,7 @@ class GnomeShellFocusBackend(PlatformBackend):
         # (the KWin script can feed both ``UpdateActiveWindow`` and a
         # parallel window list, mirroring the GNOME extension's dual
         # ``GetActiveWindow`` / ``ListWindows``).
-        return frozenset({"watch_active_app", "watch_windows"})
+        return frozenset({"watch_active_app", "watch_windows", "raise_window"})
 
     async def get_active_app(self) -> AppInfo:
         out = await _run(
@@ -478,6 +498,44 @@ class GnomeShellFocusBackend(PlatformBackend):
         payload = _parse_single_string_tuple(out)
         data = json.loads(payload)
         return [_window_info_from_payload(entry) for entry in data]
+
+    async def raise_window(self, window_id: str) -> None:
+        """Call ``org.deckd.Focus.RaiseWindow(window_id) -> b`` via gdbus.
+
+        Fire-and-forget from the user's perspective: a ``false`` return
+        (the id retired between enumeration and tap) is turned into a
+        :class:`RaiseWindowFailed` so the server can emit a diagnostic
+        ``raise_failed`` event (#73). Bus-level failures (extension
+        gone) propagate as the underlying :class:`RuntimeError`; the
+        server catches both.
+        """
+        out = await _run(
+            "gdbus",
+            "call",
+            "--session",
+            "--dest",
+            self.BUS_NAME,
+            "--object-path",
+            self.OBJECT_PATH,
+            "--method",
+            f"{self.INTERFACE}.RaiseWindow",
+            window_id,
+        )
+        if not _parse_single_bool_tuple(out):
+            raise RaiseWindowFailed(window_id)
+
+
+class RaiseWindowFailed(RuntimeError):
+    """The backend reached the window manager but it declined to raise
+    the window — almost always because ``window_id`` retired between the
+    enumeration snapshot and the user's tap (#122). Distinct from a
+    bus-level failure so the server can attribute the diagnostic
+    ``raise_failed`` event precisely; carries the offending id.
+    """
+
+    def __init__(self, window_id: str) -> None:
+        super().__init__(f"window manager declined to raise window {window_id!r}")
+        self.window_id = window_id
 
 
 class FocusBackendUnavailable(RuntimeError):
@@ -916,5 +974,20 @@ async def _run(*args: str) -> str:
 def _parse_single_string_tuple(value: str) -> str:
     parsed = ast.literal_eval(value)
     if not isinstance(parsed, tuple) or len(parsed) != 1 or not isinstance(parsed[0], str):
+        raise RuntimeError(f"unexpected gdbus response: {value}")
+    return parsed[0]
+
+
+def _parse_single_bool_tuple(value: str) -> bool:
+    """Parse gdbus's ``(true,)`` / ``(false,)`` single-boolean reply.
+
+    gdbus prints GVariant booleans lowercase (``true``/``false``), which
+    ``ast.literal_eval`` can't parse, so normalise to Python's
+    capitalised literals first — same one-arg-tuple discipline as
+    :func:`_parse_single_string_tuple`.
+    """
+    normalised = value.replace("true", "True").replace("false", "False")
+    parsed = ast.literal_eval(normalised)
+    if not isinstance(parsed, tuple) or len(parsed) != 1 or not isinstance(parsed[0], bool):
         raise RuntimeError(f"unexpected gdbus response: {value}")
     return parsed[0]

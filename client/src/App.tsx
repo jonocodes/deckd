@@ -636,13 +636,13 @@ export function App() {
             <RunningWindowsList
               windows={runningWindows}
               onRowTap={(windowId) => {
-                // Stage 3 (#122) will replace this with the
-                // ``raise_window`` message wire-up. Logged at
-                // debug-only so a curious user can see the round-trip
-                // is wired without spamming the console.
-                if (typeof console !== "undefined") {
-                  console.debug("windows row tap", windowId);
-                }
+                // Stage 3 (#122): raise the tapped window, then close
+                // the overlay back to the focused-app layout. Same
+                // clear_view handshake ``toggleWindows`` uses; the
+                // daemon raises fire-and-forget, so we don't wait.
+                send({ type: "raise_window", window_id: windowId });
+                setView("layout");
+                send({ type: "clear_view" });
               }}
             />
           ) : layout?.error ? (

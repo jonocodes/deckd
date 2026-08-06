@@ -4,11 +4,16 @@ import pytest
 from pydantic import ValidationError
 
 from deckd.protocol import (
+    ClientMessage,
     LayoutMessage,
     MediaCommandMessage,
+    RaiseWindowMessage,
     RunningWindowsMessage,
     WindowListEntry,
 )
+from pydantic import TypeAdapter
+
+_client_adapter = TypeAdapter(ClientMessage)
 
 
 @pytest.mark.parametrize("command", ["play-pause", "next", "previous"])
@@ -114,6 +119,43 @@ def test_running_windows_message_rejects_unknown_top_level_field() -> None:
     with pytest.raises(ValidationError):
         RunningWindowsMessage.model_validate(
             {"type": "running_windows", "windows": [], "future": True}
+        )
+
+
+# ---------------------------------------------------------------------------
+# RaiseWindowMessage (issue #122)
+# ---------------------------------------------------------------------------
+
+
+def test_raise_window_round_trips() -> None:
+    """The client echoes the opaque ``window_id`` back on a row tap; it
+    round-trips through JSON unchanged (#119 / #122)."""
+    msg = RaiseWindowMessage(type="raise_window", window_id="42")
+    assert RaiseWindowMessage.model_validate_json(msg.model_dump_json()) == msg
+
+
+def test_raise_window_is_in_client_message_union() -> None:
+    """The discriminated ``ClientMessage`` union resolves a
+    ``raise_window`` frame to :class:`RaiseWindowMessage` — this is the
+    wire the server's dispatch validates against."""
+    parsed = _client_adapter.validate_python({"type": "raise_window", "window_id": "7"})
+    assert isinstance(parsed, RaiseWindowMessage)
+    assert parsed.window_id == "7"
+
+
+def test_raise_window_rejects_empty_window_id() -> None:
+    """An empty id is a meaningless raise target — reject at validation
+    so a malformed frame can't reach the backend."""
+    with pytest.raises(ValidationError):
+        RaiseWindowMessage(type="raise_window", window_id="")
+
+
+def test_raise_window_rejects_unknown_fields() -> None:
+    """``extra='forbid'`` — same forward-compat rule as the rest of the
+    wire surface."""
+    with pytest.raises(ValidationError):
+        RaiseWindowMessage.model_validate(
+            {"type": "raise_window", "window_id": "1", "extra": True}
         )
 
 

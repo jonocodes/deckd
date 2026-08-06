@@ -257,6 +257,12 @@ export type ClientMediaCommand =
 export type ClientSelectView = { type: "select_view"; view: string };
 /** Undo a previous ``select_view`` for this session only. */
 export type ClientClearView = { type: "clear_view" };
+/** Client -> daemon: raise (focus) an open window by its id (#122). The
+ * user tapped a row in the running-windows chrome list; ``window_id`` is
+ * the opaque id the daemon minted into that row's ``running_windows``
+ * frame (#119). Paired with a following ``clear_view`` to close the
+ * overlay. A stale/unknown id is a no-op on the daemon side. */
+export type ClientRaiseWindow = { type: "raise_window"; window_id: string };
 /** Client -> daemon: the user's verdict on a pending ``confirm_request``
  * (issues #69 / #107). The daemon looks up the pending action by
  * ``confirm_id``: an unknown / expired / superseded token is a no-op
@@ -300,4 +306,5 @@ export type ClientMessage =
   | ClientMediaCommand
   | ClientSelectView
   | ClientClearView
+  | ClientRaiseWindow
   | ClientConfirmResponse;

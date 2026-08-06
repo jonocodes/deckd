@@ -151,6 +151,30 @@ describe("App — running windows chrome view", () => {
     expect(rows[1].textContent).toContain("xterm");
   });
 
+  it("tapping a row raises the window then clears the view (stage 3, #122)", () => {
+    openRunningPrograms();
+    send.mockReset();
+    pushRunningWindows([
+      { window_id: "1", label: "Firefox", icon: { source: "simple-icons", name: "firefox" } },
+      { window_id: "2", label: "xterm", icon: null },
+    ]);
+    const rows = document.querySelectorAll<HTMLElement>(".windows-row");
+    fireEvent.click(rows[1]);
+    expect(send.mock.calls.map((c) => c[0])).toEqual([
+      { type: "raise_window", window_id: "2" },
+      { type: "clear_view" },
+    ]);
+  });
+
+  it("closes the overlay back to the layout after a row tap", () => {
+    openRunningPrograms();
+    const button = screen.getByRole("button", { name: "running programs" });
+    expect(button.className).toContain("chrome-btn-active");
+    pushRunningWindows([{ window_id: "1", label: "Firefox", icon: null }]);
+    fireEvent.click(document.querySelector<HTMLElement>(".windows-row")!);
+    expect(button.className).not.toContain("chrome-btn-active");
+  });
+
   it("focus restoration returns to the running-programs button when the view closes", async () => {
     openRunningPrograms();
     const button = screen.getByRole("button", { name: "running programs" });

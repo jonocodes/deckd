@@ -2353,6 +2353,10 @@ class Server:
             session.view = None
             await session.push_current()
             return
+        if msg_type == "raise_window":
+            raise_msg = p.RaiseWindowMessage.model_validate(data)
+            await self._dispatch_raise_window(raise_msg)
+            return
         if msg_type == "enable_events":
             enable = p.EnableEventsMessage.model_validate(data)
             session.events_enabled = enable.events or []
@@ -2376,6 +2380,44 @@ class Server:
             log.debug("ignoring %s", msg_type)
             return
         await self._dispatch_press(session, data)
+
+    async def _dispatch_raise_window(self, msg: "p.RaiseWindowMessage") -> None:
+        """Route a ``raise_window`` to the active backend (issue #122).
+
+        Fire-and-forget from the user's side: the overlay closes on the
+        client regardless. A backend that can't raise
+        (:class:`UnimplementedCapability`), a declined raise
+        (:class:`RaiseWindowFailed` — the id retired between enumeration
+        and tap), or any bus-level failure all resolve to a diagnostic
+        ``raise_failed`` event on the #73 stream so an agent can see the
+        round-trip failed — never a torn-down websocket.
+        """
+        from .platform import RaiseWindowFailed, UnimplementedCapability
+
+        backend = self.focus_backend
+        if backend is None or "raise_window" not in backend.capabilities():
+            await self._emit_raise_failed(msg.window_id, "unsupported")
+            return
+        try:
+            await backend.raise_window(msg.window_id)
+        except RaiseWindowFailed as exc:
+            log.info("raise_window declined for %r", exc.window_id)
+            await self._emit_raise_failed(msg.window_id, "declined")
+        except UnimplementedCapability:
+            await self._emit_raise_failed(msg.window_id, "unsupported")
+        except Exception as exc:
+            log.warning("raise_window failed for %r: %s", msg.window_id, exc)
+            await self._emit_raise_failed(msg.window_id, "error")
+
+    async def _emit_raise_failed(self, window_id: str, reason: str) -> None:
+        await self.events.emit(
+            DiagnosticEvent(
+                name="raise_failed",
+                ts=time.time(),
+                data={"window_id": window_id, "reason": reason},
+                correlation_id=current_correlation_id(),
+            )
+        )
 
     def _injection_blocked(self, what: str) -> bool:
         if not self._deckd_window_focused:

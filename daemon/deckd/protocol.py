@@ -417,6 +417,24 @@ class KeyMessage(BaseModel):
     combo: str
 
 
+class RaiseWindowMessage(BaseModel):
+    """Client -> daemon: raise (focus) an open window by its id (#122).
+
+    The user tapped a row in the running-windows chrome list; the client
+    echoes back the opaque ``window_id`` the daemon minted into that
+    row's ``running_windows`` frame (#119). The daemon routes it to the
+    active backend's ``raise_window``; backends that can't enumerate /
+    raise never produce the list in the first place, so a stray id here
+    is a no-op at worst. The client pairs this with a ``clear_view`` to
+    close the overlay (stage 3, #122).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["raise_window"]
+    window_id: str = Field(min_length=1)
+
+
 class ConfirmResponseMessage(BaseModel):
     """Client -> daemon: the user's verdict on a pending
     :class:`ConfirmRequestMessage` (issues #69 / #107).
@@ -479,6 +497,6 @@ class MprisCommandRequest(BaseModel):
 
 
 ClientMessage = Annotated[
-    Union[HelloMessage, PressMessage, JogMessage, JogEndMessage, PadMessage, PadTapMessage, PadDragMessage, TypeMessage, KeyMessage, MediaCommandMessage, SelectViewMessage, ClearViewMessage, EnableEventsMessage, DisableEventsMessage, ConfirmResponseMessage],
+    Union[HelloMessage, PressMessage, JogMessage, JogEndMessage, PadMessage, PadTapMessage, PadDragMessage, TypeMessage, KeyMessage, MediaCommandMessage, SelectViewMessage, ClearViewMessage, RaiseWindowMessage, EnableEventsMessage, DisableEventsMessage, ConfirmResponseMessage],
     Field(discriminator="type"),
 ]
