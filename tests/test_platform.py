@@ -311,12 +311,12 @@ async def test_base_watch_windows_raises_unimplemented_capability() -> None:
     from deckd.platform import PlatformBackend
 
     backend = PlatformBackend()
-    # The base implementation raises synchronously inside the
-    # generator body. Calling the method returns a coroutine which the
-    # runtime sees as a plain coroutine (no ``yield`` reached), so
-    # ``await`` raises directly — no need for ``async for`` here.
+    # The base implementation is an async generator (the unreachable
+    # ``yield`` after the raise makes it one, so override signatures
+    # match — see platform.py). The body runs when the generator is
+    # first driven, not on creation, so ``anext`` triggers the raise.
     with pytest.raises(UnimplementedCapability) as excinfo:
-        await backend.watch_windows()
+        await anext(backend.watch_windows())
     assert excinfo.value.capability == "watch_windows"
 
 
