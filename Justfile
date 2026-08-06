@@ -177,6 +177,7 @@ screenshots:
 test-all:
     #!/usr/bin/env bash
     set -euo pipefail
+    export PATH="$PWD/.venv/bin:$PATH"
     echo "== 1/7  pyright daemon =="
     pyright daemon
     echo "== 2/7  pytest =="
@@ -185,6 +186,10 @@ test-all:
     (cd client && npx tsc --noEmit)
     echo "== 4/7  vitest unit =="
     (cd client && npm run test:unit)
+    # Build the client before e2e — playwright serves client/dist, so
+    # any TypeScript change in client/src must be bundled for the
+    # browser to pick it up.
+    (cd client && npm run build)
     echo "== 5/7  playwright e2e =="
     (cd client && npm run test:e2e)
     echo "== 6/7  smoke =="

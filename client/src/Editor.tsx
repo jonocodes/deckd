@@ -130,7 +130,10 @@ function buildCreationForm(
 }
 
 export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: EditorProps) {
-  const initialSelectedId = activeLayout?.app ?? (mockLayouts ? (mockLayouts.find((l) => l.id !== EDITOR_VIEW_ID)?.id ?? mockLayouts[0]?.id ?? null) : null);
+  const initialSelectedId =
+    (activeLayout && activeLayout.app !== EDITOR_VIEW_ID)
+      ? activeLayout.app
+      : (mockLayouts ? (mockLayouts.find((l) => l.id !== EDITOR_VIEW_ID)?.id ?? mockLayouts[0]?.id ?? null) : null);
   const [layouts, setLayouts] = useState<LayoutEntry[]>(mockLayouts ?? []);
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -177,6 +180,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     if (initialisedRef.current) return;
     if (creationForm) return;
     if (!activeLayout || !activeLayout.widgets) return;
+    if (activeLayout.app === EDITOR_VIEW_ID) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditWidgets(deepCloneWidgets(activeLayout.widgets));
     setEditOverflow((activeLayout.overflow as OverflowMode) ?? "shrink-to-fit");
@@ -750,7 +754,7 @@ function CreationFormView({
  * daemon's Widget model (extra="forbid"). The authenticated editor receives
  * full ``action`` and ``macro`` bodies — those are NOT stripped. */
 function stripReadOnly(widget: Widget): Record<string, unknown> {
-  const { has_action, kind_specific, ...rest } = widget as Widget & { has_action?: boolean; kind_specific?: Record<string, unknown> };
+  const { has_action: _has_action, kind_specific: _kind_specific, ...rest } = widget as Widget & { has_action?: boolean; kind_specific?: Record<string, unknown> };
   return rest as Record<string, unknown>;
 }
 

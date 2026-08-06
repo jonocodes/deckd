@@ -5,6 +5,16 @@ async function enterEditor(page: Page) {
   await page.locator(".editor-header").waitFor();
 }
 
+interface LayoutEntry {
+  id: string;
+  widgets: { id: string; label?: string }[];
+}
+
+interface LayoutListResponse {
+  ok: boolean;
+  layouts: LayoutEntry[];
+}
+
 test.describe("editor save cycle (e2e)", () => {
   test("opens editor, edits a label, saves, persists across reload", async ({
     page,
@@ -12,12 +22,16 @@ test.describe("editor save cycle (e2e)", () => {
   }) => {
     await page.goto("/index.html", { waitUntil: "networkidle" });
 
-    // Open editor (auto-selects the active layout, "Home"/"default").
+    // Open editor. The e2e daemon only has default.yaml + editor.yaml so
+    // the active layout is always "default" regardless of host focus.
     await enterEditor(page);
     await page.locator(".editor-canvas-grid").waitFor();
 
-    // The default layout has display_name "Home". Click its first widget.
-    await page.locator('[data-widget-id="code"]').click();
+    // Click the first widget.
+    const cell = page.locator(".editor-canvas-cell").first();
+    await cell.waitFor();
+    const widgetId = (await cell.getAttribute("data-widget-id")) ?? "";
+    await cell.click();
     await expect(page.getByRole("heading", { name: "Button" })).toBeVisible();
 
     // The Label input is the first text field under "Label" text.
@@ -28,18 +42,13 @@ test.describe("editor save cycle (e2e)", () => {
     // Verify persistence via the daemon's GET /layouts.
     await expect.poll(async () => {
       const res = await request.get("/layouts");
-      const body = await res.json();
-      const layout = body.layouts.find(
-        (l: { id: string }) => l.id === "default",
-      );
-      return layout?.widgets.find(
-        (w: { id: string }) => w.id === "code",
-      )?.label;
+      const body: LayoutListResponse = await res.json();
+      const layout = body.layouts.find((l) => l.id === "default");
+      return layout?.widgets.find((w) => w.id === widgetId)?.label;
     }).toBe("E2E test");
 
-    // Restore: the original `code` widget has no label, so clear it
-    // (deletion = omission per #89) rather than fill "code".
-    await page.locator('[data-widget-id="code"]').click();
+    // Restore: clear the label (deletion = omission per #89).
+    await page.locator(`[data-widget-id="${widgetId}"]`).click();
     const labelInput = page.locator("text=Label").locator("..").locator("input");
     await labelInput.fill("");
     await page.getByRole("button", { name: "save layout" }).click();
@@ -64,12 +73,12 @@ test.describe("editor save cycle (e2e)", () => {
     await page.getByRole("button", { name: "save layout" }).click();
     await expect(page.getByText("Saved")).toBeVisible({ timeout: 10000 });
 
-    // The daemon's YAML reconcile appended the new widget.
+    // Verify via the daemon's GET /layouts that the widget was appended.
     await expect.poll(async () => {
       const res = await request.get("/layouts");
-      const body = await res.json();
-      const layout = body.layouts.find((l: { id: string }) => l.id === "default");
-      return layout?.widgets.find((w: { id: string }) => w.id === "button-1")?.label;
+      const body: LayoutListResponse = await res.json();
+      const layout = body.layouts.find((l) => l.id === "default");
+      return layout?.widgets.find((w) => w.id === "button-1")?.label;
     }).toBe("E2E added");
 
     // Clean up: delete the widget and save again.
@@ -80,9 +89,9 @@ test.describe("editor save cycle (e2e)", () => {
 
     await expect.poll(async () => {
       const res = await request.get("/layouts");
-      const body = await res.json();
-      const layout = body.layouts.find((l: { id: string }) => l.id === "default");
-      return layout?.widgets.some((w: { id: string }) => w.id === "button-1");
+      const body: LayoutListResponse = await res.json();
+      const layout = body.layouts.find((l) => l.id === "default");
+      return layout?.widgets.some((w) => w.id === "button-1");
     }).toBe(false);
   });
 });

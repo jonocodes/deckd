@@ -485,6 +485,7 @@ export function App() {
   useEffect(() => {
     if (prevStatus.current === status) return;
     prevStatus.current = status;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (status === "open") setLiveText("Connected");
     else if (status === "connecting") setLiveText("Reconnecting");
     else if (status === "closed") setLiveText("Disconnected");
@@ -495,6 +496,7 @@ export function App() {
     prevLayout.current = layout;
     if (!layout) return;
     const app = layout.display_name?.trim() || layout.app || "deckd";
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLiveText(`Layout: ${app}${programSuffix}`);
   }, [layout, programSuffix]);
 

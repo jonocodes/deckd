@@ -165,6 +165,7 @@ export function useDeckdSocket(
     // doesn't log a connection error when the daemon is still starting up
     // (the `just dev` recipe starts daemon and Vite simultaneously).
     const healthUrl = resolve_health_url();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStatus("connecting");
     fetch(healthUrl)
       .then(() => connect())
