@@ -104,7 +104,16 @@ export default class DeckdFocusExtension extends Extension {
 // #122); closing the window drops it from the snapshot on the next
 // enumeration tick.
 ListWindows() {
-    const actors = global.display.get_window_actors ? global.display.get_window_actors() : [];
+    // ``get_window_actors()`` lives on the Shell ``global`` (Shell.Global),
+    // NOT on ``global.display`` (Meta.Display has no such method). Prefer
+    // it; fall back to the display accessor only if a future Shell moves
+    // it, and to ``[]`` if neither exists — so a missing API surfaces as
+    // the chrome's empty state rather than a thrown method call.
+    const actors = typeof global.get_window_actors === "function"
+      ? global.get_window_actors()
+      : (typeof global.display.get_window_actors === "function"
+          ? global.display.get_window_actors()
+          : []);
     const focused = global.display.focus_window;
     const entries = [];
     for (const actor of actors) {
