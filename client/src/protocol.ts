@@ -131,6 +131,12 @@ export type ServerLayout = {
    * focus backend. ``null`` before the first focus event. The editor's
    * new-layout creation flow (#104) uses this to prefill match tokens. */
   focused_app?: FocusedAppInfo | null;
+  /** True only on a genuine focus-driven fallback to the default layout
+   * (issues #116 / #123, stage 1). The client renders a ``(program)``
+   * suffix alongside the layout name when set. Forced false on any
+   * pinned view — demo or chrome ``select_view`` — so a pin never
+   * leaks the underlying program. */
+  is_default?: boolean;
 };
 
 export type ServerState = { type: "state"; locked: boolean };

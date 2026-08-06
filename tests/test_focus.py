@@ -644,3 +644,122 @@ async def test_type_and_key_dropped_while_deckd_window_focused(
                 {"type": "key", "keycodes": [30]},
                 {"type": "key", "keycodes": [48]},
             ]
+
+
+# ---------------------------------------------------------------------------
+# Stage 1 fallback header (issue #123)
+#
+# When the focus-driven resolution parks on the default layout, the daemon
+# flags ``is_default: true`` on the ``LayoutMessage`` so the client can
+# render ``LayoutName (program)``. The flag is suppressed on identity /
+# title matches, on pinned views, and during the auto-ignore hold — a
+# deckd-window focus event never produces a push that would leak deckd's
+# own identity into the suffix.
+# ---------------------------------------------------------------------------
+
+
+async def test_unmatched_focus_pushes_is_default_true(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    """Focus on an app with no matching layout lands on the default layout
+    and the wire frame carries ``is_default: true`` plus a focused_app
+    with the live ``wm_class`` populated."""
+
+    async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
+        async with websockets.connect(srv.ws_url) as ws:
+            await _recv_layout(ws)
+            await focus.push(AppInfo(app_id="org.xfce.Terminal", wm_class="xterm"))
+            pushed = await _recv_eventual_layout(ws)
+
+    assert pushed["app"] == "default"
+    assert pushed["is_default"] is True
+    assert pushed["focused_app"] is not None
+    assert pushed["focused_app"]["wm_class"] == "xterm"
+    assert pushed["focused_app"]["app_id"] == "org.xfce.Terminal"
+
+
+async def test_identity_matched_focus_pushes_is_default_false(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    """Focus on an app that resolves to a non-default layout: no suffix,
+    no ``is_default`` flag. The firefox layout owns ``firefox`` via
+    ``match``, so the suffix must not appear."""
+
+    async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="default") as (srv, focus):
+        async with websockets.connect(srv.ws_url) as ws:
+            await _recv_layout(ws)
+            await focus.push(AppInfo(app_id="firefox", wm_class="firefox"))
+            pushed = await _recv_eventual_layout(ws)
+
+    assert pushed["app"] == "firefox"
+    assert pushed["is_default"] is False
+    # ``focused_app`` still rides on the wire for the editor flow (#104),
+    # but ``is_default`` stays false so the suffix is suppressed.
+    assert pushed["focused_app"]["wm_class"] == "firefox"
+
+
+async def test_pinned_view_forces_is_default_false(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    """A chrome ``select_view`` pin to the default layout must NOT flag
+    ``is_default``: a pin means "frozen, don't report what's underneath"
+    — the user explicitly chose this view."""
+
+    async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, _focus):
+        async with websockets.connect(srv.ws_url) as ws:
+            await _recv_layout(ws)
+            await ws.send(json.dumps({"type": "select_view", "view": "default"}))
+            pushed = await _recv_eventual_layout(ws)
+
+    assert pushed["app"] == "default"
+    assert pushed["view"] == "default"
+    assert pushed["is_default"] is False
+
+
+async def test_null_wm_class_falls_back_to_app_id(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    """The X11 path sometimes reports ``wm_class=None`` while the app_id
+    is populated. The wire carries both fields; the client's suffix
+    rule is ``wm_class || app_id``. We assert the wire carries both
+    fields so the client can make the choice."""
+
+    async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
+        async with websockets.connect(srv.ws_url) as ws:
+            await _recv_layout(ws)
+            await focus.push(AppInfo(app_id="org.kde.dolphin", wm_class=None))
+            pushed = await _recv_eventual_layout(ws)
+
+    assert pushed["app"] == "default"
+    assert pushed["is_default"] is True
+    assert pushed["focused_app"]["wm_class"] is None
+    assert pushed["focused_app"]["app_id"] == "org.kde.dolphin"
+
+
+async def test_deckd_window_focus_does_not_carry_is_default(
+    monkeypatch, focus_layouts_dir: Path
+) -> None:
+    """The auto-ignore hold returns early in ``_on_focus``, so the deckd
+    window's identity must not surface through a push that would
+    incorrectly suffix the header as ``Home (deckd)``. The WS stays
+    silent on the deckd focus, and the last-known real resolution stays
+    intact (the server still reports ``is_default: true`` because the
+    last genuine resolution parked on the default layout)."""
+
+    async with _focus_srv(monkeypatch, focus_layouts_dir, initial_focus="firefox") as (srv, focus):
+        async with websockets.connect(srv.ws_url) as ws:
+            await _recv_layout(ws)
+            # Land on a genuine unmatched focus so we have an
+            # ``is_default: true`` resolution to preserve.
+            await focus.push(AppInfo(app_id="xterm", wm_class="xterm"))
+            pushed = await _recv_eventual_layout(ws)
+            assert pushed["app"] == "default"
+            assert pushed["is_default"] is True
+            # Now the deckd window gains focus: the WS must stay silent
+            # (the hold prevents any push) — and crucially, no push
+            # carries the deckd identity with ``is_default: true``.
+            await focus.push(_deckd_window_app(srv))
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(ws.recv(), timeout=0.3)
+            assert srv.server._current_is_default is True  # type: ignore[attr-defined]
+            assert srv.server.current_app_id == "default"

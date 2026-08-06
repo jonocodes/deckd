@@ -500,6 +500,15 @@ class Session:
                 title=focus_app.title,
                 is_browser=focus_app.is_browser,
             )
+        # Issue #123 / stage 1: ``is_default`` rides on the wire so the
+        # client can append ``(program)`` to the layout name on a genuine
+        # focus-driven default fallback. Forced false whenever this
+        # session is serving a pinned layout/view — a pin means
+        # "frozen, don't report what's underneath" even if the pinned
+        # layout happens to be the default.
+        is_default = (
+            self.server._current_is_default and pin is None and view_id is None
+        )
         if error is not None:
             # Bad on-disk config: send widgets=[] plus the error text so the
             # client swaps the grid for a diagnostic message.
@@ -514,6 +523,7 @@ class Session:
                 icon=icon,
                 web_app=web_app,
                 focused_app=focused_app,
+                is_default=is_default,
                 widgets=[],
                 error=error,
             )
@@ -530,6 +540,7 @@ class Session:
                 icon=icon,
                 web_app=web_app,
                 focused_app=focused_app,
+                is_default=is_default,
                 widgets=widgets,
                 # View-resolution errors ride alongside the focused-app
                 # widgets so the chrome stays usable while the user sees
@@ -608,6 +619,11 @@ class Server:
         self.layouts: LayoutStore = load_layouts(layouts_dir, overlay_dir)
         self._current_app_id: str = DEFAULT_APP_ID
         self._current_layout: Layout = self.layouts.default()
+        # Issue #123 / stage 1: True while the focus-driven resolution
+        # is parked on the default layout. ``Session.push_current``
+        # reads this to decide whether to set ``is_default`` on the
+        # ``LayoutMessage`` — forced false for pinned views there.
+        self._current_is_default: bool = True
         self.mpris = mpris_backend
         # Issue #52: when no mpris backend was injected, auto-build
         # one iff a loaded layout uses ``mediabrowser``. Keeps the
@@ -744,6 +760,10 @@ class Server:
             self._current_app_id = DEFAULT_APP_ID
             new_layout = self.layouts.default()
         self._current_layout = new_layout
+        # Issue #123 / stage 1: a reload can shift the resolved layout
+        # between default and identity-matched. Re-derive the flag from
+        # the resolved object identity so the wire stays truthful.
+        self._current_is_default = new_layout is self.layouts.default()
         self._current_error = None
         self.metrics.layout_reload_ok_total += 1
         # A layout reload can change which meter sources the active
@@ -831,6 +851,10 @@ class Server:
         log.info("focus -> %s (layout=%s)", app, new_app_id)
         self._current_app_id = new_app_id
         self._current_layout = new_layout
+        # Issue #123 / stage 1: True iff the focus-driven resolution
+        # parked on the default layout. Identity / title matches leave
+        # it false so the client suppresses the ``(program)`` suffix.
+        self._current_is_default = new_layout is self.layouts.default()
         # Different layouts reference different meter sources (e.g.
         # switching from a desktop to a terminal layout that monitors
         # something else). Resubscribe so the manager's polling tracks
@@ -1958,6 +1982,12 @@ class Server:
         """
         self._current_app_id = layout_id
         self._current_layout = layout
+        # Issue #123 / stage 1: an override is not focus-driven, so the
+        # ``is_default`` wire flag is always false here — even if the
+        # override target happens to be the default layout. The next
+        # genuine focus event in ``_on_focus`` restores the flag to the
+        # true resolution state.
+        self._current_is_default = False
         log.info("layout override -> %s", layout_id)
         await self._push_to_all()
 

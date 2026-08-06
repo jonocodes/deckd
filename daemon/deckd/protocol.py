@@ -66,6 +66,15 @@ class LayoutMessage(BaseModel):
     # prefill ``match`` tokens for the detect-and-offer prompt and the
     # browser-vs-site branch.
     focused_app: FocusedAppInfo | None = None
+    # True only on a genuine focus-driven fallback to the default layout —
+    # i.e. the resolution missed every loaded layout and ``store.default()``
+    # was returned. The client uses this to render the live program next to
+    # the layout name (issues #116 / #123, stage 1). Forced ``False``
+    # whenever the daemon is serving a pinned layout/view (demo
+    # ``?layout=`` pin or chrome ``select_view`` pin), even if the pinned
+    # layout happens to be the default — a pin means "frozen, don't report
+    # what's underneath".
+    is_default: bool = False
 
 
 class StateMessage(BaseModel):

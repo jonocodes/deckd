@@ -625,6 +625,162 @@ describe("App — screen-reader headings", () => {
 });
 
 /* ---------------------------------------------------------------------
+   Stage 1 fallback header (issue #123).
+
+   When the daemon reports ``is_default: true`` on a layout push, the
+   client appends the live program's identity (``wm_class || app_id``)
+   to the layout name in both the screen-reader heading and the visible
+   chrome badge. Suppressed on identity/title matches, pinned views,
+   and when the daemon sends ``focused_app: null``.
+
+   The wire is the source of truth here; tests push synthetic frames
+   through the mocked socket hook rather than going through the daemon.
+   --------------------------------------------------------------------- */
+
+describe("App — stage 1 fallback header suffix", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    onLayout.mockReset();
+    mockStatus = "open";
+    window.history.replaceState(null, "", "/?demo=default");
+  });
+
+  it("appends (wm_class) to the heading when is_default is true", () => {
+    render(<App />);
+    act(() => {
+      onLayout({
+        type: "layout",
+        app: "default",
+        display_name: "Home",
+        jogstrip_enabled: true,
+        widgets: [],
+        focused_app: {
+          app_id: "org.xfce.Terminal",
+          wm_class: "xterm",
+          title: "xterm",
+          is_browser: false,
+        },
+        is_default: true,
+      });
+    });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Home (xterm)",
+    );
+  });
+
+  it("appends (app_id) to the heading when wm_class is null", () => {
+    render(<App />);
+    act(() => {
+      onLayout({
+        type: "layout",
+        app: "default",
+        display_name: "Home",
+        jogstrip_enabled: true,
+        widgets: [],
+        focused_app: {
+          app_id: "org.kde.dolphin",
+          wm_class: null,
+          title: null,
+          is_browser: false,
+        },
+        is_default: true,
+      });
+    });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Home (org.kde.dolphin)",
+    );
+  });
+
+  it("does not append a suffix when is_default is false", () => {
+    render(<App />);
+    act(() => {
+      onLayout({
+        type: "layout",
+        app: "firefox",
+        display_name: "Firefox",
+        jogstrip_enabled: true,
+        widgets: [],
+        focused_app: {
+          app_id: "firefox",
+          wm_class: "firefox",
+          title: "Mozilla",
+          is_browser: true,
+        },
+        is_default: false,
+      });
+    });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Firefox",
+    );
+  });
+
+  it("does not append a suffix when focused_app is null", () => {
+    render(<App />);
+    act(() => {
+      onLayout({
+        type: "layout",
+        app: "default",
+        display_name: "Home",
+        jogstrip_enabled: true,
+        widgets: [],
+        focused_app: null,
+        is_default: true,
+      });
+    });
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
+      "Home",
+    );
+  });
+
+  it("appends the suffix to the aria-live layout announcement", () => {
+    render(<App />);
+    act(() => {
+      onLayout({
+        type: "layout",
+        app: "default",
+        display_name: "Home",
+        jogstrip_enabled: true,
+        widgets: [],
+        focused_app: {
+          app_id: "xterm",
+          wm_class: "xterm",
+          title: "xterm",
+          is_browser: false,
+        },
+        is_default: true,
+      });
+    });
+    expect(screen.getByRole("status").textContent).toBe(
+      "Layout: Home (xterm)",
+    );
+  });
+
+  it("appends the suffix to the visible chrome badge", () => {
+    const { container } = render(<App />);
+    act(() => {
+      onLayout({
+        type: "layout",
+        app: "default",
+        display_name: "Home",
+        jogstrip_enabled: true,
+        widgets: [],
+        focused_app: {
+          app_id: "xterm",
+          wm_class: "xterm",
+          title: "xterm",
+          is_browser: false,
+        },
+        is_default: true,
+      });
+    });
+    expect(
+      container.querySelector(".app-badge-name")?.textContent,
+    ).toBe("Home (xterm)");
+  });
+});
+
+/* ---------------------------------------------------------------------
    aria-live announcements (issue #63, AC #4).
 
    Connection state, locked state, and layout switches must be

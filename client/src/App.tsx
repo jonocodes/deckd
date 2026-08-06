@@ -391,6 +391,21 @@ export function App() {
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
 
+  // Stage 1 fallback header (issue #123): when the daemon reports this
+  // push is a genuine focus-driven default fallback (``is_default``),
+  // append the live program identity (``wm_class || app_id``) to the
+  // layout name so users see ``Home (xterm)`` instead of bare ``Home``.
+  // The daemon suppresses ``is_default`` on identity / title matches,
+  // pinned views, and the auto-ignore hold — so the suffix only appears
+  // for genuine fallback. Both the aria-live heading and the visible
+  // chrome badge read the same suffix.
+  const programSuffix = (() => {
+    const focused = layout?.focused_app;
+    if (layout?.is_default !== true || !focused) return "";
+    const id = focused.wm_class?.trim() || focused.app_id?.trim();
+    return id ? ` (${id})` : "";
+  })();
+
   // Screen-reader heading per surface (issue #63, AC #2).
   // Each view is mutually exclusive — only one h1 is in the DOM
   // at a time — so the heading level stays correct.
@@ -400,9 +415,10 @@ export function App() {
     if (view === "settings") return "Settings";
     if (view === "editor") return "Layout editor";
     if (layout?.error) return "Layout error";
-    if (layout) return layout.display_name?.trim() || layout.app || "deckd";
+    if (layout)
+      return (layout.display_name?.trim() || layout.app || "deckd") + programSuffix;
     return "deckd";
-  }, [view, layout]);
+  }, [view, layout, programSuffix]);
 
   // aria-live announcements for connection state, locked state,
   // and layout switches (issue #63, AC #4). Each effect fires
@@ -424,8 +440,8 @@ export function App() {
     prevLayout.current = layout;
     if (!layout) return;
     const app = layout.display_name?.trim() || layout.app || "deckd";
-    setLiveText(`Layout: ${app}`);
-  }, [layout]);
+    setLiveText(`Layout: ${app}${programSuffix}`);
+  }, [layout, programSuffix]);
 
   // Chrome app-identity badge (ADR-0007): the daemon relays an
   // optional ``display_name`` / ``theme`` / ``icon`` per layout; the
@@ -435,7 +451,9 @@ export function App() {
   // absent theme leaves the badge on the default chrome treatment. A
   // layout declaring neither an icon nor a theme renders the chrome
   // unchanged (bold text, no pill) so existing layouts look identical.
-  const appName = layout ? layout.display_name?.trim() || layout.app : "deckd";
+  const appName = layout
+    ? (layout.display_name?.trim() || layout.app) + programSuffix
+    : "deckd";
   const appTheme = layout?.theme?.trim() || null;
   const appIcon: IconRef | null = layout?.icon ?? null;
   // Web-app marker: the daemon resolved this layout by matching the focused
