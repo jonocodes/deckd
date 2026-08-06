@@ -161,6 +161,13 @@ build-pages:
 ladle:
     cd client && npm run ladle
 
+# Take phone-framed screenshots of the demo layouts. Starts a Vite dev
+# server, opens /screenshots.html in Chromium (Playwright, reuses the
+# nix-store binary from e2e), snaps each configured shot, and saves them
+# to docs/screenshots/. Edit client/src/Screenshots.tsx to curate the list.
+screenshots:
+    cd client && node screenshots.mjs
+
 # Run the test suite.
 test:
     pytest
