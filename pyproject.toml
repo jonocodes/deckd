@@ -63,3 +63,13 @@ include = ["deckd*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+
+[tool.pyright]
+# Point pyright at the project venv so `pyright daemon` resolves
+# third-party imports (aiohttp, dbus_fast, pydantic, etc.) regardless
+# of how it's invoked — bare `pyright`, `.venv/bin/pyright`, or via
+# `just test-all`. Without this, pyright falls back to stdlib-only
+# and every import is a false-positive error.
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
