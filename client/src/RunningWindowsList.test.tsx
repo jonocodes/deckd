@@ -41,18 +41,20 @@ describe("RunningWindowsList", () => {
     expect(rows[1].textContent).toContain("xterm");
   });
 
-  it("does not render a placeholder marker on default-fallback rows (honest absence)", () => {
-    // Decision 6: a generic "terminal" Lucide icon on every xterm
-    // would imply every xterm is the same xterm. The wire-shape
-    // distinction (icon=null) is the only honest signal — the row
-    // renders the label only.
+  it("renders a muted placeholder glyph in the icon slot on default-fallback rows", () => {
+    // Supersedes decision 6 ("render nothing"): an empty icon slot left
+    // the label as the first grid child, so it fell into the 32px icon
+    // column and got truncated. Unbranded programs now get a muted
+    // generic window glyph so the label stays in the wide column and the
+    // row has a visual anchor.
     const { container } = render(
       <RunningWindowsList
         windows={[{ window_id: "1", label: "xterm", icon: null }]}
       />,
     );
-    expect(container.querySelector(".windows-row-placeholder")).toBeNull();
-    expect(container.querySelector(".windows-row-icon")).toBeNull();
+    const icon = container.querySelector(".windows-row-icon");
+    expect(icon).not.toBeNull();
+    expect(icon?.classList.contains("windows-row-icon-fallback")).toBe(true);
   });
 
   it("renders the icon column when icon is present", () => {

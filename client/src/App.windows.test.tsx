@@ -14,8 +14,8 @@
  *       platform" empty state (decision 8).
  *     - Empty snapshot → "no running programs" message.
  *     - Non-empty snapshot → one row per window, label visible,
- *       ``icon`` riding when present, placeholder glyph when
- *       ``icon`` is null (decision 6 — honest absence).
+ *       ``icon`` riding when present, muted generic window glyph
+ *       when ``icon`` is null (supersedes decision 6).
  *
  * The socket is mocked so the test owns the wire surface — we can
  * assert exactly which client message landed in ``send`` and push

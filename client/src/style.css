@@ -1572,7 +1572,7 @@ button:focus-visible {
 
 .windows-row {
   display: grid;
-  grid-template-columns: 32px minmax(0, 1fr) auto;
+  grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   padding: 8px 12px;
@@ -1604,12 +1604,11 @@ button:focus-visible {
   display: block;
 }
 
-.windows-row-placeholder {
+/* Unbranded programs (icon=null) render a muted generic window glyph in
+ * the icon slot — dimmed so it reads as a placeholder, not a real
+ * brand/app icon. */
+.windows-row-icon-fallback {
   color: #4a5663;
-  width: 18px;
-  height: 18px;
-  display: block;
-  justify-self: end;
 }
 
 .windows-row-label {

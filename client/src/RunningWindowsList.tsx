@@ -21,8 +21,11 @@
  *     daemon-derived display string (matched layout's display_name,
  *     else a raw identity fallback); the icon, when present, rides
  *     alongside the label as a 28px glyph. Default-fallback rows
- *     (icon=null on the wire) render no icon — honest absence, not a
- *     decorative generic glyph (decision 6).
+ *     (icon=null on the wire) render a muted generic window glyph as a
+ *     placeholder — this supersedes issue #120's decision 6 ("render
+ *     nothing"), whose empty icon slot both truncated the label (it
+ *     fell into the 32px icon grid column) and left unbranded programs
+ *     with no visual anchor.
  */
 import type { WindowListEntry } from "./protocol";
 import { Icon } from "./Icon";
@@ -94,13 +97,24 @@ function RunningWindowRow({
       role={interactive ? "button" : undefined}
       aria-label={interactive ? `raise ${entry.label}` : undefined}
     >
-      {icon ? <Icon icon={icon} className="windows-row-icon" /> : null}
+      {icon ? (
+        <Icon icon={icon} className="windows-row-icon" />
+      ) : (
+        // Default-fallback rows (``icon: null`` on the wire) get a
+        // neutral placeholder glyph in the icon slot. This supersedes
+        // the original "render nothing" choice (issue #120 decision 6):
+        // an empty icon slot left the label as the first grid child, so
+        // it landed in the 32px icon column and got truncated to a few
+        // characters. A muted generic window glyph keeps every row's
+        // label aligned in the wide column and gives unbranded programs
+        // a visual anchor — it reads as "a program we couldn't brand",
+        // not a claim that all such windows are the same app.
+        <Icon
+          icon={{ source: "lucide", name: "app-window" }}
+          className="windows-row-icon windows-row-icon-fallback"
+        />
+      )}
       <span className="windows-row-label">{entry.label}</span>
-      {/* Default-fallback rows carry ``icon: null`` on the wire and
-       * render no glyph here — the absence is honest (decision 6).
-       * Inventing a generic "terminal" Lucide icon for every xterm
-       * would imply every xterm is the same xterm; the list is
-       * per-window precisely so they're not. */}
     </li>
   );
 }

@@ -12,7 +12,7 @@ const noop = () => {};
  * decorative generic icon (issue #120, decision 6). */
 const WINDOWS: WindowListEntry[] = [
   { window_id: "1", label: "Firefox", icon: { source: "simple-icons", name: "firefox" } },
-  { window_id: "2", label: "Slack", icon: { source: "simple-icons", name: "slack" } },
+  { window_id: "2", label: "Spotify", icon: { source: "simple-icons", name: "spotify" } },
   { window_id: "3", label: "foot", icon: null },
   { window_id: "4", label: "Untitled — Text Editor", icon: null },
 ];
