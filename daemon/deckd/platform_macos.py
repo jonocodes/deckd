@@ -1,4 +1,4 @@
-"""macOS backend: focus detection + key/pointer/scroll sinks.
+"""macOS backend: focus detection + window enumeration/raise + key/pointer/scroll sinks.
 
 No new native deps, no kernel extensions. Keys + focus shell out to
 ``osascript`` (AppleScript); scroll + pointer + click go through
@@ -7,12 +7,22 @@ tap-and-a-half gesture needs. cliclick was an earlier choice for
 pointer / click but couldn't model a held button across multiple
 moves -- Quartz's ``LeftMouseDragged`` is.
 
+Window enumeration + raise (switcher parity, #135) happen in-process
+too: ``Quartz.CGWindowListCopyWindowInfo`` yields on-screen windows
+(front-to-back = MRU proxy) and AppKit ``NSRunningApplication`` +
+``ApplicationServices`` Accessibility raise the chosen one. Window
+numbers are stable for a window's lifetime and serve as the opaque
+``window_id`` sent to the client. Accessibility consent is gated by
+``MacKeySink._check_accessibility`` at keysink startup.
+
 Capability matrix (sketch):
 
   +-----------------------------+--------+------------------------------+
   | capability                  | works? | how                          |
   +-----------------------------+--------+------------------------------+
   | focus detection             | yes    | osascript + System Events    |
+  | window enumeration          | yes    | Quartz ``CGWindowList``      |
+  | raise window                | yes    | AppKit + Accessibility (AX)  |
   | key injection (printable)   | yes    | osascript ``keystroke``      |
   | key injection (non-print)   | partial| osascript ``key code`` (map) |
   | combo modifiers             | yes    | ``using {command down}``     |

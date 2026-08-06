@@ -16,6 +16,7 @@ from deckd.platform import WindowInfo
 from deckd.platform_macos import (
     MacFocusBackend,
     _build_keystroke_script,
+    _is_standard_cg_window,
     _window_info_from_cg_payload,
 )
 
@@ -189,3 +190,57 @@ def test_mac_focus_backend_advertises_window_surfaces() -> None:
     assert MacFocusBackend().capabilities() == frozenset(
         {"watch_active_app", "watch_windows", "raise_window"}
     )
+
+
+# ---------------------------------------------------------------------------
+# CGWindowList standard-window filter
+# ---------------------------------------------------------------------------
+
+
+def _cg_window(number, pid, layer=0, owner="App", title="w"):
+    return {
+        "kCGWindowNumber": number,
+        "kCGWindowOwnerPID": pid,
+        "kCGWindowOwnerName": owner,
+        "kCGWindowName": title,
+        "kCGWindowLayer": layer,
+    }
+
+
+def test_is_standard_cg_window_accepts_normal_window() -> None:
+    """A layer-0 window owned by a real PID is a user window the
+    switcher should list."""
+    assert _is_standard_cg_window(_cg_window(42, 4242))
+
+
+@pytest.mark.parametrize(
+    "payload,reason",
+    [
+        # Desktop / menu-bar / dock overlays live on non-zero layers;
+        # filtering them keeps the switcher list to user windows.
+        (_cg_window(7, 4242, layer=2147483631), "non-zero layer"),
+        # Window numbers must be int (a malformed payload shouldn't crash);
+        # CGWindowList always yields ints so a non-int is a corrupt entry.
+        ({"kCGWindowLayer": 0, "kCGWindowNumber": "x", "kCGWindowOwnerPID": 4242}, "non-int number"),
+        # PID 0 is the kernel (LaunchDM / loginwindow internals); not a
+        # user-raisable app, so the gate refuses it.
+        ({"kCGWindowLayer": 0, "kCGWindowNumber": 9, "kCGWindowOwnerPID": 0}, "pid 0"),
+        # A missing PID entirely is a corrupt entry, not a window to list.
+        ({"kCGWindowLayer": 0, "kCGWindowNumber": 9, "kCGWindowOwnerPID": None}, "missing pid"),
+    ],
+)
+def test_is_standard_cg_window_rejects_noise(payload, reason) -> None:
+    assert not _is_standard_cg_window(payload)
+
+
+def test_cg_window_options_helper_combines_flags() -> None:
+    """The option flags gate the list to on-screen, non-desktop windows
+    — pinning the combination keeps a future edit from accidentally
+    dropping one half of the filter."""
+    class _FakeQuartz:
+        kCGWindowListOptionOnScreenOnly = 1
+        kCGWindowListExcludeDesktopElements = 4
+
+    from deckd.platform_macos import _cg_window_list_options
+
+    assert _cg_window_list_options(_FakeQuartz) == 5

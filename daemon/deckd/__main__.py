@@ -23,8 +23,9 @@ async def _run(server: Server) -> None:
     server.start_focus_watcher()
     # Stage 2 (#120 / #126): start the windows watcher alongside the
     # focus watcher. ``start_windows_watcher`` is a no-op when the
-    # backend lacks ``watch_windows`` (X11, macOS, headless), so the
-    # wiring stays unconditional at the call site.
+    # backend lacks ``watch_windows`` (X11, headless), so the wiring
+    # stays unconditional at the call site. macOS gained the surface
+    # in #135 via Quartz CGWindowList.
     server.start_windows_watcher()
 
     for sig in (signal.SIGINT, signal.SIGTERM):

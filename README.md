@@ -230,6 +230,8 @@ What works / doesn't on macOS:
 | capability                         | macOS                                                                                   |
 | ---------------------------------- | --------------------------------------------------------------------------------------- |
 | focus detection                    | yes (osascript + System Events)                                                         |
+| running-window enumeration         | yes (Quartz `CGWindowList`, front-to-back order)                                        |
+| running-window raise              | yes (AppKit activation + Accessibility `AXRaise`)                                       |
 | `key:` action (printable + combos) | yes (osascript `keystroke`)                                                             |
 | `key:` action (non-printable)      | partial (HID-code map covers the common ones — arrows, esc, tab, enter, F-keys)         |
 | `shell:` / `terminal:` actions     | yes                                                                                     |
@@ -1263,12 +1265,13 @@ widgets: []
 The platform backend advertises `watch_windows` in its
 `capabilities()`; today's GNOME Shell extension ships a
 `ListWindows()` method on the `org.deckd.Focus` interface that the
-daemon polls at ~100ms. Backends that can't enumerate (X11,
-macOS, headless) don't advertise the capability — the chrome icon
-stays rendered (the affordance is discoverable for users on a
-platform that ships it later) but tapping it shows the
-"running programs: unsupported on this platform" empty state,
-mirroring the media browser's "no players detected" placeholder.
+daemon polls at ~100ms, and macOS ships the same surface via Quartz
+`CGWindowList` (#135). Backends that can't enumerate (X11, headless)
+don't advertise the capability — the chrome icon stays rendered (the
+affordance is discoverable for users on a platform that ships it
+later) but tapping it shows the "running programs: unsupported on
+this platform" empty state, mirroring the media browser's "no players
+detected" placeholder.
 
 #### What the view shows
 
