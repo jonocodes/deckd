@@ -16,8 +16,8 @@ this table exists to make drift between backends visible at a glance.
 | Capability | GNOME (Wayland/X11) | KDE Plasma (Wayland) | X11 (generic) | macOS |
 |---|---|---|---|---|
 | Focus detection (`watch_active_app`) | ✓ GNOME Shell extension over `org.deckd.Focus` | ✓ KWin script pushes into daemon-owned cache (#31) | ✓ `xdotool` poll | ✓ `osascript` + System Events |
-| Window enumeration (`watch_windows`) | ✓ extension `ListWindows` | ✗ — **advertised but unimplemented, see [#133](https://github.com/jonocodes/deckd/issues/133)** | ✗ | ✗ |
-| Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✗ — **advertised but unimplemented, see [#133](https://github.com/jonocodes/deckd/issues/133)** | ✗ | ✗ |
+| Window enumeration (`watch_windows`) | ✓ extension `ListWindows` | ✗ — **advertised but unimplemented, see [#133](https://github.com/jonocodes/deckd/issues/133)** | ✗ | ✓ Quartz `CGWindowList` |
+| Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✗ — **advertised but unimplemented, see [#133](https://github.com/jonocodes/deckd/issues/133)** | ✗ | ✓ AppKit + Accessibility |
 | Raise app (`raise:`) | ✓ extension `RaiseApp` (#137) | ✗ | ✗ | ✗ |
 | Key injection — printable | ✓ `uinput` (evdev) | ✓ `uinput` | ✓ `uinput` | ✓ `osascript keystroke` |
 | Key injection — non-printable / special | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ◑ partial — `osascript key code` map |
@@ -60,10 +60,13 @@ case where KDE advertises two capabilities it can't fulfil.
   capability advertisement and the eventual KWin-side implementation).
 - **X11** — `xdotool`-based focus polling; no enumeration/raise. Input via
   `uinput` like every Linux path.
-- **macOS** — `osascript` + System Events focus detection; input via PyObjC
-  Quartz (mouse, scroll, held-button drag) and osascript (keystrokes; special
-  keys are a partial `key code` map). No enumeration/raise; no D-Bus. A macOS
-  focus-integration test harness would be entirely separate from the Linux one.
+- **macOS** — `osascript` + System Events focus detection; Quartz supplies
+  input (mouse, scroll, held-button drag) and on-screen window enumeration;
+  AppKit + Accessibility activate and raise the selected window. osascript
+  handles keystrokes (special keys are a partial `key code` map). Window
+  numbers are stable for a window's lifetime and are used as opaque ids. No
+  D-Bus. A macOS focus-integration test harness would be entirely separate
+  from the Linux one.
 
 ## Related docs
 

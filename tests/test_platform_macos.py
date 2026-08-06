@@ -12,7 +12,12 @@ from __future__ import annotations
 import pytest
 
 from deckd.input import parse_key_combo
-from deckd.platform_macos import _build_keystroke_script
+from deckd.platform import WindowInfo
+from deckd.platform_macos import (
+    MacFocusBackend,
+    _build_keystroke_script,
+    _window_info_from_cg_payload,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -151,3 +156,36 @@ def test_only_modifiers_returns_none() -> None:
     with no character."""
     # Pass a keycode that's only in MODIFIER_MAP, twice.
     assert _build_keystroke_script([29, 29]) is None
+
+
+# ---------------------------------------------------------------------------
+# Window enumeration
+# ---------------------------------------------------------------------------
+
+
+def test_cg_window_payload_maps_to_window_info() -> None:
+    """CGWindowList's standard-window fields map to the shared wire shape."""
+    assert _window_info_from_cg_payload(
+        {
+            "kCGWindowNumber": 42,
+            "kCGWindowOwnerPID": 4242,
+            "kCGWindowOwnerName": "Firefox",
+            "kCGWindowName": "YouTube",
+            "kCGWindowLayer": 0,
+        }
+    ) == WindowInfo(
+        window_id="42",
+        wm_class="Firefox",
+        gtk_application_id=None,
+        sandboxed_app_id=None,
+        title="YouTube",
+        workspace=None,
+        minimized=False,
+        app_name="Firefox",
+    )
+
+
+def test_mac_focus_backend_advertises_window_surfaces() -> None:
+    assert MacFocusBackend().capabilities() == frozenset(
+        {"watch_active_app", "watch_windows", "raise_window"}
+    )

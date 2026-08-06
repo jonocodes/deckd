@@ -40,9 +40,11 @@ dev = [
     "pytest-asyncio>=0.23",
 ]
 macos = [
-    # PyObjC Quartz for synthetic wheel-event injection via CGEventCreateScrollWheelEvent.
-    # Needed on macOS for the jogstrip to actually scroll the focused window.
+    # Quartz covers input injection and CGWindowList window enumeration;
+    # Cocoa + ApplicationServices activate and raise AX windows.
     "pyobjc-framework-Quartz>=10.0",
+    "pyobjc-framework-Cocoa>=10.0",
+    "pyobjc-framework-ApplicationServices>=10.0",
 ]
 
 [project.scripts]

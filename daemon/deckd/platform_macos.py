@@ -29,14 +29,16 @@ evdev events.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import subprocess
-from collections.abc import Sequence
+from collections.abc import AsyncIterator, Sequence
 from types import ModuleType
+from typing import Any
 
 from .input import MODIFIER_MAP, KeySink, ScrollSink, name_from_keycode
-from .platform import AppInfo, PlatformBackend, _run
+from .platform import AppInfo, PlatformBackend, RaiseWindowFailed, WindowInfo, _run
 
 log = logging.getLogger("deckd.platform_macos")
 
@@ -117,6 +119,147 @@ class MacFocusBackend(PlatformBackend):
             wm_class=None,
             title=title.strip() or None,
         )
+
+    def capabilities(self) -> frozenset[str]:
+        return frozenset({"watch_active_app", "watch_windows", "raise_window"})
+
+    async def watch_windows(
+        self, *, interval_s: float = 0.1
+    ) -> AsyncIterator[Sequence[WindowInfo]]:
+        """Poll on-screen standard windows in front-to-back order.
+
+        CGWindowList's order is front-to-back, which is the closest native
+        macOS equivalent to the MRU ordering used by the Linux backends.
+        Window numbers are stable for a window's lifetime and become the
+        opaque ``window_id`` sent to the client.
+        """
+        last: Sequence[WindowInfo] | None = None
+        while True:
+            try:
+                snapshot = await self._list_windows_once()
+            except Exception as exc:
+                log.debug("macOS watch_windows: %s", exc)
+                snapshot = []
+            if snapshot != last:
+                last = snapshot
+                yield snapshot
+            await asyncio.sleep(interval_s)
+
+    async def _list_windows_once(self) -> list[WindowInfo]:
+        quartz = self._quartz()
+        options = _cg_window_list_options(quartz)
+        payloads = quartz.CGWindowListCopyWindowInfo(
+            options, quartz.kCGNullWindowID
+        ) or []
+        return [
+            _window_info_from_cg_payload(payload)
+            for payload in payloads
+            if _is_standard_cg_window(payload)
+        ]
+
+    async def raise_window(self, window_id: str) -> None:
+        """Activate the owning app and raise the matching AX window."""
+        try:
+            quartz = self._quartz()
+            target = int(window_id)
+            options = _cg_window_list_options(quartz)
+            payloads = quartz.CGWindowListCopyWindowInfo(
+                options, quartz.kCGNullWindowID
+            ) or []
+            payload = next(
+                (
+                    item
+                    for item in payloads
+                    if _is_standard_cg_window(item)
+                    and item.get("kCGWindowNumber") == target
+                ),
+                None,
+            )
+            if payload is None:
+                raise RaiseWindowFailed(window_id)
+
+            pid = payload.get("kCGWindowOwnerPID")
+            if not isinstance(pid, int):
+                raise RaiseWindowFailed(window_id)
+
+            appkit, accessibility = _load_raise_apis()
+            app = appkit.NSRunningApplication.runningApplicationWithProcessIdentifier_(
+                pid
+            )
+            if app is None or not app.activateWithOptions_(
+                appkit.NSApplicationActivateIgnoringOtherApps
+            ):
+                raise RaiseWindowFailed(window_id)
+
+            ax_app = accessibility.AXUIElementCreateApplication(pid)
+            error, windows = accessibility.AXUIElementCopyAttributeValue(
+                ax_app, accessibility.kAXWindowsAttribute, None
+            )
+            if error != accessibility.kAXErrorSuccess or windows is None:
+                raise RaiseWindowFailed(window_id)
+            for window in windows:
+                error, number = accessibility.AXUIElementCopyAttributeValue(
+                    window, accessibility.kAXWindowNumberAttribute, None
+                )
+                if error == accessibility.kAXErrorSuccess and number == target:
+                    if accessibility.AXUIElementPerformAction(
+                        window, accessibility.kAXRaiseAction
+                    ) == accessibility.kAXErrorSuccess:
+                        return
+                    break
+            raise RaiseWindowFailed(window_id)
+        except Exception as exc:
+            log.debug("macOS raise_window(%s): %s", window_id, exc)
+            if isinstance(exc, RaiseWindowFailed):
+                raise
+            raise RaiseWindowFailed(window_id) from exc
+
+    @staticmethod
+    def _quartz() -> Any:
+        quartz, available = _load_quartz()
+        if not available or quartz is None:
+            raise RuntimeError("PyObjC Quartz is required for macOS window enumeration")
+        return quartz
+
+
+def _load_raise_apis() -> tuple[ModuleType, ModuleType]:
+    """Load AppKit and Accessibility lazily so Linux can import this module."""
+    import AppKit  # type: ignore[import-not-found]
+    import ApplicationServices  # type: ignore[import-not-found]
+
+    return AppKit, ApplicationServices
+
+
+def _is_standard_cg_window(payload: dict[str, Any]) -> bool:
+    return (
+        payload.get("kCGWindowLayer") == 0
+        and isinstance(payload.get("kCGWindowNumber"), int)
+        and isinstance(payload.get("kCGWindowOwnerPID"), int)
+        and payload["kCGWindowOwnerPID"] > 0
+    )
+
+
+def _cg_window_list_options(quartz: Any) -> int:
+    return (
+        quartz.kCGWindowListOptionOnScreenOnly
+        | quartz.kCGWindowListExcludeDesktopElements
+    )
+
+
+def _window_info_from_cg_payload(payload: dict[str, Any]) -> WindowInfo:
+    """Map a CGWindowList dictionary to deckd's platform-neutral shape."""
+    owner = payload.get("kCGWindowOwnerName")
+    title = payload.get("kCGWindowName")
+    return WindowInfo(
+        window_id=str(payload["kCGWindowNumber"]),
+        wm_class=owner if isinstance(owner, str) else None,
+        app_name=owner if isinstance(owner, str) else None,
+        gtk_application_id=None,
+        sandboxed_app_id=None,
+        title=title if isinstance(title, str) and title else None,
+        workspace=None,
+        minimized=False,
+    )
 
 
 # ---------------------------------------------------------------------------
