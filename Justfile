@@ -168,6 +168,30 @@ ladle:
 screenshots:
     cd client && node screenshots.mjs
 
+# Run the full verification ladder (docs/ONBOARDING.md) in order:
+# typechecks first (cheap gates), then Python unit/integration, then
+# TypeScript compile, client unit tests, Playwright e2e, the daemon
+# smoke test, and finally the lint sweep. Each step must pass before
+# the next. Skips nothing; anything that needs human-on-hardware
+# verification lives above this ladder (see docs/TESTING.md).
+test-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "== 1/7  pyright daemon =="
+    pyright daemon
+    echo "== 2/7  pytest =="
+    pytest
+    echo "== 3/7  tsc --noEmit =="
+    cd client && npx tsc --noEmit
+    echo "== 4/7  vitest unit =="
+    cd client && npm run test:unit
+    echo "== 5/7  playwright e2e =="
+    cd client && npm run test:e2e
+    echo "== 6/7  smoke =="
+    just smoke
+    echo "== 7/7  eslint =="
+    cd client && npm run lint
+
 # Run the test suite.
 test:
     pytest

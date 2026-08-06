@@ -401,6 +401,7 @@ class PlatformBackend:
             "this backend does not implement watch_windows",
             capability="watch_windows",
         )
+        yield  # type: ignore[unreachable]  # make this an async generator for override compat
 
     async def raise_window(self, window_id: str) -> None:
         """Raise (focus) the window carrying ``window_id`` (#122).
