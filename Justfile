@@ -182,15 +182,15 @@ test-all:
     echo "== 2/7  pytest =="
     pytest
     echo "== 3/7  tsc --noEmit =="
-    cd client && npx tsc --noEmit
+    (cd client && npx tsc --noEmit)
     echo "== 4/7  vitest unit =="
-    cd client && npm run test:unit
+    (cd client && npm run test:unit)
     echo "== 5/7  playwright e2e =="
-    cd client && npm run test:e2e
+    (cd client && npm run test:e2e)
     echo "== 6/7  smoke =="
     just smoke
     echo "== 7/7  eslint =="
-    cd client && npm run lint
+    (cd client && npm run lint)
 
 # Run the test suite.
 test:
