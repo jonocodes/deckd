@@ -47,14 +47,15 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Scroll strip** — an always-on right-side jogstrip to scroll the focused window, with release momentum.
 - [x] **Manual control mode** — the phone becomes a trackpad (move, tap, right-click, drag-lock) and a keyboard, so you can type into and point at the focused app for the things layouts don't cover (URL bars, chat boxes, ad-hoc commands).
 - [x] **App badge** — the focused app's name, icon, and accent color show in the bottom bar so you can tell at a glance what you're controlling.
-- [x] **Chrome media indicator** — the media icon sprouts a pulsing green dot whenever an MPRIS player is `Playing` (passive playback indicator), independent of the browser view.
-- [x] **MPRIS media browser** — browse and control any MPRIS-compatible player (Spotify, Firefox, VLC, etc.) from a dedicated chrome view, with album art, per-row transport controls, and now-playing metadata.
+- [x] **Chrome media indicator** — the media icon sprouts a pulsing green dot whenever a media player is playing (passive playback indicator), independent of the browser view.
+- [x] **Media browser** — browse and control any supported media player (Spotify, Firefox, VLC, etc.) from a dedicated chrome view, with album art, per-player transport controls, and now-playing metadata.
 - [x] **Running programs list** — tap a layout-grid icon in the bottom chrome to open a list of every open window on the host, labeled by the layout the window would match. Tap a row to raise (focus) that window and close the list. Enumeration and raise are GNOME-only today (via the focus extension); other backends show the list's "unsupported on this platform" empty state.
 - [x] **VLC media widgets** — full VLC control surface with play/pause, seek, volume, album art. Configurable art sources (VLC embedded art + iTunes fallback).
 - [x] **Live sensor widgets** — meter and stats widgets pushed to the client in real time (CPU %, memory %, etc.), bound to daemon-side sensor sources.
 - [x] **GUI layout editor** — build and edit layouts from the browser without hand-editing YAML: a widget palette, a drag-to-reorder reflow canvas with span and overflow controls, a properties panel (labels, icons via a searchable picker, colours, actions and macros), and new-layout creation — saved back to disk over the write API. In development, but usable today. See [Layout editor](#layout-editor).
 - [x] **Live layout editing** — edit a layout file on the desktop (by hand or via the GUI editor) and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
+- [x] **Addressable client views** — the layout, manual control, media browser, settings, editor, and running-windows views have their own URL paths for deep links and browser history.
 - [x] **Keep screen awake** while the surface is in use.
 - [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
 - [x] **Password auth** — every client authenticates with a shared password (on by default; `--no-auth` disables it for local development). See [Client auth](#client-auth).
@@ -360,7 +361,7 @@ That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws
 
 Every layout renders inside a persistent **chrome** shell that the daemon does not know about:
 
-- **Bottom strip** (always visible): the current app badge (from `LayoutMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the layout's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected), a `manual control` button that swaps the main area for the combined trackpad + IME surface (see [Manual control mode](#manual-control-mode)), a `media browser` button (when enabled — see [MPRIS media browser](#mpris-media-browser); ADR-0008 records the chrome-view carve-out that lets the client pin a specific layout) that asks the daemon for the global MPRIS browser view, and a `settings` button (see [Client tuning](#client-tuning)).
+- **Bottom strip** (always visible): the current app badge (from `LayoutMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the layout's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected), a `manual control` button that swaps the main area for the combined trackpad + IME surface (see [Manual control mode](#manual-control-mode)), a `media browser` button (when enabled — see [Media browser](#media-browser); ADR-0008 records the chrome-view carve-out that lets the client pin a specific layout) that asks the daemon for the global media browser view, and a `settings` button (see [Client tuning](#client-tuning)).
 - **Right-side jogstrip** (always visible): a full-height scroll strip that works the same as the in-grid `jogstrip` widget. A layout can suppress it with `jogstrip: false` at the YAML top level — the daemon forwards this as `jogstrip_enabled` on every `LayoutMessage`.
 
 Widgets in a layout's `widgets:` list are an **ordered list** that reflows against the viewport width (ADR-0010). There are no grid coordinates. The client packs widgets left-to-right and wraps down, computing the column count from the available width against a client-side cell-size band. A widget may carry a `size: [w, h]` span (default `[1, 1]`) for non-uniform cells; the list order is the only positional input. Portrait just fits fewer columns — no transpose, no orientation conventions.
@@ -969,10 +970,10 @@ Art sources are chosen with `art_source` (default `[vlc]`):
 
 > On some setups (e.g. NixOS) Python's TLS can't find a CA bundle, which makes the HTTPS lookup fail silently (art just falls back to the logo). If that happens, set `SSL_CERT_FILE` / `NIX_SSL_CERT_FILE` for the daemon.
 
-### MPRIS media browser
+### Media browser
 
-The MPRIS media browser is a global media-control surface that works
-independently of the focused app: it lists every MPRIS player the
+The media browser is a global media-control surface that works
+independently of the focused app: it lists every media player the
 system exposes over the session D-Bus (VLC, mpv, Spotify, Firefox
 audio, …) and gives each row a prev / play-pause / next transport.
 It's a *chrome view* — a full-bleed panel that replaces the layout
@@ -989,7 +990,7 @@ Drop a layout that declares the `mediabrowser` widget kind into your
 
 ```yaml
 match: [mpris]
-display_name: MPRIS
+display_name: Media
 widgets:
   - id: browser
     kind: mediabrowser
@@ -1019,7 +1020,7 @@ see the bottom chrome exactly as before.
 
 The media icon doubles as a glance affordance for the host's
 playback state (issue #47): a small green dot pulses in its
-top-right corner whenever at least one MPRIS player is `Playing`,
+top-right corner whenever at least one media player is `Playing`,
 and disappears otherwise. The dot reads as the same "live signal"
 affordance chat apps use for recording indicators, and crucially
 doesn't compete with the cyan accent the icon takes on when the
@@ -1050,7 +1051,7 @@ while a track is already playing tints immediately rather than
 waiting for the next boundary transition. On platforms without an
 `MprisBackend` (macOS today) no frames are produced and the icon
 stays in the default outlined state — the same
-graceful-degradation stance the rest of the MPRIS surface takes.
+graceful-degradation stance the rest of the media surface takes.
 
 #### What the view shows
 
@@ -1202,7 +1203,7 @@ The two are independent features. The VLC `media` widget is per-VLC:
 it lives in the VLC layout, polls VLC's local HTTP interface for
 playback state, and routes commands through VLC's HTTP API. The
 MPRIS browser is per-host: it lives in the chrome view, watches the
-session D-Bus for every MPRIS player, and routes commands through
+session D-Bus for every media player, and routes commands through
 the standard MPRIS Player-interface methods. The shared wire message
 is the `media_command` you already saw in the previous section; the
 daemon's dispatch routes `mpris.*` ids to the MPRIS backend and

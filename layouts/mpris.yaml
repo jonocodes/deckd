@@ -14,7 +14,7 @@
 # Shell — issue #58) with no per-layout knob; ``empty_state`` defaults
 # sensibly so most users don't need to override it.
 match: [mpris]
-display_name: MPRIS
+display_name: Media
 widgets:
   - id: browser
     kind: mediabrowser

@@ -79,6 +79,7 @@ describe("App — chrome media icon", () => {
     fireEvent.pointerDown(button);
     expect(send).toHaveBeenCalledWith({ type: "select_view", view: "mpris" });
     expect(button.className).toContain("chrome-btn-active");
+    expect(window.location.pathname).toBe("/media-browser");
   });
 
   it("sends clear_view on a second click and removes the active class", () => {
@@ -91,6 +92,17 @@ describe("App — chrome media icon", () => {
       { type: "clear_view" },
     ]);
     expect(button.className).not.toContain("chrome-btn-active");
+    expect(window.location.pathname).toBe("/");
+  });
+
+  it("opens a view from its URL and responds to browser history", () => {
+    window.history.replaceState(null, "", "/settings?demo=default");
+    render(<App />);
+    expect(screen.getByRole("heading", { name: /settings/i })).toBeTruthy();
+
+    window.history.pushState(null, "", "/trackpad?demo=default");
+    act(() => window.dispatchEvent(new PopStateEvent("popstate")));
+    expect(screen.getByRole("heading", { name: /manual control/i })).toBeTruthy();
   });
 
   it("renders the editor button in the bottom chrome", () => {

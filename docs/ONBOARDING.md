@@ -47,7 +47,7 @@ This document is the primary navigation map for AI agents (and human developers)
 │       ├── Trackpad.tsx    # Trackpad surface for manual control
 │       ├── ManualControl.tsx  # Combined trackpad + keyboard passthrough mode
 │       ├── MediaCell.tsx   # VLC media widget cell
-│       ├── MediaBrowserCell.tsx  # MPRIS media browser row
+│       ├── MediaBrowserCell.tsx  # Media browser row
 │       ├── MeterCell.tsx   # Live sensor meter widget
 │       ├── StatsCell.tsx   # Stats display cell
 │       ├── Settings.tsx    # Per-device client tuning panel

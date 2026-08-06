@@ -44,8 +44,8 @@ import { isTypingTarget, onActivate } from "./a11y";
 import { Editor } from "./Editor";
 import { ConfirmModal } from "./ConfirmModal";
 import type { Widget } from "./protocol";
+import { pathForView, viewFromPath, type View } from "./view-routing";
 
-type View = "layout" | "trackpad" | "settings" | "mediabrowser" | "editor" | "windows";
 type SocketStatus = "connecting" | "open" | "closed" | "unauthorized";
 
 /** Sentinel ids for the always-on chrome widgets. The daemon's pad / jog
@@ -71,7 +71,25 @@ export function App() {
   const [layout, setLayout] = useState<ServerLayout | null>(demoLayout);
   // A view demo (``?demo=settings`` / ``?demo=trackpad``) opens straight into
   // that chrome view; otherwise start on the layout grid.
-  const [view, setView] = useState<View>(getDemoView);
+  const [view, setView] = useState<View>(() => {
+    const demoView = getDemoView();
+    return demoView === "layout" && window.location.pathname !== "/"
+      ? viewFromPath(window.location.pathname)
+      : demoView;
+  });
+  const navigate = useCallback((nextView: View) => {
+    setView(nextView);
+    const path = pathForView(nextView);
+    if (window.location.pathname !== path) {
+      window.history.pushState(null, "", `${path}${window.location.search}`);
+    }
+  }, []);
+
+  useEffect(() => {
+    const onPopState = () => setView(viewFromPath(window.location.pathname));
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
   const onLayout = useCallback((m: ServerLayout) => setLayout(m), []);
   // Track every sensor source the active layout references (from ``meter``
   // widgets and each ``stats`` widget's metrics) so the meter store can drop
@@ -260,25 +278,25 @@ export function App() {
   // view pinned across a brief settings detour.
   const toggleMediaBrowser = useCallback(() => {
     if (view === "mediabrowser") {
-      setView("layout");
+      navigate("layout");
       send({ type: "clear_view" });
     } else {
-      setView("mediabrowser");
+      navigate("mediabrowser");
       send({ type: "select_view", view: MPRIS_VIEW_ID });
     }
-  }, [view, send]);
+  }, [navigate, view, send]);
   // Editor view toggle (issue #100): the edit button in the bottom chrome
   // sends ``select_view: "editor"`` so the daemon pushes the editor layout;
   // on close it sends ``clear_view`` to revert to the focused-app layout.
   const toggleEditor = useCallback(() => {
     if (view === "editor") {
-      setView("layout");
+      navigate("layout");
       send({ type: "clear_view" });
     } else {
-      setView("editor");
+      navigate("editor");
       send({ type: "select_view", view: EDITOR_VIEW_ID });
     }
-  }, [view, send]);
+  }, [navigate, view, send]);
   // Running-windows view toggle (issues #120 / #126): the layout-grid
   // button in the bottom chrome sends ``select_view: "windows"`` so the
   // daemon pushes the running-windows layout; on close it sends
@@ -286,22 +304,22 @@ export function App() {
   // as the media browser and editor — chrome-view carve-out per ADR-0008.
   const toggleWindows = useCallback(() => {
     if (view === "windows") {
-      setView("layout");
+      navigate("layout");
       send({ type: "clear_view" });
     } else {
-      setView("windows");
+      navigate("windows");
       send({ type: "select_view", view: WINDOWS_VIEW_ID });
     }
-  }, [view, send]);
+  }, [navigate, view, send]);
   // Trackpad / settings openers: kept named so the keyboard-shortcut
   // effect below can call them without duplicating the toggle logic.
   const openTrackpad = useCallback(
-    () => setView((v) => (v === "trackpad" ? "layout" : "trackpad")),
-    [],
+    () => navigate(view === "trackpad" ? "layout" : "trackpad"),
+    [navigate, view],
   );
   const openSettings = useCallback(
-    () => setView((v) => (v === "settings" ? "layout" : "settings")),
-    [],
+    () => navigate(view === "settings" ? "layout" : "settings"),
+    [navigate, view],
   );
 
   // Focus restoration (issue #60, AC #5). When the user opens a
@@ -388,7 +406,7 @@ export function App() {
       if (target && isTypingTarget(target)) return;
       if (e.key === "Escape" && view !== "layout") {
         e.preventDefault();
-        setView("layout");
+        navigate("layout");
         if (view === "mediabrowser" || view === "editor" || view === "windows") send({ type: "clear_view" });
         return;
       }
@@ -422,7 +440,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [view, openTrackpad, openSettings, toggleMediaBrowser, toggleEditor, toggleWindows, send, status]);
+  }, [navigate, view, openTrackpad, openSettings, toggleMediaBrowser, toggleEditor, toggleWindows, send, status]);
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
@@ -557,7 +575,7 @@ export function App() {
               sensitivity={trackpad.sensitivity}
             />
           ) : view === "mediabrowser" ? (
-            // Per-row MPRIS browser (issue #53). The cell filters the
+            // Per-player media browser (issue #53). The cell filters the
             // shared media cache down to ``mpris.*`` ids in the order
             // the daemon reports them (session bus ``ListNames``
             // reply — matching GNOME Shell, issue #58), and gates the
@@ -604,7 +622,7 @@ export function App() {
               canDeauthenticate={hasPassword}
               onDeauthenticate={() => {
                 setAttemptedAuth(false);
-                setView("layout");
+                navigate("layout");
                 deauthenticate();
               }}
               largerControls={largerControls.enabled}
@@ -620,7 +638,7 @@ export function App() {
             <Editor
               layout={layout}
               send={send}
-              onExit={() => setView("layout")}
+              onExit={() => navigate("layout")}
               mockLayouts={isDemo ? EDITOR_DEMO_LAYOUTS : undefined}
             />
           ) : view === "windows" ? (
@@ -641,7 +659,7 @@ export function App() {
                 // clear_view handshake ``toggleWindows`` uses; the
                 // daemon raises fire-and-forget, so we don't wait.
                 send({ type: "raise_window", window_id: windowId });
-                setView("layout");
+                navigate("layout");
                 send({ type: "clear_view" });
               }}
             />

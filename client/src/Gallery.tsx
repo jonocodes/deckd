@@ -29,6 +29,8 @@ const MAX_H = 360;
 
 type Orientation = "landscape" | "portrait";
 
+const DEMO_LABELS: Record<string, string> = { mpris: "Media" };
+
 function Frame({
   device,
   demo,
@@ -87,7 +89,7 @@ export function Gallery() {
               className={`gallery-btn${name === demo ? " on" : ""}`}
               onClick={() => setDemo(name)}
             >
-              {name}
+              {DEMO_LABELS[name] ?? name}
             </button>
           ))}
         </div>

@@ -199,8 +199,8 @@ export const MEDIA_DEMO_STATES: MediaState[] = [
 // by playback state.
 const MPRIS: ServerLayout = {
   type: "layout",
-  app: "mpris (demo)",
-  display_name: "MPRIS",
+  app: "Media (demo)",
+  display_name: "Media",
   theme: "#22c55e",
   icon: { source: "lucide", name: "music" },
   jogstrip_enabled: true,
@@ -369,7 +369,7 @@ export const DEMO_LAYOUTS = DEMOS;
 
 /** Names of the available demo pages, for the demo gallery selector — the
  * layout fixtures plus the settings / trackpad / editor view demos. */
-export const DEMO_NAMES = [...Object.keys(DEMOS), ...Object.keys(DEMO_VIEWS)];
+export const DEMO_NAMES = [...new Set([...Object.keys(DEMOS), ...Object.keys(DEMO_VIEWS)])];
 
 /** Returns the demo layout named by the ``?demo=`` URL param, or ``null``
  * when the param is absent/unknown (normal daemon-backed operation). A view
