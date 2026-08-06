@@ -23,3 +23,24 @@ jobs:
       - run: pip install -e ".[dev]"
 
       - run: pytest -v
+
+  # macOS carries no uinput/evdev, so the full suite (which imports the
+  # Linux input path) can't run here. But the macOS *backend* is pure —
+  # platform_macos and the platform-parity drift-guard only read
+  # advertised capability flags, never PyObjC/Quartz — so run exactly
+  # those two files on a real Mac. This is what actually exercises the
+  # macOS column of docs/PLATFORM-PARITY.md from a macOS runner (#136);
+  # on ubuntu the same assertion passes but on the host's Python only.
+  test-macos:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -e ".[dev]"
+
+      - run: pytest -v tests/test_platform_parity.py tests/test_platform_macos.py
