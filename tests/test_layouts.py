@@ -79,6 +79,15 @@ def test_media_schema_accepts_typed_controls_and_volume_fallback_actions() -> No
     assert widget.controls == ["play", "volume"]
 
 
+def test_raise_action_round_trips_from_yaml_shape() -> None:
+    widget = Widget.model_validate(
+        {"id": "raise", "kind": "button", "action": {"raise": "org.mozilla.firefox"}}
+    )
+    assert widget.action is not None
+    assert widget.action.raise_ == "org.mozilla.firefox"
+    assert widget.action.model_dump(by_alias=True)["raise"] == "org.mozilla.firefox"
+
+
 @pytest.mark.parametrize("controls", [[], ["play", "play"], ["unknown"]])
 def test_media_schema_rejects_invalid_controls(controls: list[str]) -> None:
     with pytest.raises(ValueError):

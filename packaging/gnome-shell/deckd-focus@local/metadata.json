@@ -3,5 +3,5 @@
   "name": "deckd Focus",
   "description": "Publishes the focused GNOME Shell window over session D-Bus for deckd.",
   "shell-version": ["48", "49", "50"],
-  "version": 4
+  "version": 5
 }

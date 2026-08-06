@@ -5,7 +5,7 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Awaitable, Callable, Literal
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal
 
 from .layouts import Action, Macro, MacroStep, Widget
 
@@ -58,6 +58,7 @@ class ActionContext:
     current_app: str
     key_sink: "KeySink | None" = None
     dbus_bus_factory: "Callable[[BusTypeT], MessageBus] | None" = None
+    focus_backend: Any = None
 
 
 async def execute(
@@ -78,6 +79,8 @@ async def execute(
         await _dispatch_key(action.key, ctx)
     elif action.dbus is not None:
         await _dispatch_dbus(action.dbus, ctx, widget_id=widget.id)
+    elif action.raise_ is not None:
+        await _dispatch_raise(action.raise_, ctx, widget_id=widget.id)
     elif action.url is not None:
         await _dispatch_url(action.url)
     elif action.text is not None:
@@ -86,6 +89,20 @@ async def execute(
         log.warning("widget %s action has no recognised primitive: %s",
                     widget.id, action)
     return None
+
+
+async def _dispatch_raise(identity: str, ctx: ActionContext, *, widget_id: str) -> None:
+    backend = ctx.focus_backend
+    if backend is None or "raise_app" not in backend.capabilities():
+        log.info("[raise] unsupported backend (identity=%r, widget=%s)", identity, widget_id)
+        return
+    try:
+        raised = await backend.raise_app(identity)
+    except Exception as exc:
+        log.warning("[raise] %r failed (widget=%s): %s", identity, widget_id, exc)
+        return
+    if not raised:
+        log.info("[raise] no running window matched %r (widget=%s)", identity, widget_id)
 
 
 async def _run_shell(command: str) -> None:
@@ -650,4 +667,3 @@ async def _step_text(step: MacroStep, ctx: ActionContext) -> None:
     a = Action(text=step.value, text_mode=None, restore_clipboard=True,
                restore_clipboard_delay_ms=1000)
     await _dispatch_text(a, ctx)
-

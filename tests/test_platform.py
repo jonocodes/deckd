@@ -237,8 +237,22 @@ def test_gnome_backend_advertises_watch_windows() -> None:
     """GNOME today implements both surfaces; the windows watcher is
     started at daemon boot and the chrome list gets a real snapshot."""
     assert GnomeShellFocusBackend().capabilities() == frozenset(
-        {"watch_active_app", "watch_windows", "raise_window"}
+        {"watch_active_app", "watch_windows", "raise_window", "raise_app"}
     )
+
+
+@pytest.mark.asyncio
+async def test_gnome_raise_app_calls_gdbus(monkeypatch) -> None:
+    calls: list[tuple] = []
+
+    async def fake_run(*args: str) -> str:
+        calls.append(args)
+        return "(true,)\n"
+
+    monkeypatch.setattr(plat, "_run", fake_run)
+    assert await GnomeShellFocusBackend().raise_app("org.mozilla.firefox")
+    assert calls[0][-1] == "org.mozilla.firefox"
+    assert any("RaiseApp" in part for part in calls[0])
 
 
 @pytest.mark.asyncio

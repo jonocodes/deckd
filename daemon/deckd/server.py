@@ -2472,6 +2472,7 @@ class Server:
             current_app=session.app_id,
             key_sink=self.key_sink,
             dbus_bus_factory=self.dbus_bus_factory,
+            focus_backend=self.focus_backend,
         )
         if action_widget_id in {"previous", "next", "volume_up", "volume_down"}:
             # Media sub-actions are intentionally NEVER gated by

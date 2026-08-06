@@ -421,6 +421,12 @@ class PlatformBackend:
             capability="raise_window",
         )
 
+    async def raise_app(self, identity: str) -> bool:
+        raise UnimplementedCapability(
+            "this backend does not implement raise_app",
+            capability="raise_app",
+        )
+
 
 class GnomeShellFocusBackend(PlatformBackend):
     BUS_NAME = "org.deckd.Focus"
@@ -434,7 +440,7 @@ class GnomeShellFocusBackend(PlatformBackend):
         # (the KWin script can feed both ``UpdateActiveWindow`` and a
         # parallel window list, mirroring the GNOME extension's dual
         # ``GetActiveWindow`` / ``ListWindows``).
-        return frozenset({"watch_active_app", "watch_windows", "raise_window"})
+        return frozenset({"watch_active_app", "watch_windows", "raise_window", "raise_app"})
 
     async def get_active_app(self) -> AppInfo:
         out = await _run(
@@ -523,6 +529,14 @@ class GnomeShellFocusBackend(PlatformBackend):
         )
         if not _parse_single_bool_tuple(out):
             raise RaiseWindowFailed(window_id)
+
+    async def raise_app(self, identity: str) -> bool:
+        out = await _run(
+            "gdbus", "call", "--session", "--dest", self.BUS_NAME,
+            "--object-path", self.OBJECT_PATH, "--method",
+            f"{self.INTERFACE}.RaiseApp", identity,
+        )
+        return _parse_single_bool_tuple(out)
 
 
 class RaiseWindowFailed(RuntimeError):

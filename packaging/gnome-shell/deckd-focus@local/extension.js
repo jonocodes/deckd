@@ -20,6 +20,10 @@ const DBUS_XML = `
       <arg type="s" name="window_id" direction="in"/>
       <arg type="b" name="raised" direction="out"/>
     </method>
+    <method name="RaiseApp">
+      <arg type="s" name="identity" direction="in"/>
+      <arg type="b" name="raised" direction="out"/>
+    </method>
     <signal name="ActiveWindowChanged">
       <arg type="s" name="window_json"/>
     </signal>
@@ -33,6 +37,7 @@ export default class DeckdFocusExtension extends Extension {
     // cadence) and pruned when a window is unmanaged. RaiseWindow(id)
     // resolves through this table; a retired id returns false (#122).
     this._windowMap = new Map();
+    this._windowEntries = new Map();
     // Per-window ``unmanaging`` handler ids so we can disconnect on
     // disable() and when a window retires — no leaked signal handlers.
     this._unmanagingIds = new Map();
@@ -75,6 +80,10 @@ export default class DeckdFocusExtension extends Extension {
     if (this._windowMap) {
       this._windowMap.clear();
       this._windowMap = null;
+    }
+    if (this._windowEntries) {
+      this._windowEntries.clear();
+      this._windowEntries = null;
     }
     if (this._focusSignalId) {
       global.display.disconnect(this._focusSignalId);
@@ -123,6 +132,7 @@ ListWindows() {
       if (entry) {
         entries.push(entry);
         this._trackWindow(entry.window_id, metaWindow);
+        this._windowEntries.set(entry.window_id, entry);
       }
     }
     entries.sort((a, b) => {
@@ -143,6 +153,21 @@ ListWindows() {
     if (!metaWindow) return false;
     Main.activateWindow(metaWindow);
     return true;
+  }
+
+  // Raise the MRU window whose wm_class, GTK application id, or sandboxed
+  // application id exactly matches the configured identity.
+  RaiseApp(identity) {
+    if (!this._windowMap) return false;
+    this.ListWindows();
+    for (const entry of this._windowEntries.values()) {
+      if (![entry.wm_class, entry.gtk_application_id, entry.sandboxed_app_id].includes(identity)) continue;
+      const metaWindow = this._windowMap.get(entry.window_id);
+      if (!metaWindow) continue;
+      Main.activateWindow(metaWindow);
+      return true;
+    }
+    return false;
   }
 
   // Record id -> Meta.Window and, once per window, wire its

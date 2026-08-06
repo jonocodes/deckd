@@ -300,6 +300,9 @@ class Action(BaseModel):
     key: str | None = None
     shell: str | None = None
     dbus: str | None = None
+    # ``raise`` activates the most recently focused running window matching
+    # the configured application identity. Platform support is backend-specific.
+    raise_: str | None = Field(default=None, alias="raise", min_length=1)
     # ``terminal: true`` opens the auto-detected terminal emulator ($TERMINAL,
     # then a candidate list). It intentionally does NOT take a command string:
     # to launch a specific program use ``shell:`` (which is fire-and-forget),
@@ -314,6 +317,8 @@ class Action(BaseModel):
     text_mode: Literal["simulate", "paste"] | None = None
     restore_clipboard: bool = True
     restore_clipboard_delay_ms: int = Field(default=1000, ge=0)
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
     @field_validator("terminal", mode="before")
     @classmethod

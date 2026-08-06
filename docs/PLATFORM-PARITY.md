@@ -18,6 +18,7 @@ this table exists to make drift between backends visible at a glance.
 | Focus detection (`watch_active_app`) | ✓ GNOME Shell extension over `org.deckd.Focus` | ✓ KWin script pushes into daemon-owned cache (#31) | ✓ `xdotool` poll | ✓ `osascript` + System Events |
 | Window enumeration (`watch_windows`) | ✓ extension `ListWindows` | ✗ — **advertised but unimplemented, see [#133](https://github.com/jonocodes/deckd/issues/133)** | ✗ | ✗ |
 | Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✗ — **advertised but unimplemented, see [#133](https://github.com/jonocodes/deckd/issues/133)** | ✗ | ✗ |
+| Raise app (`raise:`) | ✓ extension `RaiseApp` (#137) | ✗ | ✗ | ✗ |
 | Key injection — printable | ✓ `uinput` (evdev) | ✓ `uinput` | ✓ `uinput` | ✓ `osascript keystroke` |
 | Key injection — non-printable / special | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ◑ partial — `osascript key code` map |
 | Combo modifiers | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ✓ `using {command down}` |

@@ -69,6 +69,25 @@ async def test_press_dbus_calls_method_on_session_bus() -> None:
     ]
 
 
+async def test_press_raise_calls_backend() -> None:
+    class Backend:
+        def capabilities(self):
+            return frozenset({"raise_app"})
+
+        async def raise_app(self, identity):
+            self.identity = identity
+            return True
+
+    backend = Backend()
+    widget = Widget(
+        id="raise-btn", kind="button", action=Action.model_validate({"raise": "firefox"})
+    )
+    ctx = _ctx(FakeDbusBusFactory())
+    ctx.focus_backend = backend
+    await run_action(widget, ctx)
+    assert backend.identity == "firefox"
+
+
 async def test_press_dbus_passes_string_arguments() -> None:
     factory = FakeDbusBusFactory()
     widget = _widget(
