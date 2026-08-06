@@ -165,7 +165,9 @@ def _iface_addresses(name: str) -> list[tuple[str, int]]:
     except socket.gaierror as exc:
         raise ValueError(f"getaddrinfo({name!r}) failed: {exc}") from exc
     for family, *_rest, sockaddr in infos:
-        host = sockaddr[0]
+        raw_host = sockaddr[0]
+        assert isinstance(raw_host, str)
+        host: str = raw_host
         # Skip ``::`` (the IPv6 any-address) — only the operator
         # should ask for that explicitly, and only as a literal.
         if host == "::":
@@ -187,7 +189,7 @@ def url_for(binds: Iterable[ResolvedBind], port: int, scheme: str = "http") -> s
     actually-listening port (``self.port`` after ``start()``
     resolved any ``port=0`` sentinel).
     """
-    family_priority = {socket.AF_INET: 0, socket.AF_INET6: 1}
+    family_priority: dict[int, int] = {socket.AF_INET: 0, socket.AF_INET6: 1}
     sorted_binds = sorted(binds, key=lambda b: family_priority.get(b.family, 99))
     if not sorted_binds:
         return ""

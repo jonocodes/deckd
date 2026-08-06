@@ -237,7 +237,7 @@ class UinputSink:
             ) from exc
 
         class WriteOnlyUInput(UInput):
-            def _find_device(self, fd: int):
+            def _find_device(self, fd: int) -> None:  # type: ignore[override]
                 return None
 
         self._ecodes = ecodes

@@ -787,7 +787,7 @@ def _safe_bound_addresses(
     getter = getattr(server, "_bound_addresses", None)
     if callable(getter):
         try:
-            pairs = list(getter())
+            pairs: list[tuple[str, int]] = list(getter())  # type: ignore[arg-type]
         except Exception:
             pairs = []
         if pairs:

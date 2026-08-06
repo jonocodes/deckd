@@ -58,8 +58,9 @@ if TYPE_CHECKING:
     from dbus_fast import BusType as BusTypeT
     from dbus_fast.aio import MessageBus
 
+    from .bind import ResolvedBind
     from .input import KeySink
-    from .layouts import Action, Widget
+    from .layouts import Action, Macro, Widget
     from .platform import AppInfo, PlatformBackend, SensorManager, SensorReading, WindowInfo
 
 from . import PASSWORD_HEADER
@@ -192,7 +193,6 @@ def _action_primitive(action: "Action | None", macro: "Macro | None" = None) -> 
     For single actions the primitive is ``shell`` / ``key`` /
     ``dbus`` / ``terminal``; ``"press"`` is the fallback.
     """
-    from .layouts import Macro
     if macro is not None:
         return "macro", f"{len(macro.steps)} steps"
     if action is None:
@@ -275,6 +275,7 @@ def _open_bind_sockets(
         # Strip the trailing ``%iface`` scope so socket.bind doesn't
         # reject it; bind only needs the address.
         host = bind.host
+        sock: socket.socket | None = None
         try:
             sock = socket.socket(family, socket.SOCK_STREAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -283,7 +284,8 @@ def _open_bind_sockets(
             sock.bind((host, actual_port if actual_port is not None else port))
             sock.listen(128)
         except OSError as exc:
-            sock.close()
+            if sock is not None:
+                sock.close()
             if exc.errno == errno.EADDRINUSE:
                 # The first bind against the operator's explicit
                 # port hit a busy one — surface it to the caller
@@ -2328,7 +2330,7 @@ class Server:
                 await self.media.command(
                     widget.id,
                     media_command.command,
-                    media_command.value,
+                    media_command.value if media_command.value is not None else 0.0,
                     host=config.host,
                     port=config.port,
                     password_ref=config.password_ref,
@@ -2785,7 +2787,7 @@ class Server:
         actual_port = int(server_sockets[0].getsockname()[1])
         if actual_port != self.port:
             self.port = actual_port
-        opened: list[tuple[ResolvedBind, web.TCPSite]] = []
+        opened: list[tuple["ResolvedBind", web.BaseSite]] = []
         for sock in server_sockets:
             site = web.SockSite(runner, sock)
             try:

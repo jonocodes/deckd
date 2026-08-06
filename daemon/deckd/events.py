@@ -140,6 +140,6 @@ class EventBus:
         # change for every other session.
         for sub in list(self._subscribers):
             try:
-                asyncio.create_task(sub(event))
+                asyncio.ensure_future(sub(event))
             except Exception as exc:  # don't let one bad subscriber kill the bus
                 log.warning("event subscriber failed: %s", exc)
