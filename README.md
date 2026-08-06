@@ -49,6 +49,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **App badge** — the focused app's name, icon, and accent color show in the bottom bar so you can tell at a glance what you're controlling.
 - [x] **Chrome media indicator** — the media icon sprouts a pulsing green dot whenever an MPRIS player is `Playing` (passive playback indicator), independent of the browser view.
 - [x] **MPRIS media browser** — browse and control any MPRIS-compatible player (Spotify, Firefox, VLC, etc.) from a dedicated chrome view, with album art, per-row transport controls, and now-playing metadata.
+- [x] **Running programs list** — tap a layout-grid icon in the bottom chrome to open a list of every open window on the host, labeled by the layout the window would match (display-only in v1; raise-on-tap is stage 3).
 - [x] **VLC media widgets** — full VLC control surface with play/pause, seek, volume, album art. Configurable art sources (VLC embedded art + iTunes fallback).
 - [x] **Live sensor widgets** — meter and stats widgets pushed to the client in real time (CPU %, memory %, etc.), bound to daemon-side sensor sources.
 - [x] **GUI layout editor** — build and edit layouts from the browser without hand-editing YAML: a widget palette, a drag-to-reorder reflow canvas with span and overflow controls, a properties panel (labels, icons via a searchable picker, colours, actions and macros), and new-layout creation — saved back to disk over the write API. In development, but usable today. See [Layout editor](#layout-editor).
@@ -68,7 +69,6 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [ ] **One-step NixOS install** — a production module instead of the current spike.
 - [ ] **Multiple simultaneous clients** with per-device layouts and resolutions.
 - [ ] **Soundboard** — trigger sound clips from the deck.
-- [ ] **Raise or switch to an already-running app** from the controller.
 - [ ] **Multi-daemon chooser** — pair and pick between several desktops.
 - [ ] **Reliable web-app detection** — a browser extension reporting the active tab's real URL, so sites match by domain/path instead of the current window-title heuristic ([#90](https://github.com/jonocodes/deckd/issues/90)).
 - [ ] **Windows support**
@@ -1225,6 +1225,63 @@ and not interfering.
 See ADR-0008 for the chrome-view carve-out (the `select_view` /
 `clear_view` mechanism, the `view` field on `LayoutMessage`, and how
 the new general mechanism positions future chrome-shaped views).
+
+### Running programs list (stage 2 of the switcher design)
+
+A second chrome view lists the host's currently-open windows. Tap
+the new layout-grid icon in the bottom chrome strip and the focused
+app's layout is replaced with a list of every window the platform
+backend can enumerate — labeled by the layout the window would match
+against (`firefox.yaml` → row reads "Firefox", with the Simple Icons
+firefox glyph), and falling back to the raw `wm_class` (or
+`gtk_application_id`, then `title` last resort) on a default-fallback
+row. Default-fallback rows render with a placeholder glyph rather
+than a brand icon: a generic "terminal" Lucide glyph on every xterm
+would imply every xterm is the same xterm, and the list is
+per-window precisely so they're not.
+
+Stage 2 ships display-only — tapping a row is wired but ignored;
+stage 3 (a follow-up ticket) raises the window. The list reflects
+global reality regardless of which view a session has pinned, so
+switching into the view is instant (no spinner, no
+`select_view` round-trip).
+
+#### How to enable it
+
+The shipped `layouts/windows.yaml` is the layout the chrome view
+pins to:
+
+```yaml
+match: [windows]
+display_name: Windows
+jogstrip: false
+widgets: []
+```
+
+The platform backend advertises `watch_windows` in its
+`capabilities()`; today's GNOME Shell extension ships a
+`ListWindows()` method on the `org.deckd.Focus` interface that the
+daemon polls at ~100ms. Backends that can't enumerate (X11,
+macOS, headless) don't advertise the capability — the chrome icon
+stays rendered (the affordance is discoverable for users on a
+platform that ships it later) but tapping it shows the
+"running programs: unsupported on this platform" empty state,
+mirroring the media browser's "no players detected" placeholder.
+
+#### What the view shows
+
+- **No `running_windows` frame yet**: the unsupported empty state.
+- **Empty snapshot**: "no running programs" — distinguishes "the
+  platform can enumerate but the desktop is idle" from "the platform
+  can't enumerate".
+- **Non-empty snapshot**: one row per window. The label is the
+  matched layout's `display_name` (or the layout id when
+  `display_name` is absent). The icon rides from the matched layout
+  when present and is `null` on the default-fallback path.
+
+The `icon_for_window` helper re-derives on every push (no cache), so
+a layout reload (`POST /reload`) takes effect on the next snapshot
+with no invalidation logic.
 
 ## License
 

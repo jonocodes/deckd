@@ -21,6 +21,11 @@ async def _run(server: Server) -> None:
     loop = asyncio.get_running_loop()
     server_task = asyncio.create_task(server.start())
     server.start_focus_watcher()
+    # Stage 2 (#120 / #126): start the windows watcher alongside the
+    # focus watcher. ``start_windows_watcher`` is a no-op when the
+    # backend lacks ``watch_windows`` (X11, macOS, headless), so the
+    # wiring stays unconditional at the call site.
+    server.start_windows_watcher()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, server_task.cancel)

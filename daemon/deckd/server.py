@@ -24,6 +24,8 @@ from .input import ScrollController, parse_key_combo, text_to_combos
 from .layouts import (
     Layout,
     LayoutStore,
+    icon_for_window,
+    label_for_window,
     load_layout,
     load_layouts,
     reconcile_and_write_layout,
@@ -58,7 +60,7 @@ if TYPE_CHECKING:
 
     from .input import KeySink
     from .layouts import Action, Widget
-    from .platform import AppInfo, PlatformBackend, SensorManager, SensorReading
+    from .platform import AppInfo, PlatformBackend, SensorManager, SensorReading, WindowInfo
 
 from . import PASSWORD_HEADER
 
@@ -696,8 +698,17 @@ class Server:
         self._layouts_task: asyncio.Task[None] | None = None
         self._sensor_task: asyncio.Task[None] | None = None
         self._media_task: asyncio.Task[None] | None = None
+        self._windows_task: asyncio.Task[None] | None = None
         self._current_error: str | None = None
         self._deckd_window_focused = False
+        # Stage 2 (#120 / #126): last pushed running-windows snapshot,
+        # used to dedupe identical pushes (the daemon-side debounce that
+        # keeps the chrome list from re-rendering on every poll tick
+        # when the desktop is idle). ``None`` until the first watcher
+        # tick completes — a freshly connected client should still get
+        # the snapshot the watcher is about to compute, so the snapshot
+        # replay rides through ``push_running_windows_snapshot`` below.
+        self._last_running_windows: list["WindowInfo"] | None = None
         # Sensor subscriptions for the active layout. Re-derived whenever
         # the active layout changes (focus change or hot reload) so the
         # daemon only polls sensors the current view is actually using.
@@ -940,6 +951,148 @@ class Server:
             return None
         self._focus_task = asyncio.create_task(self.run_focus_watcher())
         return self._focus_task
+
+    # -- running-windows watcher (stage 2, issues #120 / #126) -----------------
+    #
+    # Mirrors the focus-watcher shape (one long-running task, one backend
+    # method call, one broadcast hook) but for the enumeration surface.
+    # Only started when the backend advertises ``"watch_windows"`` —
+    # otherwise the chrome list stays in its "unsupported on this
+    # platform" empty state (issue #120, decision 8). Backends that
+    # implement ``watch_windows`` raise :class:`UnimplementedCapability`
+    # if the daemon ever tries to start them without the capability, so
+    # the capability check is the single gate.
+
+    async def run_windows_watcher(self) -> None:
+        """Poll the backend's window enumeration and broadcast a
+        :class:`RunningWindowsMessage` on every snapshot change.
+
+        On a backend whose ``watch_windows`` raises
+        :class:`UnimplementedCapability`, the watcher logs once and
+        exits — the wire surface stays consistent (no
+        ``running_windows`` frame ever lands) and the chrome list shows
+        the "unsupported on this platform" empty state (issue #120,
+        decision 8). Any other exception is logged and the watcher
+        keeps going so a transient backend hiccup doesn't take the
+        chrome down.
+        """
+        if self.focus_backend is None:
+            return
+        backend = self.focus_backend
+        if "watch_windows" not in backend.capabilities():
+            log.debug("watch_windows skipped: backend lacks capability")
+            return
+        try:
+            async for snapshot in backend.watch_windows():
+                try:
+                    self._on_running_windows_change(snapshot)
+                except Exception as exc:
+                    log.warning("running-windows handler error: %s", exc)
+        except NotImplementedError:
+            log.debug("watch_windows not implemented on backend")
+        except Exception as exc:
+            log.warning("running-windows watcher exited: %s", exc)
+
+    def _on_running_windows_change(
+        self, snapshot: Sequence["WindowInfo"]
+    ) -> None:
+        """Backend listener: schedule a running-windows broadcast (issue #126).
+
+        Like :meth:`_on_chrome_media_change`, the backend iterator is
+        synchronous; the broadcast is async (it awaits ``session.send``
+        per recipient). Schedule as a task on the running loop so the
+        signal-pump thread doesn't block. ``create_task`` requires a
+        running loop, which is guaranteed because the iterator is
+        driven from this async method.
+        """
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        # Dedupe by value-equality against the last pushed snapshot so
+        # an idle desktop doesn't keep the chrome list re-rendering
+        # every poll tick — same shape as the chrome_media broadcast
+        # but in user-space (the backend's enumeration isn't debounced
+        # by event type the way MPRIS PropertiesChanged is). The
+        # comparison is on the WindowInfo tuple, which is frozen.
+        if self._last_running_windows is not None:
+            if list(self._last_running_windows) == list(snapshot):
+                return
+        self._last_running_windows = list(snapshot)
+        asyncio.create_task(self._broadcast_running_windows(snapshot))
+
+    def _running_windows_message(
+        self, snapshot: Sequence["WindowInfo"]
+    ) -> "p.RunningWindowsMessage":
+        """Build a ``running_windows`` frame from a backend snapshot.
+
+        Per-push label derivation (issue #120, decision 5): every
+        window's identity runs through :func:`label_for_window` so a
+        layout reload takes effect on the next push with no
+        invalidation logic. ``icon_for_window`` carries the matched
+        layout's icon when present, ``null`` on the default-fallback
+        path (decision 6 — honest absence, not a generic glyph).
+        """
+        entries: list[p.WindowListEntry] = []
+        for win in snapshot:
+            label = label_for_window(self.layouts, win)
+            icon = icon_for_window(self.layouts, win)
+            entries.append(
+                p.WindowListEntry(
+                    window_id=win.window_id,
+                    label=label,
+                    icon=icon,
+                )
+            )
+        return p.RunningWindowsMessage(type="running_windows", windows=entries)
+
+    async def _broadcast_running_windows(
+        self, snapshot: Sequence["WindowInfo"]
+    ) -> None:
+        """Push a ``RunningWindowsMessage`` to every connected session.
+
+        Mirror of :meth:`_broadcast_chrome_media`: the windows list is
+        global chrome (every session holds a fresh snapshot regardless
+        of which view it pinned, decision 7). Dead-connection failures
+        drop the session, same cleanup pattern.
+        """
+        if not self._sessions:
+            return
+        msg = self._running_windows_message(snapshot)
+        dead: list[Session] = []
+        for session in list(self._sessions):
+            try:
+                await session.send(msg)
+            except (ConnectionResetError, RuntimeError, ConnectionError):
+                dead.append(session)
+        for session in dead:
+            self._sessions.discard(session)
+
+    async def push_running_windows_snapshot(self, session: Session) -> None:
+        """Replay the current windows snapshot to a just-connected session.
+
+        Mirrors :meth:`push_chrome_media_snapshot`: the watcher only
+        broadcasts on snapshot change, so a session that connects
+        mid-lifetime would otherwise never see the list until the next
+        genuine change. Sends nothing on a backend that lacks the
+        capability — the chrome view's "unsupported on this platform"
+        empty state is the wire-level signal that no snapshot is
+        coming.
+        """
+        backend = self.focus_backend
+        if backend is None or "watch_windows" not in backend.capabilities():
+            return
+        if self._last_running_windows is None:
+            return
+        await session.send(self._running_windows_message(self._last_running_windows))
+
+    def start_windows_watcher(self) -> asyncio.Task[None] | None:
+        if self.focus_backend is None or self._windows_task is not None:
+            return None
+        if "watch_windows" not in self.focus_backend.capabilities():
+            return None
+        self._windows_task = asyncio.create_task(self.run_windows_watcher())
+        return self._windows_task
 
     # -- layouts-dir watcher -------------------------------------------------
 
@@ -2066,6 +2219,14 @@ class Server:
             # already playing would otherwise never see ``playing=true``
             # until the next boundary transition (which is rare).
             await self.push_chrome_media_snapshot(session)
+            # Issue #126 / stage 2: replay the running-windows snapshot
+            # to a fresh session — same rationale as
+            # ``push_chrome_media_snapshot``. The watcher only broadcasts
+            # on snapshot change, so a late-connecting client would
+            # otherwise never see the list until the next genuine
+            # change. A backend without ``watch_windows`` is a silent
+            # no-op; the chrome view's empty state is the signal.
+            await self.push_running_windows_snapshot(session)
             async for raw in ws:
                 if raw.type != WSMsgType.TEXT:
                     continue
@@ -2627,7 +2788,7 @@ class Server:
             await asyncio.sleep(3600)
 
     async def stop(self) -> None:
-        for task in (self._focus_task, self._layouts_task, self._sensor_task, self._media_task):
+        for task in (self._focus_task, self._windows_task, self._layouts_task, self._sensor_task, self._media_task):
             if task is not None:
                 task.cancel()
                 try:

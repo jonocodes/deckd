@@ -1527,6 +1527,101 @@ button:focus-visible {
   transform: scale(0.94);
 }
 
+/* ---------------------------------------------------------------------------
+ * Running-windows chrome list (issues #116 / #120 / #126).
+ *
+ * Mirrors the mediabrowser surface shape: a scrollable column of rows that
+ * fills the chrome-excluded surface, a single dashed-border empty card when
+ * the daemon hasn't pushed a snapshot yet or has nothing to enumerate. The
+ * icon column is the same 28px slot a ButtonGrid cell uses; the row body is
+ * a single label that ellipsises when it overflows.
+ * ------------------------------------------------------------------------- */
+
+.windows {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px 4px 0 4px;
+  min-height: 0;
+}
+
+.windows-empty {
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: #1b222a;
+  border: 1px dashed #2a333d;
+  color: #8a96a3;
+  font-size: calc(14px * var(--label-scale, 1));
+  text-align: center;
+  margin: auto;
+}
+
+.windows-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  /* Long lists stay usable: scroll within the placement, not the surface. */
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.windows-row {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: #1b222a;
+  border: 1px solid #2a333d;
+  border-radius: 10px;
+  min-height: 44px;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+}
+
+.windows-row-interactive {
+  cursor: pointer;
+}
+
+.windows-row-interactive:focus-visible {
+  outline: 2px solid #3fb1d8;
+  outline-offset: 2px;
+}
+
+.windows-row-interactive:active {
+  transform: scale(0.99);
+}
+
+.windows-row-icon {
+  width: 28px;
+  height: 28px;
+  display: block;
+}
+
+.windows-row-placeholder {
+  color: #4a5663;
+  width: 18px;
+  height: 18px;
+  display: block;
+  justify-self: end;
+}
+
+.windows-row-label {
+  font-size: calc(15px * var(--label-scale, 1));
+  font-weight: 500;
+  color: #e6e9ef;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
 /**
  * A stats cell reuses the plain-cell chrome
  * (background, border, radius, non-pressable) but stacks "LABEL value" rows

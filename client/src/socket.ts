@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerLayout, ServerMessage, ServerWidgetUpdate, MediaState } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerLayout, ServerMessage, ServerRunningWindows, ServerWidgetUpdate, MediaState } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
 
@@ -46,6 +46,7 @@ export function useDeckdSocket(
   onMediaState: (m: MediaState) => void,
   onChromeMedia?: (m: ServerChromeMedia) => void,
   onConfirmRequest?: (m: ServerConfirmRequest) => void,
+  onRunningWindows?: (m: ServerRunningWindows) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -117,6 +118,13 @@ export function useDeckdSocket(
           // keeps the wire surface forward-compatible.
           else if (msg.type === "chrome_media" && onChromeMedia) onChromeMedia(msg);
           else if (msg.type === "confirm_request" && onConfirmRequest) onConfirmRequest(msg);
+          // Issue #126 / stage 2: the daemon broadcasts ``running_windows``
+          // globally (chrome-media-style) so every connected session
+          // holds a fresh snapshot regardless of view pin. The handler is
+          // optional for the same forward-compat reason as the other
+          // chrome-side frames — a client that doesn't render the list can
+          // drop the param without breaking the dispatch.
+          else if (msg.type === "running_windows" && onRunningWindows) onRunningWindows(msg);
           else if (msg.type === "error" && msg.reason === "unauthorized") {
             // Wrong/absent password: stop reconnecting and prompt the user.
             unauthorizedRef.current = true;
@@ -170,7 +178,7 @@ export function useDeckdSocket(
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onLayout, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, enabled, gen]);
+  }, [onLayout, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, enabled, gen]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;

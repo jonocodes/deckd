@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import sys
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -62,6 +62,34 @@ class AppInfo:
         """
         hay = f"{self.app_id or ''} {self.wm_class or ''}".casefold()
         return any(marker in hay for marker in _BROWSER_MARKERS)
+
+
+@dataclass(frozen=True)
+class WindowInfo:
+    """One open window, enumerated by a platform backend (issues #119 /
+    #120 / #126).
+
+    Two-layer shape: identity (the three keys the layout matcher
+    compares against ``match`` tokens — ``wm_class`` /
+    ``gtk_application_id`` / ``sandboxed_app_id`` per #117 / #118) plus
+    state (``title`` for raw display fallback; ``workspace`` and
+    ``minimized`` are on the wire from the extension per #119 but
+    unrendered in v1's chrome list). ``window_id`` is the
+    underlying platform window id (e.g. ``Meta.Window.get_id()`` on
+    GNOME) stringified for transport — stable for the window's
+    lifetime, opaque to the daemon, never parsed by the client. The
+    matched label is *not* on this struct: it's a separate
+    wire-payload field the daemon produces (backend interface is free
+    of layout-pipeline concerns, per #121).
+    """
+
+    window_id: str
+    wm_class: str | None
+    gtk_application_id: str | None
+    sandboxed_app_id: str | None
+    title: str | None
+    workspace: int | None
+    minimized: bool
 
 
 @dataclass(frozen=True)
@@ -311,6 +339,19 @@ class PsutilMemoryPercentSensorSource(SensorSource):
 
 
 class PlatformBackend:
+    def capabilities(self) -> frozenset[str]:
+        """Backend capability flags consumed by the server (issue #121).
+
+        The default base implementation advertises the legacy focus-only
+        surface so existing backends (X11, macOS, headless) keep working
+        unchanged. Backends that implement the enumeration / raise
+        surfaces (GNOME today, KWin follow-ups) override to add their
+        flags. The server reads this once at startup; flag absences mean
+        the matching wire frames are simply never produced — the chrome
+        surfaces the corresponding empty state (issue #120, decision 8).
+        """
+        return frozenset({"watch_active_app"})
+
     async def start(self) -> None:
         """Acquire any long-lived resources (a D-Bus bus name, a session
         connection, etc.) the backend needs before the first
@@ -335,11 +376,45 @@ class PlatformBackend:
                 yield current
             await asyncio.sleep(interval_s)
 
+    async def watch_windows(
+        self, *, interval_s: float = 0.1
+    ) -> AsyncIterator[Sequence[WindowInfo]]:
+        """Enumerate every open window, polling at ``interval_s``.
+
+        Default implementation refuses: only backends that know how to
+        enumerate (today the GNOME Shell extension) advertise the
+        ``"watch_windows"`` capability and override this method. The
+        server catches :class:`UnimplementedCapability` at startup so a
+        legacy backend (X11, macOS, headless) doesn't crash; the chrome
+        list simply stays in its "unsupported on this platform" empty
+        state (issue #120, decision 8).
+
+        The yielded snapshot is MRU-ordered (most-recently-focused
+        first) by the backend's own comparator. The per-window
+        ``window_id`` is the platform's stable underlying id (e.g.
+        ``Meta.Window.get_id()`` on GNOME, stringified for transport)
+        — stable for the window's lifetime, opaque to the daemon and
+        the client (#119).
+        """
+        raise UnimplementedCapability(
+            "this backend does not implement watch_windows",
+            capability="watch_windows",
+        )
+
 
 class GnomeShellFocusBackend(PlatformBackend):
     BUS_NAME = "org.deckd.Focus"
     OBJECT_PATH = "/org/deckd/Focus"
     INTERFACE = "org.deckd.Focus"
+
+    def capabilities(self) -> frozenset[str]:
+        # Stage 2 (#120): enumeration of every open window joins the
+        # legacy focus-only surface. The KDE backend inherits this
+        # unchanged for the poll path; it advertises the same flag set
+        # (the KWin script can feed both ``UpdateActiveWindow`` and a
+        # parallel window list, mirroring the GNOME extension's dual
+        # ``GetActiveWindow`` / ``ListWindows``).
+        return frozenset({"watch_active_app", "watch_windows"})
 
     async def get_active_app(self) -> AppInfo:
         out = await _run(
@@ -357,6 +432,53 @@ class GnomeShellFocusBackend(PlatformBackend):
         data = json.loads(payload)
         return _app_info_from_payload(data)
 
+    async def watch_windows(
+        self, *, interval_s: float = 0.1
+    ) -> AsyncIterator[Sequence[WindowInfo]]:
+        """Poll ``org.deckd.Focus.ListWindows()`` at the focus cadence.
+
+        Mirrors :meth:`watch_active_app` for the enumeration surface
+        (#120 decision 2 — "polled, no signal"): the extension mints
+        fresh ``window_id`` strings on every call so the daemon's
+        id→Meta.Window table is the sole source of identity, and we
+        evict on close via the daemon's own watcher. The cadence
+        matches the focus poll so a newly-opened window appears in the
+        chrome list with the same ~100ms envelope as a focus change.
+
+        Errors from the gdbus shell-out (extension not installed,
+        session bus unreachable) are logged once and the loop sleeps
+        through them — mirrors the focus watcher's behaviour so a
+        daemon started before the extension is enabled survives and
+        the windows list catches up the moment the bus replies.
+        """
+        last: Sequence[WindowInfo] | None = None
+        while True:
+            try:
+                snapshot = await self._list_windows_once()
+            except Exception as exc:  # surface bus failures without killing the watcher
+                log.debug("watch_windows: %s", exc)
+                snapshot = []
+            if snapshot != last:
+                last = snapshot
+                yield snapshot
+            await asyncio.sleep(interval_s)
+
+    async def _list_windows_once(self) -> list[WindowInfo]:
+        out = await _run(
+            "gdbus",
+            "call",
+            "--session",
+            "--dest",
+            self.BUS_NAME,
+            "--object-path",
+            self.OBJECT_PATH,
+            "--method",
+            f"{self.INTERFACE}.ListWindows",
+        )
+        payload = _parse_single_string_tuple(out)
+        data = json.loads(payload)
+        return [_window_info_from_payload(entry) for entry in data]
+
 
 class FocusBackendUnavailable(RuntimeError):
     """Raised by a focus backend when its underlying mechanism (a shell-out
@@ -371,6 +493,31 @@ class FocusBackendUnavailable(RuntimeError):
     def __init__(self, message: str, *, hint: str = "") -> None:
         super().__init__(message)
         self.hint = hint
+
+
+class UnimplementedCapability(RuntimeError):
+    """Raised by a backend that doesn't implement an opt-in capability
+    (``watch_windows`` / ``raise_window``) — issue #121.
+
+    Deliberately *distinct* from :class:`FocusBackendUnavailable`:
+    ``FocusBackendUnavailable`` carries an install hint because the
+    user can act on it (install the extension, enable the KWin
+    script). ``UnimplementedCapability`` is silent — the backend has
+    no path to that capability (X11's ``xdotool`` has no enumeration;
+    macOS's osascript / Quartz surface can be extended but isn't in
+    scope). The chrome-side treatment is the same either way (no
+    ``RunningWindowsMessage`` frame ever lands; the view shows the
+    "unsupported on this platform" empty state), so the daemon's
+    startup hook swallows this exception and the wire surface stays
+    consistent.
+
+    Carries the missing capability name so a diagnostic can attribute
+    the absence correctly when more than one capability is in scope.
+    """
+
+    def __init__(self, message: str, *, capability: str = "") -> None:
+        super().__init__(message)
+        self.capability = capability
 
 
 # ---------------------------------------------------------------------------
@@ -410,6 +557,29 @@ def _app_info_from_payload(data: dict) -> AppInfo:
         wm_class=data.get("wm_class"),
         title=data.get("title"),
         pid=data.get("pid"),
+    )
+
+
+def _window_info_from_payload(data: dict) -> WindowInfo:
+    """Build a :class:`WindowInfo` from the parsed JSON payload the
+    ``org.deckd.Focus.ListWindows()`` wire shape publishes (issues #119 /
+    #120).
+
+    All keys are read via ``data.get(...)`` with sensible defaults so a
+    future extension revision that adds or removes a field doesn't crash
+    an older daemon — the canonical "ignore unknown keys" rule the
+    ``_app_info_from_payload`` helper also follows, so the wire-shape
+    contract stays one-way extensible without a coordinated rollout.
+    """
+    workspace = data.get("workspace")
+    return WindowInfo(
+        window_id=str(data.get("window_id", "")),
+        wm_class=data.get("wm_class"),
+        gtk_application_id=data.get("gtk_application_id"),
+        sandboxed_app_id=data.get("sandboxed_app_id"),
+        title=data.get("title"),
+        workspace=int(workspace) if isinstance(workspace, int) else None,
+        minimized=bool(data.get("minimized", False)),
     )
 
 

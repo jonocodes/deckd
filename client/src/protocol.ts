@@ -194,6 +194,29 @@ export type ServerConfirmRequest = {
   confirm_id: string;
   widget_id: string;
 };
+/** One row in the running-windows list (issues #116 / #120 / #126).
+ * ``window_id`` is the per-session opaque string handle the platform
+ * extension minted on enumeration (#119); the client echoes it on tap
+ * (stage 3, #122) but never parses it. ``label`` is the daemon-derived
+ * display string: matched layout's ``display_name`` on a hit, else a
+ * raw identity fallback. ``icon`` mirrors the matched layout's icon
+ * when present and is ``null`` on a default-fallback row — honest
+ * absence, not a decorative generic glyph. */
+export type WindowListEntry = {
+  window_id: string;
+  label: string;
+  icon?: Icon | null;
+};
+/** Daemon -> client push: the chrome windows list's snapshot (issues
+ * #116 / #120 / #126). Full-snapshot per push, MRU-sorted. Pushed to
+ * every connected session regardless of view pin — same
+ * graceful-degradation as ``ServerChromeMedia``: backends whose
+ * ``capabilities()`` does not include ``"watch_windows"`` never
+ * produce a frame. */
+export type ServerRunningWindows = {
+  type: "running_windows";
+  windows: WindowListEntry[];
+};
 export type ServerMessage =
   | ServerLayout
   | ServerState
@@ -203,6 +226,7 @@ export type ServerMessage =
   | ServerChromeMedia
   | ServerMacroResult
   | ServerConfirmRequest
+  | ServerRunningWindows
   | ServerError;
 
 export type ClientHello = {
@@ -246,6 +270,12 @@ export type ClientConfirmResponse = {
   decision: "confirm" | "cancel";
 };
 
+/** The wire-side id for the running-windows chrome view (issues #120 /
+ * #126). The daemon resolves ``select_view: WINDOWS_VIEW_ID`` to the
+ * layout whose id is the same string — today, ``layouts/windows.yaml``.
+ * Same pattern as ``MPRIS_VIEW_ID``: hard-coding the literal here
+ * keeps the wire surface and the layout loader in lockstep. */
+export const WINDOWS_VIEW_ID = "windows";
 /** The wire-side id for the MPRIS chrome view (issue #51). The daemon
  * resolves ``select_view: MPRIS_VIEW_ID`` to the layout whose id is the
  * same string — today, ``layouts/mpris.yaml``. Hard-coding the literal

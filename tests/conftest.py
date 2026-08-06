@@ -83,6 +83,12 @@ class FakeFocusBackend:
         self._queue: asyncio.Queue[AppInfo] = asyncio.Queue()
         self._initial: AppInfo | None = None
 
+    def capabilities(self) -> frozenset[str]:
+        # Default: legacy focus-only surface. Tests that need the
+        # ``watch_windows`` capability either swap in a fake that
+        # overrides this or set ``_capabilities`` directly.
+        return getattr(self, "_capabilities", frozenset({"watch_active_app"}))
+
     async def start(self) -> None:  # mirror PlatformBackend.start no-op
         pass
 

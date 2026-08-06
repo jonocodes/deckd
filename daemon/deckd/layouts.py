@@ -11,7 +11,7 @@ from typing import Any, Literal
 import yaml  # type: ignore[import-untyped]
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
-from .platform import AppInfo
+from .platform import AppInfo, WindowInfo
 
 # Literal alias for the ``mediabrowser`` widget's ``empty_state`` knob
 # (issue #50). Defined here so the daemon's ``Widget`` model — the one
@@ -532,6 +532,76 @@ def resolve_layout(store: LayoutStore, app: AppInfo) -> Layout:
         if layout.matches_identity(app):
             return layout
     return store.default()
+
+
+def _window_to_app(win: WindowInfo) -> AppInfo:
+    """Build an :class:`AppInfo` for one :class:`WindowInfo` so the layout
+    matcher can compare the window's three identity keys against the
+    match tokens.
+
+    The matcher's identity path compares ``AppInfo.app_id`` /
+    ``AppInfo.wm_class`` against each ``match`` token. For a Flatpak /
+    Snap window, ``sandboxed_app_id`` is the desktop identity (e.g.
+    ``org.flathub.Firefox``); for a GTK app, ``gtk_application_id`` is.
+    Mapping ``sandboxed_app_id`` into ``AppInfo.app_id`` keeps the
+    matcher's precedence semantics intact without rewriting the
+    matcher per-source (#117 / #119). Shared between
+    :func:`label_for_window` and :func:`icon_for_window` so the identity
+    precedence lives in one place.
+    """
+    return AppInfo(
+        app_id=win.gtk_application_id or win.sandboxed_app_id,
+        wm_class=win.wm_class,
+        title=win.title,
+    )
+
+
+def label_for_window(store: LayoutStore, win: WindowInfo) -> str:
+    """Compute a single row label for one enumerated window (issues
+    #119 / #120 / #126).
+
+    Mirrors :func:`resolve_layout`'s site-before-identity ordering: a
+    ``title:`` match wins even if a generic browser layout also claims
+    the window's identity. Match → matched layout's ``display_name``
+    (falls back to ``id`` so a layout without an explicit display name
+    still renders something meaningful). No match → raw identity
+    fallback: ``wm_class``, then ``gtk_application_id``, then
+    ``sandboxed_app_id``, then ``title`` — the same three-key identity
+    the matcher compares against ``match`` tokens (#117 / #118), with
+    ``title`` as the last-resort visible string.
+
+    A reload that drops the matched layout naturally re-derives a
+    fallback label on the next push — no invalidation logic needed
+    because :func:`resolve_layout` walks ``store.layouts`` fresh every
+    call (issue #120 decision 5: "label per push, no cache"). The
+    helper is pure; the matcher is O(n_layouts × n_tokens) per call
+    and the daemon runs it once per push — adding it to the list tick
+    doesn't change the per-tick cost meaningfully.
+    """
+    layout = resolve_layout(store, _window_to_app(win))
+    if layout is not store.default():
+        return layout.display_name or layout.id or "unknown"
+    return win.wm_class or win.gtk_application_id or win.sandboxed_app_id or win.title or "unknown"
+
+
+def icon_for_window(store: LayoutStore, win: WindowInfo) -> "Icon | None":
+    """Compute the per-row ``icon`` for one enumerated window (issue #126).
+
+    Returns the matched layout's icon when the window resolves to a
+    layout (a Firefox window on a ``firefox.yaml`` layout with
+    ``icon: simple-icons firefox`` → row icon is the Simple Icons
+    Firefox glyph). Returns ``None`` on the default-fallback path —
+    the absence is *honest*, not decorative: a default-fallback row
+    having no glyph distinguishes it from identity-matched rows whose
+    glyph encodes the brand, and inventing a generic "terminal" Lucide
+    icon for every xterm would imply every xterm is the same xterm
+    (the list is per-window precisely so they're not — #120 decision
+    6).
+    """
+    layout = resolve_layout(store, _window_to_app(win))
+    if layout is store.default():
+        return None
+    return layout.icon
 
 
 def load_layouts(

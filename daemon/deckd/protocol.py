@@ -237,8 +237,48 @@ class ConfirmRequestMessage(BaseModel):
     widget_id: str = Field(min_length=1)
 
 
+class WindowListEntry(BaseModel):
+    """One row in the running-windows list (issues #116 / #120 / #126).
+
+    ``window_id`` is the per-session opaque string handle minted by the
+    platform extension on enumeration (#119) — the client echoes it on
+    tap (stage 3, #122) but never parses it. ``label`` is the
+    daemon-derived display string: matched layout's ``display_name`` on
+    a hit, else a raw identity fallback (``wm_class`` then ``app_id``
+    then ``title``, last resort). ``icon`` mirrors the matched layout's
+    icon when present and is ``null`` on a default-fallback row — the
+    absence is honest (a generic terminal glyph would imply every xterm
+    is the same xterm; the list is per-window precisely so they're not).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    window_id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    icon: Icon | None = None
+
+
+class RunningWindowsMessage(BaseModel):
+    """Daemon -> client push: the chrome windows list's snapshot
+    (issues #116 / #120 / #126).
+
+    Full-snapshot per push, MRU-sorted (per #119). Pushed to every
+    connected session regardless of which view the client has pinned —
+    the list reflects global reality; every session holds a fresh
+    snapshot so a view switch is instant (no spinner, no
+    ``select_view`` round-trip-fetch). Same graceful-degradation as
+    ``ChromeMediaMessage``: backends whose ``capabilities()`` does not
+    include ``"watch_windows"`` never produce a frame.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["running_windows"]
+    windows: list[WindowListEntry]
+
+
 ServerMessage = Annotated[
-    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, ChromeMediaMessage, EventMessage, MacroResultMessage, ConfirmRequestMessage],
+    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, ChromeMediaMessage, EventMessage, MacroResultMessage, ConfirmRequestMessage, RunningWindowsMessage],
     Field(discriminator="type"),
 ]
 

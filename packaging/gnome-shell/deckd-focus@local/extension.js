@@ -1,5 +1,6 @@
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
+import Meta from "gi://Meta";
 import {Extension} from "resource:///org/gnome/shell/extensions/extension.js";
 
 const BUS_NAME = "org.deckd.Focus";
@@ -10,6 +11,9 @@ const DBUS_XML = `
   <interface name="org.deckd.Focus">
     <method name="GetActiveWindow">
       <arg type="s" name="window_json" direction="out"/>
+    </method>
+    <method name="ListWindows">
+      <arg type="s" name="windows_json" direction="out"/>
     </method>
     <signal name="ActiveWindowChanged">
       <arg type="s" name="window_json"/>
@@ -62,6 +66,33 @@ export default class DeckdFocusExtension extends Extension {
     return this._activeWindowJson();
   }
 
+// Stage 2 (#120 / #126): JSON snapshot of every open window,
+// MRU-sorted by ``global.display.focus_window`` first. The daemon
+// polls this at the same ~100ms cadence as ``GetActiveWindow``;
+// ``window_id`` is the stringified ``Meta.Window.get_id()`` — stable
+// for the window's lifetime, opaque to the daemon and the client
+// (#119). No extension-side registry: the daemon derives labels from
+// the snapshot and the client echoes the id back on tap (stage 3,
+// #122); closing the window drops it from the snapshot on the next
+// enumeration tick.
+ListWindows() {
+    const actors = global.display.get_window_actors ? global.display.get_window_actors() : [];
+    const focused = global.display.focus_window;
+    const entries = [];
+    for (const actor of actors) {
+      const metaWindow = actor.meta_window;
+      if (!metaWindow) continue;
+      const entry = this._windowJson(metaWindow);
+      if (entry) entries.push(entry);
+    }
+    entries.sort((a, b) => {
+      if (a.window_id === this._focusedWindowId(focused)) return -1;
+      if (b.window_id === this._focusedWindowId(focused)) return 1;
+      return 0;
+    });
+    return JSON.stringify(entries);
+  }
+
   _emitActiveWindowChanged() {
     if (!this._dbus) return;
     this._dbus.emit_signal("ActiveWindowChanged", new GLib.Variant("(s)", [this._activeWindowJson()]));
@@ -86,8 +117,41 @@ export default class DeckdFocusExtension extends Extension {
     });
   }
 
+  _windowJson(metaWindow) {
+    const id = this._callOrNull(metaWindow, "get_id");
+    if (id === null) return null;
+    const workspace = this._callOrNull(metaWindow, "get_workspace");
+    const sandboxed = this._sandboxedAppId(metaWindow);
+    return {
+      window_id: String(id),
+      wm_class: this._callOrNull(metaWindow, "get_wm_class"),
+      gtk_application_id: this._callOrNull(metaWindow, "get_gtk_application_id"),
+      sandboxed_app_id: sandboxed,
+      title: this._callOrNull(metaWindow, "get_title"),
+      workspace: workspace !== null && typeof workspace.index === "number" ? workspace.index : null,
+      minimized: this._callOrNull(metaWindow, "minimized") === true,
+    };
+  }
+
+  _focusedWindowId(focused) {
+    if (!focused) return null;
+    const id = this._callOrNull(focused, "get_id");
+    return id === null ? null : String(id);
+  }
+
+  _sandboxedAppId(metaWindow) {
+    // Flatpak / Snap apps expose a third identity key on MetaWindow
+    // via ``get_app()`` → ``Meta.App`` → ``get_id()`` (the
+    // sandboxed-app id, e.g. ``org.flathub.Firefox``). The getter is
+    // stable across GNOME 40-48 per #118. Falls back to ``null`` when
+    // the window doesn't expose an app object (legacy X11 windows).
+    const app = this._callOrNull(metaWindow, "get_app");
+    if (!app) return null;
+    return this._callOrNull(app, "get_id");
+  }
+
   _callOrNull(obj, method) {
-    if (typeof obj[method] !== "function") return null;
+    if (!obj || typeof obj[method] !== "function") return null;
     const value = obj[method]();
     return value === undefined ? null : value;
   }

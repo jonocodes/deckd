@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pencil as PencilIcon, Settings as SettingsIcon, Globe as GlobeIcon } from "lucide-react";
-import { Music as MusicIcon, PointerIcon } from "lucide-react";
+import { LayoutGrid as LayoutGridIcon, Music as MusicIcon, PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
 import { ManualControl } from "./ManualControl";
 import { MediaBrowserCell } from "./MediaBrowserCell";
+import { RunningWindowsList } from "./RunningWindowsList";
 import { Tooltip } from "./Tooltip";
 import { PasswordGate } from "./PasswordGate";
 import { Settings } from "./Settings";
@@ -31,14 +32,20 @@ import { useWakeLock } from "./wake-lock";
 import { getDemoLayout, getDemoView, MEDIA_DEMO_STATES, MPRIS_DEMO_STATES, EDITOR_DEMO_LAYOUTS } from "./demo";
 import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
-import type { Icon as IconRef, ServerChromeMedia, ServerLayout } from "./protocol";
-import { EDITOR_VIEW_ID, MPRIS_VIEW_ID } from "./protocol";
+import type {
+  Icon as IconRef,
+  ServerChromeMedia,
+  ServerLayout,
+  ServerRunningWindows,
+  WindowListEntry,
+} from "./protocol";
+import { EDITOR_VIEW_ID, MPRIS_VIEW_ID, WINDOWS_VIEW_ID } from "./protocol";
 import { isTypingTarget, onActivate } from "./a11y";
 import { Editor } from "./Editor";
 import { ConfirmModal } from "./ConfirmModal";
 import type { Widget } from "./protocol";
 
-type View = "layout" | "trackpad" | "settings" | "mediabrowser" | "editor";
+type View = "layout" | "trackpad" | "settings" | "mediabrowser" | "editor" | "windows";
 type SocketStatus = "connecting" | "open" | "closed" | "unauthorized";
 
 /** Sentinel ids for the always-on chrome widgets. The daemon's pad / jog
@@ -124,6 +131,14 @@ export function App() {
   // daemon's "no players" default on a fresh session.
   const [chromeMedia, setChromeMedia] = useState<ServerChromeMedia | null>(null);
   const onChromeMedia = useCallback((m: ServerChromeMedia) => setChromeMedia(m), []);
+  // Stage 2 running-windows list (issues #120 / #126). The daemon
+  // pushes ``running_windows`` frames globally — every connected
+  // session holds a fresh snapshot regardless of which view it has
+  // pinned, so a view switch is instant. ``undefined`` until the
+  // first frame lands; the chrome view shows the "unsupported on this
+  // platform" empty state in the meantime (issue #120 decision 8).
+  const [runningWindows, setRunningWindows] = useState<WindowListEntry[] | undefined>(undefined);
+  const onRunningWindows = useCallback((m: ServerRunningWindows) => setRunningWindows(m.windows), []);
   // Demo mode has no socket, so seed the media store once on mount with the
   // fixture readings — otherwise a media widget renders as "unavailable".
   const isDemo = demoLayout !== null;
@@ -157,6 +172,7 @@ export function App() {
       onMediaState,
       onChromeMedia,
       onConfirmRequest,
+      onRunningWindows,
       { enabled: !demoLayout },
     );
   // Look the pressed widget up in the active layout so the modal
@@ -263,6 +279,20 @@ export function App() {
       send({ type: "select_view", view: EDITOR_VIEW_ID });
     }
   }, [view, send]);
+  // Running-windows view toggle (issues #120 / #126): the layout-grid
+  // button in the bottom chrome sends ``select_view: "windows"`` so the
+  // daemon pushes the running-windows layout; on close it sends
+  // ``clear_view`` to revert to the focused-app layout. Same handshake
+  // as the media browser and editor — chrome-view carve-out per ADR-0008.
+  const toggleWindows = useCallback(() => {
+    if (view === "windows") {
+      setView("layout");
+      send({ type: "clear_view" });
+    } else {
+      setView("windows");
+      send({ type: "select_view", view: WINDOWS_VIEW_ID });
+    }
+  }, [view, send]);
   // Trackpad / settings openers: kept named so the keyboard-shortcut
   // effect below can call them without duplicating the toggle logic.
   const openTrackpad = useCallback(
@@ -288,6 +318,7 @@ export function App() {
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const mediaBtnRef = useRef<HTMLButtonElement | null>(null);
   const editorBtnRef = useRef<HTMLButtonElement | null>(null);
+  const windowsBtnRef = useRef<HTMLButtonElement | null>(null);
   // Remember the chrome button that opened the current view so a
   // window-level Escape (where ``e.target`` is the body, not a
   // button) can still hand focus back to the right place.
@@ -358,7 +389,7 @@ export function App() {
       if (e.key === "Escape" && view !== "layout") {
         e.preventDefault();
         setView("layout");
-        if (view === "mediabrowser" || view === "editor") send({ type: "clear_view" });
+        if (view === "mediabrowser" || view === "editor" || view === "windows") send({ type: "clear_view" });
         return;
       }
       if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -382,11 +413,16 @@ export function App() {
         viewOriginRef.current = editorBtnRef.current;
         lastChromeFocus.current = editorBtnRef.current;
         toggleEditor();
+      } else if (e.key === "5") {
+        e.preventDefault();
+        viewOriginRef.current = windowsBtnRef.current;
+        lastChromeFocus.current = windowsBtnRef.current;
+        toggleWindows();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [view, openTrackpad, openSettings, toggleMediaBrowser, toggleEditor, send, status]);
+  }, [view, openTrackpad, openSettings, toggleMediaBrowser, toggleEditor, toggleWindows, send, status]);
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
@@ -414,6 +450,7 @@ export function App() {
     if (view === "mediabrowser") return "Media browser";
     if (view === "settings") return "Settings";
     if (view === "editor") return "Layout editor";
+    if (view === "windows") return "Running programs";
     if (layout?.error) return "Layout error";
     if (layout)
       return (layout.display_name?.trim() || layout.app || "deckd") + programSuffix;
@@ -586,6 +623,28 @@ export function App() {
               onExit={() => setView("layout")}
               mockLayouts={isDemo ? EDITOR_DEMO_LAYOUTS : undefined}
             />
+          ) : view === "windows" ? (
+            // Running-windows chrome list (issues #120 / #126).
+            // The list is the *entire* surface of this view — no
+            // per-widget state, ADR-0005 stays deferred. The actual
+            // rows arrive via the ``running_windows`` wire frame the
+            // daemon broadcasts globally; this view just hosts them.
+            // ``undefined`` is the "no snapshot yet" branch which the
+            // list renders as the "unsupported on this platform"
+            // empty state — same treatment as the media browser's
+            // "no players" placeholder (decision 8).
+            <RunningWindowsList
+              windows={runningWindows}
+              onRowTap={(windowId) => {
+                // Stage 3 (#122) will replace this with the
+                // ``raise_window`` message wire-up. Logged at
+                // debug-only so a curious user can see the round-trip
+                // is wired without spamming the console.
+                if (typeof console !== "undefined") {
+                  console.debug("windows row tap", windowId);
+                }
+              }}
+            />
           ) : layout?.error ? (
             <div className="layout-error" role="alert">
               <span className="layout-error-title">Layout error</span>
@@ -611,7 +670,7 @@ export function App() {
             <div className="empty">waiting for daemon…</div>
           )}
         </main>
-        {jogstripEnabled && view !== "settings" && view !== "mediabrowser" && view !== "editor" && (
+        {jogstripEnabled && view !== "settings" && view !== "mediabrowser" && view !== "editor" && view !== "windows" && (
           <aside
             className="chrome-jogstrip"
             style={{ "--jog-width": jogWidth.width } as CSSProperties}
@@ -705,6 +764,25 @@ export function App() {
             })}
           >
             <PencilIcon size={16} />
+          </button>
+        </Tooltip>
+        <Tooltip ref={windowsBtnRef} label="running programs">
+          <button
+            className={`chrome-btn${view === "windows" ? " chrome-btn-active" : ""}`}
+            aria-label="running programs"
+            aria-pressed={view === "windows"}
+            onPointerDown={() => {
+              viewOriginRef.current = windowsBtnRef.current;
+              lastChromeFocus.current = windowsBtnRef.current;
+              toggleWindows();
+            }}
+            onKeyDown={onActivate(() => {
+              viewOriginRef.current = windowsBtnRef.current;
+              lastChromeFocus.current = windowsBtnRef.current;
+              toggleWindows();
+            })}
+          >
+            <LayoutGridIcon size={18} />
           </button>
         </Tooltip>
         <Tooltip ref={settingsBtnRef} label="settings">

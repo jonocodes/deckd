@@ -17,6 +17,8 @@ from deckd.platform import (
     AppInfo,
     FocusBackendUnavailable,
     GnomeShellFocusBackend,
+    UnimplementedCapability,
+    WindowInfo,
     X11FocusBackend,
 )
 
@@ -205,3 +207,162 @@ def test_appinfo_is_browser_true(app_id, wm_class) -> None:
 )
 def test_appinfo_is_browser_false(app_id, wm_class) -> None:
     assert not AppInfo(app_id=app_id, wm_class=wm_class, title="x - YouTube").is_browser
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 capability surface (issues #120 / #121 / #126)
+# ---------------------------------------------------------------------------
+
+
+def test_default_capabilities_advertise_focus_only() -> None:
+    """The base ``PlatformBackend`` advertises the legacy focus-only
+    surface. Backends that implement the enumeration / raise surfaces
+    (GNOME today, KWin follow-ups) override to add their flags — the
+    server reads this once at startup so a legacy backend keeps
+    working unchanged."""
+    from deckd.platform import PlatformBackend
+
+    assert PlatformBackend().capabilities() == frozenset({"watch_active_app"})
+
+
+def test_x11_backend_does_not_advertise_watch_windows() -> None:
+    """X11's xdotool surface has no enumeration capability — the
+    windows list stays in its "unsupported on this platform" empty
+    state (issue #120, decision 8)."""
+    assert X11FocusBackend().capabilities() == frozenset({"watch_active_app"})
+
+
+def test_gnome_backend_advertises_watch_windows() -> None:
+    """GNOME today implements both surfaces; the windows watcher is
+    started at daemon boot and the chrome list gets a real snapshot."""
+    assert GnomeShellFocusBackend().capabilities() == frozenset(
+        {"watch_active_app", "watch_windows"}
+    )
+
+
+@pytest.mark.asyncio
+async def test_base_watch_windows_raises_unimplemented_capability() -> None:
+    """The base ``PlatformBackend.watch_windows`` refuses: only backends
+    that know how to enumerate (today the GNOME Shell extension)
+    override this method. The exception carries the missing capability
+    name so a diagnostic can attribute the absence correctly."""
+    from deckd.platform import PlatformBackend
+
+    backend = PlatformBackend()
+    # The base implementation raises synchronously inside the
+    # generator body. Calling the method returns a coroutine which the
+    # runtime sees as a plain coroutine (no ``yield`` reached), so
+    # ``await`` raises directly — no need for ``async for`` here.
+    with pytest.raises(UnimplementedCapability) as excinfo:
+        await backend.watch_windows()
+    assert excinfo.value.capability == "watch_windows"
+
+
+def test_unimplemented_capability_is_runtime_error() -> None:
+    """Same broad-catch rule as ``FocusBackendUnavailable``: the
+    daemon's startup wiring handles the absence via ``capabilities()``
+    rather than via ``try/except`` around backend methods, but the
+    exception still subclasses ``RuntimeError`` so a defensive
+    ``except Exception`` keeps catching it unchanged."""
+    err = UnimplementedCapability("boom", capability="watch_windows")
+    assert isinstance(err, RuntimeError)
+    assert err.capability == "watch_windows"
+
+
+def test_unimplemented_capability_carries_capability_name() -> None:
+    """The capability name rides on the exception so a log line / diag
+    entry attributes the absence to the right surface (a backend that
+    lacks ``watch_windows`` today may implement ``raise_window``
+    tomorrow — distinct diagnostics matter)."""
+    err = UnimplementedCapability("nope", capability="raise_window")
+    assert err.capability == "raise_window"
+
+
+def test_window_info_is_frozen_and_carries_seven_keys() -> None:
+    """The window identity struct is frozen (hashable for dedupe) and
+    carries the seven fields the wire shape publishes (#119 / #120):
+    ``window_id`` + three identity keys + ``title`` + ``workspace`` +
+    ``minimized``. Missing any of them would break the round-trip
+    against the GNOME extension's JSON snapshot."""
+    info = WindowInfo(
+        window_id="1",
+        wm_class="firefox",
+        gtk_application_id="org.mozilla.firefox",
+        sandboxed_app_id="org.flathub.Firefox",
+        title="YouTube",
+        workspace=2,
+        minimized=False,
+    )
+    assert info.window_id == "1"
+    assert info.wm_class == "firefox"
+    assert info.gtk_application_id == "org.mozilla.firefox"
+    assert info.sandboxed_app_id == "org.flathub.Firefox"
+    assert info.title == "YouTube"
+    assert info.workspace == 2
+    assert info.minimized is False
+    # Frozen: any field reassignment raises.
+    import dataclasses
+
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        info.window_id = "2"  # type: ignore[misc]
+
+
+def test_window_info_from_payload_full_shape() -> None:
+    """The parser matches the GNOME extension's JSON snapshot
+    byte-for-byte: every key the extension publishes lands on the
+    right field, including the ``workspace`` int (an index, not a
+    MetaWorkspace object on the wire) and the ``minimized`` bool."""
+    info = plat._window_info_from_payload(
+        {
+            "window_id": "42",
+            "wm_class": "firefox",
+            "gtk_application_id": "org.mozilla.firefox",
+            "sandboxed_app_id": "org.flathub.Firefox",
+            "title": "YouTube",
+            "workspace": 1,
+            "minimized": False,
+        }
+    )
+    assert info == WindowInfo(
+        window_id="42",
+        wm_class="firefox",
+        gtk_application_id="org.mozilla.firefox",
+        sandboxed_app_id="org.flathub.Firefox",
+        title="YouTube",
+        workspace=1,
+        minimized=False,
+    )
+
+
+def test_window_info_from_payload_handles_missing_keys() -> None:
+    """A future extension revision that drops a field doesn't crash an
+    older daemon — every key is read with ``data.get`` so a missing
+    field lands as ``None`` / ``False`` and the snapshot still parses.
+    Same forward-compat rule as ``_app_info_from_payload``."""
+    info = plat._window_info_from_payload({})
+    assert info.window_id == ""
+    assert info.wm_class is None
+    assert info.gtk_application_id is None
+    assert info.sandboxed_app_id is None
+    assert info.title is None
+    assert info.workspace is None
+    assert info.minimized is False
+
+
+def test_window_info_from_payload_coerces_window_id_to_str() -> None:
+    """``Meta.Window.get_id()`` returns a number on the JS side; the
+    extension already stringifies it before publishing the JSON, but
+    a future backend that forgets to would still round-trip rather
+    than crash — the parser coerces to ``str`` defensively."""
+    info = plat._window_info_from_payload({"window_id": 42})
+    assert info.window_id == "42"
+
+
+def test_window_info_from_payload_non_int_workspace_is_none() -> None:
+    """A workspace index that doesn't serialise as an int (a string
+    from a future backend revision, or a missing field that lands as
+    ``None``) yields ``workspace=None`` rather than crashing the
+    daemon. Mirrors the same defensive normalisation the rest of the
+    parser does for missing keys."""
+    info = plat._window_info_from_payload({"workspace": "primary"})
+    assert info.workspace is None

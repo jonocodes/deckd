@@ -1,0 +1,26 @@
+# Running-windows chrome view (issues #116 / #120 / #126).
+#
+# Tapping the layout name in the chrome header opens a list of the
+# daemon's currently-running programs. Display only — tapping a row
+# (when wired) raises that window; that's stage 3 (#122), not in
+# this ticket's scope.
+#
+# This layout is reached from the persistent chrome via the client
+# sending ``select_view: "windows"`` — the match token (``windows``)
+# is the synthetic internal token the server uses to address a chrome
+# view, not the identity of any real application. The server's
+# view-resolution hook looks the view up by layout id and sets
+# ``view: "windows"`` on the resulting ``LayoutMessage`` so the chrome
+# knows to stay on this view until the client sends ``clear_view``.
+#
+# The cell hosts the running-windows list itself; ADR-0005 (per-widget
+# state pushes) is deliberately deferred — the list is the *entire
+# surface* of this view, not a widget whose state mutates under a
+# static layout. The single widget below declares an empty surface
+# placeholder so the server-side rendering pipeline has a real layout
+# shape to push; the actual rows arrive via the ``running_windows``
+# wire frame the daemon broadcasts in parallel.
+match: [windows]
+display_name: Windows
+jogstrip: false
+widgets: []
