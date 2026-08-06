@@ -1,15 +1,15 @@
 import type { Story } from "@ladle/react";
-import { MediaBrowserCell } from "./MediaBrowserCell";
+import { NowPlayingCell } from "./NowPlayingCell";
 import type { MediaReading } from "./media-store";
 import type { Widget } from "./protocol";
 
-export default { title: "MediaBrowserCell" };
+export default { title: "NowPlayingCell" };
 
 const noop = () => {};
 
 const WIDGET: Widget = {
   id: "browser",
-  kind: "mediabrowser",
+  kind: "nowplaying",
 };
 
 /** A playing-VLC / paused-Spotify / stopped-mystery trio. The
@@ -58,7 +58,7 @@ const MIXED: Record<string, MediaReading> = {
 
 export const Default: Story = () => (
   <div style={{ display: "grid", width: 480, height: 360 }}>
-    <MediaBrowserCell
+    <NowPlayingCell
       widget={WIDGET}
       states={MIXED}
       onCommand={noop}
@@ -68,13 +68,13 @@ export const Default: Story = () => (
 
 export const Empty: Story = () => (
   <div style={{ display: "grid", width: 480, height: 360 }}>
-    <MediaBrowserCell widget={WIDGET} states={{}} onCommand={noop} />
+    <NowPlayingCell widget={WIDGET} states={{}} onCommand={noop} />
   </div>
 );
 
 export const EmptyHidden: Story = () => (
   <div style={{ display: "grid", width: 480, height: 360 }}>
-    <MediaBrowserCell
+    <NowPlayingCell
       widget={{ ...WIDGET, empty_state: "hide" }}
       states={{}}
       onCommand={noop}
@@ -89,7 +89,7 @@ export const EmptyHidden: Story = () => (
  * story exercises both branches in one view. */
 export const WithArt: Story = () => (
   <div style={{ display: "grid", width: 480, height: 360 }}>
-    <MediaBrowserCell
+    <NowPlayingCell
       widget={WIDGET}
       states={{
         ...MIXED,

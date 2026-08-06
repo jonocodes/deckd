@@ -1,10 +1,10 @@
-/** MediaBrowserCell rendering (issue #53).
+/** NowPlayingCell rendering (issue #53).
  *
  * Covers the six observable contracts:
  *  1. A row per ``media_state`` frame whose ``id`` starts with ``mpris.``
  *     lands in the rendered list (one row per row, full-width,
  *     top-aligned, equal-height). Rows for unrelated ids (e.g. the VLC
- *     media widget's ``id``) are not shown — the browser is a separate
+ *     media widget's ``id``) are not shown — the now-playing surface is a separate
  *     surface.
  *  2. The art slot: when ``art_token`` is set, renders an ``<img>``
  *     pointing at the daemon's ``/mpris/<row>/art?token=<art_token>``
@@ -16,7 +16,7 @@
  *     button is always reactive. A click sends the right
  *     ``media_command`` shape with the row id and the right command.
  *  4. Empty state: when no rows exist and ``empty_state === "show"``,
- *     a "No media players detected" row renders; when
+ *     a "Nothing playing" row renders; when
  *     ``empty_state === "hide"``, the cell renders nothing (no
  *     placeholder, no rows).
  *  5. Row order is the daemon's ``row_ids`` order (issue #58): the
@@ -31,13 +31,13 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MediaBrowserCell } from "./MediaBrowserCell";
+import { NowPlayingCell } from "./NowPlayingCell";
 import type { MediaReading } from "./media-store";
 import type { Widget } from "./protocol";
 
 const WIDGET: Widget = {
   id: "browser",
-  kind: "mediabrowser",
+  kind: "nowplaying",
   empty_state: "show",
 };
 
@@ -60,7 +60,7 @@ function row(
   };
 }
 
-describe("MediaBrowserCell", () => {
+describe("NowPlayingCell", () => {
   afterEach(cleanup);
 
   it("renders one row per mpris.<suffix> media_state", () => {
@@ -68,11 +68,11 @@ describe("MediaBrowserCell", () => {
       "mpris.vlc": row("mpris.vlc", true),
       "mpris.spotify": row("mpris.spotify", false),
       // Unrelated id (e.g. the VLC media widget) must be filtered out;
-      // the browser only shows MPRIS rows.
+      // the now-playing cell only shows MPRIS rows.
       "vlc-media": row("vlc-media", true, { title: "Unrelated" }),
     };
     render(
-      <MediaBrowserCell
+      <NowPlayingCell
         widget={WIDGET}
         states={states}
         onCommand={vi.fn()}
@@ -86,7 +86,7 @@ describe("MediaBrowserCell", () => {
 
   it("renders the app_name as a per-row header, omitting it when null", () => {
     render(
-      <MediaBrowserCell
+      <NowPlayingCell
         widget={WIDGET}
         states={{
           "mpris.vlc": row("mpris.vlc", true, { app_name: "VLC media player" }),
@@ -98,12 +98,12 @@ describe("MediaBrowserCell", () => {
     const rows = screen.getAllByRole("listitem");
     expect(within(rows[0]).getByText("VLC media player")).toBeTruthy();
     // The null-app_name row renders no header element at all.
-    expect(rows[1].querySelector(".mediabrowser-app")).toBeNull();
+    expect(rows[1].querySelector(".nowplaying-app")).toBeNull();
   });
 
   it("falls back to a disc icon in the art slot when art_token is null", () => {
     render(
-      <MediaBrowserCell
+      <NowPlayingCell
         widget={WIDGET}
         states={{
           "mpris.vlc": row("mpris.vlc", true, { art_token: null }),
@@ -112,15 +112,15 @@ describe("MediaBrowserCell", () => {
       />,
     );
     // The fallback lives in the row's art slot; the lucide ``Disc``
-    // icon is an inline SVG with the class ``mediabrowser-art-icon``.
-    const artIcon = document.querySelector(".mediabrowser-art-icon");
+    // icon is an inline SVG with the class ``nowplaying-art-icon``.
+    const artIcon = document.querySelector(".nowplaying-art-icon");
     expect(artIcon).not.toBeNull();
     expect(artIcon?.tagName.toLowerCase()).toBe("svg");
   });
 
   it("renders an <img> in the art slot when art_token is set (issue #57)", () => {
     render(
-      <MediaBrowserCell
+      <NowPlayingCell
         widget={WIDGET}
         states={{
           "mpris.vlc": row("mpris.vlc", true, {
@@ -134,7 +134,7 @@ describe("MediaBrowserCell", () => {
     // the daemon's proxy, cache-busted with the token. Row id is the
     // MPRIS bus suffix, not the wire ``mpris.`` prefixed one — the
     // proxy lives at /mpris/<row-suffix>/art so the URL stays short.
-    const slot = document.querySelector(".mediabrowser-art");
+    const slot = document.querySelector(".nowplaying-art");
     const img = slot?.querySelector("img");
     expect(img).not.toBeNull();
     expect(img?.getAttribute("src")).toBe(
@@ -144,7 +144,7 @@ describe("MediaBrowserCell", () => {
 
   it("falls back to the brand icon when the art <img> errors", () => {
     render(
-      <MediaBrowserCell
+      <NowPlayingCell
         widget={WIDGET}
         states={{
           "mpris.vlc": row("mpris.vlc", true, {
@@ -155,19 +155,19 @@ describe("MediaBrowserCell", () => {
         onCommand={vi.fn()}
       />,
     );
-    const img = document.querySelector(".mediabrowser-art img");
+    const img = document.querySelector(".nowplaying-art img");
     expect(img).not.toBeNull();
     // Trigger the onError handler; the cell should swap the <img>
     // for the desktop-entry brand icon and stop pointing at the
     // broken URL.
     fireEvent.error(img as HTMLElement);
-    const slot = document.querySelector(".mediabrowser-art");
+    const slot = document.querySelector(".nowplaying-art");
     expect(slot?.querySelector("img")).toBeNull();
   });
 
   it("uses the desktop_entry as the art-slot icon when art_token is null", () => {
     render(
-      <MediaBrowserCell
+      <NowPlayingCell
         widget={WIDGET}
         states={{
           "mpris.vlc": row("mpris.vlc", true, {
@@ -180,14 +180,14 @@ describe("MediaBrowserCell", () => {
     );
     // Desktop entry ``vlc`` maps to the Simple Icons ``vlcmediaplayer``
     // logo; an unknown desktop_entry still falls back to the disc icon.
-    const slot = document.querySelector(".mediabrowser-art");
+    const slot = document.querySelector(".nowplaying-art");
     expect(slot).not.toBeNull();
   });
 
   it("disables previous/next when capabilities are false and fires media_command on play-pause", () => {
     const onCommand = vi.fn();
     render(
-      <MediaBrowserCell
+      <NowPlayingCell
         widget={WIDGET}
         states={{
           "mpris.vlc": row("mpris.vlc", true, {
@@ -206,9 +206,9 @@ describe("MediaBrowserCell", () => {
     expect(onCommand).toHaveBeenCalledExactlyOnceWith("mpris.vlc", "play-pause");
   });
 
-  it("renders the 'No media players detected' row when no states exist and empty_state is show", () => {
+  it("renders the 'Nothing playing' row when no states exist and empty_state is show", () => {
     render(
-      <MediaBrowserCell
+      <NowPlayingCell
         widget={WIDGET}
         states={{}}
         onCommand={vi.fn()}
@@ -216,21 +216,21 @@ describe("MediaBrowserCell", () => {
     );
     const rows = screen.getAllByRole("listitem");
     expect(rows).toHaveLength(1);
-    expect(within(rows[0]).getByText("No media players detected")).toBeTruthy();
+    expect(within(rows[0]).getByText("Nothing playing")).toBeTruthy();
     // No transport controls on the empty state.
     expect(screen.queryByRole("button", { name: "Play" })).toBeNull();
   });
 
   it("renders nothing when no states exist and empty_state is hide", () => {
     render(
-      <MediaBrowserCell
+      <NowPlayingCell
         widget={{ ...WIDGET, empty_state: "hide" }}
         states={{}}
         onCommand={vi.fn()}
       />,
     );
     expect(screen.queryAllByRole("listitem")).toHaveLength(0);
-    expect(screen.queryByText("No media players detected")).toBeNull();
+    expect(screen.queryByText("Nothing playing")).toBeNull();
   });
 
   it("preserves the media-store insertion order (issue #58)", () => {
@@ -246,7 +246,7 @@ describe("MediaBrowserCell", () => {
       "mpris.firefox": row("mpris.firefox", true),
     };
     render(
-      <MediaBrowserCell
+      <NowPlayingCell
         widget={WIDGET}
         states={states}
         onCommand={vi.fn()}
@@ -263,7 +263,7 @@ describe("MediaBrowserCell", () => {
   it("fires the matching media_command for each transport button", () => {
     const onCommand = vi.fn();
     render(
-      <MediaBrowserCell
+      <NowPlayingCell
         widget={WIDGET}
         states={{
           "mpris.vlc": row("mpris.vlc", true),

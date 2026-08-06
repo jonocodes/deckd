@@ -37,7 +37,7 @@ This is layout-semantic rather than device-ergonomic, so it may be a layout prop
 
 ### Full-surface widgets opt out of the flow
 
-A widget may declare itself full-surface (`size: full`) — it takes the whole chrome-excluded area and does not participate in packing. This is where the MPRIS `mediabrowser` lands: it is already a full-bleed view under [ADR-0008](0008-chrome-view-carveout.md), not a grid cell. Generalising "full-surface" from the hardcoded view set into a widget property is a follow-on, not required by this ADR.
+A widget may declare itself full-surface (`size: full`) — it takes the whole chrome-excluded area and does not participate in packing. This is where the MPRIS `nowplaying` widget lands: it is already a full-bleed view under [ADR-0008](0008-chrome-view-carveout.md), not a grid cell. Generalising "full-surface" from the hardcoded view set into a widget property is a follow-on, not required by this ADR.
 
 ## Out of scope (deferred, deliberately)
 

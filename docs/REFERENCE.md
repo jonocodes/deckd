@@ -173,7 +173,7 @@ Primary development operations. Run `just` (no args) to list all available recip
 - Client chrome: app badge, connection indicator, manual-control toggle, media icon, settings.
 - Scroll strip (persistent right-side jogstrip with release momentum, per-layout disable).
 - Manual control mode: combined trackpad + keyboard passthrough (IME → evdev).
-- Media browser (chrome view with per-player transport, album art proxy, passive playback indicator).
+- Now playing (chrome view with per-player transport, album art proxy, passive playback indicator).
 - VLC media widget (HTTP-backed live state, album art proxy).
 - Live `meter` / `stats` widgets (`cpu_percent`, `mem_percent` sensors).
 - Layout hot-reload (watches `layouts/` directory; bad YAML surfaces as diagnostic on client).
@@ -186,8 +186,8 @@ Primary development operations. Run `just` (no args) to list all available recip
 ### Limitations
 
 - Keystroke injection is **US-layout only** (`input.py` maps ASCII + shift-symbols to evdev keycodes). Non-US keyboard layouts will produce wrong characters.
-- macOS has no equivalent media integration — the media browser and chrome indicator are Linux-only.
-- The `mediamediabrowser` requires a per-layout YAML file; there is no auto-discovery without it.
+- macOS has no equivalent media integration — the now-playing surface and chrome indicator are Linux-only.
+- The `nowplaying` widget requires a per-layout YAML file; there is no auto-discovery without it.
 - `deckctl` does not read the daemon's password file — supply `--password` or `$DECKD_PASSWORD` explicitly.
 - `sudo` is required for the Tailscale TLS cert provisioning (`just dev`).
 - Build output is static files only; there is no SSR or server-side rendering.

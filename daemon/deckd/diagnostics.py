@@ -656,7 +656,7 @@ def _widget_kind_specific(widget: Any) -> dict[str, Any]:
         info["metrics"] = [
             {"source": m.source, "label": m.label} for m in (widget.metrics or [])
         ]
-    elif kind == "mediabrowser":
+    elif kind == "nowplaying":
         info["empty_state"] = widget.empty_state
     elif kind == "media":
         info["controls"] = list(widget.controls or [])

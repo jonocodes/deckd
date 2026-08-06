@@ -48,14 +48,14 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Manual control mode** — the phone becomes a trackpad (move, tap, right-click, drag-lock) and a keyboard, so you can type into and point at the focused app for the things layouts don't cover (URL bars, chat boxes, ad-hoc commands).
 - [x] **App badge** — the focused app's name, icon, and accent color show in the bottom bar so you can tell at a glance what you're controlling.
 - [x] **Chrome media indicator** — the media icon sprouts a pulsing green dot whenever a media player is playing (passive playback indicator), independent of the browser view.
-- [x] **Media browser** — browse and control any supported media player (Spotify, Firefox, VLC, etc.) from a dedicated chrome view, with album art, per-player transport controls, and now-playing metadata.
+- [x] **Now playing** — control any supported media player (Spotify, Firefox, VLC, etc.) from a dedicated chrome view, with album art, per-player transport controls, and now-playing metadata.
 - [x] **Running programs list** — tap a layout-grid icon in the bottom chrome to open a list of every open window on the host, labeled by the layout the window would match. Tap a row to raise (focus) that window and close the list. Enumeration and raise are GNOME-only today (via the focus extension); other backends show the list's "unsupported on this platform" empty state.
 - [x] **VLC media widgets** — full VLC control surface with play/pause, seek, volume, album art. Configurable art sources (VLC embedded art + iTunes fallback).
 - [x] **Live sensor widgets** — meter and stats widgets pushed to the client in real time (CPU %, memory %, etc.), bound to daemon-side sensor sources.
 - [x] **GUI layout editor** — build and edit layouts from the browser without hand-editing YAML: a widget palette, a drag-to-reorder reflow canvas with span and overflow controls, a properties panel (labels, icons via a searchable picker, colours, actions and macros), and new-layout creation — saved back to disk over the write API. In development, but usable today. See [Layout editor](#layout-editor).
 - [x] **Live layout editing** — edit a layout file on the desktop (by hand or via the GUI editor) and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
-- [x] **Addressable client views** — the layout, manual control, media browser, settings, editor, and running-windows views have their own URL paths for deep links and browser history.
+- [x] **Addressable client views** — the layout, manual control, now playing, settings, editor, and running-windows views have their own URL paths for deep links and browser history.
 - [x] **Keep screen awake** while the surface is in use.
 - [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
 - [x] **Password auth** — every client authenticates with a shared password (on by default; `--no-auth` disables it for local development). See [Client auth](#client-auth).
@@ -377,7 +377,7 @@ That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws
 
 Every layout renders inside a persistent **chrome** shell that the daemon does not know about:
 
-- **Bottom strip** (always visible): the current app badge (from `LayoutMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the layout's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected), a `manual control` button that swaps the main area for the combined trackpad + IME surface (see [Manual control mode](#manual-control-mode)), a `media browser` button (when enabled — see [Media browser](#media-browser); ADR-0008 records the chrome-view carve-out that lets the client pin a specific layout) that asks the daemon for the global media browser view, and a `settings` button (see [Client tuning](#client-tuning)).
+- **Bottom strip** (always visible): the current app badge (from `LayoutMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the layout's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected), a `manual control` button that swaps the main area for the combined trackpad + IME surface (see [Manual control mode](#manual-control-mode)), a `now playing` button (when enabled — see [Now playing](#now-playing); ADR-0008 records the chrome-view carve-out that lets the client pin a specific layout) that asks the daemon for the global now-playing view, and a `settings` button (see [Client tuning](#client-tuning)).
 - **Right-side jogstrip** (always visible): a full-height scroll strip that works the same as the in-grid `jogstrip` widget. A layout can suppress it with `jogstrip: false` at the YAML top level — the daemon forwards this as `jogstrip_enabled` on every `LayoutMessage`.
 
 Widgets in a layout's `widgets:` list are an **ordered list** that reflows against the viewport width (ADR-0010). There are no grid coordinates. The client packs widgets left-to-right and wraps down, computing the column count from the available width against a client-side cell-size band. A widget may carry a `size: [w, h]` span (default `[1, 1]`) for non-uniform cells; the list order is the only positional input. Portrait just fits fewer columns — no transpose, no orientation conventions.
@@ -415,7 +415,7 @@ The right-side jogstrip stays available for scrolling while you're pointing.
 
 ### Layout editor
 
-Tap the **layout editor** button in the bottom chrome (next to media browser / settings) to build and edit layouts in the browser — no hand-editing YAML. Like manual control and the media browser, it's a chrome view that swaps in over the button grid.
+Tap the **layout editor** button in the bottom chrome (next to now playing / settings) to build and edit layouts in the browser — no hand-editing YAML. Like manual control and now playing, it's a chrome view that swaps in over the button grid.
 
 - **Palette** — pick a widget kind (button, jogstrip, meter, stats, media, blank, …) to append it to the layout.
 - **Reflow canvas** — widgets render exactly as the live deck does (ADR-0010, ordered-list reflow). Drag to reorder, adjust a widget's `size` span, and toggle the layout's `overflow` mode; the canvas repacks as you go.
@@ -498,9 +498,9 @@ sleep 2 && .venv/bin/python -u scripts/send_scroll.py --velocity 1200
 
 The client is usable end-to-end without a mouse (issues [#60](https://github.com/jonocodes/deckd/issues/60) and [#62](https://github.com/jonocodes/deckd/issues/62)).
 
-**Keyboard navigation** — `Tab` walks every interactive element in DOM/logical order: the bottom-chrome buttons (manual control / media browser / settings), the layout's widgets, the in-grid jogstrip, the settings sliders and toggles. `Shift+Tab` walks back. The focused element has a high-contrast cyan focus ring (a double-box-shadow; meets WCAG 2.1 SC 1.4.11 contrast); the ring is `focus-visible`-only, so a mouse click doesn't surface it.
+**Keyboard navigation** — `Tab` walks every interactive element in DOM/logical order: the bottom-chrome buttons (manual control / now playing / settings), the layout's widgets, the in-grid jogstrip, the settings sliders and toggles. `Shift+Tab` walks back. The focused element has a high-contrast cyan focus ring (a double-box-shadow; meets WCAG 2.1 SC 1.4.11 contrast); the ring is `focus-visible`-only, so a mouse click doesn't surface it.
 
-**Keyboard activation** — every button (chrome, grid, media, mediabrowser, settings, jog-strip) responds to `Enter` and `Space`. Native `<button>` elements get this for free when they have an `onClick`; the project's `onPointerDown`-only pattern (kept for fast touch response) is paired with a matching `onKeyDown` so the keyboard path is preserved.
+**Keyboard activation** — every button (chrome, grid, media, nowplaying, settings, jog-strip) responds to `Enter` and `Space`. Native `<button>` elements get this for free when they have an `onClick`; the project's `onPointerDown`-only pattern (kept for fast touch response) is paired with a matching `onKeyDown` so the keyboard path is preserved.
 
 **Keyboard alternatives for the pointer surfaces** — the right-side jogstrip and the trackpad each expose a keyboard mode so they aren't pointer-only:
 
@@ -509,9 +509,9 @@ The client is usable end-to-end without a mouse (issues [#60](https://github.com
 | JogStrip    | `↑/↓/←/→` (small step), `PageUp/PageDown` (large step), `Home`/`End` (jump), held = auto-repeat |
 | Trackpad    | `↑/↓/←/→` (move), `Numpad 1/3/7/9` (diagonals), `PageUp/PageDown` (big step), `Space`/`Enter` (left click) |
 
-**Global shortcuts** — `1` toggles trackpad mode, `2` opens the media browser, `3` opens settings, `Escape` returns to the focused-app layout. Shortcuts are suppressed while a text input is focused, so typing into the password gate or the trackpad IME isn't hijacked.
+**Global shortcuts** — `1` toggles trackpad mode, `2` opens now playing, `3` opens settings, `Escape` returns to the focused-app layout. Shortcuts are suppressed while a text input is focused, so typing into the password gate or the trackpad IME isn't hijacked.
 
-**Focus restoration** — opening a chrome view (settings, trackpad, media browser) pushes focus into the first interactive element of that view; closing it (via `Escape` or the same button) hands focus back to the chrome button that opened it. The password gate also restores focus to the surface after a successful submit, so a keyboard user can Tab into the layout without clicking anywhere.
+**Focus restoration** — opening a chrome view (settings, trackpad, now playing) pushes focus into the first interactive element of that view; closing it (via `Escape` or the same button) hands focus back to the chrome button that opened it. The password gate also restores focus to the surface after a successful submit, so a keyboard user can Tab into the layout without clicking anywhere.
 
 **OS-level preferences** — the theme respects `prefers-contrast: more` (thicker focus ring, higher-contrast cell borders, white halo on the connection dot) and `prefers-reduced-motion: reduce` (the connection-state pulse and the media-icon playback dot stop animating; press feedback loses its scale-down but keeps the static brightness shift). Status (connection state, playback state) is conveyed by **icon + text + colour** so it doesn't depend on colour alone: the connection indicator has a visible "live" / "reconnecting" / "disconnected" / "locked" label, and the media icon carries a screen-reader-only "now playing" / "idle" string alongside the pulsing green dot.
 
@@ -807,7 +807,7 @@ Mark a button (or a macro widget) as dangerous by adding `confirm: true`. On pre
 Rules:
 
 - `confirm` is a plain boolean (default `false`). Opt-in only — the daemon never auto-classifies an action as dangerous.
-- Valid only on a widget that has an `action` or a `macro`. Rejected at load on `blank`, `meter`, `stats`, `media`, and `mediabrowser` (media sub-actions are intentionally ungated; nothing dangerous runs there).
+- Valid only on a widget that has an `action` or a `macro`. Rejected at load on `blank`, `meter`, `stats`, `media`, and `nowplaying` (media sub-actions are intentionally ungated; nothing dangerous runs there).
 - Gates the main press only. The same widget's transport / sub-actions still fire without a prompt.
 - The confirmation round-trip is **daemon-authoritative**: silence = no dangerous action. The daemon never runs the action until the client confirms. A ~30 s backstop discards the pending action if the client doesn't reply (silently, no-op) and the client modal auto-dismisses in lockstep so a visible prompt is always a live one.
 - Outcomes are recorded in the diagnostic surfaces: a `confirm` diagnostic event carries the lifecycle (`requested` / `confirmed` / `cancelled` / `expired`), and `cancelled` / `expired` land as distinct recent-action ring records. `confirmed` is the normal execution record (no double-counting).
@@ -912,7 +912,7 @@ The pieces behind the features above, for anyone reading the code:
 - **Jogstrip** scroll plumbing from browser pointer movement to daemon-side uinput, including release momentum.
 - **Manual control mode**: combined trackpad (`REL_X` / `REL_Y` motion plus `BTN_LEFT` / `BTN_RIGHT` / `BTN_MIDDLE` on the same uinput device, with client-side gesture recognition: tap / two-finger tap / tap-and-a-half drag lock) and IME passthrough (`type` / `key` wire messages, ASCII+Shift→evdev translation, daemon-side focus guard against self-injection). Both live in one view; the strip's keyboard-icon toggle raises the soft keyboard.
 - **Active-window detection** via GNOME Shell extension + session D-Bus (`app_id`, `wm_class`, `title`, `pid`).
-- **Persistent client chrome** — bottom strip (branded app badge + connection dot + manual-control button + media icon + settings) and right-side jogstrip — layered above every layout with zero daemon involvement. The app badge optionally carries an icon, a theme colour, and a human-readable name the layout YAML declares (ADR-0007). The one carve-out is the `mediabrowser` chrome view: a client can pin its session to a specific layout via `select_view`, with the daemon pushing a `view`-tagged `LayoutMessage` so the client knows which mode to render. ADR-0008 records the carve-out and the general mechanism.
+- **Persistent client chrome** — bottom strip (branded app badge + connection dot + manual-control button + media icon + settings) and right-side jogstrip — layered above every layout with zero daemon involvement. The app badge optionally carries an icon, a theme colour, and a human-readable name the layout YAML declares (ADR-0007). The one carve-out is the `nowplaying` chrome view: a client can pin its session to a specific layout via `select_view`, with the daemon pushing a `view`-tagged `LayoutMessage` so the client knows which mode to render. ADR-0008 records the carve-out and the general mechanism.
 - **Layout hot-reload** — the daemon watches `layouts/*.yaml` and re-pushes on any edit; bad YAML surfaces as a diagnostic on the client without crashing the daemon.
 - **Reconnecting client** (`useDeckdSocket` exponential backoff).
 - **Build output** is plain static files — `client/dist/` — served by the daemon.
@@ -986,9 +986,9 @@ Art sources are chosen with `art_source` (default `[vlc]`):
 
 > On some setups (e.g. NixOS) Python's TLS can't find a CA bundle, which makes the HTTPS lookup fail silently (art just falls back to the logo). If that happens, set `SSL_CERT_FILE` / `NIX_SSL_CERT_FILE` for the daemon.
 
-### Media browser
+### Now playing
 
-The media browser is a global media-control surface that works
+Now playing is a global media-control surface that works
 independently of the focused app: it lists every media player the
 system exposes over the session D-Bus (VLC, mpv, Spotify, Firefox
 audio, …) and gives each row a prev / play-pause / next transport.
@@ -1001,15 +1001,15 @@ view, side by side and not interfering.
 
 #### Enable it
 
-Drop a layout that declares the `mediabrowser` widget kind into your
+Drop a layout that declares the `nowplaying` widget kind into your
 `layouts/` directory. The shipped `mpris.yaml` is exactly this:
 
 ```yaml
 match: [mpris]
-display_name: Media
+display_name: Now playing
 widgets:
   - id: browser
-    kind: mediabrowser
+    kind: nowplaying
     size: [4, 2]
 ```
 
@@ -1021,13 +1021,13 @@ need a focus match for any real app.
 Once the layout is on disk, restart the daemon (or just wait — YAML
 changes are hot-reloaded). The bottom chrome gains a **music-note
 icon** between the manual-control and settings buttons — the chrome
-media icon, the entry point to the browser. Tapping it pins this
+media icon, the entry point to the view. Tapping it pins this
 client to the MPRIS chrome view (sends `select_view: "mpris"` over
 the WebSocket). Tapping it again reverts to the focused-app layout
-(`clear_view`). The pin is per-client: a phone parked on the browser
+(`clear_view`). The pin is per-client: a phone parked on the view
 doesn't lock a second phone out of its own focus-driven layout.
 
-The icon is *opt-in*: a daemon that has no `mediabrowser` layout
+The icon is *opt-in*: a daemon that has no `nowplaying` layout
 never shows the music-note button, never opens the session D-Bus, and
 never pays the bus-connect cost. Users who don't enable the feature
 see the bottom chrome exactly as before.
@@ -1041,7 +1041,7 @@ and disappears otherwise. The dot reads as the same "live signal"
 affordance chat apps use for recording indicators, and crucially
 doesn't compete with the cyan accent the icon takes on when the
 view is open — the two states stack cleanly when both are true.
-The icon stays useful whether or not the browser view is open —
+The icon stays useful whether or not the now-playing view is open —
 the indicator reflects global reality, so a phone on the desk
 reads "something is playing" at a glance without the user having
 to tap the icon and pin the view.
@@ -1072,7 +1072,7 @@ graceful-degradation stance the rest of the media surface takes.
 #### What the view shows
 
 The chrome view is the same `mpris.yaml` layout, rendered with the
-layout area replaced by the `mediabrowser` widget. One row per
+layout area replaced by the `nowplaying` widget. One row per
 discovered player. Each row is topped by an **app-name header** — the
 player's human-readable name from the MPRIS root interface's `Identity`
 (e.g. "Firefox", "VLC media player"), matching GNOME's media control —
@@ -1087,7 +1087,7 @@ header are three slots:
   `file://` / `http(s)://` / `data:` URL is resolved server-side
   (other shapes / no URL fall back through the `DesktopEntry`
   brand icon to the generic Lucide `Disc` glyph). The cover is
-  cache-busted per track, so the browser fetches each new cover
+  cache-busted per track, so the client fetches each new cover
   exactly once.
 - **Title / subtitle** (centre) — `xesam:title` and `xesam:artist`
   from MPRIS `Metadata`. Unknown fields render as an em-dash.
@@ -1105,25 +1105,25 @@ Player-interface method (`PlayPause` / `Next` / `Previous`). Volume
 and seek are deferred follow-ups.
 
 The view persists across focus changes until cleared — a user who
-tapped the icon wants the browser to stay put even if they alt-tab
-to a different app. `clear_view` (the second tap on the chrome
+tapped the icon wants the now-playing view to stay put even if they
+alt-tab to a different app. `clear_view` (the second tap on the chrome
 icon, or the session ending) is the only way out.
 
 #### Configuration knobs
 
-The `mediabrowser` widget has one optional knob:
+The `nowplaying` widget has one optional knob:
 
 ```yaml
 - id: browser
-  kind: mediabrowser
+  kind: nowplaying
   size: [4, 2]
   empty_state: show         # or "hide"
 ```
 
 - `empty_state: show` (default) — when no players exist, render a
-  single "No media players detected" row so the chrome icon is still
+  single "Nothing playing" row so the chrome icon is still
   reachable. `hide` collapses the cell so a layout that depends on
-  the browser can drop the cell entirely.
+  the surface can drop the cell entirely.
 
 Row order is the order the session bus's `org.freedesktop.DBus.ListNames`
 reply reports the players — the same order GNOME Shell's quick-settings
@@ -1134,7 +1134,7 @@ session. There is no per-widget ordering knob (issue #58).
 
 The daemon enumerates every bus name matching
 `org.mpris.MediaPlayer2.*` on the session D-Bus at startup, gated on
-the layout actually containing a `mediabrowser` widget — users who
+the layout actually containing a `nowplaying` widget — users who
 don't enable the feature don't pay the bus-connect cost. Two
 exclusions:
 
@@ -1150,7 +1150,7 @@ The bus is monitored live: `NameOwnerChanged` signals add / remove
 rows as players come and go (a bus-name handoff is treated as
 remove-then-add so the new owner's metadata is rebuilt cleanly),
 and `PropertiesChanged` signals update each row's cached state
-without a fresh `Properties.GetAll` round-trip. The browser reflects
+without a fresh `Properties.GetAll` round-trip. The view reflects
 the bus, not a snapshot.
 
 The forwarded state subset is the documented one: `PlaybackStatus`,
@@ -1184,7 +1184,7 @@ players immediately instead of "no players detected".
 
 #### Album art
 
-The browser shows a real cover in the row's art slot when the
+The view shows a real cover in the row's art slot when the
 player's `Metadata.mpris:artUrl` is set, and falls back to the
 `DesktopEntry`-mapped brand icon or the `Disc` glyph otherwise.
 Because the phone can't reach the host's local art cache and has
@@ -1227,13 +1227,13 @@ everything else to the VLC handler. Adding one feature doesn't
 affect the other.
 
 A user who has both sees the VLC `media` widget in the VLC layout
-(with VLC's keyboard or HTTP-based transport) and the MPRIS browser
-in the chrome view (with per-player MPRIS transport), side by side
-and not interfering.
+(with VLC's keyboard or HTTP-based transport) and the MPRIS
+now-playing surface in the chrome view (with per-player MPRIS
+transport), side by side and not interfering.
 
 #### Future follow-ups
 
-- **Volume, seek, scrubber** — the v1 browser exposes the three
+- **Volume, seek, scrubber** — the v1 now-playing view exposes the three
   transport buttons only. Volume and seek controls (and the
   capability-gated `CanSeek` honouring) are deferred.
 - **Per-row select / raise** — the GNOME 50 media widget calls
@@ -1284,8 +1284,8 @@ daemon polls at ~100ms, and macOS ships the same surface via Quartz
 don't advertise the capability — the chrome icon stays rendered (the
 affordance is discoverable for users on a platform that ships it
 later) but tapping it shows the "running programs: unsupported on
-this platform" empty state, mirroring the media browser's "no players
-detected" placeholder.
+this platform" empty state, mirroring the now-playing surface's
+"Nothing playing" placeholder.
 
 #### What the view shows
 

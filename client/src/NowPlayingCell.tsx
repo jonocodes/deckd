@@ -2,12 +2,12 @@ import { useMemo, useState } from "react";
 import { Disc, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { Icon } from "./Icon";
 import type { MediaReading } from "./media-store";
-import type { MediaBrowserEmptyState, Widget } from "./protocol";
+import type { NowPlayingEmptyState, Widget } from "./protocol";
 
 type Props = {
   widget: Widget;
-  /** Live ``media_state`` cache, keyed by id. The browser filters to ids
-   * starting with ``mpris.`` — every other id belongs to a different
+  /** Live ``media_state`` cache, keyed by id. The now-playing view filters
+   * to ids starting with ``mpris.`` — every other id belongs to a different
    * widget (e.g. the VLC media card) and is not shown here. */
   states: Record<string, MediaReading>;
   onCommand: (id: string, command: "play-pause" | "next" | "previous") => void;
@@ -45,7 +45,7 @@ function ArtSlot({ id, reading }: { id: string; reading: MediaReading }) {
   if (reading.art_token && failedToken !== reading.art_token) {
     return (
       <img
-        className="mediabrowser-art-img"
+        className="nowplaying-art-img"
         alt=""
         src={`/mpris/${encodeURIComponent(rowSuffix)}/art?token=${encodeURIComponent(reading.art_token)}`}
         onError={() => setFailedToken(reading.art_token ?? null)}
@@ -53,12 +53,12 @@ function ArtSlot({ id, reading }: { id: string; reading: MediaReading }) {
     );
   }
   const entry = reading.desktop_entry ? DESKTOP_ICONS[reading.desktop_entry] : null;
-  if (entry) return <Icon icon={entry} className="mediabrowser-art-icon" />;
-  return <Disc className="mediabrowser-art-icon" />;
+  if (entry) return <Icon icon={entry} className="nowplaying-art-icon" />;
+  return <Disc className="nowplaying-art-icon" />;
 }
 
-export function MediaBrowserCell({ widget, states, onCommand }: Props) {
-  const emptyState: MediaBrowserEmptyState = widget.empty_state ?? "show";
+export function NowPlayingCell({ widget, states, onCommand }: Props) {
+  const emptyState: NowPlayingEmptyState = widget.empty_state ?? "show";
 
   // Filter the parent store down to MPRIS rows. The store is keyed by
   // widget id, so a row whose id starts with ``mpris.`` belongs to
@@ -79,37 +79,37 @@ export function MediaBrowserCell({ widget, states, onCommand }: Props) {
   if (rows.length === 0) {
     if (emptyState === "hide") return null;
     return (
-      <ul className="mediabrowser-list" role="list">
-        <li className="mediabrowser-row mediabrowser-row-empty" role="listitem">
-          No media players detected
+      <ul className="nowplaying-list" role="list">
+        <li className="nowplaying-row nowplaying-row-empty" role="listitem">
+          Nothing playing
         </li>
       </ul>
     );
   }
 
   return (
-    <ul className="mediabrowser-list" role="list">
+    <ul className="nowplaying-list" role="list">
       {rows.map(({ id, reading }) => (
         <li
           key={id}
           data-row-id={id}
-          className="mediabrowser-row"
+          className="nowplaying-row"
           role="listitem"
         >
           {reading.app_name ? (
-            <div className="mediabrowser-app">{reading.app_name}</div>
+            <div className="nowplaying-app">{reading.app_name}</div>
           ) : null}
-          <div className="mediabrowser-art" aria-hidden>
+          <div className="nowplaying-art" aria-hidden>
             <ArtSlot id={id} reading={reading} />
           </div>
-          <div className="mediabrowser-text">
-            <div className="mediabrowser-title">{reading.title ?? "—"}</div>
-            <div className="mediabrowser-subtitle">{reading.artist ?? "—"}</div>
+          <div className="nowplaying-text">
+            <div className="nowplaying-title">{reading.title ?? "—"}</div>
+            <div className="nowplaying-subtitle">{reading.artist ?? "—"}</div>
           </div>
-          <div className="mediabrowser-transport">
+          <div className="nowplaying-transport">
             <button
               type="button"
-              className="mediabrowser-skip"
+              className="nowplaying-skip"
               aria-label="Previous"
               disabled={reading.can_go_previous === false}
               onClick={() => onCommand(id, "previous")}
@@ -118,7 +118,7 @@ export function MediaBrowserCell({ widget, states, onCommand }: Props) {
             </button>
             <button
               type="button"
-              className="mediabrowser-play"
+              className="nowplaying-play"
               aria-label={reading.playing ? "Pause" : "Play"}
               aria-pressed={Boolean(reading.playing)}
               onClick={() => onCommand(id, "play-pause")}
@@ -127,7 +127,7 @@ export function MediaBrowserCell({ widget, states, onCommand }: Props) {
             </button>
             <button
               type="button"
-              className="mediabrowser-skip"
+              className="nowplaying-skip"
               aria-label="Next"
               disabled={reading.can_go_next === false}
               onClick={() => onCommand(id, "next")}

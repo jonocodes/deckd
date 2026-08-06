@@ -187,8 +187,8 @@ export const MEDIA_DEMO_STATES: MediaState[] = [
   },
 ];
 
-// Backend-free MPRIS browser demo (issue #53). A single
-// ``mediabrowser`` widget, matching the shipping ``layouts/mpris.yaml``
+// Backend-free MPRIS now-playing demo (issue #53). A single
+// ``nowplaying`` widget, matching the shipping ``layouts/mpris.yaml``
 // footprint, so ``/?demo=mpris`` opens the chrome view with seeded
 // MPRIS rows already in the media store — the same surface a real
 // daemon would render after the first ``media_state`` push. Three
@@ -208,7 +208,7 @@ const MPRIS: ServerLayout = {
   widgets: [
     {
       id: "browser",
-      kind: "mediabrowser",
+      kind: "nowplaying",
       size: [4, 2],
     },
   ],
@@ -344,18 +344,18 @@ const DEMOS: Record<string, ServerLayout> = {
   macro: MACRO,
 };
 
-type DemoView = "layout" | "trackpad" | "settings" | "mediabrowser" | "editor";
+type DemoView = "layout" | "trackpad" | "settings" | "nowplaying" | "editor";
 
 // Demo names that open a chrome *view* (settings / trackpad) rather than a
 // bare layout. They render over a base fixture so the socket stays disabled
 // and the app chrome (badge, status) has real context behind the panel.
-// ``mpris`` opens the mediabrowser view with the MPRIS fixture as the
+// ``mpris`` opens the now-playing view with the MPRIS fixture as the
 // base, so the per-row cell renders with seeded rows on first paint —
 // the layout file the real daemon would push.
 const DEMO_VIEWS: Record<string, DemoView> = {
   settings: "settings",
   trackpad: "trackpad",
-  mpris: "mediabrowser",
+  mpris: "nowplaying",
   editor: "editor",
 };
 const VIEW_DEMO_BASE = VLC;
@@ -374,7 +374,7 @@ export const DEMO_NAMES = [...new Set([...Object.keys(DEMOS), ...Object.keys(DEM
 /** Returns the demo layout named by the ``?demo=`` URL param, or ``null``
  * when the param is absent/unknown (normal daemon-backed operation). A view
  * demo (``settings`` / ``trackpad``) renders over a shared base fixture;
- * ``mpris`` opens the mediabrowser view with the MPRIS fixture as the
+ * ``mpris`` opens the now-playing view with the MPRIS fixture as the
  * base so the per-row cell has a backing widget. */
 export function getDemoLayout(): ServerLayout | null {
   if (typeof window === "undefined") return null;

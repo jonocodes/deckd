@@ -72,13 +72,13 @@ function widgetIcon(w: Widget): string {
   if (w.kind === "meter") return "📊";
   if (w.kind === "stats") return "📈";
   if (w.kind === "jogstrip") return "↕";
-  if (w.kind === "media" || w.kind === "mediabrowser") return "🎬";
+  if (w.kind === "media" || w.kind === "nowplaying") return "🎬";
   if (w.kind === "trackpad") return "✋";
   if (w.icon) return "";
   return "⬛";
 }
 
-const UNSUPPORTED_KINDS = new Set(["media", "mediabrowser"]);
+const UNSUPPORTED_KINDS = new Set(["media", "nowplaying"]);
 
 function adjustSpan(widget: Widget, dw: number, dh: number): Widget {
   const isFull = widget.size === "full";

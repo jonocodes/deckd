@@ -54,7 +54,7 @@ _Extends: [0006](0006-widget-visual-styling.md) — presentation-relay seam reac
 
 [0008-chrome-view-carveout.md](0008-chrome-view-carveout.md)
 
-A client can pin its session to a specific layout via `select_view`. Daemon pushes a `view`-tagged `LayoutMessage`. Created for MPRIS media browser; general mechanism for future chrome views.
+A client can pin its session to a specific layout via `select_view`. Daemon pushes a `view`-tagged `LayoutMessage`. Created for MPRIS now-playing; general mechanism for future chrome views.
 
 _Amends: [0003](0003-persistent-chrome.md) — chrome knowledge now includes payload-per-view content delivered by the daemon_
 

@@ -5,10 +5,10 @@ export type MediaReading = Omit<MediaState, "type">;
 
 /** Per-widget activity gate for the media cache. A row passes the
  * ``activeIds`` membership check, or — for widgets whose rows the
- * client can't enumerate up front (the ``mediabrowser`` collects
+ * client can't enumerate up front (the ``nowplaying`` surface collects
  * ``mpris.*`` ids from the daemon) — any row whose id starts with one
  * of ``activePrefixes``. Exact-id membership is the common case; the
- * prefix set is the narrow seam for the browser. */
+ * prefix set is the narrow seam for the now-playing surface. */
 export function useMediaStore(
   activeIds: ReadonlySet<string>,
   activePrefixes: ReadonlySet<string> = new Set(),

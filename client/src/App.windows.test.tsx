@@ -181,7 +181,7 @@ describe("App — running windows chrome view", () => {
     // Press Escape — the global handler should revert to the layout
     // view and hand focus back to the chrome button that opened the
     // overlay (issue #60, AC #5 — same pattern as the editor and
-    // media browser).
+    // now-playing view).
     fireEvent.keyDown(document.body, { key: "Escape" });
     await waitFor(() => expect(button.className).not.toContain("chrome-btn-active"));
     expect(send).toHaveBeenCalledWith({ type: "clear_view" });

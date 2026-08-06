@@ -296,7 +296,7 @@ async def test_mpris_players_with_fake_backend(monkeypatch, tmp_path) -> None:
 match: [default]
 widgets:
   - id: mpris
-    kind: mediabrowser
+    kind: nowplaying
     size: [4, 1]
 """
     )

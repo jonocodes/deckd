@@ -11,7 +11,7 @@ export type Metric = { source: string; label?: string | null };
 
 export type MediaHttp = { host?: string; port?: number; password_ref?: string | null };
 export type MediaControl = "play" | "previous" | "next" | "volume" | "position" | "speed";
-export type MediaBrowserEmptyState = "show" | "hide";
+export type NowPlayingEmptyState = "show" | "hide";
 export type MediaState = {
   type: "media_state";
   id: string;
@@ -48,7 +48,7 @@ export type MediaState = {
 export type WidgetSize = [number, number] | "full";
 export type Widget = {
   id: string;
-  kind: "button" | "blank" | "jogstrip" | "trackpad" | "meter" | "stats" | "media" | "mediabrowser";
+  kind: "button" | "blank" | "jogstrip" | "trackpad" | "meter" | "stats" | "media" | "nowplaying";
   label?: string | null;
   icon?: Icon | null;
   /** Reflow extent (ADR-0010). Absent means a ``[1, 1]`` single cell. */
@@ -69,12 +69,12 @@ export type Widget = {
   next_action?: Record<string, unknown> | null;
   volume_up_action?: Record<string, unknown> | null;
   volume_down_action?: Record<string, unknown> | null;
-  /** ``mediabrowser`` knob (issue #50): whether the cell still renders
+  /** ``nowplaying`` knob (issue #50): whether the cell still renders
    * a placeholder row when no MPRIS player is discovered. ``show``
    * keeps the chrome's icon reachable; ``hide`` collapses the cell.
    * Row order follows the daemon's ``row_ids`` (the session bus's
    * ``ListNames`` reply order — matching GNOME Shell — issue #58). */
-  empty_state?: MediaBrowserEmptyState | null;
+  empty_state?: NowPlayingEmptyState | null;
   /** Confirmation opt-in (issues #69 / #108). When ``true``, pressing
    * the widget withholds execution on the daemon; the daemon mints a
    * ``confirm_id``, sends a ``confirm_request`` to this client, and

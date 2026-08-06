@@ -5,7 +5,7 @@ import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
 import { ManualControl } from "./ManualControl";
-import { MediaBrowserCell } from "./MediaBrowserCell";
+import { NowPlayingCell } from "./NowPlayingCell";
 import { RunningWindowsList } from "./RunningWindowsList";
 import { Tooltip } from "./Tooltip";
 import { PasswordGate } from "./PasswordGate";
@@ -110,22 +110,22 @@ export function App() {
   }, [layout]);
   const meter = useMeterStore(activeMeterSources);
   const activeMediaIds = useMemo(() => new Set((layout?.widgets ?? []).filter((w) => w.kind === "media").map((w) => w.id)), [layout]);
-  // Mediabrowser rows arrive with ids of the form ``mpris.<suffix>`` —
+  // Now-playing rows arrive with ids of the form ``mpris.<suffix>`` —
   // the daemon enumerates them at runtime, so the client can't list
   // them up front. The media store accepts a set of prefixes alongside
   // the exact-id set; adding the bus-prefix here keeps the rows
-  // visible to the browser cell without leaking the VLC media widget's
-  // id into the browser.
+  // visible to the cell without leaking the VLC media widget's id
+  // into the now-playing surface.
   const activeMediaPrefixes = useMemo(
-    () => new Set((layout?.widgets ?? []).filter((w) => w.kind === "mediabrowser").map(() => "mpris.")),
+    () => new Set((layout?.widgets ?? []).filter((w) => w.kind === "nowplaying").map(() => "mpris.")),
     [layout],
   );
-  // The single mediabrowser widget in the active layout is the
+  // The single nowplaying widget in the active layout is the
   // configuration source for the chrome view; the chrome view has
   // nowhere else to learn about ``empty_state``. Hoist the lookup out
   // of the render path so the JSX stays declarative.
-  const browserWidget = useMemo(
-    () => (layout?.widgets ?? []).find((w) => w.kind === "mediabrowser") ?? null,
+  const nowPlayingWidget = useMemo(
+    () => (layout?.widgets ?? []).find((w) => w.kind === "nowplaying") ?? null,
     [layout],
   );
   const media = useMediaStore(activeMediaIds, activeMediaPrefixes);
@@ -164,8 +164,8 @@ export function App() {
     if (!isDemo) return;
     for (const state of MEDIA_DEMO_STATES) onMediaState(state);
     // The mpris demo seeds the same MPRIS rows the daemon would
-    // push; the browser cell filters to ``mpris.*`` ids so the VLC
-    // fixture doesn't leak into the browser.
+    // push; the now-playing cell filters to ``mpris.*`` ids so the VLC
+    // fixture doesn't leak into the now-playing surface.
     for (const state of MPRIS_DEMO_STATES) onMediaState(state);
   }, [isDemo, onMediaState]);
   // Confirmation handshake state (issues #69 / #107). The daemon
@@ -259,14 +259,14 @@ export function App() {
   const typeText = (text: string) => send({ type: "type", text });
   const keyCombo = (combo: string) => send({ type: "key", combo });
   const mediaCommand = (id: string, command: "volume" | "seek" | "rate", value: number) => send({ type: "media_command", id, command, value });
-  // Mediabrowser per-row transport (issue #54): the browser sends
+  // Now-playing per-row transport (issue #54): the cell sends
   // three value-less commands — ``play-pause`` / ``next`` / ``previous``
   // — keyed by the row's ``mpris.<suffix>`` id. The server routes the
   // ``mpris.`` prefix to the MPRIS backend and the rest of the
   // ``media_command`` family keeps going to the VLC path. This
-  // callback is the only thing the browser cell needs to know about
-  // the wire surface.
-  const browserCommand = (id: string, command: "play-pause" | "next" | "previous") =>
+  // callback is the only thing the cell needs to know about the
+  // wire surface.
+  const nowPlayingCommand = (id: string, command: "play-pause" | "next" | "previous") =>
     send({ type: "media_command", id, command });
   // Chrome view toggle (issue #51): the media icon mirrors the existing
   // trackpad / settings buttons. When opened it sends ``select_view``
@@ -276,12 +276,12 @@ export function App() {
   // (settings, trackpad) — that's intentional, mirroring how the
   // existing buttons don't reset each other, and keeps the daemon-side
   // view pinned across a brief settings detour.
-  const toggleMediaBrowser = useCallback(() => {
-    if (view === "mediabrowser") {
+  const toggleNowPlaying = useCallback(() => {
+    if (view === "nowplaying") {
       navigate("layout");
       send({ type: "clear_view" });
     } else {
-      navigate("mediabrowser");
+      navigate("nowplaying");
       send({ type: "select_view", view: MPRIS_VIEW_ID });
     }
   }, [navigate, view, send]);
@@ -301,7 +301,7 @@ export function App() {
   // button in the bottom chrome sends ``select_view: "windows"`` so the
   // daemon pushes the running-windows layout; on close it sends
   // ``clear_view`` to revert to the focused-app layout. Same handshake
-  // as the media browser and editor — chrome-view carve-out per ADR-0008.
+  // as the now-playing and editor — chrome-view carve-out per ADR-0008.
   const toggleWindows = useCallback(() => {
     if (view === "windows") {
       navigate("layout");
@@ -407,7 +407,7 @@ export function App() {
       if (e.key === "Escape" && view !== "layout") {
         e.preventDefault();
         navigate("layout");
-        if (view === "mediabrowser" || view === "editor" || view === "windows") send({ type: "clear_view" });
+        if (view === "nowplaying" || view === "editor" || view === "windows") send({ type: "clear_view" });
         return;
       }
       if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -420,7 +420,7 @@ export function App() {
         e.preventDefault();
         viewOriginRef.current = mediaBtnRef.current;
         lastChromeFocus.current = mediaBtnRef.current;
-        toggleMediaBrowser();
+        toggleNowPlaying();
       } else if (e.key === "3") {
         e.preventDefault();
         viewOriginRef.current = settingsBtnRef.current;
@@ -440,7 +440,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate, view, openTrackpad, openSettings, toggleMediaBrowser, toggleEditor, toggleWindows, send, status]);
+  }, [navigate, view, openTrackpad, openSettings, toggleNowPlaying, toggleEditor, toggleWindows, send, status]);
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
@@ -465,7 +465,7 @@ export function App() {
   // at a time — so the heading level stays correct.
   const headingText = useMemo(() => {
     if (view === "trackpad") return "Manual control";
-    if (view === "mediabrowser") return "Media browser";
+    if (view === "nowplaying") return "Now playing";
     if (view === "settings") return "Settings";
     if (view === "editor") return "Layout editor";
     if (view === "windows") return "Running programs";
@@ -576,27 +576,27 @@ export function App() {
               onKey={keyCombo}
               sensitivity={trackpad.sensitivity}
             />
-          ) : view === "mediabrowser" ? (
-            // Per-player media browser (issue #53). The cell filters the
-            // shared media cache down to ``mpris.*`` ids in the order
+          ) : view === "nowplaying" ? (
+            // Per-player now-playing surface (issue #53). The cell filters
+            // the shared media cache down to ``mpris.*`` ids in the order
             // the daemon reports them (session bus ``ListNames``
             // reply — matching GNOME Shell, issue #58), and gates the
             // prev/next transport on each row's capabilities. The
-            // single mediabrowser widget in the active layout is the
-            // configuration source; ``null`` falls back to the legacy
-            // "no players" placeholder so the chrome view still
+            // single nowplaying widget in the active layout is the
+            // configuration source; ``null`` falls back to the
+            // "Nothing playing" placeholder so the chrome view still
             // renders something when the daemon hasn't pushed a
-            // mediabrowser layout (e.g. a transient race during a
+            // nowplaying layout (e.g. a transient race during a
             // view switch).
-            <div className="mediabrowser" role="region" aria-label="media browser">
-              {browserWidget ? (
-                <MediaBrowserCell
-                  widget={browserWidget}
+            <div className="nowplaying" role="region" aria-label="now playing">
+              {nowPlayingWidget ? (
+                <NowPlayingCell
+                  widget={nowPlayingWidget}
                   states={media.states}
-                  onCommand={browserCommand}
+                  onCommand={nowPlayingCommand}
                 />
               ) : (
-                <div className="mediabrowser-empty">No media players detected</div>
+                <div className="nowplaying-empty">Nothing playing</div>
               )}
             </div>
           ) : view === "settings" ? (
@@ -651,8 +651,8 @@ export function App() {
             // daemon broadcasts globally; this view just hosts them.
             // ``undefined`` is the "no snapshot yet" branch which the
             // list renders as the "unsupported on this platform"
-            // empty state — same treatment as the media browser's
-            // "no players" placeholder (decision 8).
+            // empty state — same treatment as the now-playing
+            // "Nothing playing" placeholder (decision 8).
             <RunningWindowsList
               windows={runningWindows}
               onRowTap={(windowId) => {
@@ -690,7 +690,7 @@ export function App() {
             <div className="empty">waiting for daemon…</div>
           )}
         </main>
-        {jogstripEnabled && view !== "settings" && view !== "mediabrowser" && view !== "editor" && view !== "windows" && (
+        {jogstripEnabled && view !== "settings" && view !== "nowplaying" && view !== "editor" && view !== "windows" && (
           <aside
             className="chrome-jogstrip"
             style={{ "--jog-width": jogWidth.width } as CSSProperties}
@@ -741,20 +741,20 @@ export function App() {
             <PointerIcon size={18} />
           </button>
         </Tooltip>
-        <Tooltip ref={mediaBtnRef} label="media browser">
+        <Tooltip ref={mediaBtnRef} label="now playing">
           <button
-            className={`chrome-btn${view === "mediabrowser" ? " chrome-btn-active" : ""}${chromeMedia?.playing ? " chrome-btn-playing" : ""}`}
-            aria-label={chromeMedia?.playing ? "media browser (now playing)" : "media browser"}
-            aria-pressed={view === "mediabrowser"}
+            className={`chrome-btn${view === "nowplaying" ? " chrome-btn-active" : ""}${chromeMedia?.playing ? " chrome-btn-playing" : ""}`}
+            aria-label={chromeMedia?.playing ? "now playing" : "now playing"}
+            aria-pressed={view === "nowplaying"}
             onPointerDown={() => {
               viewOriginRef.current = mediaBtnRef.current;
               lastChromeFocus.current = mediaBtnRef.current;
-              toggleMediaBrowser();
+              toggleNowPlaying();
             }}
             onKeyDown={onActivate(() => {
               viewOriginRef.current = mediaBtnRef.current;
               lastChromeFocus.current = mediaBtnRef.current;
-              toggleMediaBrowser();
+              toggleNowPlaying();
             })}
           >
             <MusicIcon size={18} />

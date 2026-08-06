@@ -2,15 +2,15 @@
 
 ADR-0003 declared chrome a pure client concern — the daemon has no chrome
 knowledge, the client renders the persistent bottom strip and right-side
-jogstrip unchanged regardless of which layout is active. The MPRIS media
-browser is the first feature that needs more: a chrome-shaped surface (a
-full-bleed panel that replaces the layout area, not a grid cell) whose
-state comes from the host — the session-bus MPRIS player list — and
-which the client asks the daemon to render by name. This ADR records
-that carve-out and the new general mechanism that supports it.
+jogstrip unchanged regardless of which layout is active. The MPRIS
+now-playing surface is the first feature that needs more: a chrome-shaped
+surface (a full-bleed panel that replaces the layout area, not a grid
+cell) whose state comes from the host — the session-bus MPRIS player
+list — and which the client asks the daemon to render by name. This ADR
+records that carve-out and the new general mechanism that supports it.
 
 The carve-out is small in code (`select_view` / `clear_view` messages, a
-`view` field on `LayoutMessage`, the `mediabrowser` widget kind) and
+`view` field on `LayoutMessage`, the `nowplaying` widget kind) and
 deliberate in scope: the chrome is still rendered by the client; the
 daemon only pushes a layout the client has explicitly asked to see. A
 future chrome-shaped view (a settings panel, a trackpad surface, a
@@ -43,8 +43,8 @@ daemon pushes the resolved layout with `view` set to the requested name.
 A follow-up `clear_view` message from the same client reverts to the
 focused-app layout for that session only; other clients keep whatever
 view they have selected. The view is per-session because the affordance
-is per-client: one phone pinned to the browser doesn't lock a second
-phone out of its own focus-driven layout.
+is per-client: one phone pinned to the now-playing view doesn't lock a
+second phone out of its own focus-driven layout.
 
 Per-session state lives on the `Session` object (`view: str | None`).
 A session that never sends `select_view` keeps the focus-driven default
@@ -74,35 +74,35 @@ A genuine (non-deckd-window) focus change re-resolves the *layout* per
 ADR-0003, but a client-requested view is not a layout — it's a chrome
 view the daemon re-pushes on every focus change until the client
 explicitly clears it. This is the carve-out: a user who tapped the
-media icon in the chrome wants the browser to stay put even if they
-alt-tab to a different app. `clear_view` (or the session ending) is the
-only way out.
+media icon in the chrome wants the now-playing view to stay put even
+if they alt-tab to a different app. `clear_view` (or the session
+ending) is the only way out.
 
-### The `mediabrowser` widget kind
+### The `nowplaying` widget kind
 
-The view surfaces through a new widget kind, `mediabrowser`, declared
-in YAML the same as any other widget:
+The view surfaces through a new widget kind, `nowplaying`, declared in
+YAML the same as any other widget:
 
 ```yaml
 match: [mpris]
-display_name: MPRIS
+display_name: Now playing
 widgets:
   - id: browser
-    kind: mediabrowser
+    kind: nowplaying
     grid: [0, 0, 4, 2]
 ```
 
 The kind is a *grid cell* the client renders when it has the view
-pinned; the chrome surface (trackpad, settings, browser) is a *mode*
-the client swaps into when the layout's `match` token matches the
-selected view name. Both shapes share the same `LayoutMessage` — the
-`view` field tells the client which mode to render. The widget kind
-also has a small public schema (`empty_state`) but that lives with
-the kind, not the view mechanism. Row order follows the session bus's
-`ListNames` reply — matching GNOME Shell — with no per-widget knob
-(issue #58).
+pinned; the chrome surface (trackpad, settings, now-playing) is a
+*mode* the client swaps into when the layout's `match` token matches
+the selected view name. Both shapes share the same `LayoutMessage` —
+the `view` field tells the client which mode to render. The widget
+kind also has a small public schema (`empty_state`) but that lives
+with the kind, not the view mechanism. Row order follows the session
+bus's `ListNames` reply — matching GNOME Shell — with no per-widget
+knob (issue #58).
 
-A layout that uses `mediabrowser` also pays the bus-connect cost:
+A layout that uses `nowplaying` also pays the bus-connect cost:
 the daemon opens the session D-Bus only when at least one loaded
 layout declares the kind. Users who don't enable the feature don't
 pay the cost.
@@ -136,9 +136,9 @@ layouts. Future views plug in without daemon or protocol changes.
   `ServerLayout` type mirrors it. Both protocols were extended;
   existing clients that ignore unknown fields keep working (the
   field defaults to `null`).
-- The `mediabrowser` widget kind is a documented public schema. New
+- The `nowplaying` widget kind is a documented public schema. New
   users can ship a layout with it without reading the daemon source.
-- A user who has shipped a `mediabrowser` layout once has a stable
+- A user who has shipped a `nowplaying` layout once has a stable
   path to enable the feature on every daemon they run: ship the
   layout, tap the chrome icon, the view is pinned until cleared.
 - ADR-0003's wording ("the daemon has no chrome knowledge") is
@@ -176,7 +176,7 @@ pseudo-element overlay, not a glyph swap.
 The indicator reflects global reality — every connected client
 receives the frame regardless of which view it has pinned — so the
 icon is useful as a glance affordance from across the room even when
-the user isn't looking at the browser. On platforms without an
+the user isn't looking at the surface. On platforms without an
 `MprisBackend` (macOS today), no frames are produced and the dot
 stays hidden, the same graceful-degradation stance the rest of the
 MPRIS surface takes.

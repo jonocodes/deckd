@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from .layouts import MediaBrowserEmptyState
+from .layouts import NowPlayingEmptyState
 from .media import MediaState, _art_token
 from .mpris_art import is_supported_art_url
 
@@ -148,8 +148,8 @@ def _parse_mpris_art_url(metadata: Any) -> str | None:
     return value
 
 
-class MediaBrowser(BaseModel):
-    """The ``mediabrowser`` widget kind (issue #50).
+class NowPlaying(BaseModel):
+    """The ``nowplaying`` widget kind (issue #50).
 
     Lists the MPRIS rows the daemon's :class:`MprisBackend` reports, with
     each row showing its player identity and prev / play-pause / next
@@ -164,11 +164,12 @@ class MediaBrowser(BaseModel):
       to the client so it can correlate per-row updates).
     - ``size``: the standard reflow extent, identical to every other widget
       kind (ADR-0010) — a ``[w, h]`` span or ``"full"``. Optional; a
-      mediabrowser is typically a full-surface view rendered outside the flow.
+      nowplaying widget is typically a full-surface view rendered outside
+      the flow.
     - ``empty_state``: whether the cell still renders a placeholder row
       when no MPRIS player is discovered. ``show`` (default) keeps the
       chrome's icon reachable; ``hide`` collapses the cell so a layout
-      that relies on the browser can drop the cell entirely.
+      that relies on the surface can drop the cell entirely.
 
     Row order is whatever :meth:`MprisBackend.row_ids` returns — by
     convention the order the session bus's ``ListNames`` reply reports
@@ -180,7 +181,7 @@ class MediaBrowser(BaseModel):
 
     id: str
     size: list[int] | Literal["full"] | None = None
-    empty_state: MediaBrowserEmptyState = "show"
+    empty_state: NowPlayingEmptyState = "show"
 
 
 class MprisBackend(Protocol):
@@ -391,7 +392,7 @@ class DbusMprisBackend(MprisBackend):
     The class is constructed empty; :meth:`start` does the connect /
     enumerate / subscribe work, and :meth:`stop` tears it down. A
     no-layouts-use-it factory :func:`connect_mpris_backend` returns
-    ``None`` so a daemon whose layouts don't include ``mediabrowser``
+    ``None`` so a daemon whose layouts don't include ``nowplaying``
     doesn't even open the bus.
 
     The bus surface is plugged through ``bus_factory`` so tests can
@@ -1130,19 +1131,19 @@ def connect_mpris_backend(
 ) -> DbusMprisBackend | None:
     """Connect a real :class:`DbusMprisBackend` if any layout uses it.
 
-    Users who don't enable the ``mediabrowser`` widget shouldn't pay
+    Users who don't enable the ``nowplaying`` widget shouldn't pay
     the cost of opening the session bus; this factory checks every
     loaded layout for the widget kind and returns ``None`` when none
     are present. Callers wire the result into the same
     ``Server(mpris_backend=...)`` slot as ``FakeMprisBackend``.
 
     The check is layout-only (not focus-driven): a user with the
-    mediabrowser layout in their config pays the cost once on startup
+    nowplaying layout in their config pays the cost once on startup
     and re-uses the same backend on every focus change. The backend's
-    idle-while-no-active-mediabrowser-layout behaviour is owned by
-    the server's pump gating (``_has_mediabrowser``), not this factory.
+    idle-while-no-active-nowplaying-layout behaviour is owned by
+    the server's pump gating (``_has_nowplaying``), not this factory.
     """
     for layout in layouts.layouts:
-        if any(getattr(w, "kind", None) == "mediabrowser" for w in layout.widgets):
+        if any(getattr(w, "kind", None) == "nowplaying" for w in layout.widgets):
             return DbusMprisBackend(bus_factory=bus_factory)
     return None

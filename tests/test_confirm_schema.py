@@ -2,7 +2,7 @@
 
 The field opts a widget into a daemon-authoritative confirmation handshake:
 ``confirm: true`` requires the widget to carry an ``action`` or a ``macro``
-(blank/meter/stats/media/mediabrowser reject it). The wire shape is
+(blank/meter/stats/media/nowplaying reject it). The wire shape is
 plain-boolean; default ``false``; the daemon emits ``confirm: false`` on
 every widget so the client can decide at render time whether to show a
 danger affordance.
@@ -78,10 +78,10 @@ def test_confirm_true_rejected_on_media() -> None:
         )
 
 
-def test_confirm_true_rejected_on_mediabrowser() -> None:
+def test_confirm_true_rejected_on_nowplaying() -> None:
     with pytest.raises(ValueError, match="confirm"):
         Widget.model_validate(
-            {"id": "mb", "kind": "mediabrowser", "confirm": True}
+            {"id": "mb", "kind": "nowplaying", "confirm": True}
         )
 
 

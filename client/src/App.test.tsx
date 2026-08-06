@@ -1,4 +1,4 @@
-/** Chrome media icon + mediabrowser view (issue #51).
+/** Chrome media icon + nowplaying view (issue #51).
  *
  * Covers the three observable contracts:
  *  1. The icon renders in the bottom chrome strip next to settings.
@@ -6,9 +6,9 @@
  *     on the wire); a second click closes it (active class gone +
  *     ``clear_view`` on the wire). Mirrors the settings button exactly.
  *  3. While the view is open, the surface renders the browser area with
- *     the "No media players detected" placeholder instead of the
+ *     the "Nothing playing" placeholder instead of the
  *     focused-app layout. The placeholder is unconditional for v1
- *     (real rows arrive via the MediaBrowserCell ticket #53).
+ *     (real rows arrive via the NowPlayingCell ticket #53).
  *
  * The socket is mocked so the test owns the wire surface — we can assert
  * exactly which client message landed in ``send`` without spinning up a
@@ -69,22 +69,22 @@ describe("App — chrome media icon", () => {
 
   it("renders the media icon in the bottom chrome", () => {
     render(<App />);
-    expect(screen.getByRole("button", { name: /media browser/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /now playing/i })).toBeTruthy();
   });
 
   it("sends select_view on first click and applies the active class", () => {
     render(<App />);
-    const button = screen.getByRole("button", { name: /media browser/i });
+    const button = screen.getByRole("button", { name: /now playing/i });
     expect(button.className).not.toContain("chrome-btn-active");
     fireEvent.pointerDown(button);
     expect(send).toHaveBeenCalledWith({ type: "select_view", view: "mpris" });
     expect(button.className).toContain("chrome-btn-active");
-    expect(window.location.pathname).toBe("/media-browser");
+    expect(window.location.pathname).toBe("/now-playing");
   });
 
   it("sends clear_view on a second click and removes the active class", () => {
     render(<App />);
-    const button = screen.getByRole("button", { name: /media browser/i });
+    const button = screen.getByRole("button", { name: /now playing/i });
     fireEvent.pointerDown(button); // open
     fireEvent.pointerDown(button); // close
     expect(send.mock.calls.map((c) => c[0])).toEqual([
@@ -133,26 +133,26 @@ describe("App — chrome media icon", () => {
 
   it("renders the browser placeholder in place of the focused-app layout while open", () => {
     render(<App />);
-    const button = screen.getByRole("button", { name: /media browser/i });
+    const button = screen.getByRole("button", { name: /now playing/i });
     fireEvent.pointerDown(button);
-    // The default demo has no mediabrowser widget, so the chrome view
+    // The default demo has no nowplaying widget, so the chrome view
     // falls back to the "no players" placeholder (issue #51; #53 added
-    // the real per-row cell that takes over once a mediabrowser
+    // the real per-row cell that takes over once a nowplaying
     // widget is in the active layout).
-    expect(screen.getByText("No media players detected")).toBeTruthy();
+    expect(screen.getByText("Nothing playing")).toBeTruthy();
   });
 });
 
-/** Chrome media icon + mediabrowser view with the per-row cell (issue #53).
+/** Chrome media icon + nowplaying view with the per-row cell (issue #53).
  *
- * The mpris demo seeds the active mediabrowser widget with four MPRIS
+ * The mpris demo seeds the active nowplaying widget with four MPRIS
  * rows, so opening the chrome view renders the real per-row cell
  * (not the placeholder). Clicks on the per-row transport buttons
  * fire the wire ``media_command`` with the row's ``mpris.<suffix>``
  * id and the right command — that's the bridge to the server-side
  * dispatch in #54.
  */
-describe("App — mediabrowser per-row cell", () => {
+describe("App — nowplaying per-row cell", () => {
   afterEach(cleanup);
   beforeEach(() => {
     send.mockReset();
@@ -161,7 +161,7 @@ describe("App — mediabrowser per-row cell", () => {
 
   it("renders the per-row browser with seeded MPRIS rows", () => {
     render(<App />);
-    // ``?demo=mpris`` opens straight into the mediabrowser view, so
+    // ``?demo=mpris`` opens straight into the nowplaying view, so
     // the rows are visible without clicking the chrome icon. The
     // demo seeds the media store from a mount-time ``useEffect`` —
     // wrap the render in ``act`` so the seeded states have
@@ -228,7 +228,7 @@ describe("App — chrome media icon passive indicator", () => {
 
   it("starts outlined when no chrome_media frame has arrived", () => {
     render(<App />);
-    const button = screen.getByRole("button", { name: /media browser/i });
+    const button = screen.getByRole("button", { name: /now playing/i });
     // Default outlined state: no playing-class, regardless of any other
     // chrome-btn classes the icon might carry (active when the view
     // is open is the orthogonal concern).
@@ -238,7 +238,7 @@ describe("App — chrome media icon passive indicator", () => {
   it("tints the icon when a chrome_media frame reports playing=true", () => {
     render(<App />);
     pushChromeMedia({ available: true, playing: true, playing_count: 1 });
-    const button = screen.getByRole("button", { name: /media browser/i });
+    const button = screen.getByRole("button", { name: /now playing/i });
     expect(button.className).toContain("chrome-btn-playing");
   });
 
@@ -246,14 +246,14 @@ describe("App — chrome media icon passive indicator", () => {
     render(<App />);
     pushChromeMedia({ available: true, playing: true, playing_count: 1 });
     pushChromeMedia({ available: true, playing: false, playing_count: 0 });
-    const button = screen.getByRole("button", { name: /media browser/i });
+    const button = screen.getByRole("button", { name: /now playing/i });
     expect(button.className).not.toContain("chrome-btn-playing");
   });
 
   it("stays outlined when players are available but none are playing", () => {
     render(<App />);
     pushChromeMedia({ available: true, playing: false, playing_count: 0 });
-    const button = screen.getByRole("button", { name: /media browser/i });
+    const button = screen.getByRole("button", { name: /now playing/i });
     expect(button.className).not.toContain("chrome-btn-playing");
   });
 });
@@ -279,7 +279,7 @@ describe("App — chrome button tooltips", () => {
       // The media button's aria-label changes with playback state
       // (issue #62, AC #3). A regex keeps the tooltip test
       // independent of that detail.
-      { name: /media browser/i, tipId: "media browser" },
+      { name: /now playing/i, tipId: "now playing" },
       { name: "layout editor", tipId: "layout editor" },
       { name: "settings", tipId: "settings" },
     ];
@@ -302,7 +302,7 @@ describe("App — chrome button tooltips", () => {
     // and carry aria-label only — they get the tooltip wrapper.
     const iconOnly = [
       screen.getByRole("button", { name: "manual control" }),
-      screen.getByRole("button", { name: /media browser/i }),
+      screen.getByRole("button", { name: /now playing/i }),
       screen.getByRole("button", { name: "layout editor" }),
       screen.getByRole("button", { name: "settings" }),
     ];
@@ -310,12 +310,12 @@ describe("App — chrome button tooltips", () => {
       // The tooltip wrapper only adds aria-describedby when the
       // tooltip is open; absent focus, the attribute is omitted.
       expect(b.getAttribute("aria-describedby")).toBeNull();
-      // The media browser button now also carries a screen-reader-only
+      // The now-playing button now also carries a screen-reader-only
       // state label ("now playing" / "idle", issue #62, AC #3). The
       // clipped text is still empty in the rendered tree (the clip
       // path hides it visually) — assert it isn't visible by
       // checking the element exists with the expected class.
-      if (b.getAttribute("aria-label")?.startsWith("media browser")) {
+      if (b.getAttribute("aria-label")?.startsWith("now playing")) {
         expect(b.querySelector(".chrome-btn-sr-status")).not.toBeNull();
       }
     }
@@ -361,9 +361,9 @@ describe("App — chrome keyboard activation", () => {
     expect(button.className).toContain("chrome-btn-active");
   });
 
-  it("Enter activates the media browser button and sends select_view", () => {
+  it("Enter activates the now-playing button and sends select_view", () => {
     render(<App />);
-    const button = screen.getByRole("button", { name: /media browser/i });
+    const button = screen.getByRole("button", { name: /now playing/i });
     fireEvent.keyDown(button, { key: "Enter" });
     expect(button.className).toContain("chrome-btn-active");
     expect(send).toHaveBeenCalledWith({ type: "select_view", view: "mpris" });
@@ -388,7 +388,7 @@ describe("App — chrome keyboard activation", () => {
     render(<App />);
     const manual = screen.getByRole("button", { name: "manual control" });
     const settings = screen.getByRole("button", { name: "settings" });
-    const media = screen.getByRole("button", { name: /media browser/i });
+    const media = screen.getByRole("button", { name: /now playing/i });
     const editor = screen.getByRole("button", { name: "layout editor" });
     expect(manual.getAttribute("aria-pressed")).toBe("false");
     expect(settings.getAttribute("aria-pressed")).toBe("false");
@@ -425,10 +425,10 @@ describe("App — keyboard shortcuts", () => {
     expect(screen.getByRole("button", { name: "manual control" }).className).not.toContain("chrome-btn-active");
   });
 
-  it("pressing 2 opens the media browser view and sends select_view", () => {
+  it("pressing 2 opens the now-playing view and sends select_view", () => {
     render(<App />);
     fireEvent.keyDown(window, { key: "2" });
-    expect(screen.getByRole("button", { name: /media browser/i }).className).toContain("chrome-btn-active");
+    expect(screen.getByRole("button", { name: /now playing/i }).className).toContain("chrome-btn-active");
     expect(send).toHaveBeenCalledWith({ type: "select_view", view: "mpris" });
   });
 
@@ -445,12 +445,12 @@ describe("App — keyboard shortcuts", () => {
     expect(send).toHaveBeenCalledWith({ type: "select_view", view: "editor" });
   });
 
-  it("Escape returns to the layout view and clears the media browser", () => {
+  it("Escape returns to the layout view and clears the now-playing view", () => {
     render(<App />);
     fireEvent.keyDown(window, { key: "2" });
-    expect(screen.getByRole("button", { name: /media browser/i }).className).toContain("chrome-btn-active");
+    expect(screen.getByRole("button", { name: /now playing/i }).className).toContain("chrome-btn-active");
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.getByRole("button", { name: /media browser/i }).className).not.toContain("chrome-btn-active");
+    expect(screen.getByRole("button", { name: /now playing/i }).className).not.toContain("chrome-btn-active");
     expect(send.mock.calls.map((c) => c[0])).toContainEqual({ type: "clear_view" });
   });
 
@@ -607,11 +607,11 @@ describe("App — screen-reader headings", () => {
     );
   });
 
-  it("heading changes to Media browser when the media view opens", () => {
+  it("heading changes to Now playing when the media view opens", () => {
     render(<App />);
     fireEvent.keyDown(window, { key: "2" });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
-      "Media browser",
+      "Now playing",
     );
   });
 

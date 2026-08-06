@@ -630,7 +630,7 @@ class Server:
         self._current_is_default: bool = True
         self.mpris = mpris_backend
         # Issue #52: when no mpris backend was injected, auto-build
-        # one iff a loaded layout uses ``mediabrowser``. Keeps the
+        # one iff a loaded layout uses ``nowplaying``. Keeps the
         # cost of opening the session bus off the path of users who
         # don't enable the feature. The explicit injection
         # (``mpris_backend=...``) is always honoured, so
@@ -1289,16 +1289,16 @@ class Server:
     def _media_widgets(self) -> list[Widget]:
         return [w for w in self._current_layout.widgets if w.kind == "media"]
 
-    def _has_mediabrowser(self) -> bool:
+    def _has_nowplaying(self) -> bool:
         # Gate on *any* loaded layout, not the focus-driven current one:
-        # the ``mediabrowser`` widget lives in the ``mpris`` chrome view,
+        # the ``nowplaying`` widget lives in the ``mpris`` chrome view,
         # which a client pins per-session and which is never the focused
         # app's layout. Checking ``_current_layout`` (e.g. the ``vlc``
         # layout while VLC is focused) would starve the pump so the
-        # browser stays empty even though a client has it open. Mirrors
-        # the ``connect_mpris_backend`` discovery gate.
+        # now-playing surface stays empty even though a client has it
+        # open. Mirrors the ``connect_mpris_backend`` discovery gate.
         return any(
-            w.kind == "mediabrowser"
+            w.kind == "nowplaying"
             for layout in self.layouts.layouts
             for w in layout.widgets
         )
@@ -1327,7 +1327,7 @@ class Server:
                             continue
                         if await self._broadcast_media_state(widget.id, state, widget.art_source or ["vlc"]):
                             last[widget.id] = state
-                if self.mpris is not None and self._has_mediabrowser():
+                if self.mpris is not None and self._has_nowplaying():
                     for row_id in self.mpris.row_ids():
                         state = await self.mpris.read_state(row_id)
                         if state is None or last.get(f"mpris.{row_id}") == state:
@@ -1508,7 +1508,7 @@ class Server:
         re-broadcasting). Replaying a snapshot on connect / ``select_view``
         closes that gap so a reload or a second client shows the players
         immediately instead of "no players detected"."""
-        if self.mpris is None or not self._has_mediabrowser():
+        if self.mpris is None or not self._has_nowplaying():
             return
         for row_id in self.mpris.row_ids():
             state = await self.mpris.read_state(row_id)

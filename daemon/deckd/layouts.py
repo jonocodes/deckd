@@ -13,14 +13,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 from .platform import AppInfo, WindowInfo
 
-# Literal alias for the ``mediabrowser`` widget's ``empty_state`` knob
+# Literal alias for the ``nowplaying`` widget's ``empty_state`` knob
 # (issue #50). Defined here so the daemon's ``Widget`` model — the one
 # YAML flows through — has a single source of truth;
-# :class:`deckd.mpris.MediaBrowser` imports the same name so the
+# :class:`deckd.mpris.NowPlaying` imports the same name so the
 # dedicated schema can't drift. ``ordering`` was removed in issue #58:
 # rows now reflect the session bus's ``ListNames`` order (matching GNOME
 # Shell) with no per-layout knob.
-MediaBrowserEmptyState = Literal["show", "hide"]
+NowPlayingEmptyState = Literal["show", "hide"]
 
 log = logging.getLogger("deckd.layouts")
 
@@ -133,13 +133,13 @@ class Widget(BaseModel):
     next_action: "Action | None" = None
     volume_up_action: "Action | None" = None
     volume_down_action: "Action | None" = None
-    # ``mediabrowser`` widgets (issue #50) take one knob documented on
-    # :class:`deckd.mpris.MediaBrowser`: whether the cell still renders
+    # ``nowplaying`` widgets (issue #50) take one knob documented on
+    # :class:`deckd.mpris.NowPlaying`: whether the cell still renders
     # an empty placeholder when no player is discovered (``empty_state``).
     # Row order follows the session bus's ``ListNames`` reply — no
     # per-layout knob (issue #58). Mirrors the existing media-only-field
-    # rule: only valid when ``kind == "mediabrowser"``.
-    empty_state: MediaBrowserEmptyState | None = None
+    # rule: only valid when ``kind == "nowplaying"``.
+    empty_state: NowPlayingEmptyState | None = None
     # Confirmation opt-in (issues #69 / #108). When ``True`` the daemon
     # withholds execution on press, mints a ``confirm_id``, sends a
     # ``confirm_request`` to the client, and only runs the action /
@@ -149,7 +149,7 @@ class Widget(BaseModel):
     # ``server.py::_dispatch_press`` for the seam. Valid only on a
     # widget with an ``action`` or a ``macro`` — rejected at load by
     # the ``_validate_confirm_invariant`` model validator below
-    # (blank / meter / stats / media / mediabrowser all reject
+    # (blank / meter / stats / media / nowplaying all reject
     # ``confirm: true``; ``confirm: false``/absent is harmless
     # everywhere and stays the default). Emit-always via plain
     # ``model_dump`` so the client can read ``widget.confirm`` to
@@ -215,7 +215,7 @@ class Widget(BaseModel):
             "volume_up_action": self.volume_up_action,
             "volume_down_action": self.volume_down_action,
         }
-        mediabrowser_fields = {
+        nowplaying_fields = {
             "empty_state": self.empty_state,
         }
         if self.kind == "blank":
@@ -233,7 +233,7 @@ class Widget(BaseModel):
                 "source": self.source,
                 "metrics": self.metrics,
                 **media_fields,
-                **mediabrowser_fields,
+                **nowplaying_fields,
             }
             invalid = sorted(name for name, value in forbidden.items() if value is not None)
             if invalid:
@@ -241,9 +241,9 @@ class Widget(BaseModel):
             return self
         if self.kind == "media" and self.controls is None:
             self.controls = ["play", "volume", "position"]
-        if self.kind == "mediabrowser":
-            # Apply the same default as ``MediaBrowser`` so a widget
-            # declared with just ``id`` / ``kind`` / ``grid`` still
+        if self.kind == "nowplaying":
+            # Apply the same default as ``NowPlaying`` so a widget
+            # declared with just ``id`` / ``kind`` / ``size`` still
             # round-trips through ``model_dump`` with the knob populated —
             # the client needs it to make the empty-placeholder decision,
             # and an absent key would land as ``None`` on the wire.
@@ -253,11 +253,11 @@ class Widget(BaseModel):
             invalid = sorted(name for name, value in media_fields.items() if value is not None)
             if invalid:
                 raise ValueError(f"media-only fields on non-media widget: {', '.join(invalid)}")
-        if self.kind != "mediabrowser":
-            invalid = sorted(name for name, value in mediabrowser_fields.items() if value is not None)
+        if self.kind != "nowplaying":
+            invalid = sorted(name for name, value in nowplaying_fields.items() if value is not None)
             if invalid:
                 raise ValueError(
-                    f"mediabrowser-only fields on non-mediabrowser widget: {', '.join(invalid)}"
+                    f"nowplaying-only fields on non-nowplaying widget: {', '.join(invalid)}"
                 )
         if self.kind == "meter":
             if not self.source:
@@ -279,10 +279,10 @@ class Widget(BaseModel):
             # ``confirm: true`` requires an executable action or macro to
             # gate. A bare label-only button, a non-interactive kind
             # (``blank`` / ``meter`` / ``stats``), or a composite media
-            # surface (``media`` / ``mediabrowser`` — issue #108's
+            # surface (``media`` / ``nowplaying`` — issue #108's
             # clarification) has nothing to confirm; rejecting at load
             # is clearer than silently ignoring the field.
-            forbidden_confirm_kinds = {"blank", "meter", "stats", "media", "mediabrowser"}
+            forbidden_confirm_kinds = {"blank", "meter", "stats", "media", "nowplaying"}
             if self.kind in forbidden_confirm_kinds:
                 raise ValueError(
                     f"confirm: true is not valid on kind={self.kind!r} widgets"

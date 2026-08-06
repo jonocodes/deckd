@@ -40,7 +40,7 @@ async def _boot_chrome_media_websocket(
 
     Mirrors :func:`test_mpris_websocket._boot_mpris_websocket` so the
     chrome-media and per-row tests share the same plumbing: a layout
-    with one ``mediabrowser`` widget (so the daemon wires a real
+    with one ``nowplaying`` widget (so the daemon wires a real
     :class:`DbusMprisBackend`), booted on a random port, with the
     server's pump started. Returns the ``TestServer``, the ``Server``,
     and the bus so tests can push signals and read recorded calls.
@@ -50,7 +50,7 @@ async def _boot_chrome_media_websocket(
 match: [default]
 widgets:
   - id: browser
-    kind: mediabrowser
+    kind: nowplaying
     size: [4, 2]
 """
     )
@@ -235,7 +235,7 @@ async def test_chrome_media_does_not_emit_on_metadata_update(
 
 async def test_chrome_media_emits_to_all_connected_sessions(tmp_path: Path) -> None:
     """The chrome icon is global chrome — every connected session
-    receives the frame, not only the one with the mediabrowser view
+    receives the frame, not only the one with the nowplaying view
     pinned (issue #47 acceptance criterion: push to all connected
     clients). Two simultaneous WS clients both see the registration
     transition."""
@@ -264,15 +264,15 @@ async def test_chrome_media_emits_to_all_connected_sessions(tmp_path: Path) -> N
         await test_server.close()
 
 
-async def test_chrome_media_emits_when_no_mediabrowser_widget_mounted(
+async def test_chrome_media_emits_when_no_nowplaying_widget_mounted(
     tmp_path: Path,
 ) -> None:
-    """The indicator is global chrome — a user with a ``mediabrowser``
+    """The indicator is global chrome — a user with a ``nowplaying``
     layout loaded (so the backend is alive) but currently focused on
-    some other app's layout (no ``mediabrowser`` widget in the
+    some other app's layout (no ``nowplaying`` widget in the
     *current* layout) must still see ``chrome_media`` frames
     (acceptance criterion 4: "the daemon emits a ``chrome_media``
-    frame regardless of whether any ``mediabrowser`` widget is
+    frame regardless of whether any ``nowplaying`` widget is
     mounted"). The real-world shape: a user who has the
     ``layouts/mpris.yaml`` shipped but spends most of their time in
     Firefox / a terminal / etc."""
@@ -296,7 +296,7 @@ widgets:
 match: [mpris]
 widgets:
   - id: browser
-    kind: mediabrowser
+    kind: nowplaying
     size: [4, 2]
 """
     )
@@ -330,7 +330,7 @@ widgets:
 
             # A fresh registration transition still pushes a frame
             # even though the focused-app layout has no
-            # ``mediabrowser`` widget — the indicator is global chrome.
+            # ``nowplaying`` widget — the indicator is global chrome.
             # The reducer's rule is "registered AND confirmed Playing":
             # spotify's cache hasn't been populated yet, so it
             # contributes 0 to the playing tally; the frame still

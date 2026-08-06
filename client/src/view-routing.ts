@@ -1,10 +1,10 @@
-export type View = "layout" | "trackpad" | "settings" | "mediabrowser" | "editor" | "windows";
+export type View = "layout" | "trackpad" | "settings" | "nowplaying" | "editor" | "windows";
 
 const PATH_BY_VIEW: Record<View, string> = {
   layout: "/",
   trackpad: "/trackpad",
   settings: "/settings",
-  mediabrowser: "/media-browser",
+  nowplaying: "/now-playing",
   editor: "/editor",
   windows: "/windows",
 };

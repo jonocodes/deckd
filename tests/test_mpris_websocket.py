@@ -30,7 +30,7 @@ async def test_mpris_rows_and_commands_cross_websocket_boundary(tmp_path: Path) 
 match: [default]
 widgets:
   - id: browser
-    kind: mediabrowser
+    kind: nowplaying
     size: [4, 2]
 """
     )
@@ -70,13 +70,13 @@ widgets:
 async def test_mpris_rows_flow_when_browser_is_a_non_current_view(
     tmp_path: Path,
 ) -> None:
-    """The pump must broadcast MPRIS rows even when the ``mediabrowser``
+    """The pump must broadcast MPRIS rows even when the ``nowplaying``
     widget lives only in a chrome-view layout that is *not* the focused
     app's current layout — the real-world shape, where a client pins the
     ``mpris`` view while some other app (e.g. VLC) is focused. Regression:
     gating on ``_current_layout`` starved the pump and left the browser
     empty against a live daemon even though players were discovered."""
-    # Current/default layout has no mediabrowser widget...
+    # Current/default layout has no nowplaying widget...
     (tmp_path / "default.yaml").write_text(
         """
 match: [default]
@@ -92,7 +92,7 @@ widgets:
 match: [mpris]
 widgets:
   - id: browser
-    kind: mediabrowser
+    kind: nowplaying
     size: [4, 2]
 """
     )
@@ -126,7 +126,7 @@ async def test_late_session_receives_current_players_via_snapshot(
 match: [default]
 widgets:
   - id: browser
-    kind: mediabrowser
+    kind: nowplaying
     size: [4, 2]
 """
     )
@@ -169,7 +169,7 @@ async def _boot_mpris_websocket(
     ``TestServer`` (so the caller can connect), the ``Server`` (so it
     can drive the pump), and the ``bus`` (so the test can read
     recorded calls after the fact). The layout declares a single
-    ``mediabrowser`` widget so the server wires a real
+    ``nowplaying`` widget so the server wires a real
     :class:`DbusMprisBackend`.
     """
     (tmp_path / "default.yaml").write_text(
@@ -177,7 +177,7 @@ async def _boot_mpris_websocket(
 match: [default]
 widgets:
   - id: browser
-    kind: mediabrowser
+    kind: nowplaying
     size: [4, 2]
 """
     )

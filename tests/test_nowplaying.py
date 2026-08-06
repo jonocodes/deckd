@@ -1,10 +1,10 @@
-"""Schema and integration tests for the mediabrowser widget (issue #50).
+"""Schema and integration tests for the nowplaying widget (issue #50).
 
 Three concerns, one ticket:
 
-1. The ``MediaBrowser`` Pydantic model (schema for the new widget kind).
+1. The ``NowPlaying`` Pydantic model (schema for the new widget kind).
 2. The matching ``mpris.yaml`` shipping layout + ``Layout`` / ``Widget``
-   models accepting a ``mediabrowser``-kind widget with the
+   models accepting a ``nowplaying``-kind widget with the
    ``empty_state`` knob (issue #58 removed the ``ordering`` knob).
 3. The server's view-resolution hook: ``select_view`` / ``clear_view``
    client -> daemon messages resolve the synthetic ``mpris`` view to
@@ -31,7 +31,7 @@ from pydantic import ValidationError
 
 from conftest import FakeFocusBackend, make_test_server
 from deckd.layouts import Layout, Widget, load_layouts
-from deckd.mpris import MediaBrowser
+from deckd.mpris import NowPlaying
 from deckd.platform import AppInfo
 
 
@@ -40,20 +40,20 @@ from deckd.platform import AppInfo
 # ---------------------------------------------------------------------------
 
 
-def test_media_browser_defaults() -> None:
+def test_nowplaying_defaults() -> None:
     """The model's only required field is ``id``; ``size`` is an optional
     reflow extent (ADR-0010) and ``empty_state`` defaults to ``show``
     (issue #58 removed the ``ordering`` knob)."""
-    widget = MediaBrowser.model_validate({"id": "browser", "size": [4, 2]})
+    widget = NowPlaying.model_validate({"id": "browser", "size": [4, 2]})
 
     assert widget.id == "browser"
     assert widget.size == [4, 2]
     assert widget.empty_state == "show"
 
 
-def test_media_browser_accepts_explicit_knobs() -> None:
+def test_nowplaying_accepts_explicit_knobs() -> None:
     """The ``empty_state`` knob accepts both documented values."""
-    hidden = MediaBrowser.model_validate(
+    hidden = NowPlaying.model_validate(
         {"id": "browser", "size": [4, 2], "empty_state": "hide"}
     )
     assert hidden.empty_state == "hide"
@@ -66,38 +66,38 @@ def test_media_browser_accepts_explicit_knobs() -> None:
         ("empty_state", ""),
     ],
 )
-def test_media_browser_rejects_unknown_knobs(field: str, value: str) -> None:
+def test_nowplaying_rejects_unknown_knobs(field: str, value: str) -> None:
     """Invalid knob values are a schema violation, surfaced as ``ValidationError``."""
     with pytest.raises(ValidationError):
-        MediaBrowser.model_validate({"id": "browser", "size": [4, 2], field: value})
+        NowPlaying.model_validate({"id": "browser", "size": [4, 2], field: value})
 
 
-def test_media_browser_defaults_size_to_none() -> None:
-    """``size`` is optional (ADR-0010): a mediabrowser is typically a
+def test_nowplaying_defaults_size_to_none() -> None:
+    """``size`` is optional (ADR-0010): a nowplaying is typically a
     full-surface view rendered outside the flow, so it needs no span."""
-    widget = MediaBrowser.model_validate({"id": "browser"})
+    widget = NowPlaying.model_validate({"id": "browser"})
     assert widget.size is None
 
 
-def test_media_browser_rejects_extra_fields() -> None:
+def test_nowplaying_rejects_extra_fields() -> None:
     """Unknown fields are rejected so a typo in ``mpris.yaml`` is loud
     (issue #58: the removed ``ordering`` knob is the most likely typo)."""
     with pytest.raises(ValidationError):
-        MediaBrowser.model_validate(
+        NowPlaying.model_validate(
             {"id": "browser", "size": [4, 2], "ordring": "stable"}
         )
 
 
-@pytest.mark.parametrize("model", [MediaBrowser, Widget])
+@pytest.mark.parametrize("model", [NowPlaying, Widget])
 def test_rejects_removed_ordering_knob(model) -> None:
     """Issue #58 removed the ``ordering`` knob: a layout that still
     declares it must fail loud rather than silently ignore the intent.
-    Both the dedicated ``MediaBrowser`` model and the generic
+    Both the dedicated ``NowPlaying`` model and the generic
     ``Widget`` model (the one YAML flows through) reject it via
     ``extra='forbid'``."""
     payload = {
         "id": "browser",
-        "kind": "mediabrowser",
+        "kind": "nowplaying",
         "size": [4, 2],
         "ordering": "playing_first",
     }
@@ -105,36 +105,36 @@ def test_rejects_removed_ordering_knob(model) -> None:
         model.model_validate(payload)
 
 
-def test_widget_accepts_mediabrowser_kind_with_optional_knobs() -> None:
+def test_widget_accepts_nowplaying_kind_with_optional_knobs() -> None:
     """The daemon's ``Widget`` model (the one YAML flows through) accepts a
-    ``mediabrowser`` kind and round-trips the optional ``empty_state``
+    ``nowplaying`` kind and round-trips the optional ``empty_state``
     field the client needs to know about (issue #58 removed the
     ``ordering`` knob)."""
     widget = Widget.model_validate(
         {
             "id": "browser",
-            "kind": "mediabrowser",
+            "kind": "nowplaying",
             "size": [4, 2],
             "empty_state": "hide",
         }
     )
-    assert widget.kind == "mediabrowser"
+    assert widget.kind == "nowplaying"
     assert widget.empty_state == "hide"
     dumped = widget.model_dump()
     assert dumped["empty_state"] == "hide"
 
 
-def test_widget_defaults_mediabrowser_knobs() -> None:
+def test_widget_defaults_nowplaying_knobs() -> None:
     widget = Widget.model_validate(
-        {"id": "browser", "kind": "mediabrowser", "size": [4, 2]}
+        {"id": "browser", "kind": "nowplaying", "size": [4, 2]}
     )
     assert widget.empty_state == "show"
 
 
-def test_widget_rejects_mediabrowser_knobs_on_other_kinds() -> None:
+def test_widget_rejects_nowplaying_knobs_on_other_kinds() -> None:
     """Mirrors the existing media-only-fields rule: ``empty_state``
-    is only valid on ``kind: mediabrowser``."""
-    with pytest.raises(ValueError, match="mediabrowser-only"):
+    is only valid on ``kind: nowplaying``."""
+    with pytest.raises(ValueError, match="nowplaying-only"):
         Widget.model_validate(
             {
                 "id": "back",
@@ -144,7 +144,7 @@ def test_widget_rejects_mediabrowser_knobs_on_other_kinds() -> None:
         )
 
 
-def test_widget_mediabrowser_round_trips_through_json_wire_shape() -> None:
+def test_widget_nowplaying_round_trips_through_json_wire_shape() -> None:
     """The TS ``Widget`` type declares ``empty_state`` as an optional
     ``null``-able field. This is the wire-shape contract: a ``Widget``
     serialised on the Python side must parse back into the same shape
@@ -152,19 +152,19 @@ def test_widget_mediabrowser_round_trips_through_json_wire_shape() -> None:
     receiving the key even when the YAML omits it — issue #58 dropped
     ``ordering``)."""
     widget = Widget.model_validate(
-        {"id": "browser", "kind": "mediabrowser", "size": [4, 2]}
+        {"id": "browser", "kind": "nowplaying", "size": [4, 2]}
     )
     # The on-the-wire shape is ``model_dump_json()`` parsed by the TS
     # client — every key the TS union declares must be present so a
     # client with a stale types file can still destructure it.
     dumped = json.loads(widget.model_dump_json())
-    assert dumped["kind"] == "mediabrowser"
+    assert dumped["kind"] == "nowplaying"
     assert dumped["empty_state"] == "show"
     # And a wire shape with the knob explicit survives the round-trip.
     explicit = Widget.model_validate(
         {
             "id": "browser",
-            "kind": "mediabrowser",
+            "kind": "nowplaying",
             "size": [4, 2],
             "empty_state": "hide",
         }
@@ -181,8 +181,8 @@ def test_widget_mediabrowser_round_trips_through_json_wire_shape() -> None:
 REPO_LAYOUTS_DIR = Path(__file__).parent.parent / "layouts"
 
 
-def test_shipping_mpris_layout_loads_and_has_mediabrowser_widget() -> None:
-    """The new ``mpris.yaml`` shipping layout declares one ``mediabrowser``
+def test_shipping_mpris_layout_loads_and_has_nowplaying_widget() -> None:
+    """The new ``mpris.yaml`` shipping layout declares one ``nowplaying``
     widget and loads through the regular layout loader."""
     store = load_layouts(REPO_LAYOUTS_DIR)
     # Match-by-token id is "mpris"; the layout id is the first match token.
@@ -190,7 +190,7 @@ def test_shipping_mpris_layout_loads_and_has_mediabrowser_widget() -> None:
     layout = store["mpris"]
     assert len(layout.widgets) == 1
     widget = layout.widgets[0]
-    assert widget.kind == "mediabrowser"
+    assert widget.kind == "nowplaying"
     assert widget.id  # non-empty
     # Default survives the round-trip even when the YAML omits it.
     # (Issue #58 removed the ``ordering`` knob — no longer asserted.)
@@ -216,7 +216,7 @@ match: [mpris]
 display_name: MPRIS
 widgets:
   - id: browser
-    kind: mediabrowser
+    kind: nowplaying
     size: [4, 2]
 """
 
@@ -279,7 +279,7 @@ async def test_select_view_pushes_mpris_layout_with_view_set(tmp_path: Path) -> 
     assert initial["app"] == "default"
     assert switched["view"] == "mpris"
     assert switched["app"] == "mpris"
-    assert [w["kind"] for w in switched["widgets"]] == ["mediabrowser"]
+    assert [w["kind"] for w in switched["widgets"]] == ["nowplaying"]
 
 
 async def test_clear_view_reverts_to_focused_app_layout(tmp_path: Path) -> None:

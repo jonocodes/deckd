@@ -19,7 +19,7 @@ const SHOTS: Shot[] = [
   { demo: "meter", label: "meter", orientation: "landscape" },
   { demo: "showcase", label: "showcase", orientation: "landscape" },
   { demo: "vlc", label: "vlc" },
-  { demo: "mpris", label: "media-browser", orientation: "landscape" },
+  { demo: "mpris", label: "now-playing", orientation: "landscape" },
 ];
 
 const PHONE_W = 390;

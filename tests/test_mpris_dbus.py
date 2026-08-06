@@ -19,7 +19,7 @@ Coverage mirrors the issue's acceptance criteria:
   * ``NameOwnerChanged`` adds/removes rows (rename = remove then add)
   * ``PropertiesChanged`` updates a row's state live
   * the connect-only-if-needed factory yields ``None`` when no layout
-    uses ``mediabrowser``
+    uses ``nowplaying``
   * the idle-while-no-layout gate is exercised at the pump layer
 """
 from __future__ import annotations
@@ -978,9 +978,9 @@ async def test_start_installs_match_rules() -> None:
 
 
 @pytest.mark.asyncio
-async def test_connect_mpris_backend_returns_none_when_no_layout_has_mediabrowser() -> None:
+async def test_connect_mpris_backend_returns_none_when_no_layout_has_nowplaying() -> None:
     """The factory only opens the bus when at least one loaded layout
-    declares a ``mediabrowser`` widget (issue #52 acceptance criterion 1)."""
+    declares a ``nowplaying`` widget (issue #52 acceptance criterion 1)."""
 
     captured: dict[str, Any] = {}
 
@@ -1002,7 +1002,7 @@ async def test_connect_mpris_backend_returns_none_when_no_layout_has_mediabrowse
 
 
 @pytest.mark.asyncio
-async def test_connect_mpris_backend_returns_backend_when_a_layout_has_mediabrowser() -> None:
+async def test_connect_mpris_backend_returns_backend_when_a_layout_has_nowplaying() -> None:
     def factory(_bt: Any) -> FakeDbusBus:
         return FakeDbusBus()
 
@@ -1010,7 +1010,7 @@ async def test_connect_mpris_backend_returns_backend_when_a_layout_has_mediabrow
         [
             (
                 "mpris",
-                [{"id": "browser", "kind": "mediabrowser", "size": [4, 2]}],
+                [{"id": "browser", "kind": "nowplaying", "size": [4, 2]}],
             ),
         ]
     )

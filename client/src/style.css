@@ -359,7 +359,7 @@ button:focus-visible {
   border: 0;
 }
 
-/* Screen-reader-only state label for the media browser button
+/* Screen-reader-only state label for the now playing button
    (issue #62, AC #3). The pulsing green dot is a colour-only
    carrier — a colour-blind user sees a dot they can't tell apart
    from a "ready" state, and a screen reader user gets no signal
@@ -638,10 +638,10 @@ button:focus-visible {
   color: #6b7785;
 }
 
-/* Chrome media-browser view (issue #51, #53). Holds the
-   ``MediaBrowserCell``; stays the same shell whether the cell is
-   showing rows or its single "No media players detected" row. */
-.mediabrowser {
+/* Chrome now-playing view (issue #51, #53). Holds the
+   ``NowPlayingCell``; stays the same shell whether the cell is
+   showing rows or its single "Nothing playing" row. */
+.nowplaying {
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -649,7 +649,7 @@ button:focus-visible {
   min-height: 0;
 }
 
-.mediabrowser-empty {
+.nowplaying-empty {
   padding: 14px 18px;
   border-radius: 10px;
   background: #1b222a;
@@ -1364,7 +1364,7 @@ button:focus-visible {
  * is always reactive. Capability gating is at render time, not schema time.
  * ------------------------------------------------------------------------- */
 
-.mediabrowser-list {
+.nowplaying-list {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -1378,7 +1378,7 @@ button:focus-visible {
   -webkit-overflow-scrolling: touch;
 }
 
-.mediabrowser-row {
+.nowplaying-row {
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
@@ -1393,7 +1393,7 @@ button:focus-visible {
   touch-action: manipulation;
 }
 
-.mediabrowser-row-empty {
+.nowplaying-row-empty {
   grid-template-columns: 1fr;
   justify-items: center;
   color: #8a96a3;
@@ -1404,7 +1404,7 @@ button:focus-visible {
 
 /* GNOME-style per-player header: the MPRIS ``Identity`` (e.g. "Firefox")
    spanning the full row above the art/title/transport line. */
-.mediabrowser-app {
+.nowplaying-app {
   grid-column: 1 / -1;
   font-size: clamp(11px, 1.4vw, 13px);
   font-weight: 600;
@@ -1414,7 +1414,7 @@ button:focus-visible {
   white-space: nowrap;
 }
 
-.mediabrowser-art {
+.nowplaying-art {
   width: 40px;
   height: 40px;
   border-radius: 8px;
@@ -1426,7 +1426,7 @@ button:focus-visible {
   flex: 0 0 auto;
 }
 
-.mediabrowser-art-icon {
+.nowplaying-art-icon {
   width: 60%;
   height: 60%;
   color: #8a96a3;
@@ -1436,21 +1436,21 @@ button:focus-visible {
  * ``art_token`` (issue #57). Fills the same 40x40 slot as the icon
  * fallbacks so the row layout stays stable as the source switches
  * between the brand icon, the disc glyph, and the actual cover. */
-.mediabrowser-art-img {
+.nowplaying-art-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
 }
 
-.mediabrowser-text {
+.nowplaying-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
   min-width: 0;
 }
 
-.mediabrowser-title {
+.nowplaying-title {
   font-weight: 700;
   font-size: clamp(13px, 1.8vw, 16px);
   color: #e6e9ef;
@@ -1459,7 +1459,7 @@ button:focus-visible {
   white-space: nowrap;
 }
 
-.mediabrowser-subtitle {
+.nowplaying-subtitle {
   font-size: clamp(11px, 1.4vw, 13px);
   color: #8a96a3;
   overflow: hidden;
@@ -1467,7 +1467,7 @@ button:focus-visible {
   white-space: nowrap;
 }
 
-.mediabrowser-transport {
+.nowplaying-transport {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -1475,7 +1475,7 @@ button:focus-visible {
   flex: 0 0 auto;
 }
 
-.mediabrowser-skip {
+.nowplaying-skip {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1487,24 +1487,24 @@ button:focus-visible {
   border-radius: 8px;
 }
 
-.mediabrowser-skip svg {
+.nowplaying-skip svg {
   width: 22px;
   height: 22px;
   fill: currentColor;
   stroke-width: 0;
 }
 
-.mediabrowser-skip:active:not(:disabled) {
+.nowplaying-skip:active:not(:disabled) {
   background: #2a333d;
   color: #7dd3fc;
 }
 
-.mediabrowser-skip:disabled {
+.nowplaying-skip:disabled {
   opacity: 0.35;
   cursor: not-allowed;
 }
 
-.mediabrowser-play {
+.nowplaying-play {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1516,21 +1516,21 @@ button:focus-visible {
   color: #0e1720;
 }
 
-.mediabrowser-play svg {
+.nowplaying-play svg {
   width: 60%;
   height: 60%;
   fill: currentColor;
   stroke-width: 0;
 }
 
-.mediabrowser-play:active {
+.nowplaying-play:active {
   transform: scale(0.94);
 }
 
 /* ---------------------------------------------------------------------------
  * Running-windows chrome list (issues #116 / #120 / #126).
  *
- * Mirrors the mediabrowser surface shape: a scrollable column of rows that
+ * Mirrors the now-playing surface shape: a scrollable column of rows that
  * fills the chrome-excluded surface, a single dashed-border empty card when
  * the daemon hasn't pushed a snapshot yet or has nothing to enumerate. The
  * icon column is the same 28px slot a ButtonGrid cell uses; the row body is
@@ -1753,8 +1753,8 @@ button:focus-visible {
      brightness shift still reads as feedback. */
   .chrome-btn:active,
   .cell-button:active,
-  .mediabrowser-skip:active:not(:disabled),
-  .mediabrowser-play:active,
+  .nowplaying-skip:active:not(:disabled),
+  .nowplaying-play:active,
   .media-play:active,
   .media-skip:active { transform: none; }
   /* Tooltip fade-in already disabled above; keyframes parity kept
@@ -1791,7 +1791,7 @@ button:focus-visible {
   .cell-meter,
   .cell-stats,
   .cell-media,
-  .mediabrowser-row,
+  .nowplaying-row,
   .app-badge {
     border-width: 2px;
     border-color: #6b7785;
@@ -1886,7 +1886,7 @@ button:focus-visible {
 .a11y-high-contrast .cell-meter,
 .a11y-high-contrast .cell-stats,
 .a11y-high-contrast .cell-media,
-.a11y-high-contrast .mediabrowser-row,
+.a11y-high-contrast .nowplaying-row,
 .a11y-high-contrast .app-badge {
   border-width: 2px;
   border-color: #6b7785;
@@ -1926,8 +1926,8 @@ button:focus-visible {
 .a11y-reduce-motion .chrome-btn-playing::after { animation: none; }
 .a11y-reduce-motion .chrome-btn:active,
 .a11y-reduce-motion .cell-button:active,
-.a11y-reduce-motion .mediabrowser-skip:active:not(:disabled),
-.a11y-reduce-motion .mediabrowser-play:active,
+.a11y-reduce-motion .nowplaying-skip:active:not(:disabled),
+.a11y-reduce-motion .nowplaying-play:active,
 .a11y-reduce-motion .media-play:active,
 .a11y-reduce-motion .media-skip:active { transform: none; }
 .a11y-reduce-motion .tooltip-floating { animation: none; }

@@ -11,7 +11,8 @@
  * Three observable shapes:
  *  1. ``windows`` is undefined — the daemon hasn't pushed a snapshot
  *     yet. The list renders an "unsupported on this platform" empty
- *     state (mirrors the media browser's "no players" placeholder,
+ *     state (mirrors the now-playing surface's "Nothing playing"
+ *     placeholder,
  *     issue #120 decision 8).
  *  2. ``windows`` is an empty list — a desktop with no open windows
  *     or the very first frame the watcher emits. The list renders an

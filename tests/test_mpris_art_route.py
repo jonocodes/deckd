@@ -46,10 +46,10 @@ class _MprisArtFixture:
     resolver: dict[str, tuple[str, bytes]]
 
 
-def _mediabrowser_layout() -> Layout:
+def _nowplaying_layout() -> Layout:
     return Layout(
         id="mpris",
-        widgets=[Widget(id="browser", kind="mediabrowser", size=[4, 2])],
+        widgets=[Widget(id="browser", kind="nowplaying", size=[4, 2])],
     )
 
 
@@ -96,7 +96,7 @@ async def mpris_art_client() -> AsyncIterator[_MprisArtFixture]:
         mpris_backend=backend,
         mpris_art_resolver=_resolver,
     )
-    server._current_layout = _mediabrowser_layout()
+    server._current_layout = _nowplaying_layout()
     client = TestClient(TestServer(server.app))
     await client.start_server()
     try:

@@ -100,7 +100,7 @@ export function PropertiesPanel({
     );
   }
 
-  const isUnsupported = widget.kind === "media" || widget.kind === "mediabrowser";
+  const isUnsupported = widget.kind === "media" || widget.kind === "nowplaying";
 
   if (isUnsupported) {
     return (

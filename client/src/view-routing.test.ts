@@ -6,7 +6,7 @@ describe("view routing", () => {
     ["/", "layout"],
     ["/trackpad", "trackpad"],
     ["/settings", "settings"],
-    ["/media-browser", "mediabrowser"],
+    ["/now-playing", "nowplaying"],
     ["/editor", "editor"],
     ["/windows", "windows"],
   ] as const)("maps %s to %s", (path, view) => {

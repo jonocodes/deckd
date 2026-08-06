@@ -10,7 +10,7 @@
  *   6. The editor layout entry is styled as a "chrome view".
  *   7. Canvas renders widget cells with drag handles and kind labels.
  *   8. Overflow toggle and viewport-preview toolbar buttons render.
- *   9. Unsupported widgets (media, mediabrowser) get placeholder badges.
+ *   9. Unsupported widgets (media, nowplaying) get placeholder badges.
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1483,7 +1483,7 @@ describe("Editor — widget palette (issue #103)", () => {
     expect(screen.getByRole("button", { name: "add stats" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "add blank" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "add media" })).toBeFalsy();
-    expect(screen.queryByRole("button", { name: "add media browser" })).toBeFalsy();
+    expect(screen.queryByRole("button", { name: "add nowplaying" })).toBeFalsy();
   });
 
   it("clicking a palette item appends a minted widget and selects it", async () => {
