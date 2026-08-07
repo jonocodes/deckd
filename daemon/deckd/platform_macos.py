@@ -232,6 +232,22 @@ class MacFocusBackend(PlatformBackend):
         return quartz
 
 
+def _ax_trusted() -> bool | None:
+    """Is this process tree trusted for Accessibility?
+
+    ``None`` when the API isn't importable (non-macOS, or PyObjC not
+    installed) — "unknown", not "untrusted".
+    """
+    try:
+        import ApplicationServices
+    except ImportError:
+        return None
+    # PyObjC's stubs don't declare the AX namespace, but the symbol is
+    # there at runtime (same story as the kAX* constants used by
+    # raise_window).
+    return bool(ApplicationServices.AXIsProcessTrusted())  # pyright: ignore[reportAttributeAccessIssue]
+
+
 def _load_raise_apis() -> tuple[ModuleType, ModuleType]:
     """Load AppKit and Accessibility lazily so Linux can import this module."""
     import AppKit  # type: ignore[import-not-found]
@@ -390,6 +406,7 @@ class MacKeySink(KeySink):
         # mid-drag. The server drives this via pad_drag start/end.
         self._dragging_left = False
         self._check_accessibility()
+        self._check_ax_trust()
 
     # -- key -----------------------------------------------------------------
 
@@ -423,6 +440,29 @@ class MacKeySink(KeySink):
             log.warning("[mac key] osascript not found; key injection unavailable")
         except subprocess.TimeoutExpired:
             log.warning("[mac key] osascript keystroke probe timed out")
+
+    @staticmethod
+    def _check_ax_trust() -> None:
+        """Warn when Accessibility is missing — the *silent* failure.
+
+        The osascript probe above covers the System Events grant, which is
+        separate: keystrokes and focus can work perfectly while every
+        Quartz event is dropped without an error and ``raise_window``
+        fails at ``AXRaise``. Both grants follow the responsible process
+        (the terminal / launchd agent), so this is worth saying at
+        startup rather than leaving the user to wonder why the trackpad
+        does nothing.
+        """
+        if _ax_trusted() is not False:
+            return
+        log.warning(
+            "[mac key] Accessibility is not granted to %s — Quartz pointer / "
+            "click / drag / scroll events will be silently dropped and "
+            "raise_window will fail (kAXErrorAPIDisabled).\n"
+            "  Grant it in System Settings > Privacy & Security > "
+            "Accessibility, then restart that app.",
+            _terminal_name(),
+        )
 
     def emit_key(self, keycodes: list[int]) -> None:
         script = _build_keystroke_script(keycodes)

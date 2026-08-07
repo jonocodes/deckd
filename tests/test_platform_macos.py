@@ -9,6 +9,8 @@ Runs on any platform -- the function doesn't import Quartz / osascript.
 """
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from deckd.input import parse_key_combo
@@ -231,6 +233,40 @@ def test_is_standard_cg_window_accepts_normal_window() -> None:
 )
 def test_is_standard_cg_window_rejects_noise(payload, reason) -> None:
     assert not _is_standard_cg_window(payload)
+
+
+# ---------------------------------------------------------------------------
+# Accessibility-trust warning
+# ---------------------------------------------------------------------------
+
+
+def test_ax_trust_warning_names_the_silent_failure(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An untrusted process tree drops every Quartz event without an
+    error, so the startup warning is the only signal the user gets."""
+    import deckd.platform_macos as mac
+
+    monkeypatch.setattr(mac, "_ax_trusted", lambda: False)
+    with caplog.at_level(logging.WARNING, logger="deckd.platform_macos"):
+        mac.MacKeySink._check_ax_trust()
+
+    assert any("Accessibility is not granted" in r.message for r in caplog.records)
+
+
+@pytest.mark.parametrize("trusted", [True, None])
+def test_ax_trust_warning_silent_when_trusted_or_unknown(
+    trusted, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """``None`` means "can't tell" (no PyObjC / not macOS) — warning only
+    on a definite False, so a Linux checkout stays quiet."""
+    import deckd.platform_macos as mac
+
+    monkeypatch.setattr(mac, "_ax_trusted", lambda: trusted)
+    with caplog.at_level(logging.WARNING, logger="deckd.platform_macos"):
+        mac.MacKeySink._check_ax_trust()
+
+    assert not caplog.records
 
 
 def test_cg_window_options_helper_combines_flags() -> None:
