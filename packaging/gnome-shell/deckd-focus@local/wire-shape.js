@@ -1,5 +1,26 @@
-// Pure JSON builders kept separate from GNOME Shell so the wire contract can
-// be tested without a compositor.
+// Pure JSON builders and compositor-accessor resolution kept separate from
+// GNOME Shell so the wire contract can be tested without a compositor.
+
+// Resolve the open-window actor list from the Shell ``global``.
+// ``get_window_actors()`` lives on the Shell ``global`` (``Shell.Global``),
+// NOT on ``global.display`` (``Meta.Display`` has no such method). Prefer it;
+// fall back to the display accessor only if a future Shell moves it.
+//
+// If neither accessor exists we return ``[]`` — the daemon polls at the focus
+// cadence (~100ms) and a thrown method every tick is worse than a degraded
+// list — but we call ``onMissing`` so the caller can log it (#128). A silent
+// ``[]`` is exactly what hid the stage-2 receiver bug (#126): "no windows
+// open" and "the enumeration API moved" looked identical to the user.
+export function resolveWindowActors(globalObj, onMissing) {
+  if (typeof globalObj.get_window_actors === "function") {
+    return globalObj.get_window_actors();
+  }
+  if (globalObj.display && typeof globalObj.display.get_window_actors === "function") {
+    return globalObj.display.get_window_actors();
+  }
+  onMissing();
+  return [];
+}
 
 export function activeWindowPayload(window, callOrNull) {
   if (!window) {

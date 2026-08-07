@@ -3,7 +3,7 @@ import GLib from "gi://GLib";
 import Meta from "gi://Meta";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import {Extension} from "resource:///org/gnome/shell/extensions/extension.js";
-import {activeWindowPayload, windowPayload} from "./wire-shape.js";
+import {activeWindowPayload, resolveWindowActors, windowPayload} from "./wire-shape.js";
 
 const BUS_NAME = "org.deckd.Focus";
 const OBJECT_PATH = "/org/deckd/Focus";
@@ -42,6 +42,10 @@ export default class DeckdFocusExtension extends Extension {
     // Per-window ``unmanaging`` handler ids so we can disconnect on
     // disable() and when a window retires — no leaked signal handlers.
     this._unmanagingIds = new Map();
+    // Latches true after the first ListWindows() call that finds no
+    // enumeration API, so the warning lands once per enable() rather than
+    // every focus-cadence poll (#128).
+    this._enumerationApiWarned = false;
     // Export the object FIRST (on the connection's unique name), then acquire the
     // well-known name with the 6-arg standalone helper. The method-style
     // Gio.DBus.session.own_name(...) used here previously was removed on GNOME 50
@@ -114,16 +118,16 @@ export default class DeckdFocusExtension extends Extension {
 // #122); closing the window drops it from the snapshot on the next
 // enumeration tick.
 ListWindows() {
-    // ``get_window_actors()`` lives on the Shell ``global`` (Shell.Global),
-    // NOT on ``global.display`` (Meta.Display has no such method). Prefer
-    // it; fall back to the display accessor only if a future Shell moves
-    // it, and to ``[]`` if neither exists — so a missing API surfaces as
-    // the chrome's empty state rather than a thrown method call.
-    const actors = typeof global.get_window_actors === "function"
-      ? global.get_window_actors()
-      : (typeof global.display.get_window_actors === "function"
-          ? global.display.get_window_actors()
-          : []);
+    // Actor-source selection + loud-fail on a missing enumeration API lives
+    // in ``resolveWindowActors`` (wire-shape.js, tested without a compositor).
+    // The latch keeps the warning to once per ``enable()`` rather than every
+    // focus-cadence poll (#128).
+    const actors = resolveWindowActors(global, () => {
+      if (!this._enumerationApiWarned) {
+        log("[deckd-focus] ListWindows: no get_window_actors() on global or global.display — enumeration API missing, returning empty list (see #128)");
+        this._enumerationApiWarned = true;
+      }
+    });
     const focused = global.display.focus_window;
     const entries = [];
     for (const actor of actors) {

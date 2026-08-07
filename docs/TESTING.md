@@ -48,6 +48,12 @@ on **every** real GNOME session from stage 2 (#126) onward. Every test was green
 because every test mocked gdbus daemon-side. It surfaced only when a human ran it
 on a live GNOME 50 session while verifying #127. Fixed in commit `e166242`.
 
+The `[]` fallback survives for the case where *neither* `get_window_actors`
+accessor exists (a future Shell moving the API) — the daemon polls at ~100ms and
+a thrown method every tick is worse than a degraded list — but that branch now
+logs once per `enable()` (#128), so "no windows open" and "the enumeration API
+moved" no longer look identical in the journal.
+
 The tiers below are the tests that would have caught it.
 
 ## The missing tier: desktop integration

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import {activeWindowPayload, windowPayload} from "../packaging/gnome-shell/deckd-focus@local/wire-shape.js";
+import {activeWindowPayload, resolveWindowActors, windowPayload} from "../packaging/gnome-shell/deckd-focus@local/wire-shape.js";
 
 const fixture = JSON.parse(fs.readFileSync(new URL("../tests/fixtures/focus-wire.json", import.meta.url)));
 const schema = JSON.parse(fs.readFileSync(new URL("../tests/fixtures/focus-wire.schema.json", import.meta.url)));
@@ -39,3 +39,42 @@ assert.deepEqual(active, fixture.active_window);
 assert.deepEqual(entry, fixture.window);
 assertSchemaShape(active, schema.$defs.active_window);
 assertSchemaShape(entry, schema.$defs.window);
+
+// resolveWindowActors: enumeration-source selection + loud-fail on a missing
+// API (#128). The daemon polls ListWindows() at the focus cadence, so a
+// missing accessor must degrade to [] rather than throw — but not silently.
+const actorsA = [{tag: "a"}];
+const actorsB = [{tag: "b"}];
+
+// Preferred path: Shell ``global.get_window_actors()``.
+let missedGlobal = null;
+const globalWithShellAccessor = {
+  get_window_actors: () => actorsA,
+  display: {get_window_actors: () => actorsB},
+};
+assert.deepEqual(
+  resolveWindowActors(globalWithShellAccessor, () => {missedGlobal = "warned";}),
+  actorsA,
+  "prefers global.get_window_actors()",
+);
+assert.equal(missedGlobal, null, "no warning when the preferred accessor exists");
+
+// Fallback path: only ``global.display.get_window_actors()`` exists.
+let missedFallback = null;
+const globalWithDisplayAccessor = {display: {get_window_actors: () => actorsB}};
+assert.deepEqual(
+  resolveWindowActors(globalWithDisplayAccessor, () => {missedFallback = "warned";}),
+  actorsB,
+  "falls back to global.display.get_window_actors()",
+);
+assert.equal(missedFallback, null, "no warning when the fallback accessor exists");
+
+// Neither accessor exists: return [] AND invoke the onMissing callback.
+let missedCount = 0;
+const globalWithNoAccessor = {display: {}};
+assert.deepEqual(
+  resolveWindowActors(globalWithNoAccessor, () => {missedCount += 1;}),
+  [],
+  "returns [] when no enumeration API is present",
+);
+assert.equal(missedCount, 1, "warns exactly once per call when the API is missing");
