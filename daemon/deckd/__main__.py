@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import signal
 import sys
 from pathlib import Path
@@ -209,6 +210,31 @@ def main() -> None:
 
         return MessageBus(bus_type=bus_type)
 
+    # Test-only seam (analogous to the ``PYTHONPATH=scripts/no-evdev``
+    # input shim): when ``DECKD_FAKE_MPRIS`` names a JSON file, skip the
+    # real session-bus backend and inject a pre-seeded
+    # ``FakeMprisBackend``. This lets the Playwright e2e boot a real
+    # daemon that reports a "player is playing" now-playing surface
+    # without a session bus or a real MPRIS player on the runner. The
+    # JSON is ``{row_id: {field: value}}`` (see ``build_fake_mpris``).
+    # Never set in production; when absent the real backend path (the
+    # ``connect_mpris_backend`` auto-discovery in ``Server``) is used.
+    fake_mpris_backend = None
+    fake_mpris_path = os.environ.get("DECKD_FAKE_MPRIS")
+    if fake_mpris_path:
+        import json as _json
+
+        from .mpris import build_fake_mpris
+
+        seed = _json.loads(Path(fake_mpris_path).read_text())
+        fake_mpris_backend = build_fake_mpris(seed)
+        logging.getLogger("deckd").warning(
+            "DECKD_FAKE_MPRIS set; injecting fake MPRIS backend from %s "
+            "(%d row(s)) — test-only, no session bus opened",
+            fake_mpris_path,
+            len(seed),
+        )
+
     server = Server(
         layouts_dir=args.layouts_dir,
         bind=args.bind if args.bind is not None else list(DEFAULT_BIND),
@@ -220,6 +246,7 @@ def main() -> None:
         ),
         key_sink=key_sink,
         dbus_bus_factory=dbus_bus_factory,
+        mpris_backend=fake_mpris_backend,
         focus_backend=focus_backend,
         overlay_dir=overlay_dir,
         password=password,

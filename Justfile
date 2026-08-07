@@ -206,6 +206,14 @@ test:
 test-focus-wire:
     node scripts/test_focus_wire_shape.mjs
 
+# Live-bus MPRIS smoke test — NOT part of `test` / CI. Publishes a real
+# MPRIS player on the session bus and asserts the production
+# DbusMprisBackend enumerates it with correct metadata. Needs a desktop
+# session bus; skips (exit 0) on a headless box. See
+# scripts/smoke_mpris_live.py.
+smoke-mpris:
+    .venv/bin/python scripts/smoke_mpris_live.py
+
 # Run the client test suite (Vitest unit tests + Playwright e2e). The e2e
 # half boots the daemon with PYTHONPATH=scripts/no-evdev so its uinput sink
 # is shadowed to LoggingKeySink — keystrokes are logged, not injected into

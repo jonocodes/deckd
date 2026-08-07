@@ -323,6 +323,15 @@ class FakeMprisBackend(MprisBackend):
         # tests that don't care about the diagnostic ring buffer out
         # of the wiring.
         self._diagnostic_listener: Callable[[str, str | None, dict[str, Any]], None] | None = None
+        # Chrome-media listener. The real backend fires this on
+        # Playing↔non-Playing boundary transitions; the fake has no
+        # live bus to transition, so it never fires — but it must
+        # accept the registration so ``Server`` (which wires
+        # ``set_chrome_media_listener`` on whatever backend it holds,
+        # server.py) doesn't ``AttributeError`` on a fake. The
+        # just-connected snapshot path (``chrome_media_snapshot``) is
+        # what actually lights the chrome dot for a seeded fake.
+        self._chrome_media_listener: Callable[[ChromeMediaState], None] | None = None
 
     def row_ids(self) -> list[str]:
         return list(self.states)
@@ -366,6 +375,11 @@ class FakeMprisBackend(MprisBackend):
         """
         return compute_chrome_media(self.row_ids(), self.states)
 
+    def set_chrome_media_listener(
+        self, listener: "Callable[[ChromeMediaState], None] | None"
+    ) -> None:
+        self._chrome_media_listener = listener
+
     def set_diagnostic_listener(
         self, listener: Callable[[str, str | None, dict[str, Any]], None] | None
     ) -> None:
@@ -377,6 +391,44 @@ class FakeMprisBackend(MprisBackend):
         listener = self._diagnostic_listener
         if listener is not None:
             listener(kind, row_id, data)
+
+
+# MediaState fields the seed loader accepts. Derived from the dataclass
+# (rather than hand-listed) so it can't silently drift when MediaState
+# gains a field, minus the two internal fields a seed has no business
+# setting: ``stale`` (a freshness flag the daemon owns) and ``art_url``
+# (resolved server-side; the client only ever sees ``art_token``). A
+# key outside this set is a typo and fails loudly in ``build_fake_mpris``
+# rather than being silently dropped.
+_SEED_FIELDS = frozenset(
+    f.name for f in dataclasses.fields(MediaState)
+) - {"stale", "art_url"}
+
+
+def build_fake_mpris(seed: dict[str, dict[str, Any]]) -> FakeMprisBackend:
+    """Build a :class:`FakeMprisBackend` from a plain ``{row_id: {field:
+    value}}`` mapping (e.g. parsed from JSON).
+
+    The seam behind the ``DECKD_FAKE_MPRIS`` env hook (see
+    ``deckd.__main__``) and a convenience for tests that want a
+    pre-populated backend without hand-building :class:`MediaState`
+    objects. Each inner dict is validated against :data:`_SEED_FIELDS`
+    and defaulted to ``available=True`` so the common "a player is
+    present and playing" seed is a two-key dict. Unknown keys raise
+    ``ValueError`` so a typo fails loudly instead of vanishing.
+    """
+    states: dict[str, MediaState] = {}
+    for row_id, fields in seed.items():
+        unknown = set(fields) - _SEED_FIELDS
+        if unknown:
+            raise ValueError(
+                f"fake-mpris seed row {row_id!r} has unknown field(s) "
+                f"{sorted(unknown)}; allowed: {sorted(_SEED_FIELDS)}"
+            )
+        states[row_id] = MediaState(available=fields.get("available", True), **{
+            k: v for k, v in fields.items() if k != "available"
+        })
+    return FakeMprisBackend(states)
 
 
 class DbusMprisBackend(MprisBackend):

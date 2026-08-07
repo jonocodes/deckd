@@ -1,0 +1,10 @@
+{
+  "vlc": {
+    "playing": true,
+    "title": "Parity Test Track",
+    "artist": "The Drift Guards",
+    "app_name": "VLC media player",
+    "can_go_next": true,
+    "can_go_previous": true
+  }
+}
