@@ -17,7 +17,7 @@ Bottom to top, fast to slow. Full commands live in the
 | Daemon integration | `tests/test_*_websocket.py` | Real in-process daemon over a real WebSocket | the focus backend (`FakeFocusBackend`); gdbus/xdotool monkeypatched to canned strings |
 | Client e2e (Playwright) | `client/e2e/kbd-mode.spec.ts`, `client/e2e/now-playing.spec.ts` | Real daemon + real browser | the uinput sink is shadowed to `LoggingKeySink` (`PYTHONPATH=scripts/no-evdev`); the MPRIS backend is a seeded `FakeMprisBackend` (`DECKD_FAKE_MPRIS`) |
 | Smoke | `scripts/smoke.py` | Boots daemon, fires every action primitive | uinput (log-only) |
-| Live-bus smoke (opt-in) | `scripts/smoke_mpris_live.py` (`just smoke-mpris`) | Real `DbusMprisBackend` picks up a real MPRIS player over the real session bus | nothing — needs a desktop session bus; skips (exit 0) when absent, so it's **not** in CI |
+| Live-bus smoke (opt-in) | `scripts/smoke_mpris_live.py` (`just smoke-mpris`), `scripts/smoke_focus_live.py` (`just smoke-focus`) | Real `DbusMprisBackend` picks up a real MPRIS player; real `GnomeShellFocusBackend` drives `org.deckd.Focus` (GetActiveWindow / ListWindows / RaiseWindow) over the real session bus (#129) | nothing — needs a desktop session bus (focus one needs the GNOME extension + a window open); skips (exit 0) when absent, so **not** in CI |
 
 **The pattern to notice:** everything is verified right up to the OS boundary,
 and nothing across it. Two boundaries are never exercised for real:
@@ -49,7 +49,7 @@ first (fast, no infra), then B (the real payoff), then C.
 
 | Ticket | Tier | Scope | Cost / cadence |
 |---|---|---|---|
-| [#129](https://github.com/jonocodes/deckd/issues/129) | A | Live-bus contract smoke: `ListWindows` / `GetActiveWindow` / `RaiseWindow` return well-formed responses over the session bus | cheap; skip when bus absent |
+| [#129](https://github.com/jonocodes/deckd/issues/129) ✅ | A | Live-bus contract smoke: `ListWindows` / `GetActiveWindow` / `RaiseWindow` return well-formed responses over the session bus | cheap; skip when bus absent — **done: `scripts/smoke_focus_live.py` / `just smoke-focus`** |
 | [#130](https://github.com/jonocodes/deckd/issues/130) | A | Shared window-JSON shape contract between the extension producer and the daemon parser | cheap; pure |
 | [#131](https://github.com/jonocodes/deckd/issues/131) | B | Nested/headless compositor: open real windows, assert enumeration, close the loop on raise (`RaiseWindow` → `GetActiveWindow` reflects it) | medium; **nightly / opt-in, not the PR gate** |
 | [#132](https://github.com/jonocodes/deckd/issues/132) | C | Input closed-loop via an echo receiver app: injected event → app records it → assert it matches | high; **nightly / opt-in** |

@@ -214,6 +214,16 @@ test-focus-wire:
 smoke-mpris:
     .venv/bin/python scripts/smoke_mpris_live.py
 
+# Live-bus GNOME focus smoke test (#129) — NOT part of `test` / CI.
+# Drives the production GnomeShellFocusBackend over the live session bus
+# and asserts GetActiveWindow / ListWindows / RaiseWindow are well-formed
+# — catches extension↔compositor drift daemon-side mocks can't (the
+# e166242 empty-list bug). Needs a GNOME session with deckd-focus@local
+# enabled and a window open; skips (exit 0) when org.deckd.Focus isn't on
+# the bus. See scripts/smoke_focus_live.py.
+smoke-focus:
+    .venv/bin/python scripts/smoke_focus_live.py
+
 # Run the client test suite (Vitest unit tests + Playwright e2e). The e2e
 # half boots the daemon with PYTHONPATH=scripts/no-evdev so its uinput sink
 # is shadowed to LoggingKeySink — keystrokes are logged, not injected into
