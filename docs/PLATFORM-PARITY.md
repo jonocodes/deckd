@@ -19,9 +19,13 @@ this table exists to make drift between backends visible at a glance.
 | Capability | GNOME (Wayland/X11) | KDE Plasma (Wayland) | X11 (generic) | macOS |
 |---|---|---|---|---|
 | Focus detection (`watch_active_app`) | ✓ GNOME Shell extension over `org.deckd.Focus` | ✓ KWin script pushes into daemon-owned cache (#31) | ✓ `xdotool` poll | ✓ `osascript` + System Events |
-| Window enumeration (`watch_windows`) | ✓ extension `ListWindows` | ✗ — not advertised; KWin-side impl is future work ([#133](https://github.com/jonocodes/deckd/issues/133)) | ✗ | ✓ Quartz `CGWindowList` |
-| Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✗ — not advertised; KWin-side impl is future work ([#133](https://github.com/jonocodes/deckd/issues/133)) | ✗ | ✓ AppKit + Accessibility |
+| Window enumeration (`watch_windows`) | ✓ extension `ListWindows` | ✗ — not advertised; KWin-side impl is future work ([#133](https://github.com/jonocodes/deckd/issues/133)) | ✗ | ✓ Quartz `CGWindowList` — app names only (titles need Screen Recording) |
+| Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✗ — not advertised; KWin-side impl is future work ([#133](https://github.com/jonocodes/deckd/issues/133)) | ✗ | ✓ AppKit + Accessibility (AX half needs the grant) |
+| Window row → layout match (icon / display name) | ✓ `wm_class` matches the layout token | n/a — no enumeration | n/a | ✗ — `CGWindowList` reports `Firefox`, tokens are `firefox`; matching is case-sensitive |
 | Raise app (`raise:`) | ✓ extension `RaiseApp` (#137) | ✗ | ✗ | ✗ |
+| MPRIS media (chrome media icon + `nowplaying`) | ✓ session-bus MPRIS | ✓ | ✓ | ✗ — no session bus; the daemon sends `chrome_media.supported = false` and the view says "unsupported on this platform". A MediaRemote-based equivalent is [#56](https://github.com/jonocodes/deckd/issues/56) |
+| `media` widget (VLC HTTP backend) | ✓ | ✓ | ✓ | ◑ unverified — plain HTTP to VLC's web interface, no platform-specific path |
+| `dbus:` action | ✓ | ✓ | ✓ | ✗ — a Mac has no GNOME/KDE services to call |
 | Key injection — printable | ✓ `uinput` (evdev) | ✓ `uinput` | ✓ `uinput` | ✓ `osascript keystroke` |
 | Key injection — non-printable / special | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ◑ partial — `osascript key code` map |
 | Combo modifiers | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ✓ `using {command down}` |
@@ -31,6 +35,39 @@ this table exists to make drift between backends visible at a glance.
 | Scroll (jogstrip) | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ✓ Quartz scroll-wheel event |
 
 Legend: ✓ works · ◑ partial · ✗ not available.
+
+## Verification status
+
+A ✓ in the matrix means *the code advertises and implements it*. That is not
+the same as *someone watched it work*, and the difference is where the bugs
+live (#133 and the GNOME `ListWindows` bug both passed every test). Rows carry
+one of three evidence levels:
+
+- **machine-verified** — driven end-to-end against a live daemon and asserted
+  programmatically.
+- **human-observed** — a human used it on a real desktop and reported what
+  they saw. Weaker than machine-verified, stronger than nothing.
+- **unverified** — implemented, typechecked, unit-tested; nobody has watched
+  it on hardware.
+
+**macOS, last checked 2026-08-06 (macOS 15.6.1, Apple Silicon):**
+
+| row | evidence | note |
+|---|---|---|
+| Focus detection | machine-verified | `/diag` reports app + title |
+| Window enumeration | machine + human | 8 windows over a live `running_windows` frame; human confirms the switcher list renders |
+| Raise window | machine-verified | raised Firefox, confirmed focus moved, restored |
+| Pointer / drag | machine-verified | exact deltas read back off the cursor |
+| Scroll (jogstrip) | **unverified** ([#141](https://github.com/jonocodes/deckd/issues/141)) | events sent, never observed landing — needs a human watching a scrollable window |
+| Key injection (printable / combos / special) | **unverified** ([#141](https://github.com/jonocodes/deckd/issues/141)) | the osascript probe sends `keystroke ""`; it proves the grant, not delivery |
+| Click (left / right) | **unverified** ([#141](https://github.com/jonocodes/deckd/issues/141)) | never fired against a real target |
+| MPRIS media browser | human-observed **not working**; now says so | no session bus on macOS ([#56](https://github.com/jonocodes/deckd/issues/56) tracks a native replacement). Verified live: the daemon's connect frame is `{"supported": false, …}` |
+| `media` widget (VLC HTTP) | **unverified** | nobody has pointed it at a VLC on a Mac |
+
+The Linux columns are code-and-CI truth. No dated hardware run backs them, and
+the GNOME rows in particular have a history of passing tests while broken on a
+live session — treat them as *unverified* until someone repeats the exercise
+above on a GNOME box and dates it here.
 
 ## Reading the matrix
 
@@ -72,6 +109,32 @@ case where KDE advertises two capabilities it can't fulfil.
   numbers are stable for a window's lifetime and are used as opaque ids. No
   D-Bus. A macOS focus-integration test harness would be entirely separate
   from the Linux one.
+
+  **The macOS column is really "✓ *given the TCC grants*".** Permissions are
+  attributed to the responsible process — the terminal or launchd agent that
+  started the daemon — so the same code is fully working in one process tree
+  and silently inert in another. Three independent grants:
+
+  | grant | gates | failure mode without it |
+  |---|---|---|
+  | Accessibility | Quartz `CGEventPost` (pointer, click, drag, scroll) + the `AXRaise` half of `raise_window` | events **silently dropped**, no error; raise activates the app then fails `kAXErrorAPIDisabled` (-25211) |
+  | System Events | focus detection + `osascript keystroke` | osascript exits non-zero; `MacKeySink._check_accessibility` warns at startup |
+  | Screen Recording | `kCGWindowName` in `CGWindowList` | every enumerated `title` is `None`; rows label by app name |
+
+  This is why "it doesn't work on my Mac" is usually a *process-tree*
+  question, not a code question — verify against the daemon the user
+  actually runs (`/diag`, or drive `raise_window` / `pad` over its
+  WebSocket), never from a fresh shell in some other app's tree.
+
+  **Enumerated rows don't resolve to layouts.** `CGWindowList` reports the
+  owner name (`Firefox`, `Slack`); layout `match` tokens are lowercase
+  process names (`firefox`) because the *focus* path gets its identity from
+  osascript, which reports the process name. `Layout.matches_identity` is an
+  exact `in` comparison, so a row never matches — it falls back to the app
+  name with no icon and no `display_name`, while the same app's layout
+  switches correctly on focus. Fixing it means either case-insensitive
+  identity matching or normalising the owner name in the backend; both change
+  cross-platform matching semantics, so it's a decision, not a cleanup.
 
 ## Related docs
 

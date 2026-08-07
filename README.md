@@ -243,15 +243,26 @@ What works / doesn't on macOS:
 | capability                         | macOS                                                                                   |
 | ---------------------------------- | --------------------------------------------------------------------------------------- |
 | focus detection                    | yes (osascript + System Events)                                                         |
-| running-window enumeration         | yes (Quartz `CGWindowList`, front-to-back order)                                        |
+| running-window enumeration         | yes (Quartz `CGWindowList`, front-to-back order) — app names only, see TCC below         |
 | running-window raise              | yes (AppKit activation + Accessibility `AXRaise`)                                       |
+| running-window row → layout match  | no (rows carry no icon / `display_name`; identity matching is case-sensitive)            |
 | `key:` action (printable + combos) | yes (osascript `keystroke`)                                                             |
 | `key:` action (non-printable)      | partial (HID-code map covers the common ones — arrows, esc, tab, enter, F-keys)         |
 | `shell:` / `terminal:` actions     | yes                                                                                     |
 | `dbus:` action                     | no (macOS D-Bus exists but GNOME services don't)                                        |
+| MPRIS media browser + chrome media icon | no (MPRIS is session-bus D-Bus; `/mpris/players` reports `available: false`) — [#56](https://github.com/jonocodes/deckd/issues/56) tracks a MediaRemote equivalent |
+| `media` widget (VLC HTTP backend)  | untested (plain HTTP to VLC's web interface — nothing platform-specific in the path)     |
 | trackpad pointer + clicks + drag   | yes (PyObjC Quartz `CGEventCreateMouseEvent`)                                           |
 | jogstrip scroll                    | yes (PyObjC Quartz `CGEventCreateScrollWheelEvent` — pulled in via the `[macos]` extra) |
 
+Machine-verified on hardware 2026-08-06 (macOS 15.6.1, Apple Silicon) by driving the running daemon over its own WebSocket API: focus, enumeration, raise, and pointer deltas. Scroll, clicks, and key injection are implemented but **nobody has watched an injected event land in an app** — see the evidence table in [PLATFORM-PARITY.md](docs/PLATFORM-PARITY.md#verification-status) for what's actually been observed versus what merely compiles.
+
+**TCC permissions are per-process-tree, and that bites.** macOS attributes a grant to the *responsible* process — the terminal (or launchd agent) that started the daemon — not to `python` itself. Consequences worth knowing before you debug the wrong layer:
+
+- **Accessibility** gates Quartz `CGEventPost` *and* the `AXRaise` half of raise. Without it, pointer/click/drag/scroll are **silently dropped** (no error, no log line) and `raise_window` fails with `kAXErrorAPIDisabled` (-25211) after the app has already been activated — so the app comes forward but the specific window doesn't rise.
+- **System Events** (the focus + `keystroke` path) is a *separate* grant, which is why focus detection and key injection can work fine while every Quartz path is dead.
+- Run the daemon from a *different* terminal (or under an editor/agent harness) and you inherit that tree's grants, not the ones you clicked through earlier.
+- **Screen Recording** gates `kCGWindowName`. Without it every enumerated window's `title` is `None`, so the running-windows list is labelled by app name alone. deckd works either way — the label falls back — but title-based layout matching (`title:` tokens) can't see enumerated windows.
 
 When the layout doesn't switch as expected, run `python scripts/check_focus_macos.py` for a one-shot diagnostic: it prints what `osascript` reports for the frontmost app, whether the auto-ignore rule would hold, and which layout `resolve_layout` would pick. Saves reading the daemon log for the common cases (TCC denied, stale daemon, wrong app_id).
 
@@ -1027,10 +1038,12 @@ the WebSocket). Tapping it again reverts to the focused-app layout
 (`clear_view`). The pin is per-client: a phone parked on the view
 doesn't lock a second phone out of its own focus-driven layout.
 
-The icon is *opt-in*: a daemon that has no `nowplaying` layout
-never shows the music-note button, never opens the session D-Bus, and
-never pays the bus-connect cost. Users who don't enable the feature
-see the bottom chrome exactly as before.
+The *bus connection* is opt-in: a daemon that has no `nowplaying`
+layout never opens the session D-Bus and never pays the bus-connect
+cost (`connect_mpris_backend`). The **button itself is always in the
+chrome** — it is rendered unconditionally alongside manual-control and
+settings (`App.tsx`), like every other chrome control, so the strip
+looks the same on every device a user pairs.
 
 #### Passive playback indicator
 
@@ -1124,6 +1137,14 @@ The `nowplaying` widget has one optional knob:
   single "Nothing playing" row so the chrome icon is still
   reachable. `hide` collapses the cell so a layout that depends on
   the surface can drop the cell entirely.
+
+The knob governs the *transient* empty state — "nothing is playing
+right now," which the user can change. It does not apply when the host
+can't run MPRIS at all: there the daemon sends `supported: false` on
+the `chrome_media` frame and the view says **"now playing: unsupported
+on this platform"** regardless of `empty_state`, because collapsing to
+a blank screen would answer the user's question with silence. macOS is
+the case today (no session bus — [#56](https://github.com/jonocodes/deckd/issues/56)).
 
 Row order is the order the session bus's `org.freedesktop.DBus.ListNames`
 reply reports the players — the same order GNOME Shell's quick-settings
