@@ -253,6 +253,26 @@ def test_icon_for_window_carries_matched_layout_icon() -> None:
     assert icon.name == "firefox"
 
 
+def test_row_matches_layout_when_enumeration_identity_differs_only_in_case() -> None:
+    """A row whose enumeration identity differs only in case from the
+    layout token (macOS ``Firefox`` vs the ``firefox`` token, #140) still
+    carries the matched layout's ``display_name`` and ``icon`` — it used
+    to drop to the default fallback (bare app name, no glyph)."""
+    store = _layout_store_with(
+        Layout(
+            match=["firefox"],
+            display_name="Firefox",
+            icon={"source": "simple-icons", "name": "firefox"},
+            widgets=[Widget(id="noop", kind="blank")],
+        ),
+    )
+    win = _window(wm_class="Firefox", app_name="Firefox")
+    assert label_for_window(store, win) == "Firefox"
+    icon = icon_for_window(store, win)
+    assert icon is not None
+    assert (icon.source, icon.name) == ("simple-icons", "firefox")
+
+
 def test_icon_for_window_returns_none_on_default_fallback() -> None:
     """Default-fallback row carries no icon — honest absence, not a
     decorative generic glyph (decision 6). Inventing a generic

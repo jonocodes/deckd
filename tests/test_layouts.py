@@ -237,6 +237,24 @@ def test_resolve_matches_on_wm_class_when_app_id_is_none(tmp_path: Path) -> None
     assert layout is store["firefox"]
 
 
+def test_resolve_matches_identity_case_insensitively(tmp_path: Path) -> None:
+    """Identity matching ignores case — see ``Layout.matches_identity`` (#140)."""
+    _write(tmp_path, "firefox.yaml", FIREFOX_LAYOUT)
+    _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)
+    store = load_layouts(tmp_path)
+
+    app = AppInfo(app_id=None, wm_class="Firefox", title=None)
+    assert resolve_layout(store, app) is store["firefox"]
+
+
+def test_matches_identity_is_case_insensitive() -> None:
+    """``matches_identity`` compares tokens against identities casefolded."""
+    layout = Layout(match=["firefox"])
+    assert layout.matches_identity(AppInfo(app_id="Firefox", wm_class=None))
+    assert layout.matches_identity(AppInfo(app_id=None, wm_class="FIREFOX"))
+    assert not layout.matches_identity(AppInfo(app_id="chrome", wm_class=None))
+
+
 def test_resolve_falls_back_to_default_layout(tmp_path: Path) -> None:
     _write(tmp_path, "firefox.yaml", FIREFOX_LAYOUT)
     _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)

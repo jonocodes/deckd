@@ -427,10 +427,23 @@ class Layout(BaseModel):
         return False
 
     def matches_identity(self, app: AppInfo) -> bool:
-        """True if an ``app_id``/``wm_class`` token covers the focused app."""
+        """True if an ``app_id``/``wm_class`` token covers the focused app.
+
+        The comparison is case-insensitive (#140). A backend's enumeration
+        identity can differ in case from its focus identity — macOS reports
+        ``kCGWindowOwnerName`` as ``Firefox`` while the focus path and the
+        layout tokens are the lowercase process name ``firefox`` — and an
+        exact membership test dropped those windows to the default fallback
+        (bare app name, no glyph) even though focus-driven switching matched
+        fine. Casefolding both sides fixes every backend at once. The cost
+        is that two layouts whose tokens differ only in case now collide;
+        that has never been a supported distinction (ids slugify to
+        lowercase, and ``resolve_id`` already matches case-insensitively).
+        """
         if not self.match or self.match == ["default"]:
             return False
-        return any(token in (app.app_id, app.wm_class) for token in self.match)
+        identities = {value.casefold() for value in (app.app_id, app.wm_class) if value}
+        return any(token.casefold() in identities for token in self.match)
 
 
 def load_layout(path: Path) -> Layout:

@@ -245,7 +245,7 @@ What works / doesn't on macOS:
 | focus detection                    | yes (osascript + System Events)                                                         |
 | running-window enumeration         | yes (Quartz `CGWindowList`, front-to-back order) — app names only, see TCC below         |
 | running-window raise              | yes (AppKit activation + Accessibility `AXRaise`)                                       |
-| running-window row → layout match  | no (rows carry no icon / `display_name`; identity matching is case-sensitive)            |
+| running-window row → layout match  | yes (identity matching is case-insensitive, so `CGWindowList`'s `Firefox` matches the `firefox` token — #140) |
 | `key:` action (printable + combos) | yes (osascript `keystroke`)                                                             |
 | `key:` action (non-printable)      | partial (HID-code map covers the common ones — arrows, esc, tab, enter, F-keys)         |
 | `shell:` / `terminal:` actions     | yes                                                                                     |

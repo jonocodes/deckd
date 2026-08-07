@@ -21,7 +21,7 @@ this table exists to make drift between backends visible at a glance.
 | Focus detection (`watch_active_app`) | ✓ GNOME Shell extension over `org.deckd.Focus` | ✓ KWin script pushes into daemon-owned cache (#31) | ✓ `xdotool` poll | ✓ `osascript` + System Events |
 | Window enumeration (`watch_windows`) | ✓ extension `ListWindows` | ✗ — not advertised; KWin-side impl is future work ([#133](https://github.com/jonocodes/deckd/issues/133)) | ✗ | ✓ Quartz `CGWindowList` — app names only (titles need Screen Recording) |
 | Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✗ — not advertised; KWin-side impl is future work ([#133](https://github.com/jonocodes/deckd/issues/133)) | ✗ | ✓ AppKit + Accessibility (AX half needs the grant) |
-| Window row → layout match (icon / display name) | ✓ `wm_class` matches the layout token | n/a — no enumeration | n/a | ✗ — `CGWindowList` reports `Firefox`, tokens are `firefox`; matching is case-sensitive |
+| Window row → layout match (icon / display name) | ✓ `wm_class` matches the layout token | n/a — no enumeration | n/a | ✓ identity matching is case-insensitive (#140), so `CGWindowList`'s `Firefox` matches the `firefox` token |
 | Raise app (`raise:`) | ✓ extension `RaiseApp` (#137) | ✗ | ✗ | ✗ |
 | MPRIS media (chrome media icon + `nowplaying`) | ✓ session-bus MPRIS | ✓ | ✓ | ✗ — no session bus; the daemon sends `chrome_media.supported = false` and the view says "unsupported on this platform". A MediaRemote-based equivalent is [#56](https://github.com/jonocodes/deckd/issues/56) |
 | `media` widget (VLC HTTP backend) | ✓ | ✓ | ✓ | ◑ unverified — plain HTTP to VLC's web interface, no platform-specific path |
@@ -56,6 +56,7 @@ one of three evidence levels:
 |---|---|---|
 | Focus detection | machine-verified | `/diag` reports app + title |
 | Window enumeration | machine + human | 8 windows over a live `running_windows` frame; human confirms the switcher list renders |
+| Window row → layout match | unit-tested; **unverified on hardware** ([#140](https://github.com/jonocodes/deckd/issues/140)) | was broken (`Firefox` row never matched the `firefox` token; `icon: null` seen live 2026-08-06); matcher is now case-insensitive but nobody has re-read a `running_windows` frame on a Mac to confirm the row carries the icon |
 | Raise window | machine-verified | raised Firefox, confirmed focus moved, restored |
 | Pointer / drag | machine-verified | exact deltas read back off the cursor; drag lock produced 1 `mousedown`, 5 held moves, 1 `mouseup` in a browser echo page |
 | Click (left / right) | machine-verified | `click` / `contextmenu` fired at the exact injected coordinates (#141) |
