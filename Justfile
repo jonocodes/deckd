@@ -16,13 +16,17 @@ default:
 setup-linux:
     #!/usr/bin/env bash
     set -euo pipefail
-    uv venv --python 3.12 --allow-existing
+    # See setup-macos: skip venv creation when flox (or any activation)
+    # already owns one, or the empty ./.venv shadows it everywhere.
+    if [ -z "${VIRTUAL_ENV:-}" ]; then
+        uv venv --python 3.12 --allow-existing
+    fi
     if [ "$(uname -m)" = x86_64 ]; then
         uv pip install -e ".[dev,uinput]"
     else
         echo "note: $(uname -m) has no evdev-binary wheel; source-building python-evdev." >&2
         uv pip install -e ".[dev]"
-        PYTHON=".venv/bin/python" bash scripts/install_evdev_source.sh \
+        PYTHON="${VIRTUAL_ENV:-.venv}/bin/python" bash scripts/install_evdev_source.sh \
             || echo "warn: evdev source build failed; uinput key injection will no-op." >&2
     fi
     cd client && npm install
@@ -30,7 +34,16 @@ setup-linux:
 # macOS dev: [dev] + [macos] (PyObjC Quartz covers scroll, pointer, click,
 # and held-button drag for the trackpad).
 setup-macos:
-    uv venv --python 3.12 --allow-existing
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Under flox the env already exists ($FLOX_ENV_CACHE/python) and
+    # `uv pip install` targets it. Creating ./.venv anyway leaves an empty
+    # venv that shadows the real one: it lands first on test-all's PATH,
+    # pyright picks it over --pythonpath, and playwright boots
+    # .venv/bin/deckd. So only create one when nothing is active.
+    if [ -z "${VIRTUAL_ENV:-}" ]; then
+        uv venv --python 3.12 --allow-existing
+    fi
     uv pip install -e ".[dev,macos]"
     cd client && npm install
 
@@ -177,9 +190,16 @@ screenshots:
 test-all:
     #!/usr/bin/env bash
     set -euo pipefail
-    export PATH="$PWD/.venv/bin:$PATH"
+    # Only prepend ./.venv when it's the real env — under flox it either
+    # doesn't exist or (historically) is an empty shell that shadows the
+    # active interpreter and breaks every step below.
+    if [ -x .venv/bin/python ]; then
+        export PATH="$PWD/.venv/bin:$PATH"
+    fi
     echo "== 1/7  pyright daemon =="
-    pyright daemon
+    # --pythonpath resolves imports against whichever env is active
+    # (flox cache or ./.venv); see [tool.pyright] in pyproject.toml.
+    pyright --pythonpath "$(command -v python)" daemon
     echo "== 2/7  pytest =="
     pytest
     echo "== 3/7  tsc --noEmit =="
@@ -212,7 +232,7 @@ test-focus-wire:
 # session bus; skips (exit 0) on a headless box. See
 # scripts/smoke_mpris_live.py.
 smoke-mpris:
-    .venv/bin/python scripts/smoke_mpris_live.py
+    "${VIRTUAL_ENV:-.venv}/bin/python" scripts/smoke_mpris_live.py
 
 # Live-bus GNOME focus smoke test (#129) — NOT part of `test` / CI.
 # Drives the production GnomeShellFocusBackend over the live session bus
@@ -222,7 +242,7 @@ smoke-mpris:
 # enabled and a window open; skips (exit 0) when org.deckd.Focus isn't on
 # the bus. See scripts/smoke_focus_live.py.
 smoke-focus:
-    .venv/bin/python scripts/smoke_focus_live.py
+    "${VIRTUAL_ENV:-.venv}/bin/python" scripts/smoke_focus_live.py
 
 # Run the client test suite (Vitest unit tests + Playwright e2e). The e2e
 # half boots the daemon with PYTHONPATH=scripts/no-evdev so its uinput sink

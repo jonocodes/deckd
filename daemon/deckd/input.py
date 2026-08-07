@@ -230,7 +230,10 @@ class UinputSink:
 
     def __init__(self) -> None:
         try:
-            from evdev import UInput, ecodes
+            # evdev is the Linux-only [uinput] extra; a macOS checkout
+            # legitimately has no such module (MacKeySink is used instead),
+            # so the missing import is expected there, not a type error.
+            from evdev import UInput, ecodes  # pyright: ignore[reportMissingImports]
         except ImportError as exc:
             raise RuntimeError(
                 "evdev is not installed; install deckd with the uinput extra"

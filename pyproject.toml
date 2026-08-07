@@ -38,6 +38,10 @@ dev = [
     "websockets>=13",
     "pytest>=8",
     "pytest-asyncio>=0.23",
+    # Step 1 of the verification ladder (`just test-all`). Declared so the
+    # typecheck is reproducible from a fresh `just setup` on either platform
+    # rather than depending on an ad-hoc global install.
+    "pyright>=1.1.400",
 ]
 macos = [
     # Quartz covers input injection and CGWindowList window enumeration;
@@ -70,6 +74,14 @@ testpaths = ["tests"]
 # of how it's invoked — bare `pyright`, `.venv/bin/pyright`, or via
 # `just test-all`. Without this, pyright falls back to stdlib-only
 # and every import is a false-positive error.
+#
+# This names the plain-`uv venv` layout. A flox checkout has no ./.venv
+# (flox owns the env under $FLOX_ENV_CACHE/python, and `just setup` skips
+# venv creation there) — pyright then falls back to the interpreter
+# `just test-all` passes via `--pythonpath "$(command -v python)"`.
+# NOTE: an *existing but empty* ./.venv wins over --pythonpath and makes
+# every third-party import unresolvable, which is why setup must not
+# leave one behind.
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.12"
