@@ -395,6 +395,9 @@ async def test_kde_backend_start_logs_install_hint_on_success(caplog) -> None:
 
 
 def _reset_module_env(monkeypatch) -> None:
+    # sys.platform pinned for the same reason as tests/test_platform.py:
+    # darwin short-circuits to the macOS backend before the env is read.
+    monkeypatch.setattr(plat.sys, "platform", "linux")
     for var in ("XDG_SESSION_TYPE", "XDG_CURRENT_DESKTOP"):
         monkeypatch.delenv(var, raising=False)
 

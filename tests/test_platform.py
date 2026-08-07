@@ -29,7 +29,14 @@ from deckd.platform import (
 
 def _reset_module_env(monkeypatch) -> None:
     """Strip the X11 / desktop env vars ``default_backend()`` reads so each
-    test starts from a known dispatcher state."""
+    test starts from a known dispatcher state.
+
+    Also pins ``sys.platform`` to Linux: ``default_backend()`` short-circuits
+    to the macOS backend on darwin before it ever looks at the env, so on a
+    Mac checkout every dispatch assertion below would fail on a platform the
+    test isn't about. The darwin branch has its own test.
+    """
+    monkeypatch.setattr(plat.sys, "platform", "linux")
     for var in ("XDG_SESSION_TYPE",):
         monkeypatch.delenv(var, raising=False)
 
@@ -71,6 +78,18 @@ def test_default_backend_picks_gnome_on_wayland(monkeypatch) -> None:
     monkeypatch.setenv("XDG_SESSION_TYPE", "wayland")
     backend = plat.default_backend()
     assert isinstance(backend, GnomeShellFocusBackend)
+
+
+def test_default_backend_picks_macos_on_darwin(monkeypatch) -> None:
+    """darwin short-circuits before any env inspection: a Mac session can
+    carry a stray ``XDG_SESSION_TYPE`` (inherited from a shell profile or a
+    flox env) and must still land on the macOS backend."""
+    from deckd.platform_macos import MacFocusBackend
+
+    monkeypatch.setattr(plat.sys, "platform", "darwin")
+    monkeypatch.setenv("XDG_SESSION_TYPE", "x11")
+    backend = plat.default_backend()
+    assert isinstance(backend, MacFocusBackend)
 
 
 @pytest.mark.asyncio

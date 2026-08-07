@@ -179,6 +179,26 @@ class FakeDbusBusFactory:
 # Server fixture
 # ---------------------------------------------------------------------------
 
+@pytest.fixture
+def as_linux(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin ``sys.platform`` to Linux for tests that assert the Linux branch.
+
+    Several forks read ``sys.platform`` at call time — the URL opener
+    (``xdg-open`` vs ``open``), the clipboard tools (``wl-copy`` vs
+    ``pbcopy``), and ``default_backend()``'s GNOME / KDE / X11 dispatch.
+    On a macOS checkout those take the Mac path and the Linux assertions
+    fail, a false negative CI (Linux-only) never sees. Mac-branch tests
+    pin the other way with :func:`as_macos`.
+    """
+    monkeypatch.setattr(sys, "platform", "linux")
+
+
+@pytest.fixture
+def as_macos(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pin ``sys.platform`` to macOS — the counterpart to :func:`as_linux`,
+    so the Mac branch is covered from a Linux checkout too."""
+    monkeypatch.setattr(sys, "platform", "darwin")
+
 
 @dataclass
 class ServerHandle:

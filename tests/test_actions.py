@@ -242,7 +242,7 @@ def _ctx_key_sink(sink: FakePointerSink) -> ActionContext:
 
 
 async def test_press_url_opens_via_xdg_open(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, as_linux: None,
 ) -> None:
     """A url: action launches the opener with the URL as an argument."""
     import deckd.actions as actions_mod
@@ -269,7 +269,7 @@ async def test_press_url_opens_via_xdg_open(
 
 
 async def test_press_url_falls_back_to_gio_open(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, as_linux: None,
 ) -> None:
     """When xdg-open is missing, gio open is tried next."""
     import deckd.actions as actions_mod
@@ -295,6 +295,43 @@ async def test_press_url_falls_back_to_gio_open(
 
     assert len(calls) == 1
     assert calls[0][0][:3] == ("gio", "open", "https://example.com")
+
+
+async def test_press_url_opens_via_open_on_macos(
+    monkeypatch: pytest.MonkeyPatch, as_macos: None,
+) -> None:
+    """On macOS the opener is ``open`` — xdg-open / gio are never tried."""
+    import deckd.actions as actions_mod
+
+    calls: list[tuple] = []
+
+    async def fake_exec(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(actions_mod.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(actions_mod.shutil, "which", lambda name: f"/usr/bin/{name}")
+
+    widget = Widget(
+        id="url-btn",
+        kind="button",
+        action=Action(url="https://example.com"),
+    )
+    await run_action(widget, _ctx_key_sink(FakePointerSink()))
+
+    assert len(calls) == 1
+    assert calls[0][0][:2] == ("open", "https://example.com")
+
+
+def test_clipboard_tools_on_macos_are_pbcopy_pbpaste(as_macos: None) -> None:
+    """macOS ships the clipboard pair in the base system, so detection
+    returns it unconditionally — no ``which`` probing, no wl-copy/xclip
+    argument dance (``pbcopy`` / ``pbpaste`` take the selection from
+    argv-free stdin/stdout)."""
+    import deckd.actions as actions_mod
+
+    assert actions_mod._detect_clipboard_tools() == ("pbcopy", "pbpaste")
+    assert actions_mod._clipboard_write_args("pbcopy") == ["pbcopy"]
+    assert actions_mod._clipboard_read_args("pbpaste") == ["pbpaste"]
 
 
 async def test_url_scheme_validation_rejects_unknown_schemes() -> None:
@@ -405,7 +442,7 @@ async def test_press_text_empty_string_rejected() -> None:
 
 
 async def test_press_text_paste_writes_clipboard_and_sends_ctrl_v(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, as_linux: None,
 ) -> None:
     """paste mode writes to clipboard, emits ctrl+v, and restores."""
     import deckd.actions as actions_mod
@@ -456,7 +493,7 @@ async def test_press_text_paste_writes_clipboard_and_sends_ctrl_v(
 
 
 async def test_press_text_paste_no_clipboard_tool_falls_back_to_simulate(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, as_linux: None,
 ) -> None:
     """When no clipboard tool exists, paste falls back to simulate."""
     import deckd.actions as actions_mod

@@ -206,7 +206,9 @@ async def test_press_dbus(srv: ServerHandle) -> None:
 # ---------------------------------------------------------------------------
 
 
-async def test_press_url_opens_url(monkeypatch, srv: ServerHandle) -> None:
+async def test_press_url_opens_url(
+    monkeypatch, srv: ServerHandle, as_linux: None,
+) -> None:
     """A url: action launches the URL opener via create_subprocess_exec."""
     import deckd.actions as actions_mod
 
