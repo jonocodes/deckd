@@ -600,7 +600,13 @@ class MacScrollSink(ScrollSink):
             log.info("[mac scroll log] delta=%s (no Quartz)", delta)
             return
         self._wheel_remainder += delta
-        detents = self._wheel_remainder // self.DETENT
+        # Truncate toward zero, not floor. ``-4 // 120`` is ``-1``, so
+        # floor division fired a full detent on the first downward tick
+        # of a gesture and then set the remainder to +116 — which ate the
+        # next 120 units. Downward scrolling over-fired, upward scrolling
+        # under-fired, and momentum (small decaying deltas either side of
+        # zero) mostly emitted nothing at all.
+        detents = int(self._wheel_remainder / self.DETENT)
         if detents == 0:
             return
         self._wheel_remainder -= int(detents) * self.DETENT

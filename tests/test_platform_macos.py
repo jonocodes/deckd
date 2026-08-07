@@ -236,6 +236,98 @@ def test_is_standard_cg_window_rejects_noise(payload, reason) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Scroll accumulator (hi-res wire units -> whole wheel detents)
+# ---------------------------------------------------------------------------
+
+
+class _FakeQuartz:
+    """Records the detent count of every wheel event the sink posts."""
+
+    kCGScrollEventUnitLine = 1
+    kCGHIDEventTap = 0
+
+    def __init__(self) -> None:
+        self.detents: list[int] = []
+
+    def CGEventCreateScrollWheelEvent(self, _src, _unit, _axes, detents):
+        return detents
+
+    def CGEventPost(self, _tap, event) -> None:
+        self.detents.append(event)
+
+
+def _scroll_probe():
+    """A real :class:`MacScrollSink` posting into a fake Quartz.
+
+    ``__init__`` probes for PyObjC and logs, so the instance is built
+    without it — but ``emit_scroll`` itself runs unmodified, which is the
+    whole point: these tests must fail if the accumulator regresses.
+    """
+    from deckd.platform_macos import MacScrollSink
+
+    sink = MacScrollSink.__new__(MacScrollSink)
+    quartz = _FakeQuartz()
+    sink._Quartz = quartz
+    sink._available = True
+    sink._wheel_remainder = 0
+    return sink, quartz.detents, sink.emit_scroll
+
+
+@pytest.mark.parametrize("sign", [1, -1])
+def test_scroll_accumulates_symmetrically_in_both_directions(sign) -> None:
+    """Up and down must need the same input to produce a detent.
+
+    The wire sends ``REL_WHEEL_HI_RES`` units; 120 of them make one
+    detent. Floor division made this asymmetric — ``-4 // 120`` is
+    ``-1``, so a single downward unit emitted a whole detent while the
+    same magnitude upward emitted nothing, and the +116 remainder it
+    left behind swallowed the next gesture.
+    """
+    _, emitted, emit = _scroll_probe()
+    for _ in range(10):
+        emit(sign * 4)  # 40 units — a third of a detent
+    assert emitted == [], f"40 units should not reach a detent, got {emitted}"
+
+    for _ in range(20):
+        emit(sign * 4)  # cumulative 120 units — exactly one detent
+    assert emitted == [sign], f"120 units should be exactly one detent, got {emitted}"
+
+
+def test_scroll_remainder_carries_across_direction_changes() -> None:
+    """A reversal doesn't leave a phantom backlog: 120 up then 120 down
+    is one detent each way and a zero remainder, so the next gesture
+    starts clean."""
+    sink, emitted, emit = _scroll_probe()
+    emit(120)
+    emit(-120)
+    assert emitted == [1, -1]
+    assert sink._wheel_remainder == 0
+
+
+def test_scroll_momentum_travel_is_under_one_detent() -> None:
+    """Documents why momentum is invisible on macOS today (#143).
+
+    ``ScrollController`` decays velocity by 0.9 per 1/60s frame, so a
+    flick's whole travel is ``velocity / 6`` hi-res units — 66 units for
+    a fast flick, half of the 120 a single line detent costs. Quantising
+    to ``kCGScrollEventUnitLine`` therefore rounds the entire momentum
+    phase away, while Linux's ``REL_WHEEL_HI_RES`` renders it smoothly.
+    Fixing that means pixel-unit events, which is a feel decision, not a
+    rounding fix — so this pins the arithmetic that makes the case.
+    """
+    from deckd.platform_macos import MacScrollSink
+
+    velocity, travel = 400.0, 0.0
+    while abs(velocity) >= 20:  # ScrollController's momentum_cutoff
+        travel += velocity / 60
+        velocity *= 0.9
+    assert travel < MacScrollSink.DETENT, (
+        f"momentum travel {travel:.0f} units now exceeds one detent "
+        f"({MacScrollSink.DETENT}) — #143 may be fixed; revisit this test"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Accessibility-trust warning
 # ---------------------------------------------------------------------------
 
