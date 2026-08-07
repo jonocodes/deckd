@@ -32,7 +32,7 @@ this table exists to make drift between backends visible at a glance.
 | Pointer relative motion | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ✓ Quartz CG event |
 | Mouse click (left/right) | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ✓ Quartz CG event |
 | Mouse drag (held button) | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ✓ Quartz `LeftMouseDragged` |
-| Scroll (jogstrip) | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ✓ Quartz scroll-wheel event |
+| Scroll (jogstrip) | ✓ `uinput` | ✓ `uinput` | ✓ `uinput` | ◑ Quartz scroll-wheel event — drag scrolls, momentum is quantised away ([#143](https://github.com/jonocodes/deckd/issues/143)) |
 
 Legend: ✓ works · ◑ partial · ✗ not available.
 
@@ -57,10 +57,12 @@ one of three evidence levels:
 | Focus detection | machine-verified | `/diag` reports app + title |
 | Window enumeration | machine + human | 8 windows over a live `running_windows` frame; human confirms the switcher list renders |
 | Raise window | machine-verified | raised Firefox, confirmed focus moved, restored |
-| Pointer / drag | machine-verified | exact deltas read back off the cursor |
-| Scroll (jogstrip) | **unverified** ([#141](https://github.com/jonocodes/deckd/issues/141)) | events sent, never observed landing — needs a human watching a scrollable window |
-| Key injection (printable / combos / special) | **unverified** ([#141](https://github.com/jonocodes/deckd/issues/141)) | the osascript probe sends `keystroke ""`; it proves the grant, not delivery |
-| Click (left / right) | **unverified** ([#141](https://github.com/jonocodes/deckd/issues/141)) | never fired against a real target |
+| Pointer / drag | machine-verified | exact deltas read back off the cursor; drag lock produced 1 `mousedown`, 5 held moves, 1 `mouseup` in a browser echo page |
+| Click (left / right) | machine-verified | `click` / `contextmenu` fired at the exact injected coordinates (#141) |
+| Scroll (jogstrip) — drag phase | machine-verified | `scrollTop` moved on the element under the cursor; 120 hi-res units = one detent, symmetric both directions |
+| Scroll (jogstrip) — momentum | **broken** ([#143](https://github.com/jonocodes/deckd/issues/143)) | daemon decay runs, but a flick's travel (~66 units) is under one line detent, so nothing reaches the app |
+| Key injection (printable / combos / special) | machine-verified | `type` → textarea; `super+t`/`super+w` opened and closed a tab; `super+[`/`super+]` navigated back/forward; Esc, arrows, Enter, F-key, Tab all delivered (#141) |
+| Manual control (phone IME round-trip) | **unverified** ([#141](https://github.com/jonocodes/deckd/issues/141)) | the wire-level `type` / `key` paths pass; typing on the phone's own IME still needs a human |
 | MPRIS media browser | human-observed **not working**; now says so | no session bus on macOS ([#56](https://github.com/jonocodes/deckd/issues/56) tracks a native replacement). Verified live: the daemon's connect frame is `{"supported": false, …}` |
 | `media` widget (VLC HTTP) | **unverified** | nobody has pointed it at a VLC on a Mac |
 
