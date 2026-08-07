@@ -157,6 +157,27 @@ Tests cover the cache, the `dbus_fast` interface shape, the backend's start/stop
 
 ---
 
+## Spike #4 — macOS now-playing backend (issue #56)
+
+**Status:** off-Mac investigation done; **recommend build** via a helper shim. Empirical verification on a live macOS host is the one remaining step and is the only part that needs Mac hardware. Findings in [`docs/research/issue-56-macos-nowplaying.md`](research/issue-56-macos-nowplaying.md).
+
+**Goal:** size whether a macOS "now playing" backend — the MediaRemote equivalent of the Linux MPRIS media feature (#46) — is feasible for a Python daemon without a private Apple entitlement, and whether it fits behind the existing `MprisBackend` seam. Parallel to the platform-backend groundwork in #24.
+
+### Decision
+- **Right target:** `MediaRemote.framework` (private) for system-wide read/control — **not** `MPNowPlayingInfoCenter` / `MPRemoteCommandCenter`, both of which are publish/receive-side (an app declaring/handling its *own* playback).
+- **Recommended path:** `MacNowPlayingBackend` that **shells out to `ungive/mediaremote-adapter`** (or `nowplaying-cli`, which vendors its read core) rather than binding MediaRemote in-process. Treat the helper as an external, swappable dependency — detect on `$PATH` / bundled location, surface a clean "unavailable + install hint" when missing (mirror `FocusBackendUnavailable`), never crash the daemon on its absence.
+- **Direct pyobjc/ctypes rejected:** since macOS 15.4 `mediaremoted` enforces an entitlement on the *read* side — `MRMediaRemoteGetNowPlayingInfo` returns `Operation not permitted` for unentitled callers. `MRMediaRemoteSendCommand` still works unentitled, but read-less control is useless. The adapter's working trick is running the read through `/usr/bin/perl` (reported as a `com.apple.*` bundle id), no SIP change — confirmed working through macOS 26 (tested on Sequoia 15.7 / Tahoe 26.3).
+- **AppleScript (Music/Spotify)** is a documented, explicitly-narrower per-app fallback only — not system-wide.
+- **Risk:** undocumented private-API hole Apple can close without notice (they did once, at 15.4). A moderate, well-fenced bet — isolated behind the seam, degrades in tiers.
+
+### Definition of done
+- [x] Report clarifies `MPNowPlayingInfoCenter` (publish) vs `MediaRemote` (read/control) and picks the right target.
+- [x] Confirms `MprisBackend` (`row_ids` / `read_state` / `send_command`) is the only seam a macOS backend touches, and that the single-now-playing-row (or zero-row) shape renders cleanly in the existing `now playing` UI — verified against `NowPlayingCell.tsx` (explicit `rows.length === 0` empty state; row-count-agnostic flexbox layout; already exercised by the single-VLC-row e2e and the reducer unit tests).
+- [ ] Establishes **empirically**, on a stated macOS version, whether read and control work without a private entitlement, and by which path — **needs a Mac** (run `nowplaying-cli get` / `stream` and confirm the fields deckd renders).
+- [x] Sizes the work and gives a build-or-drop recommendation with evidence (build; path b).
+
+---
+
 ## Implementation Plan
 
 _To be drafted after spike #1 and spike #2 resolve. The plan will consume their outputs and lay out milestones 3–7 (daemon skeleton, client polish, trackpad widget, lifecycle)._
