@@ -15,9 +15,17 @@ Bottom to top, fast to slow. Full commands live in the
 |---|---|---|---|
 | Unit / protocol | pydantic round-trips, reducers, label derivation | Pure logic and wire shapes | everything external |
 | Daemon integration | `tests/test_*_websocket.py` | Real in-process daemon over a real WebSocket | the focus backend (`FakeFocusBackend`); gdbus/xdotool monkeypatched to canned strings |
-| Client e2e (Playwright) | `client/e2e/kbd-mode.spec.ts`, `client/e2e/now-playing.spec.ts` | Real daemon + real browser | the uinput sink is shadowed to `LoggingKeySink` (`PYTHONPATH=scripts/no-evdev`); the MPRIS backend is a seeded `FakeMprisBackend` (`DECKD_FAKE_MPRIS`) |
+| Client e2e (Playwright) | `client/e2e/kbd-mode.spec.ts`, `client/e2e/now-playing.spec.ts` | Real daemon + real browser | input sinks forced to logging (`DECKD_FAKE_INPUT=1`, plus the `PYTHONPATH=scripts/no-evdev` uinput shadow on Linux); focus watcher off (`--no-focus`); the MPRIS backend is a seeded `FakeMprisBackend` (`DECKD_FAKE_MPRIS`) |
 | Smoke | `scripts/smoke.py` | Boots daemon, fires every action primitive | uinput (log-only) |
 | Live-bus smoke (opt-in) | `scripts/smoke_mpris_live.py` (`just smoke-mpris`), `scripts/smoke_focus_live.py` (`just smoke-focus`) | Real `DbusMprisBackend` picks up a real MPRIS player; real `GnomeShellFocusBackend` drives `org.deckd.Focus` (GetActiveWindow / ListWindows / RaiseWindow) over the real session bus (#129) | nothing — needs a desktop session bus (focus one needs the GNOME extension + a window open); skips (exit 0) when absent, so **not** in CI |
+
+> **Why the e2e daemon is doubly muzzled.** The evdev shadow is Linux-only —
+> `MacKeySink` imports nothing shadowable, so on a Mac the suite used to type
+> real keystrokes and move the real cursor on the developer's desktop. And
+> macOS always has a working focus backend, so the daemon followed the
+> developer's actual frontmost app and the editor specs opened on the wrong
+> layout. `DECKD_FAKE_INPUT=1` and `--no-focus` make the suite
+> platform-independent on both counts.
 
 **The pattern to notice:** everything is verified right up to the OS boundary,
 and nothing across it. Two boundaries are never exercised for real:

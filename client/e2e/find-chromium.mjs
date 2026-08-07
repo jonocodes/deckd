@@ -9,7 +9,9 @@ export function findChromiumExe() {
     encoding: "utf8",
   }).trim();
   if (out && existsSync(out)) return out;
-  throw new Error(
-    `Chromium binary not found at ${pattern}. Set CHROMIUM_PATH to a chromium executable, or run \`nix-env -iA nixpkgs.playwright-chromium\`.`,
-  );
+  // No nix store (macOS / a plain npm checkout): return undefined so
+  // Playwright falls back to its own managed browser — `npx playwright
+  // install chromium` puts one in ~/Library/Caches/ms-playwright. Set
+  // CHROMIUM_PATH to force a specific binary.
+  return undefined;
 }

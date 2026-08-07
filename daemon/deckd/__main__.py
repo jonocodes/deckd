@@ -11,7 +11,14 @@ from pathlib import Path
 from aiohttp import web
 
 from .auth import PasswordError, default_password_path, load_or_create_password
-from .input import LoggingKeySink, LoggingScrollSink, ScrollController, UinputSink
+from .input import (
+    KeySink,
+    LoggingKeySink,
+    LoggingScrollSink,
+    ScrollController,
+    ScrollSink,
+    UinputSink,
+)
 from .logging_setup import setup_logging
 from .platform import default_backend, default_sensor_manager
 from .media import MediaManager
@@ -49,6 +56,37 @@ def _overlay_dir_for(layouts_dir: Path) -> Path:
     """
     suffix = {"darwin": "macos"}.get(sys.platform, "linux")
     return layouts_dir.parent / f"{layouts_dir.name}.{suffix}"
+
+
+def _build_sinks() -> tuple[object | None, ScrollSink, KeySink]:
+    """Pick the (device, scroll, key) sinks for this process.
+
+    ``DECKD_FAKE_INPUT`` forces the logging sinks on *every* platform.
+    The e2e suite needs a daemon that records injections instead of
+    performing them, and its Linux trick — shadowing ``evdev`` with
+    ``PYTHONPATH=scripts/no-evdev`` so ``UinputSink`` raises — has no
+    macOS analogue: ``MacKeySink`` imports nothing shadowable and would
+    type real keystrokes into whatever window happens to be focused on
+    the developer's desktop.
+    """
+    if os.environ.get("DECKD_FAKE_INPUT"):
+        logging.getLogger("deckd").warning(
+            "DECKD_FAKE_INPUT set; input is logged, not injected"
+        )
+        return None, LoggingScrollSink(), LoggingKeySink()
+    try:
+        if sys.platform == "darwin":
+            from .platform_macos import MacKeySink, MacScrollSink
+
+            sink = MacKeySink()
+            return sink, MacScrollSink(), sink
+        sink = UinputSink()
+        return sink, sink, sink
+    except Exception as exc:
+        logging.getLogger("deckd").warning(
+            "platform sink unavailable; falling back to logging only: %s", exc
+        )
+        return None, LoggingScrollSink(), LoggingKeySink()
 
 
 def main() -> None:
@@ -159,27 +197,7 @@ def main() -> None:
         )
         logging.getLogger().addHandler(file_handler)
 
-    sink: object | None
-    scroll_sink: object
-    key_sink: object
-    try:
-        if sys.platform == "darwin":
-            from .platform_macos import MacKeySink, MacScrollSink
-
-            sink = MacKeySink()
-            scroll_sink = MacScrollSink()
-            key_sink = sink
-        else:
-            sink = UinputSink()
-            scroll_sink = sink
-            key_sink = sink
-    except Exception as exc:
-        logging.getLogger("deckd").warning(
-            "platform sink unavailable; falling back to logging only: %s", exc
-        )
-        sink = None
-        scroll_sink = LoggingScrollSink()
-        key_sink = LoggingKeySink()
+    sink, scroll_sink, key_sink = _build_sinks()
 
     focus_backend = None if args.no_focus else default_backend()
     if focus_backend is not None:

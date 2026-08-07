@@ -8,7 +8,14 @@ canonical form here.
 """
 from __future__ import annotations
 
-from deckd.input import name_from_keycode, text_to_combos
+import pytest
+
+from deckd.input import (
+    LoggingKeySink,
+    LoggingScrollSink,
+    name_from_keycode,
+    text_to_combos,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -109,3 +116,46 @@ def test_text_to_combos_drops_unknown_characters() -> None:
 
 def test_text_to_combos_empty_string() -> None:
     assert text_to_combos("") == []
+
+
+# ---------------------------------------------------------------------------
+# Sink selection (deckd.__main__._build_sinks)
+# ---------------------------------------------------------------------------
+
+
+def test_build_sinks_fake_input_forces_logging_sinks_on_any_platform(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``DECKD_FAKE_INPUT`` wins over the platform branch — including
+    darwin, where the e2e suite's Linux trick (shadowing ``evdev`` via
+    ``PYTHONPATH=scripts/no-evdev``) has no effect and the daemon would
+    otherwise type real keystrokes into the developer's desktop."""
+    import deckd.__main__ as main_mod
+
+    monkeypatch.setenv("DECKD_FAKE_INPUT", "1")
+    for platform in ("darwin", "linux"):
+        monkeypatch.setattr(main_mod.sys, "platform", platform)
+        sink, scroll_sink, key_sink = main_mod._build_sinks()
+        assert sink is None
+        assert isinstance(scroll_sink, LoggingScrollSink)
+        assert isinstance(key_sink, LoggingKeySink)
+
+
+def test_build_sinks_falls_back_to_logging_when_platform_sink_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unavailable platform sink degrades to logging rather than
+    killing the daemon (no uinput node, no PyObjC, …)."""
+    import deckd.__main__ as main_mod
+
+    monkeypatch.delenv("DECKD_FAKE_INPUT", raising=False)
+    monkeypatch.setattr(main_mod.sys, "platform", "linux")
+
+    def boom() -> None:
+        raise RuntimeError("no uinput here")
+
+    monkeypatch.setattr(main_mod, "UinputSink", boom)
+    sink, scroll_sink, key_sink = main_mod._build_sinks()
+    assert sink is None
+    assert isinstance(scroll_sink, LoggingScrollSink)
+    assert isinstance(key_sink, LoggingKeySink)
