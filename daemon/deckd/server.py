@@ -629,6 +629,11 @@ class Server:
         # ``LayoutMessage`` — forced false for pinned views there.
         self._current_is_default: bool = True
         self.mpris = mpris_backend
+        # Set when a layout-configured MPRIS backend fails to reach a
+        # session bus (macOS, or a Linux session without one). Distinct
+        # from "no mediabrowser layout, so no backend was ever built" —
+        # that's an unconfigured feature, not an unsupported host.
+        self._mpris_unsupported = False
         # Issue #52: when no mpris backend was injected, auto-build
         # one iff a loaded layout uses ``nowplaying``. Keeps the
         # cost of opening the session bus off the path of users who
@@ -1367,6 +1372,7 @@ class Server:
             available=state.available,
             playing=state.playing,
             playing_count=state.playing_count,
+            supported=state.supported,
         )
 
     async def _broadcast_media_state(self, widget_id: str, state: MediaState, art_sources: list[str]) -> bool:
@@ -1490,8 +1496,24 @@ class Server:
         backend's first ``read_state`` populates the per-row cache.
         A freshly-started daemon correctly reports non-playing until
         a real ``Playing`` boundary transition arrives.
+
+        When the backend couldn't start at all we still send a frame —
+        one carrying ``supported=False``. Silence would leave the
+        client unable to tell "unsupported host" from "frame hasn't
+        arrived yet", and it would show a Mac user "no media players
+        detected" forever.
         """
         if self.mpris is None:
+            if self._mpris_unsupported:
+                await session.send(
+                    p.ChromeMediaMessage(
+                        type="chrome_media",
+                        available=False,
+                        playing=False,
+                        playing_count=0,
+                        supported=False,
+                    )
+                )
             return
         await session.send(self._chrome_message(self.mpris.chrome_media_snapshot()))
 
@@ -2826,6 +2848,11 @@ class Server:
             except Exception as exc:
                 log.warning("MPRIS backend start failed: %s", exc)
                 self.mpris = None
+                # A layout asked for the surface and the host can't
+                # provide it — that's structural, not "nothing is
+                # playing", and the client is told so explicitly
+                # (see push_chrome_media_snapshot).
+                self._mpris_unsupported = True
         self.start_layouts_watcher()
         self.start_sensor_pump()
         self.start_media_pump()

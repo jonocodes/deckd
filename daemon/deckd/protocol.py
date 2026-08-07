@@ -142,6 +142,16 @@ class ChromeMediaMessage(BaseModel):
     in ``PlaybackStatus == Playing``; ``playing_count`` carries the
     number currently in Playing so a future per-player / count-style
     indicator has the raw tally without a separate wire message.
+
+    ``supported`` is false when the MPRIS surface can't work on this
+    host at all — the configured backend failed to reach a session bus
+    (macOS has none). It defaults to true so an older client, or a
+    frame built before this field existed, reads as "supported" and
+    behaves exactly as before. The client uses it to pick between two
+    empty states that would otherwise be indistinguishable: "no media
+    players detected" (transient) and "unsupported on this platform"
+    (structural) — the same distinction the running-windows list makes
+    (issue #120, decision 8).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -150,6 +160,7 @@ class ChromeMediaMessage(BaseModel):
     available: bool
     playing: bool
     playing_count: int = Field(ge=0)
+    supported: bool = True
 
 
 class WidgetUpdateMessage(BaseModel):

@@ -22,6 +22,7 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
 import websockets
 from aiohttp.test_utils import TestServer
 
@@ -64,6 +65,82 @@ widgets:
         await server.mpris.start()
     server.start_media_pump()
     return test_server, server, bus
+
+
+async def test_chrome_media_snapshot_says_unsupported_when_backend_cannot_start(
+    tmp_path: Path,
+) -> None:
+    """A host with no session bus gets ``supported=False``, not silence.
+
+    macOS is the live case: a layout declares ``nowplaying``, so the
+    daemon builds a ``DbusMprisBackend``, and ``start()`` then fails
+    because there is no session bus to reach. Dropping the frame
+    entirely would leave the client unable to distinguish "unsupported
+    host" from "snapshot hasn't arrived yet", so it would sit on
+    "Nothing playing" forever — telling the user to go play something
+    that can never appear.
+    """
+    (tmp_path / "default.yaml").write_text(
+        """
+match: [default]
+widgets:
+  - id: browser
+    kind: nowplaying
+    size: [4, 2]
+"""
+    )
+    server, *_ = make_test_server(layouts_dir=tmp_path)
+    # Stand in for the post-``start()`` state on a bus-less host: the
+    # backend was configured by the layout, then torn down when the
+    # connect failed (see Server.start).
+    server.mpris = None
+    server._mpris_unsupported = True
+    test_server = TestServer(server.app, host="127.0.0.1")
+    await test_server.start_server()
+    try:
+        async with websockets.connect(f"ws://127.0.0.1:{test_server.port}/ws") as ws:
+            frame = await _next_chrome_media(ws)
+            assert frame == {
+                "type": "chrome_media",
+                "available": False,
+                "playing": False,
+                "playing_count": 0,
+                "supported": False,
+            }
+    finally:
+        await server.stop()
+        await test_server.close()
+
+
+async def test_chrome_media_snapshot_stays_silent_when_feature_unconfigured(
+    tmp_path: Path,
+) -> None:
+    """No ``nowplaying`` layout means no backend was ever built —
+    an unconfigured feature, not an unsupported host. The daemon sends
+    nothing, exactly as before, so the client keeps its default
+    ("Nothing playing") rather than claiming the platform can't do
+    it. This is the case that makes ``_mpris_unsupported`` a separate
+    flag from ``mpris is None``."""
+    (tmp_path / "default.yaml").write_text(
+        """
+match: [default]
+widgets:
+  - id: btn
+    kind: button
+    action: {key: a}
+"""
+    )
+    server, *_ = make_test_server(layouts_dir=tmp_path)
+    assert server.mpris is None
+    test_server = TestServer(server.app, host="127.0.0.1")
+    await test_server.start_server()
+    try:
+        async with websockets.connect(f"ws://127.0.0.1:{test_server.port}/ws") as ws:
+            with pytest.raises(asyncio.TimeoutError):
+                await _next_chrome_media(ws)
+    finally:
+        await server.stop()
+        await test_server.close()
 
 
 async def _drain_initial(ws) -> None:
@@ -130,6 +207,9 @@ async def test_chrome_media_emits_on_player_registration(tmp_path: Path) -> None
                 "available": True,
                 "playing": False,
                 "playing_count": 0,
+                # A live backend is by definition a supported one; the
+                # flag only goes false when the host has no session bus.
+                "supported": True,
             }
     finally:
         await server.stop()
@@ -173,6 +253,7 @@ async def test_chrome_media_emits_on_playback_status_transition(
                 "available": True,
                 "playing": True,
                 "playing_count": 1,
+                "supported": True,
             }
     finally:
         await server.stop()
@@ -326,6 +407,7 @@ widgets:
                 "available": True,
                 "playing": True,
                 "playing_count": 1,
+                "supported": True,
             }
 
             # A fresh registration transition still pushes a frame
@@ -345,6 +427,7 @@ widgets:
                 "available": True,
                 "playing": True,
                 "playing_count": 1,
+                "supported": True,
             }
     finally:
         await server.stop()

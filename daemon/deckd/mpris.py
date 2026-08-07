@@ -260,13 +260,22 @@ class MprisBackend(Protocol):
 class ChromeMediaState:
     """Chrome-icon passive-playback snapshot (issue #47).
 
-    Wire shape: ``{available, playing, playing_count}``. ``available``
-    means at least one ``org.mpris.MediaPlayer2.*`` player is
-    registered on the session bus; ``playing`` is true when at least
+    Wire shape: ``{available, playing, playing_count, supported}``.
+    ``available`` means at least one ``org.mpris.MediaPlayer2.*`` player
+    is registered on the session bus; ``playing`` is true when at least
     one is in ``PlaybackStatus == Playing``; ``playing_count`` is the
     number of players in Playing (so a future 'now playing' indicator
     has the raw count to work with — today the icon only tints on the
     boolean ``playing``).
+
+    ``supported`` is the *structural* bit and it is not the same as
+    ``available``: "no players registered right now" is a transient
+    state the user can change by hitting play, while "this host has no
+    session bus" (macOS — [#56](https://github.com/jonocodes/deckd/issues/56))
+    never changes no matter what they do. The client needs both so it
+    can say "no media players detected" in the first case and
+    "unsupported on this platform" in the second, instead of telling a
+    Mac user to go play something.
 
     Frozen so two values computed from the same inputs compare equal
     by value — the server's broadcast loop debounces against equality,
@@ -276,6 +285,7 @@ class ChromeMediaState:
     available: bool
     playing: bool
     playing_count: int
+    supported: bool = True
 
 
 def compute_chrome_media(

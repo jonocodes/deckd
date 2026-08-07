@@ -220,6 +220,7 @@ describe("App — chrome media icon passive indicator", () => {
     available: boolean;
     playing: boolean;
     playing_count: number;
+    supported?: boolean;
   }) {
     act(() => {
       chromeMediaHandler?.({ type: "chrome_media", ...state });
@@ -255,6 +256,89 @@ describe("App — chrome media icon passive indicator", () => {
     pushChromeMedia({ available: true, playing: false, playing_count: 0 });
     const button = screen.getByRole("button", { name: /now playing/i });
     expect(button.className).not.toContain("chrome-btn-playing");
+  });
+});
+
+/** Structurally-unsupported now-playing surface.
+ *
+ * A host with no session bus (macOS) can never produce an MPRIS row, so
+ * "no media players detected" — which reads as "go press play" — is the
+ * wrong empty state. The daemon says so explicitly with
+ * ``supported: false`` and the view borrows the running-windows list's
+ * wording (issue #120, decision 8). The button itself stays put: it's
+ * global chrome, and hiding it per-platform would make the chrome strip
+ * differ between a user's Linux box and their Mac.
+ */
+describe("App — now playing unsupported on this platform", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    onLayout.mockReset();
+    chromeMediaHandler = null;
+    window.history.replaceState(null, "", "/?demo=default");
+  });
+
+  function pushChromeMedia(state: {
+    available: boolean;
+    playing: boolean;
+    playing_count: number;
+    supported?: boolean;
+  }) {
+    act(() => {
+      chromeMediaHandler?.({ type: "chrome_media", ...state });
+    });
+  }
+
+  function openBrowser() {
+    fireEvent.pointerDown(screen.getByRole("button", { name: /now playing/i }));
+  }
+
+  it("shows the unsupported empty state when the daemon reports supported=false", () => {
+    render(<App />);
+    pushChromeMedia({
+      available: false,
+      playing: false,
+      playing_count: 0,
+      supported: false,
+    });
+    openBrowser();
+    expect(
+      screen.getByText("now playing: unsupported on this platform"),
+    ).toBeTruthy();
+    expect(screen.queryByText("Nothing playing")).toBeNull();
+  });
+
+  it("keeps the chrome button visible when unsupported", () => {
+    render(<App />);
+    pushChromeMedia({
+      available: false,
+      playing: false,
+      playing_count: 0,
+      supported: false,
+    });
+    expect(screen.getByRole("button", { name: /now playing/i })).toBeTruthy();
+  });
+
+  it("keeps the transient empty state when supported is omitted", () => {
+    // An older daemon doesn't send the field; absence must read as
+    // "supported", not as "unsupported" — otherwise every pre-upgrade
+    // daemon would claim the platform can't do media.
+    render(<App />);
+    pushChromeMedia({ available: false, playing: false, playing_count: 0 });
+    openBrowser();
+    expect(screen.getByText("Nothing playing")).toBeTruthy();
+  });
+
+  it("keeps the transient empty state when supported is true", () => {
+    render(<App />);
+    pushChromeMedia({
+      available: false,
+      playing: false,
+      playing_count: 0,
+      supported: true,
+    });
+    openBrowser();
+    expect(screen.getByText("Nothing playing")).toBeTruthy();
   });
 });
 

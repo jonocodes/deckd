@@ -149,6 +149,11 @@ export function App() {
   // daemon's "no players" default on a fresh session.
   const [chromeMedia, setChromeMedia] = useState<ServerChromeMedia | null>(null);
   const onChromeMedia = useCallback((m: ServerChromeMedia) => setChromeMedia(m), []);
+  // Structural, not transient: the host can't run MPRIS at all (macOS
+  // has no session bus). Only an explicit ``false`` counts — no frame
+  // yet, or a daemon predating the field, both read as supported and
+  // keep the existing "no players detected" behaviour.
+  const mediaUnsupported = chromeMedia?.supported === false;
   // Stage 2 running-windows list (issues #120 / #126). The daemon
   // pushes ``running_windows`` frames globally — every connected
   // session holds a fresh snapshot regardless of which view it has
@@ -588,8 +593,19 @@ export function App() {
             // renders something when the daemon hasn't pushed a
             // nowplaying layout (e.g. a transient race during a
             // view switch).
+            //
+            // ``supported: false`` short-circuits both paths: the host
+            // can never produce a row (macOS has no session bus), so
+            // "Nothing playing" would tell the user to go play something
+            // that will never show up. Same wording as the
+            // running-windows list's empty state — one vocabulary for
+            // "this platform can't do it" (issue #120, decision 8).
             <div className="nowplaying" role="region" aria-label="now playing">
-              {nowPlayingWidget ? (
+              {mediaUnsupported ? (
+                <div className="nowplaying-empty">
+                  now playing: unsupported on this platform
+                </div>
+              ) : nowPlayingWidget ? (
                 <NowPlayingCell
                   widget={nowPlayingWidget}
                   states={media.states}

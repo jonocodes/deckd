@@ -158,12 +158,19 @@ export type ServerWidgetUpdate = {
  * snapshot (issue #47). Sent on event-type transitions
  * (``NameOwnerChanged`` registration transitions and ``PlaybackStatus``
  * boundary crossings) plus a snapshot on connect. The client tints the
- * media icon when ``playing`` is true and leaves it outlined otherwise. */
+ * media icon when ``playing`` is true and leaves it outlined otherwise.
+ *
+ * ``supported`` is false when the host can't run MPRIS at all (macOS has no
+ * session bus). Absent means supported — older daemons don't send the field.
+ * It separates the structural empty state from the transient one: "no media
+ * players detected" is something the user can fix by hitting play; an
+ * unsupported host is not. */
 export type ServerChromeMedia = {
   type: "chrome_media";
   available: boolean;
   playing: boolean;
   playing_count: number;
+  supported?: boolean;
 };
 /** Sent by the daemon to a non-loopback client whose ``hello`` omitted or
  * got the shared password wrong (issue #16); the socket is closed straight
