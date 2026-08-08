@@ -164,16 +164,12 @@ export function PropertiesPanel({
             onChange={(icon) => onWidgetChange(updateField(widget, "icon", icon))}
           />
 
-          <label className="prop-field">
-            <span className="prop-field-label">Color</span>
-            <input
-              className="prop-field-input"
-              type="text"
-              value={widget.color ?? ""}
-              onChange={(e) => onWidgetChange(updateField(widget, "color", e.target.value || null))}
-              placeholder="e.g. #1e3a8a"
+          {widget.kind === "button" && (
+            <ColorField
+              color={widget.color}
+              onChange={(color) => onWidgetChange(updateField(widget, "color", color))}
             />
-          </label>
+          )}
         </>
       )}
 
@@ -350,6 +346,87 @@ function IconField({
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
       />
+    </div>
+  );
+}
+
+/** Preset palette for the colour picker (#115). A small, opinionated set
+ * designed for the deckd surface — the editor's accent, the project
+ * identity colour, and a few warm/cool accents. Picking one is a single
+ * tap; the text input remains the authoritative value. */
+const COLOR_PRESETS = [
+  "#1e3a8a",
+  "#3fb950",
+  "#ff7139",
+  "#ff0000",
+  "#58a6ff",
+  "#a371f7",
+  "#ffffff",
+  "#000000",
+] as const;
+
+/** The ``<input type="color">`` swatch always wants a 7-char hex literal;
+ * non-hex CSS (``hsl(...)``, ``rebeccapurple``) can't be displayed. Return
+ * an empty string for those cases — the swatch then falls back to its own
+ * default (browser-chosen, e.g. black) without us forcing a misleading
+ * "colour is set to black" state. */
+function parseHexColor(value: string | null | undefined): string {
+  if (!value) return "";
+  const match = /^#([0-9a-fA-F]{6})$/.exec(value.trim());
+  if (!match) return "";
+  return `#${match[1].toLowerCase()}`;
+}
+
+function ColorField({
+  color,
+  onChange,
+}: {
+  color: string | null | undefined;
+  onChange: (color: string | null) => void;
+}) {
+  const handleInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      onChange(e.target.value || null);
+    },
+    [onChange],
+  );
+  const handlePreset = useCallback(
+    (preset: string) => onChange(preset),
+    [onChange],
+  );
+
+  return (
+    <div className="prop-field">
+      <span className="prop-field-label">Color</span>
+      <div className="prop-field-color-row">
+        <input
+          className="prop-field-color-swatch"
+          type="color"
+          aria-label="color swatch"
+          value={parseHexColor(color)}
+          onChange={handleInputChange}
+        />
+        <input
+          className="prop-field-input prop-field-color-text"
+          type="text"
+          value={color ?? ""}
+          onChange={handleInputChange}
+          placeholder="e.g. #1e3a8a or rebeccapurple"
+        />
+      </div>
+      <div className="prop-field-color-presets">
+        {COLOR_PRESETS.map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            className="prop-field-color-preset"
+            style={{ background: preset }}
+            aria-label={`use preset ${preset}`}
+            title={preset}
+            onClick={() => handlePreset(preset)}
+          />
+        ))}
+      </div>
     </div>
   );
 }

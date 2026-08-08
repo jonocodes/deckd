@@ -2482,6 +2482,66 @@ select.prop-field-input {
   font-size: 12px;
 }
 
+.prop-field-color-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.prop-field-color-swatch {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background: transparent;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.prop-field-color-swatch:focus {
+  outline: 2px solid #58a6ff;
+  outline-offset: -2px;
+}
+
+.prop-field-color-swatch::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.prop-field-color-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 4px;
+}
+
+.prop-field-color-swatch::-moz-color-swatch {
+  border: none;
+  border-radius: 4px;
+}
+
+.prop-field-color-text {
+  flex: 1;
+}
+
+.prop-field-color-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.prop-field-color-preset {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.prop-field-color-preset:focus {
+  outline: 2px solid #58a6ff;
+  outline-offset: -2px;
+}
+
 /* Selected canvas cell highlight */
 .editor-canvas-cell-selected {
   outline: 2px solid #58a6ff;

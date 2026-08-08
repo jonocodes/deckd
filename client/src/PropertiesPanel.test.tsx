@@ -236,9 +236,122 @@ describe("PropertiesPanel — button widget", () => {
         onLayoutFieldChange={vi.fn()}
       />,
     );
-    const colorInput = screen.getByDisplayValue("#1e3a8a");
+    const colorInput = document.querySelector(".prop-field-color-text") as HTMLInputElement;
+    expect(colorInput.value).toBe("#1e3a8a");
     fireEvent.change(colorInput, { target: { value: "#ff0000" } });
     expect(onChange).toHaveBeenCalledWith({ ...baseButton, color: "#ff0000" });
+  });
+
+  it("renders a color swatch alongside the color text input (#115)", () => {
+    const onChange = vi.fn();
+    render(
+      <PropertiesPanel
+        widget={baseButton}
+        layoutFields={layoutFields}
+        onWidgetChange={onChange}
+        onLayoutFieldChange={vi.fn()}
+      />,
+    );
+    const swatch = screen.getByLabelText(/color swatch/i);
+    expect((swatch as HTMLInputElement).value.toLowerCase()).toBe("#1e3a8a");
+  });
+
+  it("color field is hidden on non-button widgets (#115 / ADR-0006: button-only)", () => {
+    const onChange = vi.fn();
+    const cases: Widget[] = [
+      { id: "jog-1", kind: "jogstrip" },
+      { id: "pad-1", kind: "trackpad" },
+      { id: "meter-1", kind: "meter" },
+      { id: "stats-1", kind: "stats" },
+    ];
+    for (const widget of cases) {
+      cleanup();
+      render(
+        <PropertiesPanel
+          widget={widget}
+          layoutFields={layoutFields}
+          onWidgetChange={onChange}
+          onLayoutFieldChange={vi.fn()}
+        />,
+      );
+      expect(screen.queryByLabelText(/color swatch/i)).toBeFalsy();
+    }
+  });
+
+  it("color swatch changes propagate to onWidgetChange (#115)", () => {
+    const onChange = vi.fn();
+    render(
+      <PropertiesPanel
+        widget={baseButton}
+        layoutFields={layoutFields}
+        onWidgetChange={onChange}
+        onLayoutFieldChange={vi.fn()}
+      />,
+    );
+    const swatch = screen.getByLabelText(/color swatch/i);
+    fireEvent.change(swatch, { target: { value: "#ff0000" } });
+    expect(onChange).toHaveBeenCalledWith({ ...baseButton, color: "#ff0000" });
+  });
+
+  it("preset swatch selects a colour in one click (#115)", () => {
+    const onChange = vi.fn();
+    render(
+      <PropertiesPanel
+        widget={baseButton}
+        layoutFields={layoutFields}
+        onWidgetChange={onChange}
+        onLayoutFieldChange={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByLabelText(/use preset #3fb950/i));
+    expect(onChange).toHaveBeenCalledWith({ ...baseButton, color: "#3fb950" });
+  });
+
+  it("non-hex CSS colour is preserved when displayed (#115)", () => {
+    const onChange = vi.fn();
+    const widget: Widget = { ...baseButton, color: "rebeccapurple" };
+    render(
+      <PropertiesPanel
+        widget={widget}
+        layoutFields={layoutFields}
+        onWidgetChange={onChange}
+        onLayoutFieldChange={vi.fn()}
+      />,
+    );
+    const text = document.querySelector(".prop-field-color-text") as HTMLInputElement;
+    expect(text.value).toBe("rebeccapurple");
+    fireEvent.click(screen.getByLabelText(/use preset #ff0000/i));
+    expect(onChange).toHaveBeenCalledWith({ ...baseButton, color: "#ff0000" });
+  });
+
+  it("clearing the color text input sets color to null (#115)", () => {
+    const onChange = vi.fn();
+    render(
+      <PropertiesPanel
+        widget={baseButton}
+        layoutFields={layoutFields}
+        onWidgetChange={onChange}
+        onLayoutFieldChange={vi.fn()}
+      />,
+    );
+    const colorInput = document.querySelector(".prop-field-color-text") as HTMLInputElement;
+    fireEvent.change(colorInput, { target: { value: "" } });
+    const changed = onChange.mock.calls[0][0];
+    expect("color" in changed).toBe(false);
+  });
+
+  it("color field is hidden on blank widgets (matches existing field visibility)", () => {
+    const onChange = vi.fn();
+    const widget: Widget = { id: "blank-1", kind: "blank" };
+    render(
+      <PropertiesPanel
+        widget={widget}
+        layoutFields={layoutFields}
+        onWidgetChange={onChange}
+        onLayoutFieldChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByLabelText(/color swatch/i)).toBeFalsy();
   });
 
   it("edits size fields", () => {
