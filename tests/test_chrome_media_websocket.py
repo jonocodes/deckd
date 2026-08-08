@@ -28,9 +28,13 @@ from aiohttp.test_utils import TestServer
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from conftest import make_test_server
+from conftest import make_test_server, requires_dbus
 from deckd.mpris import DbusMprisBackend, PLAYER_INTERFACE
 from test_mpris_dbus import FakeDbusBus
+
+# Whole module boots a real ``DbusMprisBackend`` and calls ``.start()``,
+# which lazily imports ``dbus_fast`` (issue #27).
+pytestmark = requires_dbus
 
 
 async def _boot_chrome_media_websocket(

@@ -13,7 +13,7 @@ from typing import Any, cast
 
 import pytest
 
-from conftest import FakeDbusBusFactory, FakePointerSink
+from conftest import FakeDbusBusFactory, FakePointerSink, requires_dbus
 
 from deckd.actions import ActionContext, execute as run_action
 from deckd.layouts import Action, Widget
@@ -43,6 +43,7 @@ def _widget(dbus_value: str) -> Widget:
 # ---------------------------------------------------------------------------
 
 
+@requires_dbus
 async def test_press_dbus_calls_method_on_session_bus() -> None:
     factory = FakeDbusBusFactory()
     widget = _widget(
@@ -88,6 +89,7 @@ async def test_press_raise_calls_backend() -> None:
     assert backend.identity == "firefox"
 
 
+@requires_dbus
 async def test_press_dbus_passes_string_arguments() -> None:
     factory = FakeDbusBusFactory()
     widget = _widget(
@@ -102,6 +104,7 @@ async def test_press_dbus_passes_string_arguments() -> None:
     assert call["args"] == ["hello", "world"]
 
 
+@requires_dbus
 async def test_press_dbus_uses_system_bus_for_systemd_interfaces() -> None:
     factory = FakeDbusBusFactory()
     widget = _widget(
@@ -126,6 +129,7 @@ async def test_press_dbus_uses_system_bus_for_systemd_interfaces() -> None:
 # ---------------------------------------------------------------------------
 
 
+@requires_dbus
 async def test_press_dbus_disconnects_bus_after_call() -> None:
     factory = FakeDbusBusFactory()
     widget = _widget(
@@ -144,6 +148,7 @@ async def test_press_dbus_disconnects_bus_after_call() -> None:
 # ---------------------------------------------------------------------------
 
 
+@requires_dbus
 async def test_press_dbus_swallows_errors_and_logs(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -162,6 +167,29 @@ async def test_press_dbus_swallows_errors_and_logs(
     assert not any(
         rec.exc_info and rec.exc_info[1] is boom for rec in caplog.records
     )
+
+
+async def test_press_dbus_swallows_import_error_and_logs(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """When ``dbus-fast`` is not installed (issue #27), parsing raises
+    ``ImportError``. The dispatcher must catch it the same way it catches a
+    malformed-value ``ValueError`` — log a warning, open no bus, never raise."""
+    import deckd.actions as actions_mod
+
+    def boom(_value: str):
+        raise ImportError("No module named 'dbus_fast'")
+
+    monkeypatch.setattr(actions_mod, "_parse_dbus_action", boom)
+    factory = FakeDbusBusFactory()
+    widget = _widget("org.example.I.Foo")
+
+    with caplog.at_level(logging.WARNING, logger="deckd.actions"):
+        # Must not raise — the dispatcher must catch and log.
+        await run_action(widget, _ctx(factory))
+
+    assert factory.buses == []
+    assert any("dbus" in rec.message.lower() for rec in caplog.records)
 
 
 # ---------------------------------------------------------------------------

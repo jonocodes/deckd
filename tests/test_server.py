@@ -11,7 +11,7 @@ import aiohttp
 import pytest
 import websockets
 
-from conftest import ServerHandle
+from conftest import ServerHandle, requires_dbus
 
 # Time to wait for a fire-and-forget side effect (shell dispatch, scroll emit).
 SIDE_EFFECT_WAIT = 0.05
@@ -183,6 +183,7 @@ async def test_press_key(srv: ServerHandle) -> None:
 # ---------------------------------------------------------------------------
 
 
+@requires_dbus
 async def test_press_dbus(srv: ServerHandle) -> None:
     async with ws_connected(srv) as (ws, _):
         await ws.send(json.dumps({"type": "press", "id": "audio-toggle"}))

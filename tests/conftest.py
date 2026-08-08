@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import sys
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -13,6 +14,15 @@ import pytest_asyncio
 from aiohttp.test_utils import TestServer
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "daemon"))
+
+# ``dbus-fast`` is an optional extra (issue #27): setup-linux installs the
+# `[dbus]` extra, setup-macos skips it. Tests that drive the real parse /
+# dispatch path (which imports ``dbus_fast.BusType``) carry this marker so
+# they skip cleanly on a macOS checkout without the extra.
+requires_dbus = pytest.mark.skipif(
+    importlib.util.find_spec("dbus_fast") is None,
+    reason="dbus-fast optional extra ('[dbus]') not installed (issue #27)",
+)
 
 from deckd.input import ScrollController
 from deckd.platform import AppInfo

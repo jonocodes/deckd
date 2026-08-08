@@ -7,9 +7,11 @@ default:
 # Per-platform setup recipes. `setup` auto-picks the right one; use the
 # explicit recipe when you want to override (e.g. cross-checking on a CI box).
 
-# Linux/GNOME/KDE dev: [dev,uinput] gives the evdev-backed uinput sink used
-# for key injection (browser buttons etc.). On x86_64 that's the prebuilt
-# evdev-binary wheel; on aarch64 (no evdev-binary wheel) we install [dev]
+# Linux/GNOME/KDE dev: [dev,uinput,dbus] gives the evdev-backed uinput sink
+# used for key injection (browser buttons etc.) plus dbus-fast for the `dbus:`
+# action primitive and MPRIS now-playing (issue #27 — both Linux-only, so
+# setup-macos skips the [dbus] extra). On x86_64 uinput is the prebuilt
+# evdev-binary wheel; on aarch64 (no evdev-binary wheel) we install [dev,dbus]
 # then source-build python-evdev via scripts/install_evdev_source.sh, which
 # needs a C compiler (the `gcc` flox package). If that build is skipped the
 # uinput backend degrades gracefully (input.py imports evdev lazily, no-ops).
@@ -22,17 +24,20 @@ setup-linux:
         uv venv --python 3.12 --allow-existing
     fi
     if [ "$(uname -m)" = x86_64 ]; then
-        uv pip install -e ".[dev,uinput]"
+        uv pip install -e ".[dev,uinput,dbus]"
     else
         echo "note: $(uname -m) has no evdev-binary wheel; source-building python-evdev." >&2
-        uv pip install -e ".[dev]"
+        uv pip install -e ".[dev,dbus]"
         PYTHON="${VIRTUAL_ENV:-.venv}/bin/python" bash scripts/install_evdev_source.sh \
             || echo "warn: evdev source build failed; uinput key injection will no-op." >&2
     fi
     cd client && npm install
 
 # macOS dev: [dev] + [macos] (PyObjC Quartz covers scroll, pointer, click,
-# and held-button drag for the trackpad).
+# and held-button drag for the trackpad). No [dbus] extra: macOS has no
+# session bus and the default layout's D-Bus/MPRIS targets don't exist there
+# (issue #27), so __main__ wires a null bus factory and the daemon serves
+# without those primitives.
 setup-macos:
     #!/usr/bin/env bash
     set -euo pipefail

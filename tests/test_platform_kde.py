@@ -22,6 +22,8 @@ import json
 
 import pytest
 
+from conftest import requires_dbus
+
 from deckd import platform as plat
 from deckd.platform import (
     AppInfo,
@@ -33,6 +35,12 @@ from deckd.platform import (
     PlatformBackend,
     X11FocusBackend,
 )
+
+# The KDE focus backend owns ``org.deckd.Focus`` via ``dbus_fast.service`` —
+# a Linux-only path never taken on macOS. When the `[dbus]` extra is absent
+# (setup-macos, issue #27) the whole module skips rather than erroring on the
+# lazy ``dbus_fast`` import.
+pytestmark = requires_dbus
 
 
 # ---------------------------------------------------------------------------

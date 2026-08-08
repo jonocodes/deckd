@@ -14,7 +14,6 @@ dependencies = [
     # order survive a one-field save. PyYAML stays for the load path.
     "ruamel.yaml>=0.18",
     "pydantic>=2.6",
-    "dbus-fast>=5",
     "watchfiles>=1.0",
     # psutil backs the daemon's cross-platform sensor sources
     # (CPU utilization, memory used, CPU frequency, battery).
@@ -25,6 +24,15 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+dbus = [
+    # dbus-fast backs the ``dbus:`` action primitive and MPRIS now-playing
+    # (issue #27). Both are Linux-only in practice — the default layout's
+    # targets (org.mpris.*, org.freedesktop.login1.*, org.gnome.ScreenSaver)
+    # don't exist on macOS, which has no session bus — so this is an opt-in
+    # extra rather than a base dep. ``__main__`` probes the import and wires
+    # ``None`` when absent; the daemon then serves without D-Bus/MPRIS.
+    "dbus-fast>=5",
+]
 uinput = [
     # x86_64 gets the prebuilt evdev-binary wheel. Other arches (notably
     # aarch64) have no evdev-binary wheel, so fall back to the sdist `evdev`,

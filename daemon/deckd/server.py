@@ -674,32 +674,40 @@ class Server:
         # (``FakeDbusBusFactory``) keep working unchanged — the
         # ``call()`` they patch still gets observed.
         if dbus_bus_factory is not None:
-            from dbus_fast.message import Message as DbusMessage
+            try:
+                from dbus_fast.message import Message as DbusMessage
+            except ImportError:
+                # ``dbus-fast`` is an optional extra (issue #27). On
+                # hosts without it (e.g. macOS) we skip the call-timing
+                # wrapper entirely — the factory still works for the
+                # fake-bus test path that doesn't touch the real
+                # ``dbus_fast.message.Message`` class.
+                self.dbus_bus_factory = dbus_bus_factory
+            else:
+                original_factory = dbus_bus_factory
 
-            original_factory = dbus_bus_factory
+                def _timing_factory(bus_type: "BusTypeT") -> "MessageBus":
+                    bus = original_factory(bus_type)
+                    original_call = bus.call
 
-            def _timing_factory(bus_type: "BusTypeT") -> "MessageBus":
-                bus = original_factory(bus_type)
-                original_call = bus.call
+                    async def _timed_call(message: DbusMessage) -> DbusMessage:
+                        import asyncio
+                        start = asyncio.get_event_loop().time()
+                        try:
+                            return await original_call(message)
+                        finally:
+                            self.metrics.record_dbcall(
+                                asyncio.get_event_loop().time() - start
+                            )
 
-                async def _timed_call(message: "DbusMessage") -> "DbusMessage":
-                    import asyncio
-                    start = asyncio.get_event_loop().time()
-                    try:
-                        return await original_call(message)
-                    finally:
-                        self.metrics.record_dbcall(
-                            asyncio.get_event_loop().time() - start
-                        )
+                    # ``bus.call`` accepts a single ``Message`` at runtime;
+                    # reassigning the bound method to a wrapper is the
+                    # least-bad way to instrument latency from outside
+                    # dbus_fast.
+                    bus.call = _timed_call  # type: ignore[method-assign,assignment]
+                    return bus
 
-                # ``bus.call`` accepts a single ``Message`` at runtime;
-                # reassigning the bound method to a wrapper is the
-                # least-bad way to instrument latency from outside
-                # dbus_fast.
-                bus.call = _timed_call  # type: ignore[method-assign,assignment]
-                return bus
-
-            self.dbus_bus_factory = _timing_factory
+                self.dbus_bus_factory = _timing_factory
         self.focus_backend = focus_backend
         self._focus_task: asyncio.Task[None] | None = None
         self._layouts_task: asyncio.Task[None] | None = None

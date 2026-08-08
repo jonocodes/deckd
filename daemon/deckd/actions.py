@@ -278,6 +278,13 @@ async def _dispatch_dbus(
     except ValueError as exc:
         log.warning("[dbus] %s (widget=%s)", exc, widget_id)
         return
+    except ImportError as exc:
+        # ``dbus-fast`` is an optional extra (issue #27); ``_parse_dbus_action``
+        # imports ``BusType`` to infer the bus. On an install without the
+        # `[dbus]` extra that import fails — swallow it like any other dispatch
+        # error so a stray ``dbus:`` button just logs instead of crashing.
+        log.warning("[dbus] dbus-fast not installed; skipping (widget=%s): %s", widget_id, exc)
+        return
 
     bus = None
     try:

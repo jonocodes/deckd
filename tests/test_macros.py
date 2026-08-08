@@ -8,7 +8,7 @@ from typing import cast
 
 import pytest
 
-from conftest import FakeDbusBusFactory
+from conftest import FakeDbusBusFactory, requires_dbus
 
 from deckd.actions import (
     ActionContext,
@@ -126,6 +126,7 @@ async def test_macro_executes_shell_step() -> None:
 # ---------------------------------------------------------------------------
 
 
+@requires_dbus
 async def test_macro_executes_dbus_step() -> None:
     factory = FakeDbusBusFactory()
     macro = Macro(steps=[

@@ -28,6 +28,8 @@ from typing import Any, Callable
 
 import pytest
 
+from conftest import requires_dbus
+
 from deckd.media import _art_token
 from deckd.mpris import (
     DbusMprisBackend,
@@ -40,6 +42,10 @@ from deckd.mpris import (
     ROOT_INTERFACE,
     connect_mpris_backend,
 )
+
+# The whole module drives the real ``dbus_fast``-backed MPRIS backend, so it
+# skips wholesale on an install without the `[dbus]` extra (issue #27).
+pytestmark = requires_dbus
 
 
 # ---------------------------------------------------------------------------

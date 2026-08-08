@@ -14,7 +14,7 @@ from aiohttp.test_utils import TestServer
 # ``conftest.py`` uses for the daemon package.
 sys.path.insert(0, str(Path(__file__).parent))
 
-from conftest import make_test_server
+from conftest import make_test_server, requires_dbus
 from deckd.media import MediaState
 from deckd.mpris import (
     DbusMprisBackend,
@@ -193,6 +193,7 @@ widgets:
     return test_server, server, bus
 
 
+@requires_dbus
 async def test_dbus_mpris_round_trips_across_websocket(tmp_path: Path) -> None:
     """End-to-end check (issue #52 acceptance criterion 7): the full
     ``DbusMprisBackend`` -> server pump -> WebSocket flow, driven by a
@@ -247,6 +248,7 @@ async def test_dbus_mpris_round_trips_across_websocket(tmp_path: Path) -> None:
         await test_server.close()
 
 
+@requires_dbus
 async def test_all_three_browser_commands_round_trip_through_dbus(tmp_path: Path) -> None:
     """End-to-end check (issue #54 acceptance criterion 4): every browser
     command — ``play-pause``, ``next``, ``previous`` — issued over a real

@@ -201,7 +201,7 @@ export PATH="$HOME/.local/bin:$PATH"
 
 # 2. Create the venv and install deps
 uv venv --python 3.12
-uv pip install -e ".[dev,uinput]"   # aarch64: source-builds python-evdev — see note below
+uv pip install -e ".[dev,uinput,dbus]"   # aarch64: source-builds python-evdev — see note below
 
 # 3. Install JS client deps (once)
 cd client && npm install && cd ..
@@ -221,7 +221,7 @@ Open `http://127.0.0.1:8765` in any browser. You should see the active layout's 
 
 ### macOS
 
-The daemon runs on macOS via `daemon/deckd/platform_macos.py` — focus + key injection work out of the box, and the jogstrip + trackpad need `pyobjc-framework-Quartz` (pulled in via the `[macos]` extra). The GNOME Shell focus extension is Linux-only.
+The daemon runs on macOS via `daemon/deckd/platform_macos.py` — focus + key injection work out of the box, and the jogstrip + trackpad need `pyobjc-framework-Quartz` (pulled in via the `[macos]` extra). The GNOME Shell focus extension is Linux-only. The `[dbus]` extra (`dbus-fast`) is Linux-only and deliberately skipped on macOS — there's no session bus and the default layout's D-Bus/MPRIS targets don't exist, so the daemon wires a null bus factory and serves without the `dbus:` action primitive or MPRIS now-playing (issue #27).
 
 Setup (no `uv`/uinput bits):
 
@@ -785,7 +785,7 @@ A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` f
 - `shell: "..."` — launch a command, fire-and-forget. The child is detached (its own session) and runs independently; stdin/stdout/stderr are discarded and the daemon does not wait for it or observe its exit code. This is the way to launch a program (`shell: firefox`, `shell: code`, `shell: "xdg-open https://…"`), including a specific terminal (`shell: tilix`).
 - `terminal: true` — open the auto-detected terminal emulator, resolved via `$TERMINAL` then a candidate list (`foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`). This is the only accepted form: `terminal` takes no command string — for a specific program (terminal or otherwise) use `shell:`. A string value is rejected at layout-load time with a message pointing you at `shell:`.
 - `key: "ctrl+t"` — fire the keystroke through uinput as a single combo.
-- `dbus: "service:path org.Interface.Method arg1 arg2"` — call a D-Bus method via `dbus-fast`. The bus is inferred from the interface name (`org.freedesktop.login1.*`, `systemd1.*`, `timedate1.*`, `locale1.*`, etc. → system bus; everything else → session bus). Errors are logged, not surfaced to the client. With the `service:path` prefix omitted, the daemon derives them from the first two / three segments of the interface name.
+- `dbus: "service:path org.Interface.Method arg1 arg2"` — call a D-Bus method via `dbus-fast` (the Linux-only `[dbus]` extra; on an install without it the action logs a warning and no-ops — issue #27). The bus is inferred from the interface name (`org.freedesktop.login1.*`, `systemd1.*`, `timedate1.*`, `locale1.*`, etc. → system bus; everything else → session bus). Errors are logged, not surfaced to the client. With the `service:path` prefix omitted, the daemon derives them from the first two / three segments of the interface name.
 - `raise: "firefox"` — raise the most recently focused running window whose `wm_class`, GTK application id, or sandboxed application id exactly matches the identity. This is currently supported by the GNOME Shell focus extension; X11, KDE, and macOS log and ignore it. Enable the updated extension and relogin after installing it.
 - `url: "https://…"` — open a URL in the user's default browser (`xdg-open` on Linux, `open` on macOS). Accepts `http:`, `https:`, and `file:` schemes; other schemes are rejected at load time with guidance to use `shell:` instead. The URL is passed directly to the opener binary (no shell quoting), so query strings, fragments, and percent-encoded paths survive unchanged.
 - `text: "hello world"` — inject a string into the focused window. Two modes: **simulate** (default) emits each character as a synthetic key event through the existing keyboard injection path; **paste** (`text_mode: paste`) writes the string to the clipboard, emits `ctrl+v`, and restores the previous clipboard contents after one second (set `restore_clipboard: false` to skip restoration). When a string contains characters not mappable to keycodes (multi-byte emoji, control chars) and the mode isn't explicitly forced to `simulate`, it automatically falls back to paste with a warning.

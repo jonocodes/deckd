@@ -7,6 +7,7 @@ import os
 import signal
 import sys
 from pathlib import Path
+from typing import Any, Callable
 
 from aiohttp import web
 
@@ -223,10 +224,25 @@ def main() -> None:
         except PasswordError as exc:
             parser.error(str(exc))
 
-    def dbus_bus_factory(bus_type):
+    # ``dbus-fast`` is an optional extra (issue #27). It backs the ``dbus:``
+    # action primitive and MPRIS now-playing — both Linux-only in practice
+    # (org.mpris.*, login1, GNOME ScreenSaver), so ``setup-macos`` skips the
+    # `[dbus]` extra. Probe the import once here: when it is absent, wire
+    # ``None`` as the factory. Both the MPRIS auto-discovery and every
+    # ``dbus:`` dispatch already guard on ``factory is None`` and skip cleanly.
+    dbus_bus_factory: "Callable[[Any], Any] | None" = None
+    try:
         from dbus_fast.aio import MessageBus
+    except ImportError:
+        logging.getLogger("deckd").warning(
+            "dbus-fast not installed; D-Bus actions and MPRIS now-playing "
+            "disabled (install the '[dbus]' extra to enable)"
+        )
+    else:
+        def _make_dbus_bus(bus_type):
+            return MessageBus(bus_type=bus_type)
 
-        return MessageBus(bus_type=bus_type)
+        dbus_bus_factory = _make_dbus_bus
 
     # Test-only seam (analogous to the ``PYTHONPATH=scripts/no-evdev``
     # input shim): when ``DECKD_FAKE_MPRIS`` names a JSON file, skip the
