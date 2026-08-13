@@ -71,15 +71,22 @@ run-daemon:
 run-daemon-lan:
     VLC_HTTP_PASSWORD=dummy deckd --bind 0.0.0.0 --layouts-dir layouts --verbose
 
-# Kill whatever is bound to the two ports we use: the daemon (:8765) and
-# the Vite dev server (:5173). Handy when a stale daemon still holds the
-# port (deckd now fails fast on that) or a dev server outlived its
-# terminal, leaving the client with no backend. Reports free ports and
-# no-ops cleanly when nothing is running.
+# Default ports. Override with DECKD_PORT / VITE_PORT when running multiple
+# worktrees side-by-side (each `git worktree` lives on its own checkout but
+# still shares the host's port space).
+DECKD_PORT := env_var_or_default("DECKD_PORT", "8765")
+VITE_PORT := env_var_or_default("VITE_PORT", "5173")
+
+# Kill whatever is bound to the two ports we use: the daemon (default :8765)
+# and the Vite dev server (default :5173). Handy when a stale daemon still
+# holds the port (deckd now fails fast on that) or a dev server outlived its
+# terminal, leaving the client with no backend. Honours DECKD_PORT /
+# VITE_PORT so multi-worktree `just kill` only tears down the current
+# worktree's processes, not every deckd on the box.
 kill:
     #!/usr/bin/env bash
     set -uo pipefail
-    for port in 8765 5173; do
+    for port in {{DECKD_PORT}} {{VITE_PORT}}; do
         pids=$(lsof -ti "tcp:$port" 2>/dev/null || true)
         if [ -z "$pids" ]; then
             echo ":$port already free"
@@ -99,13 +106,16 @@ kill:
 # plus the Vite client (tailscale HTTPS). Ctrl+C — or either process dying —
 # stops both. This replaces the old Procfile
 # (daemon: dev-daemon-lan / client: dev-client-tailscale). For a plain
-# LAN/HTTP client with no cert, run `just dev-lan` instead.
+# LAN/HTTP client with no cert, run `just dev-lan` instead. Honours
+# DECKD_PORT / VITE_PORT for multi-worktree setups; the recipe prints which
+# ports it's using so you know where to point the phone.
 dev:
     #!/usr/bin/env bash
     set -uo pipefail
+    echo "deckd on :{{DECKD_PORT}}, vite on :{{VITE_PORT}}"
     # kill 0 targets this script's process group, so Ctrl+C tears down both
     # `just` children AND their grandchildren (deckd, node/vite) — no orphans
-    # left holding :8765 / :5173.
+    # left holding :{{DECKD_PORT}} / :{{VITE_PORT}}.
     trap 'kill 0' EXIT
     just dev-daemon-lan &
     just dev-client-tailscale &
@@ -119,6 +129,7 @@ dev:
 dev-lan:
     #!/usr/bin/env bash
     set -uo pipefail
+    echo "deckd on :{{DECKD_PORT}}, vite on :{{VITE_PORT}}"
     trap 'kill 0' EXIT
     just dev-daemon-lan &
     just dev-client-lan &
@@ -128,23 +139,38 @@ dev-lan:
 # changes. Layout YAML hot-reload is built into the daemon itself; this is
 # only useful when editing Python.
 dev-daemon:
-    VLC_HTTP_PASSWORD=dummy deckd-dev --verbose
+    VLC_HTTP_PASSWORD=dummy deckd-dev --port {{DECKD_PORT}} --verbose
 
 # Same, but bind the daemon to all interfaces so a phone on the LAN
 # (or Tailscale) can reach it. deckd-dev forwards unknown args to the
-# child, so --bind and --verbose end up on the deckd process. Issue #66.
+# child, so --bind, --port, and --verbose end up on the deckd process.
+# Issue #66. --port honours DECKD_PORT so multiple worktrees can coexist.
 dev-daemon-lan:
-    VLC_HTTP_PASSWORD=dummy deckd-dev --bind 0.0.0.0 --verbose
+    VLC_HTTP_PASSWORD=dummy deckd-dev --bind 0.0.0.0 --port {{DECKD_PORT}} --verbose
 
 # Vite dev server on the LAN. Vite proxies /ws and /health to the local
-# daemon (see vite.config.ts), so the client is same-origin at :5173.
+# daemon (see vite.config.ts), so the client is same-origin at the vite
+# origin. Honours VITE_PORT for multi-worktree setups; --strictPort is
+# dropped when VITE_PORT is overridden so Vite can fall through to the
+# next free port if a sibling worktree grabbed the override.
 dev-client-lan:
-    cd client && npm run dev -- --host 0.0.0.0 --strictPort
+    #!/usr/bin/env bash
+    set -euo pipefail
+    port_flag="--port {{VITE_PORT}} --strictPort"
+    if [ "{{VITE_PORT}}" != "5173" ]; then
+        echo "vite on :{{VITE_PORT}} (DECKD_UPSTREAM=http://127.0.0.1:{{DECKD_PORT}})"
+        port_flag="--port {{VITE_PORT}}"
+    else
+        echo "vite on :{{VITE_PORT}}"
+    fi
+    cd client && DECKD_UPSTREAM="http://127.0.0.1:{{DECKD_PORT}}" npm run dev -- --host 0.0.0.0 $port_flag
 
 # Vite dev server with HTTPS via a tailscale-provisioned cert. Required
 # for Chrome's PWA install prompt (secure-context gate). Provisions the
 # cert lazily on first run; caches it under client/.tls (gitignored).
-# Phone opens https://<host>.<tailnet>.ts.net:5173/ .
+# Phone opens https://<host>.<tailnet>.ts.net:5173/ (or the override of
+# VITE_PORT). Honours VITE_PORT for multi-worktree setups; --strictPort
+# is dropped when overridden so Vite can fall through if the port is busy.
 dev-client-tailscale:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -157,8 +183,12 @@ dev-client-tailscale:
       echo "Provisioning tailscale cert for $host in $tls/ (requires sudo)..."
       (cd "$tls" && sudo "$ts" cert "$host" && sudo chown "$USER" "$host.crt" "$host.key")
     fi
-    echo "-> https://$host:5173/"
-    cd client && DECKD_TLS_DIR="./.tls" DECKD_TLS_HOST="$host" npm run dev -- --host 0.0.0.0 --strictPort
+    echo "-> https://$host:{{VITE_PORT}}/"
+    port_flag="--port {{VITE_PORT}} --strictPort"
+    if [ "{{VITE_PORT}}" != "5173" ]; then
+        port_flag="--port {{VITE_PORT}}"
+    fi
+    cd client && DECKD_TLS_DIR="./.tls" DECKD_TLS_HOST="$host" DECKD_UPSTREAM="http://127.0.0.1:{{DECKD_PORT}}" npm run dev -- --host 0.0.0.0 $port_flag
 
 # Build the client (output: client/dist/).
 build-client:

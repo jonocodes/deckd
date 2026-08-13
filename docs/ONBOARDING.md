@@ -131,8 +131,59 @@ Key daemon CLI flags (in `daemon/deckd/__main__.py`):
 - `--layouts-dir PATH` — where to load YAML layouts from
 - `--client-dist PATH` — serve built client static files
 - `--bind ADDR` — repeatable, literal IP or `iface:<name>` (default: `127.0.0.1` + `::1`)
+- `--port N` — listen port (default `8765`; `0` asks the kernel for an ephemeral one)
 - `--no-auth` — disable shared-password auth (dev only)
 - `--verbose` — debug-level logging
+
+### Worktrees (`git worktree`)
+
+Each `git worktree add` is a fully independent checkout of the repo. Paths
+inside the daemon, tests, and scripts are anchored to the file's own
+location (`Path(__file__).resolve().parents[N]`), so layouts, fixtures, and
+the built client all resolve correctly without any symlinks or rewrites —
+no code change is required for worktree support.
+
+The one resource that *is* shared is the host's port space: every worktree
+that runs `just dev` defaults to `:8765` (daemon) and `:5173` (Vite), so a
+second worktree can't bind the same ports. Override with env vars before
+launching:
+
+```sh
+# worktree 1 (defaults)
+just dev
+
+# worktree 2 — pick free ports and keep them consistent across all recipes
+DECKD_PORT=8766 VITE_PORT=5174 just dev
+```
+
+The dev recipes read these vars and pass them to both halves:
+
+- `DECKD_PORT` is forwarded as `deckd-dev`'s `--port`; `dev-daemon`,
+  `dev-daemon-lan`, `dev`, and `dev-lan` all honour it.
+- `VITE_PORT` is forwarded as Vite's `--port`. When it's been overridden
+  the recipe drops `--strictPort` so Vite falls through to the next free
+  port instead of failing; it also sets `DECKD_UPSTREAM` so Vite's
+  `/ws`/`/health` proxy reaches the *current* worktree's daemon.
+- `just kill` only tears down the *current* worktree's ports, so two
+  worktrees running side-by-side won't take each other down.
+
+Caveats:
+
+- **`just install-service` should only be run from your main checkout.**
+  It writes the literal `$(pwd)` into the systemd unit / launchd plist;
+  doing it from a feature worktree pins the service to a worktree that
+  will eventually be removed.
+- **Live MPRIS / focus smoke tests** (`just smoke-mpris`, `just
+  smoke-focus`) hit the real session bus, so two worktrees can't run
+  them simultaneously.
+- **`uv.lock` is per-repo, not per-worktree.** A `uv pip install` in one
+  worktree edits the lockfile that all worktrees share; if you're
+  intentionally diverging dependencies, isolate with a worktree-local
+  venv (`uv venv --python 3.12 .venv`) and commit changes deliberately.
+- **Each worktree needs its own `.venv/`** (run `just setup` per
+  worktree); `just test-all` only prepends `./.venv/bin` when one
+  exists, so a worktree without one will fall back to whatever Python
+  is on PATH (flox's, or the active interpreter).
 
 ## Verification ladder
 
