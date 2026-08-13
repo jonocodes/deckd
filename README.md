@@ -430,7 +430,7 @@ Tap the **layout editor** button in the bottom chrome (next to now playing / set
 
 - **Palette** — pick a widget kind (button, jogstrip, meter, stats, media, blank, …) to append it to the layout.
 - **Reflow canvas** — widgets render exactly as the live deck does (ADR-0010, ordered-list reflow). Drag to reorder, adjust a widget's `size` span, and toggle the layout's `overflow` mode; the canvas repacks as you go.
-- **Properties panel** — edit the selected widget's `label`, `icon` (via a searchable Lucide / Simple Icons picker), `color`, and its `action` or `macro`. Fields the editor doesn't model yet are passed through opaquely, so editing a layout never drops hand-authored config.
+- **Properties panel** — edit the selected widget's `label`, `icon` (via a searchable Lucide / Simple Icons picker), `color`, and its `action` or `macro`. `color` offers a native colour swatch plus one-tap presets, alongside a free-text field that still accepts any CSS colour string; values the swatch can't hold (named colours, `hsl(...)`, `#RRGGBBAA`) show as a read-only preview and stay editable as text. Clearing the field unsets `color`. Fields the editor doesn't model yet are passed through opaquely, so editing a layout never drops hand-authored config.
 - **New layouts** — create a layout from scratch, setting its `match:` list; the filename is derived from the primary match token on first save.
 
 Saving writes back to disk over the authed write API (`PUT`/`POST /layouts`, below), preserving YAML comments and widget identity; `watchfiles` then hot-reloads every connected client. The editor is in active development — most YAML is round-trippable today, but hand-editing remains the escape hatch for anything it doesn't yet surface.

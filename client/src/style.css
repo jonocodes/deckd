@@ -2488,20 +2488,26 @@ select.prop-field-input {
   gap: 6px;
 }
 
-.prop-field-color-swatch {
+/* The native picker, and the read-only stand-in shown for a CSS colour the
+   picker can't hold (named colours, hsl(...), #RRGGBBAA) — same box either
+   way so the row doesn't jump when the value changes shape. */
+.prop-field-color-swatch,
+.prop-field-color-preview {
   width: 32px;
   height: 32px;
   padding: 0;
   border: 1px solid #30363d;
   border-radius: 6px;
   background: transparent;
-  cursor: pointer;
   flex-shrink: 0;
 }
 
-.prop-field-color-swatch:focus {
-  outline: 2px solid #58a6ff;
-  outline-offset: -2px;
+.prop-field-color-swatch {
+  cursor: pointer;
+}
+
+.prop-field-color-preview {
+  cursor: default;
 }
 
 .prop-field-color-swatch::-webkit-color-swatch-wrapper {
@@ -2537,7 +2543,8 @@ select.prop-field-input {
   cursor: pointer;
 }
 
-.prop-field-color-preset:focus {
+.prop-field-color-swatch:focus-visible,
+.prop-field-color-preset:focus-visible {
   outline: 2px solid #58a6ff;
   outline-offset: -2px;
 }

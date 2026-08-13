@@ -243,6 +243,58 @@ def test_write_reconciles_nested_icon_map(tmp_path: Path) -> None:
     assert on_disk["icon"]["name"] == "new-name"
 
 
+@pytest.mark.parametrize(
+    "color",
+    [
+        # Hex — the shape the editor's `<input type="color">` swatch emits.
+        # Leading `#` is a YAML comment character, so this only survives if
+        # the writer quotes it.
+        "#1e3a8a",
+        # The escape hatches the swatch can't represent but the schema
+        # accepts: a CSS named colour and a functional notation (#115).
+        "rebeccapurple",
+        "hsl(220, 70%, 40%)",
+    ],
+)
+def test_write_round_trips_widget_color_unchanged(tmp_path: Path, color: str) -> None:
+    """#115 AC4: a colour chosen in the editor saves byte-identical.
+
+    The picker is free to normalise what it *shows*; what the client sends
+    is authoritative and must reach disk — and come back out of a re-read —
+    with no rewriting.
+    """
+    path = tmp_path / "app.yaml"
+    path.write_text("match:\n  - app\nwidgets:\n  - id: go\n    kind: button\n")
+    widget = _button("go", "Go")
+    widget["color"] = color
+    snap = _layout_dict(["app"], [widget])
+
+    reconcile_and_write_layout(path, snap)
+
+    assert _read_yaml(path)["widgets"][0]["color"] == color
+    # And through a full parse, which is what the 200 response echoes back.
+    assert _canonical(path)["widgets"][0]["color"] == color
+
+
+def test_write_clearing_widget_color_drops_the_key(tmp_path: Path) -> None:
+    """#115 AC3: clearing the field sends no `color`, so disk loses it.
+
+    The panel deletes the key rather than sending null, so an unset widget
+    stays unset in the YAML instead of gaining an explicit `color: null`.
+    """
+    path = tmp_path / "app.yaml"
+    path.write_text(
+        "match:\n  - app\n"
+        'widgets:\n  - id: go\n    kind: button\n    color: "#1e3a8a"\n'
+    )
+    snap = _layout_dict(["app"], [_button("go")])
+
+    reconcile_and_write_layout(path, snap)
+
+    assert "color" not in _read_yaml(path)["widgets"][0]
+    assert _canonical(path)["widgets"][0]["color"] is None
+
+
 def test_write_is_atomic_no_tempfile_leak_on_success(tmp_path: Path) -> None:
     path = tmp_path / "app.yaml"
     path.write_text("match:\n  - app\nwidgets: []\n")
