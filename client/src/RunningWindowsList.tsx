@@ -28,13 +28,13 @@
  *     fell into the 32px icon grid column) and left unbranded programs
  *     with no visual anchor.
  */
-import type { WindowListEntry } from "./protocol";
+import type { ServerWindowListEntry } from "./protocol";
 import { Icon } from "./Icon";
 
 export type RunningWindowsListProps = {
   /** The current windows snapshot, or ``undefined`` while the daemon's
    *  first ``running_windows`` frame is in flight. */
-  windows: WindowListEntry[] | undefined;
+  windows: ServerWindowListEntry[] | undefined;
   /** Per-row tap handler — wired but ignored in v1; stage 3 (#122)
    *  will replace this with a real raise message. */
   onRowTap?: (windowId: string) => void;
@@ -74,7 +74,7 @@ function RunningWindowRow({
   entry,
   onTap,
 }: {
-  entry: WindowListEntry;
+  entry: ServerWindowListEntry;
   onTap?: () => void;
 }) {
   const icon = entry.icon ?? undefined;

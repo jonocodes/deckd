@@ -1,9 +1,15 @@
 """Smoke test: boot server, hit /health, send WS press, verify shell + page.
 
 Run with: python smoke.py
+
+Uses a stable fixture layout (``scripts/smoke_fixtures/default.yaml``)
+rather than the shipping ``layouts/`` directory (#77) — so a layout
+edit can't break CI and the smoke harness has a deterministic widget
+set to press. Override the directory with ``--layouts-dir``.
 """
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import sys
@@ -11,7 +17,7 @@ from pathlib import Path
 
 print("importing...", flush=True)
 
-sys.path.insert(0, "daemon")
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "daemon"))
 
 import websockets
 from aiohttp import ClientSession, web
@@ -48,10 +54,10 @@ class FakeScrollSink:
         pass
 
 
-async def main() -> None:
-    print("starting server...", flush=True)
+async def main(layouts_dir: Path) -> None:
+    print(f"starting server (layouts: {layouts_dir})...", flush=True)
     server = Server(
-        layouts_dir=Path("layouts"),
+        layouts_dir=layouts_dir,
         host="127.0.0.1",
         port=18765,
         scroll=ScrollController(FakeScrollSink()),
@@ -106,4 +112,14 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    repo_root = Path(__file__).resolve().parent.parent
+    default_layouts = repo_root / "scripts" / "smoke_fixtures"
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument(
+        "--layouts-dir",
+        type=Path,
+        default=default_layouts,
+        help=f"Directory to load layouts from (default: {default_layouts}).",
+    )
+    args = parser.parse_args()
+    asyncio.run(main(args.layouts_dir))

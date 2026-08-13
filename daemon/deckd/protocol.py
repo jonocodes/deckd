@@ -7,6 +7,21 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .layouts import Icon
 
 
+# Wire-side chrome-view identifiers (issues #120, #50, #100). The daemon
+# resolves ``select_view: <VIEW>`` to the layout whose ``id`` is the same
+# string — today, ``layouts/windows.yaml``, ``layouts/mpris.yaml``,
+# ``layouts/editor.yaml``. Hard-coding the literal here (rather than
+# scattered through component code) keeps the wire surface and the
+# layout loader in lockstep: a rename in either place surfaces as a
+# codegen drift error, not silent breakage (#76). Constants are
+# defined as plain module attributes so they show up alongside the
+# message types and survive a Python -> TypeScript codegen pass without
+# extra plumbing.
+WINDOWS_VIEW_ID = "windows"
+MPRIS_VIEW_ID = "mpris"
+EDITOR_VIEW_ID = "editor"
+
+
 class FocusedAppInfo(BaseModel):
     """The daemon's best-known identity of the currently focused application.
 
@@ -122,6 +137,24 @@ class MediaStateMessage(BaseModel):
     # ``Identity`` (e.g. "Firefox", "VLC media player"); the browser
     # renders it as a per-row header. ``None`` for the VLC widget path.
     app_name: str | None = None
+
+
+class ErrorMessage(BaseModel):
+    """Daemon -> client push: a fatal connection-level error.
+
+    Sent to a non-loopback client whose ``hello`` omitted or got the
+    shared password wrong (issue #16); the socket is closed straight
+    after. The client swaps in the password gate. The ``reason`` is a
+    short machine-readable token (``"unauthorized"`` today); the client
+    renders its own copy. The two sides keep the reason set in lockstep
+    through this Pydantic model — a typo in the literal would surface
+    as a codegen drift error (#76).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["error"]
+    reason: str
 
 
 class ChromeMediaMessage(BaseModel):
@@ -289,7 +322,7 @@ class RunningWindowsMessage(BaseModel):
 
 
 ServerMessage = Annotated[
-    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, ChromeMediaMessage, EventMessage, MacroResultMessage, ConfirmRequestMessage, RunningWindowsMessage],
+    Union[LayoutMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, ChromeMediaMessage, EventMessage, MacroResultMessage, ConfirmRequestMessage, RunningWindowsMessage, ErrorMessage],
     Field(discriminator="type"),
 ]
 

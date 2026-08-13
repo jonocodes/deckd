@@ -1,6 +1,7 @@
 import type { Story } from "@ladle/react";
 import { RunningWindowsList } from "./RunningWindowsList";
 import type { WindowListEntry } from "./protocol";
+import type { ServerWindowListEntry } from "./protocol";
 
 export default { title: "RunningWindowsList" };
 
@@ -22,7 +23,7 @@ const WINDOWS: WindowListEntry[] = [
  * via the ``onRowTap`` handler. */
 export const Default: Story = () => (
   <div style={{ display: "grid", width: 480, height: 360, border: "1px solid #30363d" }}>
-    <RunningWindowsList windows={WINDOWS} onRowTap={noop} />
+    <RunningWindowsList windows={WINDOWS as unknown as ServerWindowListEntry[]} onRowTap={noop} />
   </div>
 );
 
@@ -50,6 +51,6 @@ export const Unsupported: Story = () => (
  * v1 pre-#122 behaviour and any read-only embedding. */
 export const NonInteractive: Story = () => (
   <div style={{ display: "grid", width: 480, height: 360, border: "1px solid #30363d" }}>
-    <RunningWindowsList windows={WINDOWS} />
+    <RunningWindowsList windows={WINDOWS as unknown as ServerWindowListEntry[]} />
   </div>
 );

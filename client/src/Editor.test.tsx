@@ -930,7 +930,7 @@ describe("Editor — full save-cycle integration", () => {
 
     render(
       <Editor
-        layout={(opts.layout as ServerLayout) ?? null}
+        layout={(opts.layout as unknown as ServerLayout) ?? null}
         send={send}
         onExit={onExit}
         mockLayouts={MOCK_LAYOUTS}

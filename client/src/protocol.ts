@@ -1,7 +1,96 @@
+/* client/src/protocol.ts — public protocol types.
+ *
+ * Two layers, two sources:
+ *   - Wire-protocol types (LayoutMessage, PressMessage, ...) are
+ *     generated from daemon/deckd/protocol.py — see
+ *     scripts/codegen_protocol_ts.py. Edit the Python side and run
+ *     `just check-protocol`; the drift guard fails CI if the two
+ *     diverge (#76).
+ *   - Schema-layer types (Widget, Icon, ...) are hand-curated. They
+ *     mirror daemon/deckd/layouts.py, which is YAML-loader concern,
+ *     not wire. We keep them here for ergonomics — clients import
+ *     ``Widget`` from this file — and rely on the daemon's Pydantic
+ *     validators to backstop the editor's "save" path.
+ *
+ * Aliases at the bottom (``ServerLayout`` etc.) preserve the original
+ * public surface for consumers that haven't migrated to the new names.
+ */
+
+// Wire-protocol types — re-exported from the codegen artifact.
+import type {
+  FocusedAppInfo,
+  LayoutMessage,
+  StateMessage,
+  BrightnessMessage,
+  WidgetUpdateMessage,
+  MediaStateMessage,
+  ChromeMediaMessage,
+  ErrorMessage,
+  MacroResultMessage,
+  ConfirmRequestMessage,
+  RunningWindowsMessage,
+  HelloMessage,
+  PressMessage,
+  JogMessage,
+  JogEndMessage,
+  PadMessage,
+  PadTapMessage,
+  PadDragMessage,
+  TypeMessage,
+  KeyMessage,
+  MediaCommandMessage,
+  SelectViewMessage,
+  ClearViewMessage,
+  RaiseWindowMessage,
+  ConfirmResponseMessage,
+  WindowListEntry,
+} from "./protocol.generated";
+export {
+  WINDOWS_VIEW_ID,
+  MPRIS_VIEW_ID,
+  EDITOR_VIEW_ID,
+} from "./protocol.generated";
+export type {
+  FocusedAppInfo,
+  LayoutMessage,
+  StateMessage,
+  BrightnessMessage,
+  WidgetUpdateMessage,
+  MediaStateMessage,
+  ChromeMediaMessage,
+  EventMessage,
+  MacroResultMessage,
+  ConfirmRequestMessage,
+  WindowListEntry,
+  RunningWindowsMessage,
+  ServerMessage,
+  HelloMessage,
+  PressMessage,
+  JogMessage,
+  JogEndMessage,
+  PadMessage,
+  PadTapMessage,
+  PadDragMessage,
+  TypeMessage,
+  KeyMessage,
+  MediaCommandMessage,
+  SelectViewMessage,
+  ClearViewMessage,
+  RaiseWindowMessage,
+  EnableEventsMessage,
+  DisableEventsMessage,
+  ConfirmResponseMessage,
+  MprisCommandRequest,
+  ErrorMessage,
+  ClientMessage,
+} from "./protocol.generated";
+
+/* Schema-layer types (hand-curated; mirror daemon/deckd/layouts.py). */
+
 /** An icon reference: ``source`` picks a client-side renderer (e.g.
  * "lucide", "simple-icons"), ``name`` is resolved within it. The daemon
- * relays this opaquely (ADR-0006); the client owns the source registry and
- * renders a placeholder for an unknown source. */
+ * relays this opaquely (ADR-0006); the client owns the source registry
+ * and renders a placeholder for an unknown source. */
 export type Icon = { source: string; name: string };
 
 /** One data point of a ``stats`` widget: a sensor ``source`` plus an
@@ -12,35 +101,7 @@ export type Metric = { source: string; label?: string | null };
 export type MediaHttp = { host?: string; port?: number; password_ref?: string | null };
 export type MediaControl = "play" | "previous" | "next" | "volume" | "position" | "speed";
 export type NowPlayingEmptyState = "show" | "hide";
-export type MediaState = {
-  type: "media_state";
-  id: string;
-  available: boolean;
-  stale: boolean;
-  playing?: boolean | null;
-  position?: number | null;
-  duration?: number | null;
-  volume?: number | null;
-  rate?: number | null;
-  title?: string | null;
-  artist?: string | null;
-  album?: string | null;
-  /** Changes when the current item's album art changes (null when none), so
-   * the client can point an <img> at the daemon art proxy and cache-bust. */
-  art_token?: string | null;
-  /** MPRIS-only fields populated only for ``id == "mpris.<suffix>"`` rows
-   * (issue #52). VLC's path leaves them ``null``. The browser uses
-   * ``desktop_entry`` as a key into its app-icon registry; the two booleans
-   * mirror MPRIS ``CanGoNext`` / ``CanGoPrevious`` so the browser can gate
-   * the matching transport buttons. */
-  desktop_entry?: string | null;
-  can_go_next?: boolean | null;
-  can_go_previous?: boolean | null;
-  /** The player's human-readable name from the MPRIS root interface's
-   * ``Identity`` (e.g. "Firefox", "VLC media player"). The browser renders
-   * it as a per-row header, matching GNOME. ``null`` for the VLC path. */
-  app_name?: string | null;
-};
+
 /** A widget's extent in the reflow (ADR-0010). ``[w, h]`` is a column/row
  * span (default ``[1, 1]``); the literal ``"full"`` opts the widget out of
  * the flow to take the whole chrome-excluded surface. There is no position —
@@ -89,229 +150,108 @@ export type Widget = {
   confirm?: boolean;
 };
 
-export type FocusedAppInfo = {
-  app_id?: string | null;
-  wm_class?: string | null;
-  title?: string | null;
-  is_browser: boolean;
-};
+/* Backwards-compat aliases — wire types under their old public names.
+ *
+ * The drift guard codegen emits the canonical names (``LayoutMessage``,
+ * ``MediaStateMessage``, ``HelloMessage`` etc.) but consumers import the
+ * older ``Server<Kind>`` and ``Client<Kind>`` names that predate #76.
+ * Keep both alive so a one-shot rename isn't a breaking change.
+ *
+ * ``ServerLayout`` widens ``widgets`` from the wire's opaque blob to
+ * the schema-layer ``Widget[]`` and ``icon`` to the typed ``Icon`` —
+ * the daemon relays both opaquely, but the client renders them as
+ * widgets with type-checked fields. Consumers can use the canonical
+ * ``LayoutMessage`` if they want the strict wire shape. */
 
-export type ServerLayout = {
+// ``ServerLayout`` is the historical public name for ``LayoutMessage``.
+// We declare it as a standalone interface rather than an Omit+& so it
+// stays structurally compatible with the wire shape (the Omit+& form
+// produces an intersection that TS won't widen back to LayoutMessage).
+// Consumers that need a strict-typed ``widgets`` can cast at the
+// boundary; the daemon relays widgets opaquely (ADR-0006).
+export interface ServerLayout {
   type: "layout";
-  app: string;
-  /** Optional chrome view identifier; null for focus-driven layouts. */
+  app?: string;
   view?: string | null;
   widgets: Widget[];
-  /** What happens when the defined widgets exceed the capacity the cell-size
-   * band yields at the current viewport (ADR-0010). ``clip`` (default) leaves
-   * trailing widgets off-surface; ``shrink-to-fit`` allows cells below the
-   * band's floor so every widget fits. The one genuinely per-layout sizing
-   * knob — everything else about cell size is a client-side device pref. */
   overflow?: "clip" | "shrink-to-fit";
-  jogstrip_enabled: boolean;
-  /** Human-readable name for the bottom-chrome app badge; falls back to
-   * ``app`` (the raw match token) when null. Relayed opaquely by the
-   * daemon (ADR-0007). */
+  jogstrip_enabled?: boolean;
   display_name?: string | null;
-  /** CSS colour string the browser accepts (hex, ``hsl(...)``, named); the
-   * client tints the app badge with it. Opaque relay — same rule as the
-   * per-widget ``color`` (ADR-0006), applied to the chrome badge. */
   theme?: string | null;
-  /** Optional brand icon rendered alongside the app name. Same
-   * ``{source, name}`` dispatch widgets use (ADR-0006). */
   icon?: Icon | null;
-  /** True when the layout was resolved as a web app: the focused browser's
-   * window title matched a ``title:`` token. The client shows a small globe
-   * on the badge. Daemon-derived, never authored in YAML. */
   web_app?: boolean;
-  /** Non-null when the daemon failed to load layouts; the client renders this
-   * in place of the grid until the on-disk config is fixed. */
   error?: string | null;
-  /** The currently focused app's identity, populated when the daemon has a
-   * focus backend. ``null`` before the first focus event. The editor's
-   * new-layout creation flow (#104) uses this to prefill match tokens. */
   focused_app?: FocusedAppInfo | null;
-  /** True only on a genuine focus-driven fallback to the default layout
-   * (issues #116 / #123, stage 1). The client renders a ``(program)``
-   * suffix alongside the layout name when set. Forced false on any
-   * pinned view — demo or chrome ``select_view`` — so a pin never
-   * leaks the underlying program. */
   is_default?: boolean;
-};
-
-export type ServerState = { type: "state"; locked: boolean };
-export type ServerBrightness = { type: "brightness"; value: number };
-/** Live value for a meter widget (issue #40). Pushed at the sensor's
- * poll cadence; the client renders the bar + numeric readout from
- * ``value`` / ``unit``. ``stale=true`` means the source could not
- * refresh — the UI keeps the last known position but stops claiming
- * the value is fresh. */
-export type ServerWidgetUpdate = {
-  type: "widget_update";
-  id: string;
-  source: string;
-  value: number;
-  unit: string;
-  stale: boolean;
-};
-/** Daemon -> client push: the chrome media icon's passive playback-state
- * snapshot (issue #47). Sent on event-type transitions
- * (``NameOwnerChanged`` registration transitions and ``PlaybackStatus``
- * boundary crossings) plus a snapshot on connect. The client tints the
- * media icon when ``playing`` is true and leaves it outlined otherwise.
- *
- * ``supported`` is false when the host can't run MPRIS at all (macOS has no
- * session bus). Absent means supported — older daemons don't send the field.
- * It separates the structural empty state from the transient one: "no media
- * players detected" is something the user can fix by hitting play; an
- * unsupported host is not. */
-export type ServerChromeMedia = {
-  type: "chrome_media";
-  available: boolean;
-  playing: boolean;
-  playing_count: number;
-  supported?: boolean;
-};
-/** Sent by the daemon to a non-loopback client whose ``hello`` omitted or
- * got the shared password wrong (issue #16); the socket is closed straight
- * after. The client swaps in the password prompt. */
-export type ServerError = { type: "error"; reason: string };
-/** Sent by the daemon after a macro completes. ``outcome`` is ``ok`` when
- * every step ran; ``failed-at-step`` means a step failed and the macro
- * stopped (``continue_on_error`` was false, or there is no more steps).
- * ``failed_step`` is the zero-based index of the step that failed, or
- * ``null`` on success. */
-export type ServerMacroResult = {
-  type: "macro_result";
-  id: string;
-  outcome: "ok" | "failed-at-step";
-  failed_step: number | null;
-  error: string | null;
-};
-/** Daemon -> client push: ask for a confirmation before running an action
- * (issues #69 / #107). Fires on a ``confirm: true`` press instead of
- * running the action. The client renders a modal naming the widget
- * (label / icon), then sends a ``ConfirmResponse`` with its verdict.
- * ``widget_id`` lets the client look up its own display copy (label,
- * icon) from the last ``ServerLayout`` — the daemon never sends
- * command text on the wire. Unknown / expired ``confirm_id`` is a
- * silent no-op on the daemon. */
-export type ServerConfirmRequest = {
-  type: "confirm_request";
-  confirm_id: string;
-  widget_id: string;
-};
-/** One row in the running-windows list (issues #116 / #120 / #126).
- * ``window_id`` is the per-session opaque string handle the platform
- * extension minted on enumeration (#119); the client echoes it on tap
- * (stage 3, #122) but never parses it. ``label`` is the daemon-derived
- * display string: matched layout's ``display_name`` on a hit, else a
- * raw identity fallback. ``icon`` mirrors the matched layout's icon
- * when present and is ``null`` on a default-fallback row — honest
- * absence, not a decorative generic glyph. */
-export type WindowListEntry = {
+}
+export type ServerState = StateMessage;
+export type ServerBrightness = BrightnessMessage;
+export type ServerWidgetUpdate = WidgetUpdateMessage;
+export type ServerChromeMedia = ChromeMediaMessage;
+export type ServerError = ErrorMessage;
+export type ServerMacroResult = MacroResultMessage;
+export type ServerConfirmRequest = ConfirmRequestMessage;
+// WindowListEntry carries an opaque ``icon`` field on the wire but the
+// client renders it as a typed ``Icon``. Mirror the ServerLayout rule:
+// declare the alias as a standalone interface so it stays compatible
+// with the wire type at the message boundary.
+export interface ServerWindowListEntry {
   window_id: string;
   label: string;
   icon?: Icon | null;
+}
+export type ServerRunningWindows = Omit<RunningWindowsMessage, "windows"> & {
+  windows: ServerWindowListEntry[];
 };
-/** Daemon -> client push: the chrome windows list's snapshot (issues
- * #116 / #120 / #126). Full-snapshot per push, MRU-sorted. Pushed to
- * every connected session regardless of view pin — same
- * graceful-degradation as ``ServerChromeMedia``: backends whose
- * ``capabilities()`` does not include ``"watch_windows"`` never
- * produce a frame. */
-export type ServerRunningWindows = {
-  type: "running_windows";
-  windows: WindowListEntry[];
-};
-export type ServerMessage =
-  | ServerLayout
-  | ServerState
-  | ServerBrightness
-  | ServerWidgetUpdate
-  | MediaState
-  | ServerChromeMedia
-  | ServerMacroResult
-  | ServerConfirmRequest
-  | ServerRunningWindows
-  | ServerError;
+export type MediaState = MediaStateMessage;
 
-export type ClientHello = {
-  type: "hello";
-  client: "web";
-  token?: string;
-  /** Shared password for remote clients; omitted on loopback (issue #16). */
-  password?: string;
-  /** Demo pin from the ``?layout=<name>`` URL param: forces this session to
-   * the named daemon layout regardless of host focus. Omitted when absent. */
-  layout?: string;
-};
-export type ClientPress = { type: "press"; id: string };
-export type ClientJog = { type: "jog"; id: string; delta: number };
-export type ClientJogEnd = { type: "jog_end"; id: string; velocity: number };
-export type ClientPad = { type: "pad"; id: string; dx: number; dy: number };
-export type ClientPadTap = { type: "pad_tap"; id: string; fingers: number };
-export type ClientPadDrag = { type: "pad_drag"; id: string; state: "start" | "end" };
-export type ClientType = { type: "type"; text: string };
-export type ClientKey = { type: "key"; combo: string };
-export type ClientMediaCommand =
-  | { type: "media_command"; id: string; command: "volume" | "seek" | "rate"; value: number }
-  | { type: "media_command"; id: string; command: "play-pause" | "next" | "previous"; value?: null };
-/** Ask the daemon to render a chrome view by name (issue #50). The name
- * resolves to a layout id; the server pushes the resolved layout with
- * ``view`` set. An unknown name pushes ``view: <name>`` with
- * ``error: "view not found"`` so the client can show the failure. */
-export type ClientSelectView = { type: "select_view"; view: string };
-/** Undo a previous ``select_view`` for this session only. */
-export type ClientClearView = { type: "clear_view" };
-/** Client -> daemon: raise (focus) an open window by its id (#122). The
- * user tapped a row in the running-windows chrome list; ``window_id`` is
- * the opaque id the daemon minted into that row's ``running_windows``
- * frame (#119). Paired with a following ``clear_view`` to close the
- * overlay. A stale/unknown id is a no-op on the daemon side. */
-export type ClientRaiseWindow = { type: "raise_window"; window_id: string };
-/** Client -> daemon: the user's verdict on a pending ``confirm_request``
- * (issues #69 / #107). The daemon looks up the pending action by
- * ``confirm_id``: an unknown / expired / superseded token is a no-op
- * (the action never runs). ``"confirm"`` re-enters the daemon's run
- * path; ``"cancel"`` drops the pending action with no side effects.
- * A literal verb rather than a bare bool, mirroring
- * ``MediaCommandMessage``'s ``"play-pause"`` idiom. */
-export type ClientConfirmResponse = {
-  type: "confirm_response";
-  confirm_id: string;
-  decision: "confirm" | "cancel";
-};
+export type ClientHello = HelloMessage;
+export type ClientPress = PressMessage;
+export type ClientJog = JogMessage;
+export type ClientJogEnd = JogEndMessage;
+export type ClientPad = PadMessage;
+export type ClientPadTap = PadTapMessage;
+export type ClientPadDrag = PadDragMessage;
+export type ClientType = TypeMessage;
+export type ClientKey = KeyMessage;
+export type ClientMediaCommand = MediaCommandMessage;
+export type ClientSelectView = SelectViewMessage;
+export type ClientClearView = ClearViewMessage;
+export type ClientRaiseWindow = RaiseWindowMessage;
+export type ClientConfirmResponse = ConfirmResponseMessage;
 
-/** The wire-side id for the running-windows chrome view (issues #120 /
- * #126). The daemon resolves ``select_view: WINDOWS_VIEW_ID`` to the
- * layout whose id is the same string — today, ``layouts/windows.yaml``.
- * Same pattern as ``MPRIS_VIEW_ID``: hard-coding the literal here
- * keeps the wire surface and the layout loader in lockstep. */
-export const WINDOWS_VIEW_ID = "windows";
-/** The wire-side id for the MPRIS chrome view (issue #51). The daemon
- * resolves ``select_view: MPRIS_VIEW_ID`` to the layout whose id is the
- * same string — today, ``layouts/mpris.yaml``. Hard-coding the literal
- * here (rather than scattered through component code) keeps the wire
- * surface and the layout loader in lockstep: a rename in either place
- * surfaces as a type error or a load failure, not silent breakage. */
-export const MPRIS_VIEW_ID = "mpris";
-/** The wire-side id for the editor chrome view (issue #100). Same pattern
- * as MPRIS_VIEW_ID: the client sends ``select_view: EDITOR_VIEW_ID`` and
- * the daemon pushes the editor layout. */
-export const EDITOR_VIEW_ID = "editor";
-export type ClientMessage =
-  | ClientHello
-  | ClientPress
-  | ClientJog
-  | ClientJogEnd
-  | ClientPad
-  | ClientPadTap
-  | ClientPadDrag
-  | ClientType
-  | ClientKey
-  | ClientMediaCommand
-  | ClientSelectView
-  | ClientClearView
-  | ClientRaiseWindow
-  | ClientConfirmResponse;
+/* Wire-to-schema coercion helpers (#76).
+ *
+ * ``LayoutMessage`` and friends carry ``widgets`` / ``icon`` as opaque
+ * blobs (the daemon relays them, ADR-0006); the client renders them
+ * against the typed ``Widget`` / ``Icon`` shapes. Centralise the cast
+ * here so a single well-named helper replaces the scattered
+ * ``as unknown as Widget[]`` / ``as ServerLayout`` sites — consumers
+ * import one helper, and a future tightening of the wire shape has
+ * exactly one place to update.
+ */
+
+/** Coerce a wire ``LayoutMessage`` to the typed-schema ``ServerLayout``
+ * (Widget[] for ``widgets``, typed ``Icon`` for ``icon``). Throws nothing
+ * — the wire shape is structurally compatible, so the cast is sound. */
+export function wireLayoutToServer(msg: LayoutMessage): ServerLayout {
+  return msg as unknown as ServerLayout;
+}
+
+/** Coerce a wire snapshot of window rows to the typed-schema
+ * ``ServerWindowListEntry[]``. Same opaque-icon rationale as the
+ * layout helper. */
+export function wireWindowsToServer(
+  windows: WindowListEntry[] | undefined,
+): ServerWindowListEntry[] | undefined {
+  return windows as unknown as ServerWindowListEntry[] | undefined;
+}
+
+/** Lookup a widget by id in a wire ``LayoutMessage``. Convenience so
+ * ``App.tsx``-style consumers don't repeat the opaque-blob cast. */
+export function widgetById(
+  layout: LayoutMessage,
+  id: string,
+): Widget | undefined {
+  return (layout.widgets as unknown as Widget[]).find((w) => w.id === id);
+}

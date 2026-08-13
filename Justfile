@@ -227,6 +227,23 @@ test:
     pytest
     node scripts/test_focus_wire_shape.mjs
 
+# Protocol drift guard (#76): regenerate the TypeScript wire types from
+# daemon/deckd/protocol.py and fail if the checked-in
+# client/src/protocol.generated.ts has drifted. Edit protocol.py and
+# run `just check-protocol` (or
+# `python scripts/codegen_protocol_ts.py --out client/src/protocol.generated.ts`
+# to regenerate). The companion drift test in
+# tests/test_protocol_ts_drift.py runs the same check in pytest so CI
+# catches drift without needing the Justfile recipe.
+check-protocol:
+    python scripts/codegen_protocol_ts.py --check --out client/src/protocol.generated.ts
+
+# Regenerate the TypeScript wire types from daemon/deckd/protocol.py (#76).
+# Run after editing the protocol; check-protocol (and CI) will fail until
+# the generated file is in sync.
+gen-protocol:
+    python scripts/codegen_protocol_ts.py --out client/src/protocol.generated.ts
+
 # Run the GNOME focus JSON producer contract independently.
 test-focus-wire:
     node scripts/test_focus_wire_shape.mjs
@@ -257,7 +274,10 @@ test-client:
     cd client && npm run test:unit
     cd client && npm run test:e2e
 
-# End-to-end smoke test (boots daemon in-process, fires every action primitive).
+# End-to-end smoke test (boots daemon in-process, fires every action
+# primitive). Uses a stable fixture layout (scripts/smoke_fixtures/)
+# so shipping-layout edits can't break CI (#77). Pass --layouts-dir to
+# point at shipping layouts (or anything else) instead.
 smoke:
     python -u scripts/smoke.py
 

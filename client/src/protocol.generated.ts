@@ -1,0 +1,629 @@
+/* AUTO-GENERATED from daemon/deckd/protocol.py by
+ * scripts/codegen_protocol_ts.py — do not edit by hand.
+ *
+ * To change the wire protocol, edit daemon/deckd/protocol.py and
+ * regenerate via `just check-protocol` (or this script directly).
+ * The drift guard fails CI when the two diverge.
+ */
+
+
+export const WINDOWS_VIEW_ID = "windows";
+export const MPRIS_VIEW_ID = "mpris";
+export const EDITOR_VIEW_ID = "editor";
+/**
+ * The daemon's best-known identity of the currently focused application.
+ *
+ *     Carries the fields the editor's new-layout creation flow (#104) needs to
+ *     prefill ``match`` tokens for the detect-and-offer prompt and the
+ *     browser-vs-site branch. None when the daemon has not yet seen a focus
+ *     event (headless, start-up race).
+ *
+ *     ``app_id`` and ``wm_class`` are the desktop-identity tokens the layout
+ *     matcher compares against ``match`` entries. ``title`` is the raw window
+ *     title. ``is_browser`` gates the two-prefill browser branch — its value
+ *     is the daemon's best-effort substring match against a maintained browser
+ *     marker list (:func:`deckd.platform.AppInfo.is_browser`).
+ *     
+ */
+export type FocusedAppInfo = {
+
+  app_id?: string | null;
+
+  wm_class?: string | null;
+
+  title?: string | null;
+
+  is_browser?: boolean;
+};
+
+export type LayoutMessage = {
+
+  type: "layout";
+
+  app?: string;
+
+  view?: string | null;
+  /**
+   * Overflow behaviour for the client's reflow (ADR-0010): ``clip`` drops
+   * trailing widgets off-surface, ``shrink-to-fit`` shrinks cells below the
+   * band floor so all fit. Relayed from the layout's ``overflow`` field.
+   */
+  widgets: Record<string, unknown>[];
+
+  overflow?: "clip" | "shrink-to-fit";
+  /**
+   * Chrome app badge (ADR-0007), relayed opaquely. The client renders a
+   * branded pill in the always-on bottom strip from these three:
+   * ``display_name`` replaces the raw ``app`` match token, ``theme`` tints
+   * the badge, ``icon`` is the ``{source, name}`` dispatch widgets use.
+   * The daemon never interprets them.
+   */
+  jogstrip_enabled?: boolean;
+
+  display_name?: string | null;
+
+  theme?: string | null;
+  /**
+   * True when this layout was resolved as a *web app*: it matched the focused
+   * browser's window title (a ``title:`` token) AND the focused app is a
+   * browser. The client renders a small globe on the badge. Derived by the
+   * daemon, never authored in YAML — a plain title match on a non-browser
+   * (or an app-identity match) leaves this false.
+   */
+  icon?: Record<string, unknown> | null;
+  /**
+   * Non-null when the on-disk layouts failed to load. The client renders the
+   * message in place of the widget grid; the daemon keeps the last-good
+   * layouts live so a fix on disk restores service without a restart.
+   */
+  web_app?: boolean;
+  /**
+   * The currently focused app's identity, populated when the daemon has a
+   * focus backend (never in headless mode). ``None`` before the first focus
+   * event arrives. The editor's new-layout creation flow (#104) uses this to
+   * prefill ``match`` tokens for the detect-and-offer prompt and the
+   * browser-vs-site branch.
+   */
+  error?: string | null;
+  /**
+   * True only on a genuine focus-driven fallback to the default layout —
+   * i.e. the resolution missed every loaded layout and ``store.default()``
+   * was returned. The client uses this to render the live program next to
+   * the layout name (issues #116 / #123, stage 1). Forced ``False``
+   * whenever the daemon is serving a pinned layout/view (demo
+   * ``?layout=`` pin or chrome ``select_view`` pin), even if the pinned
+   * layout happens to be the default — a pin means "frozen, don't report
+   * what's underneath".
+   */
+  focused_app?: FocusedAppInfo | null;
+
+  is_default?: boolean;
+};
+
+export type StateMessage = {
+
+  type: "state";
+
+  locked: boolean;
+};
+
+export type BrightnessMessage = {
+
+  type: "brightness";
+  /**
+   * constraint: ge=0, le=255
+   */
+  value: number;
+};
+
+export type MediaStateMessage = {
+
+  type: "media_state";
+
+  id: string;
+
+  available?: boolean;
+
+  stale?: boolean;
+
+  playing?: boolean | null;
+  /**
+   * constraint: ge=0
+   */
+  position?: number | null;
+  /**
+   * constraint: ge=0
+   */
+  duration?: number | null;
+  /**
+   * constraint: ge=0, le=100
+   */
+  volume?: number | null;
+  /**
+   * constraint: gt=0
+   */
+  rate?: number | null;
+
+  title?: string | null;
+
+  artist?: string | null;
+
+  album?: string | null;
+  /**
+   * MPRIS-only fields populated only for ``id == "mpris.<suffix>"``
+   * state messages (issue #52). The VLC path leaves them ``None``.
+   * ``desktop_entry`` is the bus's reported ``.desktop`` basename
+   * (or ``None`` when the player doesn't publish one); the browser
+   * uses it to look up an app icon. ``can_go_next`` /
+   * ``can_go_previous`` mirror MPRIS ``CanGoNext`` /
+   * ``CanGoPrevious`` so the browser can grey out the matching
+   * transport controls.
+   */
+  art_token?: string | null;
+
+  desktop_entry?: string | null;
+
+  can_go_next?: boolean | null;
+  /**
+   * The player's human-readable name from the MPRIS root interface's
+   * ``Identity`` (e.g. "Firefox", "VLC media player"); the browser
+   * renders it as a per-row header. ``None`` for the VLC widget path.
+   */
+  can_go_previous?: boolean | null;
+
+  app_name?: string | null;
+};
+
+/**
+ * Daemon -> client push: a fatal connection-level error.
+ *
+ *     Sent to a non-loopback client whose ``hello`` omitted or got the
+ *     shared password wrong (issue #16); the socket is closed straight
+ *     after. The client swaps in the password gate. The ``reason`` is a
+ *     short machine-readable token (``"unauthorized"`` today); the client
+ *     renders its own copy. The two sides keep the reason set in lockstep
+ *     through this Pydantic model — a typo in the literal would surface
+ *     as a codegen drift error (#76).
+ *     
+ */
+export type ErrorMessage = {
+
+  type: "error";
+
+  reason: string;
+};
+
+/**
+ * Daemon -> client push: the chrome media icon's passive
+ *     playback-state snapshot (issue #47).
+ *
+ *     Sent by the daemon whenever the meaning of the indicator changes —
+ *     a player registered / unregistered, or a ``PlaybackStatus`` flipped
+ *     across the Playing ↔ non-Playing boundary. The client tints the
+ *     media icon when ``playing`` is true and leaves it outlined
+ *     otherwise. Position / Metadata updates that don't flip ``playing``
+ *     never produce a frame (debounce by event type).
+ *
+ *     Pushed to every connected session regardless of which view the
+ *     client has pinned — the indicator is global chrome, not
+ *     per-session. ``available`` is true when at least one MPRIS
+ *     player is registered; ``playing`` is true when at least one is
+ *     in ``PlaybackStatus == Playing``; ``playing_count`` carries the
+ *     number currently in Playing so a future per-player / count-style
+ *     indicator has the raw tally without a separate wire message.
+ *
+ *     ``supported`` is false when the MPRIS surface can't work on this
+ *     host at all — the configured backend failed to reach a session bus
+ *     (macOS has none). It defaults to true so an older client, or a
+ *     frame built before this field existed, reads as "supported" and
+ *     behaves exactly as before. The client uses it to pick between two
+ *     empty states that would otherwise be indistinguishable: "no media
+ *     players detected" (transient) and "unsupported on this platform"
+ *     (structural) — the same distinction the running-windows list makes
+ *     (issue #120, decision 8).
+ *     
+ */
+export type ChromeMediaMessage = {
+
+  type: "chrome_media";
+
+  available: boolean;
+
+  playing: boolean;
+  /**
+   * constraint: ge=0
+   */
+  playing_count: number;
+
+  supported?: boolean;
+};
+
+/**
+ * Daemon->client push: a meter widget's live value (issue #40).
+ *
+ *     The daemon sends one of these to every connected session whenever a
+ *     sensor the session has subscribed to produces a new reading.
+ *     ``id`` is the widget id from the active layout; ``source`` echoes
+ *     the bound sensor name so a client with a stale layout can still tell
+ *     what the value belongs to; ``unit`` rides along so the client
+ *     doesn't have to know a per-source unit registry.
+ *
+ *     ``stale=True`` means the source could not refresh (sensor
+ *     disappeared, permission denied); the client renders an "unknown"
+ *     treatment and keeps the bar at its last-known position. We send
+ *     ``stale=True`` explicitly rather than dropping the message so the
+ *     UI can stop claiming the value is fresh.
+ *     
+ */
+export type WidgetUpdateMessage = {
+
+  type: "widget_update";
+
+  id: string;
+
+  source: string;
+
+  value: number;
+
+  unit: string;
+
+  stale?: boolean;
+};
+
+/**
+ * Daemon -> client push: a diagnostic event (issue #73).
+ *
+ *     Fires on focus changes, layout reloads, action attempts,
+ *     authentication outcomes, and MPRIS player / playback transitions.
+ *     The client renders nothing on receipt — the events are observability
+ *     fodder for an external watcher that has subscribed to this
+ *     session's stream.
+ *
+ *     Unknown ``name`` values are ignored on the client (clients key off
+ *     a switch in their message dispatcher). ``data`` is event-specific
+ *     and never carries the shared password or injected input.
+ *     
+ */
+export type EventMessage = {
+
+  type: "event";
+  /**
+   * constraint: min_length=1
+   */
+  name: string;
+
+  ts: number;
+  /**
+   * : When the daemon had a correlation id for the originating
+   * : action / request, it rides along so a watcher can correlate the
+   * : event to log lines / ``/actions/recent`` entries / the
+   * : structured-log feed.
+   */
+  data: Record<string, unknown>;
+
+  trace_id?: string | null;
+};
+
+export type MacroResultMessage = {
+
+  type: "macro_result";
+
+  id: string;
+
+  outcome: "ok" | "failed-at-step";
+  /**
+   * constraint: ge=0
+   */
+  failed_step?: number | null;
+
+  error?: string | null;
+};
+
+/**
+ * Daemon -> client push: ask for a confirmation before running an
+ *     action (issues #69 / #107).
+ *
+ *     Fires on a ``confirm: true`` press *instead of* running the action.
+ *     The daemon mints ``confirm_id``, stores the pending action in
+ *     session-scoped state, and waits up to ~30 seconds for a matching
+ *     :class:`ConfirmResponseMessage`. The client renders a confirmation
+ *     prompt naming the widget (``widget_id``); the widget's action /
+ *     command text is *not* sent over the wire — the client already holds
+ *     it from the last ``LayoutMessage`` and generates the prompt text
+ *     locally (no custom copy from the daemon).
+ *     
+ */
+export type ConfirmRequestMessage = {
+
+  type: "confirm_request";
+  /**
+   * constraint: min_length=1
+   */
+  confirm_id: string;
+  /**
+   * constraint: min_length=1
+   */
+  widget_id: string;
+};
+
+/**
+ * One row in the running-windows list (issues #116 / #120 / #126).
+ *
+ *     ``window_id`` is the per-session opaque string handle minted by the
+ *     platform extension on enumeration (#119) — the client echoes it on
+ *     tap (stage 3, #122) but never parses it. ``label`` is the
+ *     daemon-derived display string: matched layout's ``display_name`` on
+ *     a hit, else a raw identity fallback (``wm_class`` then ``app_id``
+ *     then ``title``, last resort). ``icon`` mirrors the matched layout's
+ *     icon when present and is ``null`` on a default-fallback row — the
+ *     absence is honest (a generic terminal glyph would imply every xterm
+ *     is the same xterm; the list is per-window precisely so they're not).
+ *     
+ */
+export type WindowListEntry = {
+  /**
+   * constraint: min_length=1
+   */
+  window_id: string;
+  /**
+   * constraint: min_length=1
+   */
+  label: string;
+
+  icon?: Record<string, unknown> | null;
+};
+
+/**
+ * Daemon -> client push: the chrome windows list's snapshot
+ *     (issues #116 / #120 / #126).
+ *
+ *     Full-snapshot per push, MRU-sorted (per #119). Pushed to every
+ *     connected session regardless of which view the client has pinned —
+ *     the list reflects global reality; every session holds a fresh
+ *     snapshot so a view switch is instant (no spinner, no
+ *     ``select_view`` round-trip-fetch). Same graceful-degradation as
+ *     ``ChromeMediaMessage``: backends whose ``capabilities()`` does not
+ *     include ``"watch_windows"`` never produce a frame.
+ *     
+ */
+export type RunningWindowsMessage = {
+
+  type: "running_windows";
+
+  windows: WindowListEntry[];
+};
+
+export type ServerMessage = LayoutMessage | StateMessage | BrightnessMessage | WidgetUpdateMessage | MediaStateMessage | ChromeMediaMessage | EventMessage | MacroResultMessage | ConfirmRequestMessage | RunningWindowsMessage | ErrorMessage;
+
+export type HelloMessage = {
+
+  type: "hello";
+
+  client?: string;
+  /**
+   * Shared password (issue #16). Required whenever the daemon runs with auth
+   * on; validated by the server before the hello frame reaches ``_dispatch``.
+   * Omitted only when the daemon was started with --no-auth.
+   */
+  token?: string | null;
+  /**
+   * Optional demo pin (``?layout=<name>`` in the client URL): forces this one
+   * session to the named layout regardless of host focus, so a demo device can
+   * be parked on a view. Ignored if the name doesn't match a loaded layout.
+   */
+  password?: string | null;
+  /**
+   * Issue #73: client-supplied correlation id. When set, every
+   * diagnostic surface touched by this session (recent-action
+   * entries, log fields, event pushes) carries this id so an AI
+   * agent can correlate the connection to its own watcher. The
+   * ``X-Deckd-Trace`` upgrade header takes precedence when both are
+   * present; absent both, the daemon mints a fresh short id.
+   */
+  layout?: string | null;
+
+  trace?: string | null;
+};
+
+export type PressMessage = {
+
+  type: "press";
+
+  id: string;
+};
+
+export type JogMessage = {
+
+  type: "jog";
+
+  id: string;
+
+  delta: number;
+};
+
+export type JogEndMessage = {
+
+  type: "jog_end";
+
+  id: string;
+
+  velocity: number;
+};
+
+export type PadMessage = {
+
+  type: "pad";
+
+  id: string;
+
+  dx: number;
+
+  dy: number;
+};
+
+export type PadTapMessage = {
+
+  type: "pad_tap";
+
+  id: string;
+
+  fingers: number;
+};
+
+export type PadDragMessage = {
+
+  type: "pad_drag";
+
+  id: string;
+
+  state: "start" | "end";
+};
+
+export type TypeMessage = {
+
+  type: "type";
+
+  text: string;
+};
+
+export type MediaCommandMessage = {
+
+  type: "media_command";
+
+  id: string;
+
+  command: "volume" | "seek" | "rate" | "play-pause" | "next" | "previous";
+
+  value?: number | null;
+};
+
+/**
+ * Client -> daemon: ask the server to render a chrome view (issue #50).
+ *
+ *     The named view is the ``id`` of a layout whose ``match`` token is the
+ *     same string (e.g. ``mpris`` resolves to the ``mpris.yaml`` shipping
+ *     layout). The server pushes the resolved layout with ``view`` set to
+ *     the requested name, so the client can tell focus-driven layouts
+ *     (``view: null``) from client-requested chrome views. An unknown
+ *     name pushes the current focused-app layout with ``view`` set and
+ *     ``error: "view not found"`` so the client can show the failure
+ *     without losing the chrome context.
+ *     
+ */
+export type SelectViewMessage = {
+
+  type: "select_view";
+  /**
+   * constraint: min_length=1
+   */
+  view: string;
+};
+
+/**
+ * Client -> daemon: revert to the focused-app layout (issue #50).
+ *
+ *     Undoes a prior ``select_view`` for this session only; other sessions
+ *     keep whatever view they have selected (or none). The server pushes
+ *     the current focused-app layout with ``view: null``.
+ *     
+ */
+export type ClearViewMessage = {
+
+  type: "clear_view";
+};
+
+export type KeyMessage = {
+
+  type: "key";
+
+  combo: string;
+};
+
+/**
+ * Client -> daemon: raise (focus) an open window by its id (#122).
+ *
+ *     The user tapped a row in the running-windows chrome list; the client
+ *     echoes back the opaque ``window_id`` the daemon minted into that
+ *     row's ``running_windows`` frame (#119). The daemon routes it to the
+ *     active backend's ``raise_window``; backends that can't enumerate /
+ *     raise never produce the list in the first place, so a stray id here
+ *     is a no-op at worst. The client pairs this with a ``clear_view`` to
+ *     close the overlay (stage 3, #122).
+ *     
+ */
+export type RaiseWindowMessage = {
+
+  type: "raise_window";
+  /**
+   * constraint: min_length=1
+   */
+  window_id: string;
+};
+
+/**
+ * Client -> daemon: the user's verdict on a pending
+ *     :class:`ConfirmRequestMessage` (issues #69 / #107).
+ *
+ *     ``decision`` is a literal verb over a bare bool, mirroring the
+ *     ``MediaCommandMessage`` idiom (``"play-pause"`` not ``True``). The
+ *     daemon looks up the pending action by ``confirm_id``: an unknown /
+ *     expired / superseded token is a no-op (the action never runs). On
+ *     ``"confirm"`` the daemon re-enters the normal ``run_action`` path;
+ *     on ``"cancel"`` the pending action is dropped without side effects.
+ *     
+ */
+export type ConfirmResponseMessage = {
+
+  type: "confirm_response";
+  /**
+   * constraint: min_length=1
+   */
+  confirm_id: string;
+
+  decision: "confirm" | "cancel";
+};
+
+/**
+ * Client -> daemon: subscribe this session to the diagnostic event
+ *     stream (issue #73).
+ *
+ *     Adds the session to the server's per-session subscriber list. Until
+ *     the client opts in, no diagnostic events are pushed. A re-sent
+ *     ``enable_events`` is a no-op. ``events`` is the optional allow-list;
+ *     when absent, every published event name is delivered.
+ *     
+ */
+export type EnableEventsMessage = {
+
+  type: "enable_events";
+
+  events?: string[] | null;
+};
+
+/**
+ * Client -> daemon: stop the diagnostic event stream for this
+ *     session (issue #73). Mirrors :class:`EnableEventsMessage`.
+ */
+export type DisableEventsMessage = {
+
+  type: "disable_events";
+};
+
+/**
+ * Body for ``POST /mpris/{row}/command`` (issue #72).
+ *
+ *     Only ``play-pause``, ``next``, ``previous`` are dispatched to the
+ *     MPRIS backend — the dispatch table is intentionally small enough
+ *     that a bug or a typo in the wire shape can't invoke arbitrary
+ *     D-Bus methods. ``raise`` is accepted at the validation layer
+ *     (the spec's acceptance criterion mentions it) but currently
+ *     rejected with 400; the dispatch will land alongside MPRIS
+ *     Raise() support in a follow-up.
+ *     
+ */
+export type MprisCommandRequest = {
+
+  command: "play-pause" | "next" | "previous" | "raise";
+};
+
+export type ClientMessage = HelloMessage | PressMessage | JogMessage | JogEndMessage | PadMessage | PadTapMessage | PadDragMessage | TypeMessage | KeyMessage | MediaCommandMessage | SelectViewMessage | ClearViewMessage | RaiseWindowMessage | EnableEventsMessage | DisableEventsMessage | ConfirmResponseMessage;

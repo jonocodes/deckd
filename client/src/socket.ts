@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerLayout, ServerMessage, ServerRunningWindows, ServerWidgetUpdate, MediaState } from "./protocol";
+import { wireLayoutToServer, wireWindowsToServer } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
 
@@ -105,7 +106,7 @@ export function useDeckdSocket(
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data) as ServerMessage;
-          if (msg.type === "layout") onLayout(msg);
+          if (msg.type === "layout") onLayout(wireLayoutToServer(msg));
           else if (msg.type === "widget_update") onWidgetUpdate(msg);
           else if (msg.type === "media_state") onMediaState(msg);
           // Issue #47: the daemon may push ``chrome_media`` to every
@@ -124,7 +125,10 @@ export function useDeckdSocket(
           // optional for the same forward-compat reason as the other
           // chrome-side frames — a client that doesn't render the list can
           // drop the param without breaking the dispatch.
-          else if (msg.type === "running_windows" && onRunningWindows) onRunningWindows(msg);
+          else if (msg.type === "running_windows" && onRunningWindows) {
+            const cast: ServerRunningWindows = { ...msg, windows: wireWindowsToServer(msg.windows) ?? [] };
+            onRunningWindows(cast);
+          }
           else if (msg.type === "error" && msg.reason === "unauthorized") {
             // Wrong/absent password: stop reconnecting and prompt the user.
             unauthorizedRef.current = true;

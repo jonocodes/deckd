@@ -91,17 +91,22 @@ export function useMeterStore(activeSources: ReadonlySet<string>) {
       // animation. We compare on the three fields the UI actually
       // renders: value, stale flag, and unit.
       const existing = prev[m.source];
+      // The wire marks ``stale`` optional with a default of false;
+      // normalise so the comparison sees a consistent boolean (#76
+      // codegen treats Pydantic ``= False`` defaults as optional on
+      // the wire).
+      const stale = m.stale ?? false;
       if (
         existing &&
         existing.value === m.value &&
-        existing.stale === m.stale &&
+        existing.stale === stale &&
         existing.unit === m.unit
       ) {
         return prev;
       }
       const next = {
         ...prev,
-        [m.source]: { value: m.value, unit: m.unit, stale: m.stale },
+        [m.source]: { value: m.value, unit: m.unit, stale },
       };
       try {
         // Persist the most recent reading so a page reload doesn't
@@ -111,7 +116,7 @@ export function useMeterStore(activeSources: ReadonlySet<string>) {
         // pressure better than one key per push.
         window.localStorage.setItem(
           `${METER_KEY_PREFIX}${m.source}`,
-          JSON.stringify({ value: m.value, unit: m.unit, stale: m.stale, source: m.source }),
+          JSON.stringify({ value: m.value, unit: m.unit, stale, source: m.source }),
         );
       } catch {
         // Private mode / quota: stay in memory only.

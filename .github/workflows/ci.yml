@@ -9,20 +9,66 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12"]
 
     steps:
       - uses: actions/checkout@v4
 
+      # Single Python version (not a matrix) — the project's only declared
+      # support target is 3.12 (Justfile setup recipes pin uv --python 3.12,
+      # pyproject tom 3.12). Narrowing here saves runner-minutes without
+      # losing coverage; widen back to a matrix if a 3.11 fallback is
+      # ever officially supported.
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
 
-      - run: pip install -e ".[dev]"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
 
-      - run: pytest -v
+      - name: Install Python deps
+        run: pip install -e ".[dev]"
+
+      - name: Install client deps
+        run: npm install
+        working-directory: client
+
+      # Each step is named so a failure points at the subsystem
+      # (#77 — "failures identify the relevant subsystem and remediation
+      # rather than only returning a generic nonzero result"). The
+      # recipe these mirror is `just test-all`; run it locally to
+      # reproduce a CI failure.
+      - name: "[1/7] pyright daemon (Python typecheck)"
+        run: |
+          pip install pyright
+          pyright --pythonpath "$(command -v python)" daemon
+
+      - name: "[2/7] pytest (Python unit + integration)"
+        run: pytest
+
+      - name: "[3/7] tsc --noEmit (TypeScript typecheck)"
+        run: npx tsc --noEmit
+        working-directory: client
+
+      - name: "[4/7] vitest unit (client unit tests)"
+        run: npm run test:unit
+        working-directory: client
+
+      # Build the client before e2e — playwright serves client/dist, so
+      # any TypeScript change in client/src must be bundled for the
+      # browser to pick it up.
+      - name: "[5/7] playwright e2e (client end-to-end)"
+        run: |
+          npm run build
+          npm run test:e2e
+        working-directory: client
+
+      - name: "[6/7] smoke (daemon end-to-end via stable fixture #77)"
+        run: python -u scripts/smoke.py
+
+      - name: "[7/7] eslint (client lint)"
+        run: npm run lint
+        working-directory: client
 
   # macOS carries no uinput/evdev, so the full suite (which imports the
   # Linux input path) can't run here. But the macOS *backend* is pure —
@@ -31,6 +77,12 @@ jobs:
   # those two files on a real Mac. This is what actually exercises the
   # macOS column of docs/PLATFORM-PARITY.md from a macOS runner (#136);
   # on ubuntu the same assertion passes but on the host's Python only.
+  #
+  # The full ladder (lint / tsc / vitest / smoke) is exercised on the
+  # ubuntu job above. macOS here is host-safe (no input devices, no
+  # desktop required) per #77 AC "CI covers the macOS platform path
+  # without requiring physical macOS input devices" — the parity test
+  # reads advertised capability flags only.
   test-macos:
     runs-on: macos-latest
 
@@ -43,4 +95,5 @@ jobs:
 
       - run: pip install -e ".[dev]"
 
-      - run: pytest -v tests/test_platform_parity.py tests/test_platform_macos.py
+      - name: "[macOS] platform-parity + macOS backend"
+        run: pytest -v tests/test_platform_parity.py tests/test_platform_macos.py

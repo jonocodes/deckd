@@ -43,7 +43,8 @@ import { EDITOR_VIEW_ID, MPRIS_VIEW_ID, WINDOWS_VIEW_ID } from "./protocol";
 import { isTypingTarget, onActivate } from "./a11y";
 import { Editor } from "./Editor";
 import { ConfirmModal } from "./ConfirmModal";
-import type { Widget } from "./protocol";
+import type { Widget, ConfirmRequestMessage } from "./protocol";
+import { wireWindowsToServer } from "./protocol";
 import { pathForView, viewFromPath, type View } from "./view-routing";
 
 type SocketStatus = "connecting" | "open" | "closed" | "unauthorized";
@@ -99,7 +100,10 @@ export function App() {
   const activeMeterSources = useMemo(() => {
     const sources = new Set<string>();
     if (layout) {
-      for (const w of layout.widgets) {
+      // ``widgets`` arrives over the wire as an opaque blob; cast at
+      // the boundary to the schema-layer Widget type (#76 — the wire
+      // protocol relays widgets opaquely).
+      for (const w of layout.widgets as unknown as Widget[]) {
         if (w.kind === "meter" && w.source) sources.add(w.source);
         if (w.kind === "stats" && w.metrics) {
           for (const m of w.metrics) if (m.source) sources.add(m.source);
@@ -125,7 +129,10 @@ export function App() {
   // nowhere else to learn about ``empty_state``. Hoist the lookup out
   // of the render path so the JSX stays declarative.
   const nowPlayingWidget = useMemo(
-    () => (layout?.widgets ?? []).find((w) => w.kind === "nowplaying") ?? null,
+    () =>
+      (layout?.widgets as unknown as Widget[] | undefined ?? []).find(
+        (w) => w.kind === "nowplaying",
+      ) ?? null,
     [layout],
   );
   const media = useMediaStore(activeMediaIds, activeMediaPrefixes);
@@ -184,7 +191,7 @@ export function App() {
     { confirmId: string; widgetId: string } | null
   >(null);
   const onConfirmRequest = useCallback(
-    (m: { confirm_id: string; widget_id: string }) =>
+    (m: ConfirmRequestMessage) =>
       setPendingConfirm({ confirmId: m.confirm_id, widgetId: m.widget_id }),
     [],
   );
@@ -204,7 +211,9 @@ export function App() {
   // and the modal showing, fall back to a synthetic widget with
   // just the id so the prompt still names something concrete.
   const pendingWidget: Widget | null = pendingConfirm
-    ? layout?.widgets.find((w) => w.id === pendingConfirm.widgetId) ?? {
+    ? (layout?.widgets as unknown as Widget[] | undefined)?.find(
+        (w) => w.id === pendingConfirm.widgetId,
+      ) ?? {
         id: pendingConfirm.widgetId,
         kind: "button",
         confirm: true,
@@ -670,7 +679,7 @@ export function App() {
             // empty state — same treatment as the now-playing
             // "Nothing playing" placeholder (decision 8).
             <RunningWindowsList
-              windows={runningWindows}
+              windows={wireWindowsToServer(runningWindows)}
               onRowTap={(windowId) => {
                 // Stage 3 (#122): raise the tapped window, then close
                 // the overlay back to the focused-app layout. Same

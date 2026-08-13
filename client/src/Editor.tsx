@@ -135,7 +135,11 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
       ? activeLayout.app
       : (mockLayouts ? (mockLayouts.find((l) => l.id !== EDITOR_VIEW_ID)?.id ?? mockLayouts[0]?.id ?? null) : null);
   const [layouts, setLayouts] = useState<LayoutEntry[]>(mockLayouts ?? []);
-  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId);
+  // ``initialSelectedId``'s ternary resolves to ``string | null | undefined``
+  // (the ``mockLayouts?.find(...)?.id`` branch is ``undefined`` when no
+  // match exists); normalise to ``string | null`` so useState's setter
+  // typechecks against the React setter contract.
+  const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string>("");
@@ -188,7 +192,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setEditTheme(activeLayout.theme ?? "");
     setEditIcon(activeLayout.icon ?? null);
     setEditJogstrip(activeLayout.jogstrip_enabled ?? true);
-    setEditMatch([activeLayout.app]);
+    setEditMatch([activeLayout.app ?? "default"]);
     initialisedRef.current = true;
     pickerSkipRef.current = true;
   }, [activeLayout, creationForm]);

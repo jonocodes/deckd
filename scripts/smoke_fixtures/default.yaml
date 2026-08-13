@@ -1,0 +1,95 @@
+# Stable smoke-test fixture layout (#77).
+#
+# The smoke test (scripts/smoke.py) presses the widget ids below by
+# name; this fixture keeps those ids stable so a layout edit in
+# layouts/ can't break CI. Mirrors the minimal shape of the shipping
+# default layout: a few buttons that exercise the shell / terminal /
+# url / key / jog primitives, plus a meter and a stats widget for
+# widget_update coverage.
+#
+# NOT a shipping layout — do not edit layouts/ to mirror this. The
+# shipping layouts live at layouts/ and are user-facing config; this
+# file is the smoke harness's private fixture.
+match:
+  - default
+display_name: Smoke
+jogstrip: true
+widgets:
+  # Pressed by the smoke test as ``press: open-url`` — exercises the
+  # ``url:`` action primitive. The URL doesn't need to be live; the
+  # daemon's url action just shells out to ``xdg-open`` (or
+  # platform-equivalent) and the smoke test overrides run_shell to a
+  # fake, so no browser opens.
+  - id: open-url
+    kind: button
+    icon:
+      source: simple-icons
+      name: github
+    action:
+      url: "https://github.com"
+
+  # Pressed as ``press: open-terminal`` — exercises ``terminal: true``.
+  # The smoke test overrides run_terminal with a fake that records the
+  # call, so no terminal actually opens.
+  - id: open-terminal
+    kind: button
+    icon:
+      source: lucide
+      name: square-terminal
+    action:
+      terminal: true
+
+  # Pressed as ``press: tilix`` — same terminal primitive under a
+  # different id, mirrors the shipping default layout's tilix button.
+  - id: tilix
+    kind: button
+    icon:
+      source: lucide
+      name: square-terminal
+    action:
+      terminal: true
+
+  # Pressed as ``press: xterm`` — exercises the ``shell:`` action
+  # primitive. The smoke test overrides run_shell with a fake.
+  - id: xterm
+    kind: button
+    icon:
+      source: lucide
+      name: square-terminal
+    action:
+      shell: "xterm"
+
+  # Send-key: exercises the ``key:`` action primitive (ctrl+t). Not
+  # pressed by the smoke harness today but kept here so a future
+  # key-press smoke step has a stable target.
+  - id: send-key-tab
+    kind: button
+    label: Send Ctrl+T
+    icon:
+      source: lucide
+      name: keyboard
+    action:
+      key: "ctrl+t"
+
+  # A meter widget: the daemon pushes widget_update frames for it
+  # while the smoke session is connected. Not asserted on directly by
+  # the smoke harness (the source's poll cadence would make that
+  # flaky), but kept here so a layout that includes a meter survives
+  # the load + reload round-trip.
+  - id: cpu-meter
+    kind: meter
+    label: CPU
+    source: cpu_percent
+    min: 0
+    max: 100
+
+  # Stats widget: same role as the meter — exercises the multi-source
+  # subscription path during a smoke run without flaky assertions.
+  - id: system
+    kind: stats
+    label: System
+    metrics:
+      - source: cpu_percent
+        label: CPU
+      - source: mem_percent
+        label: MEM
