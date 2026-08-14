@@ -93,7 +93,7 @@ The daemon uses a single shared password for all clients:
 - **Bypass:** `--no-auth` disables all checks. `/health`, `/diag`, `/metrics`, `GET /layouts`, and the art proxies are always open (read-only, no secret leak).
 - **Rotation:** Edit the password file and restart the daemon.
 
-See [README#client-auth](../README.md#client-auth) for the full flow.
+See [the guide's Client auth section](GUIDE.md#client-auth) for the full flow.
 
 ## Diagnostic HTTP endpoints
 
@@ -224,6 +224,7 @@ For the full wire shape, the authoritative source is `daemon/deckd/protocol.py` 
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System diagram and module index. |
 | [CONTEXT.md](../CONTEXT.md) | Domain lexicon (ubiquitous language). |
 | [INCEPTION.md](INCEPTION.md) | Project origin and design philosophy. |
-| [README.md](../README.md) | User-facing overview, configuration walkthrough, platform documentation. |
+| [GUIDE.md](GUIDE.md) | Install, per-platform setup, layout/configuration walkthrough, client features, dev loop. |
+| [README.md](../README.md) | User-facing showcase: pitch, screenshots, status, comparison. |
 | [docs/adr/](adr/) | Architectural decision records (ADR-0001 through ADR-0009+). |
 | [docs/SPIKES.md](SPIKES.md) | Spike proposals and outcomes. |

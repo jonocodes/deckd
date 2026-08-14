@@ -10,7 +10,7 @@ This document is the primary navigation map for AI agents (and human developers)
 ├── CONTEXT.md              # Domain vocabulary (ubiquitous language — read first)
 ├── Justfile                # All common commands: setup, dev, test, build, smoke
 ├── LICENSE                 # MIT
-├── README.md               # Human-facing: pitch, screenshots, status, setup, config reference
+├── README.md               # Human-facing showcase: pitch, screenshots, status, comparison
 ├── pyproject.toml          # Python package metadata, deps, entry points
 ├── daemon/                 # Python daemon (deckd) — the brains of the system
 │   └── deckd/
@@ -73,6 +73,7 @@ This document is the primary navigation map for AI agents (and human developers)
 ├── scripts/                # Diagnostic and testing utilities
 ├── tests/                  # Python test suite (pytest + pytest-asyncio)
 └── docs/                   # Documentation (see below)
+    ├── GUIDE.md            # User & setup guide: install, per-platform setup, config walkthrough, client features, dev loop
     ├── INCEPTION.md        # Pre-implementation design document
     ├── SPIKES.md           # Spike progress and implementation plan
     ├── spike-kde-wayland-focus.md  # KWin focus detection investigation
@@ -85,8 +86,9 @@ This document is the primary navigation map for AI agents (and human developers)
 
 For an agent or developer new to the codebase, read in this order:
 
-1. **README.md** — Pitch, screenshots, status, setup instructions, config reference.
-2. **CONTEXT.md** — Domain vocabulary (ubiquitous language). Every concept used in code, tests, and docs is defined here.
+1. **README.md** — Pitch, screenshots, status, comparison (the showcase).
+2. **docs/GUIDE.md** — Install, per-platform setup, layout/configuration walkthrough, client features, and the dev loop.
+3. **CONTEXT.md** — Domain vocabulary (ubiquitous language). Every concept used in code, tests, and docs is defined here.
 3. **docs/REFERENCE.md** — Canonical CLI flags, environment variables, diagnostic endpoints, and project status.
 4. **docs/INCEPTION.md** — Pre-implementation design. Architecture, core principles, v1 scope, deferred work.
 4. **docs/adr/README.md** — ADR index with summaries and amend/supersede relationships.

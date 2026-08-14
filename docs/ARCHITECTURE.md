@@ -125,7 +125,8 @@ graph TB
 | **Build/test commands** | [Justfile](../Justfile) | All common commands: setup, dev, test, build, smoke. |
 | **Testing strategy** | [TESTING.md](TESTING.md) | Testing layers, what each fakes, and the planned desktop-integration tier. |
 | **Platform parity** | [PLATFORM-PARITY.md](PLATFORM-PARITY.md) | What works on GNOME / KDE / X11 / macOS — capability matrix and per-backend notes. |
-| **README** | [README.md](../README.md) | Human-facing: pitch, screenshots, status, setup, config reference. |
+| **User & setup guide** | [GUIDE.md](GUIDE.md) | Install, per-platform setup, layout/configuration walkthrough, client features, dev loop. |
+| **README** | [README.md](../README.md) | Human-facing showcase: pitch, screenshots, status, comparison. |
 
 ## Code owns behavior
 
