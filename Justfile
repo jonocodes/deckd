@@ -256,6 +256,7 @@ test-all:
 test:
     pytest
     node scripts/test_focus_wire_shape.mjs
+    node scripts/test_kwin_focus_bridge.mjs
 
 # Protocol drift guard (#76): regenerate the TypeScript wire types from
 # daemon/deckd/protocol.py and fail if the checked-in
@@ -274,9 +275,10 @@ check-protocol:
 gen-protocol:
     python scripts/codegen_protocol_ts.py --out client/src/protocol.generated.ts
 
-# Run the GNOME focus JSON producer contract independently.
+# Run the GNOME + KDE focus JSON producer contracts independently.
 test-focus-wire:
     node scripts/test_focus_wire_shape.mjs
+    node scripts/test_kwin_focus_bridge.mjs
 
 # Live-bus MPRIS smoke test — NOT part of `test` / CI. Publishes a real
 # MPRIS player on the session bus and asserts the production

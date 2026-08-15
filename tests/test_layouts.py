@@ -255,6 +255,28 @@ def test_matches_identity_is_case_insensitive() -> None:
     assert not layout.matches_identity(AppInfo(app_id="chrome", wm_class=None))
 
 
+def test_matches_identity_matches_reverse_dns_short_name() -> None:
+    """A bare token matches its reverse-DNS form — ``konsole`` covers
+    ``org.kde.konsole``, the identity KDE's ``resourceClass`` (and GNOME's
+    ``get_wm_class``) report for Wayland-native windows. Without this,
+    Konsole falls to the default layout on KDE (#133 follow-up field bug)."""
+    layout = Layout(match=["konsole"])
+    assert layout.matches_identity(AppInfo(app_id="org.kde.konsole", wm_class=None))
+    assert layout.matches_identity(AppInfo(app_id=None, wm_class="org.kde.konsole"))
+
+
+def test_matches_identity_reverse_dns_does_not_widen_short_token() -> None:
+    """The short-name widening only covers a token that IS the last segment
+    — ``firefox`` never matches an unrelated reverse-DNS id, and a full
+    token still matches only its own exact identity."""
+    layout = Layout(match=["firefox"])
+    assert not layout.matches_identity(AppInfo(app_id="org.kde.dolphin", wm_class=None))
+    assert not layout.matches_identity(AppInfo(app_id=None, wm_class="com.github.firefoxtools"))
+    full = Layout(match=["org.gnome.Console"])
+    assert full.matches_identity(AppInfo(app_id="org.gnome.Console", wm_class=None))
+    assert not full.matches_identity(AppInfo(app_id="org.gnome.console2", wm_class=None))
+
+
 def test_resolve_falls_back_to_default_layout(tmp_path: Path) -> None:
     _write(tmp_path, "firefox.yaml", FIREFOX_LAYOUT)
     _write(tmp_path, "default.yaml", DEFAULT_LAYOUT)

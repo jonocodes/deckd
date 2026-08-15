@@ -95,8 +95,17 @@ No — they sit on a spectrum:
 - **#131 (nested compositor)** is written with a GNOME path and a later
   sway / labwc / weston path for the KWin / generic backend (#31).
 
-**Caveat:** enumeration + raise (`ListWindows` / `RaiseWindow`) only *exist* on the
-GNOME backend today — KDE inherits focus-only, and X11 / macOS have no enumeration
-— so in practice these run GNOME-first until KDE catches up. macOS focus
+**Caveat:** enumeration + raise (`ListWindows` / `RaiseWindow`) exist on the GNOME
+*and* KDE backends now (#133 taught the KWin script to push a window list and the
+daemon to enqueue raises the script drains on a `QTimer` — see
+`daemon/deckd/platform.py` and `packaging/kwin-script/deckd-focus/`), but X11 /
+macOS still have no enumeration. The KDE producer is exercised without a
+compositor by `scripts/test_kwin_focus_bridge.mjs` (the KWin counterpart of the
+GNOME `scripts/test_focus_wire_shape.mjs`); a live KWin session is still needed to
+machine-verify it end-to-end. Per `docs/PLATFORM-PARITY.md`, a ✓ means "the code
+advertises and implements it" — the Linux columns (GNOME and now KDE) are
+code-and-CI truth with no dated hardware run behind them, so treat the KDE
+enumeration/raise rows as unverified until someone repeats a live-session check
+and dates it there. macOS focus
 (osascript / Quartz, no D-Bus) would need a different harness entirely, out of
 scope for these four.

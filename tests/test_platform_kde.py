@@ -120,6 +120,120 @@ def test_cache_identity_falls_back_to_wm_class() -> None:
 
 
 # ---------------------------------------------------------------------------
+# DeckdFocusCache — the window-list snapshot fed by the KWin script's
+# UpdateWindowList push (enumeration parity, #133 follow-up). Mirrors the
+# active-window cache above: a separate JSON payload the daemon serves back
+# on ListWindows() so the inherited GnomeShellFocusBackend.watch_windows
+# gdbus-poll is answered from cache instead of failing UnknownMethod.
+# ---------------------------------------------------------------------------
+
+
+def test_cache_default_windows_payload_is_empty_list() -> None:
+    cache = DeckdFocusCache()
+    assert json.loads(cache.windows_payload) == []
+    assert cache.to_window_infos() == []
+
+
+def test_cache_update_windows_stores_and_renders_window_infos() -> None:
+    cache = DeckdFocusCache()
+    cache.update_windows(
+        json.dumps(
+            [
+                {
+                    "window_id": "42",
+                    "wm_class": "dolphin",
+                    "gtk_application_id": None,
+                    "sandboxed_app_id": None,
+                    "app_name": "Dolphin",
+                    "title": "Dolphin — Home",
+                    "workspace": 1,
+                    "minimized": False,
+                },
+                {
+                    "window_id": "43",
+                    "wm_class": "firefox",
+                    "gtk_application_id": None,
+                    "sandboxed_app_id": None,
+                    "app_name": "Firefox",
+                    "title": "deckd — GitHub",
+                    "workspace": 2,
+                    "minimized": True,
+                },
+            ]
+        )
+    )
+    windows = cache.to_window_infos()
+    assert [w.window_id for w in windows] == ["42", "43"]
+    assert windows[0].wm_class == "dolphin"
+    assert windows[0].minimized is False
+    assert windows[1].minimized is True
+    assert windows[1].title == "deckd — GitHub"
+
+
+def test_cache_update_windows_rejects_non_list_without_overwriting() -> None:
+    """A window-list push must be a JSON array. A hostile / malformed
+    object push is rejected and the previous good list is preserved —
+    same last-good discipline as the active-window ``update``."""
+    cache = DeckdFocusCache()
+    cache.update_windows(json.dumps([{"window_id": "1", "wm_class": "kate"}]))
+    with pytest.raises(ValueError):
+        cache.update_windows(json.dumps({"not": "a list"}))
+    assert cache.to_window_infos()[0].window_id == "1"
+
+
+def test_cache_update_windows_rejects_invalid_json_without_overwriting() -> None:
+    cache = DeckdFocusCache()
+    cache.update_windows(json.dumps([{"window_id": "1", "wm_class": "kate"}]))
+    with pytest.raises(json.JSONDecodeError):
+        cache.update_windows("not-json")
+    assert cache.to_window_infos()[0].window_id == "1"
+
+
+def test_cache_update_windows_empty_list_clears_snapshot() -> None:
+    cache = DeckdFocusCache()
+    cache.update_windows(json.dumps([{"window_id": "1", "wm_class": "kate"}]))
+    cache.update_windows("[]")
+    assert cache.to_window_infos() == []
+
+
+# ---------------------------------------------------------------------------
+# DeckdFocusCache — the pending-raise queue (raise parity, #133 follow-up).
+#
+# KWin scripts can only ``callDBus`` OUTBOUND, so the daemon cannot push a
+# raise command into the compositor. The verified-clean inversion (KWin 6
+# exposes a ``QTimer`` global): the daemon enqueues a window id here, and the
+# persistent KWin script drains the queue on a timer tick via
+# ``DrainPendingRaises`` and sets ``workspace.activeWindow``.
+# ---------------------------------------------------------------------------
+
+
+def test_cache_drain_pending_raises_default_empty() -> None:
+    cache = DeckdFocusCache()
+    assert json.loads(cache.drain_pending_raises()) == []
+
+
+def test_cache_enqueue_and_drain_pending_raises_fifo_then_clears() -> None:
+    cache = DeckdFocusCache()
+    cache.enqueue_raise("42")
+    cache.enqueue_raise("43")
+    assert json.loads(cache.drain_pending_raises()) == ["42", "43"]
+    # Draining clears the queue — a raise is consumed exactly once.
+    assert json.loads(cache.drain_pending_raises()) == []
+
+
+def test_cache_enqueue_raise_is_bounded() -> None:
+    """A pathological backlog (script not draining) can't grow without
+    bound — the queue keeps only the most recent ``MAX_PENDING_RAISES``."""
+    cache = DeckdFocusCache()
+    for i in range(DeckdFocusCache.MAX_PENDING_RAISES + 25):
+        cache.enqueue_raise(str(i))
+    drained = json.loads(cache.drain_pending_raises())
+    assert len(drained) == DeckdFocusCache.MAX_PENDING_RAISES
+    # The oldest were dropped; the most recent survive.
+    assert drained[-1] == str(DeckdFocusCache.MAX_PENDING_RAISES + 24)
+
+
+# ---------------------------------------------------------------------------
 # DeckdFocusDBusService — the org.deckd.Focus service interface
 # ---------------------------------------------------------------------------
 
@@ -178,6 +292,73 @@ def test_dbus_service_update_writes_through_to_shared_cache() -> None:
         json.dumps({"app_id": "k", "wm_class": "k", "title": None, "pid": 1}),
     )
     assert json.loads(cache.payload)["app_id"] == "k"
+
+
+def _service_method(svc, name):
+    from dbus_fast.service import ServiceInterface
+
+    return next(
+        m for m in ServiceInterface._get_methods(svc.interface) if m.name == name
+    )
+
+
+def test_dbus_service_exposes_list_and_update_window_methods() -> None:
+    """Enumeration parity (#133 follow-up): the daemon-owned service
+    gains ``ListWindows() -> s`` (the enumeration surface the inherited
+    ``watch_windows`` gdbus-polls) and ``UpdateWindowList(s)`` (the KWin
+    script's list push target). Byte-identical wire shape to the GNOME
+    extension's ``ListWindows``."""
+    from dbus_fast.service import ServiceInterface
+
+    svc = DeckdFocusDBusService()
+    names = {m.name for m in ServiceInterface._get_methods(svc.interface)}
+    assert "ListWindows" in names
+    assert "UpdateWindowList" in names
+    list_m = _service_method(svc, "ListWindows")
+    update_m = _service_method(svc, "UpdateWindowList")
+    assert list_m.in_signature == ""
+    assert list_m.out_signature == "s"
+    assert update_m.in_signature == "s"
+    assert update_m.out_signature == ""
+
+
+def test_dbus_service_list_windows_returns_cache_windows_payload() -> None:
+    cache = DeckdFocusCache()
+    cache.update_windows(json.dumps([{"window_id": "9", "wm_class": "kate"}]))
+    svc = DeckdFocusDBusService(cache=cache)
+    method = _service_method(svc, "ListWindows")
+    assert method.fn(svc.interface) == cache.windows_payload
+
+
+def test_dbus_service_update_window_list_writes_through_to_shared_cache() -> None:
+    cache = DeckdFocusCache()
+    svc = DeckdFocusDBusService(cache=cache)
+    method = _service_method(svc, "UpdateWindowList")
+    method.fn(svc.interface, json.dumps([{"window_id": "5", "wm_class": "okular"}]))
+    assert cache.to_window_infos()[0].window_id == "5"
+
+
+def test_dbus_service_exposes_drain_pending_raises() -> None:
+    """The KWin script's raise-poll target (#133 follow-up): the script's
+    ``QTimer`` tick calls ``DrainPendingRaises() -> s`` and activates each
+    returned window id."""
+    from dbus_fast.service import ServiceInterface
+
+    svc = DeckdFocusDBusService()
+    names = {m.name for m in ServiceInterface._get_methods(svc.interface)}
+    assert "DrainPendingRaises" in names
+    drain_m = _service_method(svc, "DrainPendingRaises")
+    assert drain_m.in_signature == ""
+    assert drain_m.out_signature == "s"
+
+
+def test_dbus_service_drain_pending_raises_returns_and_clears_queue() -> None:
+    cache = DeckdFocusCache()
+    cache.enqueue_raise("7")
+    svc = DeckdFocusDBusService(cache=cache)
+    method = _service_method(svc, "DrainPendingRaises")
+    assert json.loads(method.fn(svc.interface)) == ["7"]
+    assert json.loads(method.fn(svc.interface)) == []
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +430,102 @@ async def test_kde_backend_get_active_app_default_cache_round_trips_all_none(
     monkeypatch.setattr(plat, "_run", fake_run)
     app = await KdeFocusBackend().get_active_app()
     assert app == AppInfo(None, None, None, None)
+
+
+# ---------------------------------------------------------------------------
+# KdeFocusBackend — enumeration + raise parity (#133 follow-up).
+#
+# watch_windows is inherited verbatim from GnomeShellFocusBackend (it
+# gdbus-polls ListWindows against the now-answering daemon-owned bus), so
+# there's no KDE override to test for it beyond the capability flag. raise_window
+# / raise_app ARE overridden: they resolve against the daemon's own cached
+# window list and enqueue into the pending-raise queue the KWin script drains.
+# ---------------------------------------------------------------------------
+
+
+def test_kde_backend_capabilities_reach_gnome_parity() -> None:
+    """With enumeration (push) and raise (enqueue-and-poll) both wired,
+    KDE re-advertises the surfaces #133 forced it to drop — the KWin-side
+    implementation the issue named as the trigger to re-add the flags."""
+    caps = KdeFocusBackend().capabilities()
+    assert caps == frozenset(
+        {"watch_active_app", "watch_windows", "raise_window", "raise_app"}
+    )
+    # And the parity is with the GNOME backend it subclasses.
+    assert caps == GnomeShellFocusBackend().capabilities()
+
+
+@pytest.mark.asyncio
+async def test_kde_backend_raise_window_enqueues_id_present_in_snapshot() -> None:
+    cache = DeckdFocusCache()
+    cache.update_windows(
+        json.dumps([{"window_id": "42", "wm_class": "dolphin"}])
+    )
+    backend = KdeFocusBackend(cache=cache)
+    await backend.raise_window("42")
+    assert json.loads(cache.drain_pending_raises()) == ["42"]
+
+
+@pytest.mark.asyncio
+async def test_kde_backend_raise_window_retired_id_raises_failed_without_enqueue() -> None:
+    """An id that retired between the enumeration snapshot and the tap is
+    not in the cached window list: mirror the GNOME backend's ``false``
+    return by raising :class:`RaiseWindowFailed` (the server turns it into
+    a diagnostic ``raise_failed`` / ``declined`` event, #122) and enqueue
+    nothing so the KWin script never chases a dead window."""
+    from deckd.platform import RaiseWindowFailed
+
+    cache = DeckdFocusCache()
+    cache.update_windows(json.dumps([{"window_id": "42", "wm_class": "dolphin"}]))
+    backend = KdeFocusBackend(cache=cache)
+    with pytest.raises(RaiseWindowFailed):
+        await backend.raise_window("99")
+    assert json.loads(cache.drain_pending_raises()) == []
+
+
+@pytest.mark.asyncio
+async def test_kde_backend_raise_app_enqueues_matching_window() -> None:
+    cache = DeckdFocusCache()
+    cache.update_windows(
+        json.dumps(
+            [
+                {"window_id": "1", "wm_class": "konsole"},
+                {"window_id": "2", "wm_class": "firefox", "sandboxed_app_id": "org.mozilla.firefox"},
+            ]
+        )
+    )
+    backend = KdeFocusBackend(cache=cache)
+    # Matches on wm_class...
+    assert await backend.raise_app("konsole") is True
+    assert json.loads(cache.drain_pending_raises()) == ["1"]
+    # ...and on the desktop-file identity carried in sandboxed_app_id.
+    assert await backend.raise_app("org.mozilla.firefox") is True
+    assert json.loads(cache.drain_pending_raises()) == ["2"]
+
+
+@pytest.mark.asyncio
+async def test_kde_backend_raise_app_no_match_returns_false_without_enqueue() -> None:
+    cache = DeckdFocusCache()
+    cache.update_windows(json.dumps([{"window_id": "1", "wm_class": "konsole"}]))
+    backend = KdeFocusBackend(cache=cache)
+    assert await backend.raise_app("inkscape") is False
+    assert json.loads(cache.drain_pending_raises()) == []
+
+
+@pytest.mark.asyncio
+async def test_kde_backend_raise_window_and_app_do_not_shell_out(monkeypatch) -> None:
+    """The KDE raise path is cache-local (enqueue for the script to
+    drain) — unlike the inherited GNOME path it must never fork ``gdbus``
+    (there is no daemon-side ``RaiseWindow`` method to call)."""
+    async def boom(*args: str) -> str:
+        raise AssertionError(f"raise must not shell out on KDE: {args!r}")
+
+    monkeypatch.setattr(plat, "_run", boom)
+    cache = DeckdFocusCache()
+    cache.update_windows(json.dumps([{"window_id": "1", "wm_class": "kate"}]))
+    backend = KdeFocusBackend(cache=cache)
+    await backend.raise_window("1")
+    await backend.raise_app("kate")
 
 
 @pytest.mark.asyncio
