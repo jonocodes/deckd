@@ -19,10 +19,10 @@ this table exists to make drift between backends visible at a glance.
 | Capability | GNOME (Wayland/X11) | KDE Plasma (Wayland) | X11 (generic) | macOS |
 |---|---|---|---|---|
 | Focus detection (`watch_active_app`) | ✓ GNOME Shell extension over `org.deckd.Focus` | ✓ KWin script pushes into daemon-owned cache (#31) | ✓ `xdotool` poll | ✓ `osascript` + System Events |
-| Window enumeration (`watch_windows`) | ✓ extension `ListWindows` | ✗ — not advertised; KWin-side impl is future work ([#133](https://github.com/jonocodes/deckd/issues/133)) | ✗ | ✓ Quartz `CGWindowList` — app names only (titles need Screen Recording) |
-| Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✗ — not advertised; KWin-side impl is future work ([#133](https://github.com/jonocodes/deckd/issues/133)) | ✗ | ✓ AppKit + Accessibility (AX half needs the grant) |
-| Window row → layout match (icon / display name) | ✓ `wm_class` matches the layout token | n/a — no enumeration | n/a | ✓ identity matching is case-insensitive (#140), so `CGWindowList`'s `Firefox` matches the `firefox` token |
-| Raise app (`raise:`) | ✓ extension `RaiseApp` (#137) | ✗ | ✗ | ✗ |
+| Window enumeration (`watch_windows`) | ✓ extension `ListWindows` | ✓ KWin script pushes `UpdateWindowList` → daemon `ListWindows` (#133) | ✗ | ✓ Quartz `CGWindowList` — app names only (titles need Screen Recording) |
+| Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✓ daemon enqueues → KWin script `QTimer`-polls `DrainPendingRaises`, sets `workspace.activeWindow` (#133) | ✗ | ✓ AppKit + Accessibility (AX half needs the grant) |
+| Window row → layout match (icon / display name) | ✓ `wm_class` matches the layout token | ✓ `resourceClass` → `wm_class`, `desktopFileName` → `sandboxed_app_id` (#133) | n/a | ✓ identity matching is case-insensitive (#140), so `CGWindowList`'s `Firefox` matches the `firefox` token |
+| Raise app (`raise:`) | ✓ extension `RaiseApp` (#137) | ✓ daemon matches identity in its cached list, enqueues the winner (#133) | ✗ | ✗ |
 | MPRIS media (chrome media icon + `nowplaying`) | ✓ session-bus MPRIS | ✓ | ✓ | ✗ — no session bus; the daemon sends `chrome_media.supported = false` and the view says "unsupported on this platform". A MediaRemote-based equivalent is [#56](https://github.com/jonocodes/deckd/issues/56) |
 | `media` widget (VLC HTTP backend) | ✓ | ✓ | ✓ | ◑ unverified — plain HTTP to VLC's web interface, no platform-specific path |
 | `dbus:` action | ✓ | ✓ | ✓ | ✗ — a Mac has no GNOME/KDE services to call |
@@ -87,22 +87,38 @@ the enumeration/raise tests (#129–#131) are GNOME-first.
 capability simply never produces the corresponding wire frame; the client
 surfaces the "unsupported on this platform" empty state (issue #120, decision
 8). The daemon gates each optional surface on `capabilities()` — so the honest
-move for a backend that can't do something is to *not advertise it*. #133 is a
-case where KDE advertises two capabilities it can't fulfil.
+move for a backend that can't do something is to *not advertise it*. #133 was a
+case where KDE advertised two capabilities it couldn't fulfil; the short-term
+fix dropped them to focus-only, and the follow-up (this doc's current KDE
+column) taught the KWin script + daemon cache to honour enumeration and raise,
+so KDE could honestly re-advertise them.
 
 ## Backend notes
 
-- **GNOME** — richest backend. The `deckd-focus@local` Shell extension owns
-  `org.deckd.Focus` and answers `GetActiveWindow` / `ListWindows` /
-  `RaiseWindow`. Enumeration + raise are GNOME-only today.
-- **KDE Plasma** — `KdeFocusBackend` subclasses the GNOME backend and reuses its
-  poll path, but the daemon (not a KDE extension) owns `org.deckd.Focus`; the
-  KWin script can only *push* focus in (`UpdateActiveWindow`), so the exported
-  interface implements focus only, so `KdeFocusBackend.capabilities()`
-  overrides the inherited GNOME set back down to focus-only. Enumeration/raise
-  parity is future work
-  ([#133](https://github.com/jonocodes/deckd/issues/133) tracks the eventual
-  KWin-side implementation that would re-add the flags).
+- **GNOME** — the `deckd-focus@local` Shell extension owns `org.deckd.Focus`
+  and answers `GetActiveWindow` / `ListWindows` / `RaiseWindow` / `RaiseApp`
+  directly (pull model — the daemon gdbus-calls the extension).
+- **KDE Plasma** — reaches GNOME parity on all four compositor-axis surfaces
+  ([#133](https://github.com/jonocodes/deckd/issues/133) follow-up), but by the
+  opposite plumbing: the **daemon** owns `org.deckd.Focus` and the KWin script
+  feeds it, because KWin scripts can only `callDBus` *outbound* — they cannot
+  own a bus name or receive inbound methods (spike #30).
+  - *Focus + enumeration* invert to **push**: the KWin script pushes the active
+    window (`UpdateActiveWindow`) and the full window list (`UpdateWindowList`)
+    into the daemon cache; the daemon serves `GetActiveWindow` / `ListWindows`
+    from it, so `KdeFocusBackend` reuses the inherited GNOME gdbus **poll** path
+    unchanged (byte-identical wire shape).
+  - *Raise* inverts to **enqueue-and-poll**: since the daemon can't call into
+    KWin, `raise_window` / `raise_app` resolve the id against the daemon's own
+    cached window list and enqueue it; the persistent KWin script drains the
+    queue on a `QTimer` tick (`DrainPendingRaises`) and sets
+    `workspace.activeWindow`. Raise is fire-and-forget on this model — a retired
+    id is caught daemon-side (it's absent from the cached list → `raise_failed`
+    / `declined`), but a live enqueue's ultimate success isn't observable.
+  - Per-window identity maps `resourceClass` → `wm_class` and `desktopFileName`
+    → `sandboxed_app_id` (KWin's desktop-file id is the closest analogue to the
+    GNOME extension's `Meta.App` id), so the layout matcher has both an X11-class
+    and a desktop-file token to compare, matching GNOME behaviour.
 - **X11** — `xdotool`-based focus polling; no enumeration/raise. Input via
   `uinput` like every Linux path.
 - **macOS** — `osascript` + System Events focus detection; Quartz supplies

@@ -672,9 +672,35 @@ class DeckdFocusCache:
     EMPTY_PAYLOAD = json.dumps(
         {"app_id": None, "wm_class": None, "title": None, "pid": None}
     )
+    #: The enumeration surface's empty default (#133 follow-up). An
+    #: empty JSON array is the "no windows / not yet pushed" state the
+    #: inherited ``watch_windows`` gdbus-poll reads back before the KWin
+    #: script's first ``UpdateWindowList`` push — the same designed empty
+    #: state the GNOME extension yields from ``ListWindows`` on a fresh
+    #: session (issue #120, decision 8).
+    EMPTY_WINDOWS_PAYLOAD = json.dumps([])
+    #: Safety cap on the pending-raise queue. A KWin script that pushes a
+    #: window list is the same script that drains raises on its timer, so
+    #: a backlog only accrues if the script wedged between the two — keep
+    #: the most recent handful and drop the stale rest so the queue can't
+    #: grow without bound (the newest tap is the one the user meant).
+    MAX_PENDING_RAISES = 16
 
-    def __init__(self, payload: str | None = None) -> None:
+    def __init__(
+        self, payload: str | None = None, windows_payload: str | None = None
+    ) -> None:
         self.payload: str = payload if payload is not None else self.EMPTY_PAYLOAD
+        self.windows_payload: str = (
+            windows_payload
+            if windows_payload is not None
+            else self.EMPTY_WINDOWS_PAYLOAD
+        )
+        #: FIFO of window ids the daemon asked KWin to raise, waiting for
+        #: the KWin script's next ``DrainPendingRaises`` poll (#133
+        #: follow-up). The daemon owns the enqueue side (``enqueue_raise``
+        #: from ``KdeFocusBackend.raise_window`` / ``raise_app``); the
+        #: script owns the drain side.
+        self._pending_raises: list[str] = []
 
     def update(self, payload: str) -> None:
         """Store a new JSON payload. Validates JSON so a malformed KWin
@@ -689,6 +715,27 @@ class DeckdFocusCache:
         json.loads(payload)  # raises json.JSONDecodeError on bad input
         self.payload = payload
 
+    def update_windows(self, payload: str) -> None:
+        """Store a new JSON window-list payload from the KWin script's
+        ``UpdateWindowList`` push (#133 follow-up).
+
+        Same last-good discipline as :meth:`update`: a malformed push
+        (bad JSON, or a JSON value that isn't an array) is rejected and
+        the previous good list is preserved, so a truncated ``callDBus``
+        arg cannot blank the running-windows list. Validating the *shape*
+        (must be a list) in addition to the JSON matters here because the
+        enumeration wire contract is a JSON array — a bare object would
+        otherwise reach ``_window_info_from_payload`` per-entry and crash
+        the reader; rejecting it at the push boundary keeps that failure
+        off the hot path.
+        """
+        parsed = json.loads(payload)  # raises json.JSONDecodeError on bad input
+        if not isinstance(parsed, list):
+            raise ValueError(
+                f"window-list push must be a JSON array, got {type(parsed).__name__}"
+            )
+        self.windows_payload = payload
+
     def to_app_info(self) -> AppInfo:
         """Inspection helper for tests / diagnostics. The production
         poll path goes through :class:`GnomeShellFocusBackend`'s
@@ -697,18 +744,58 @@ class DeckdFocusCache:
         hot path."""
         return _app_info_from_payload(json.loads(self.payload))
 
+    def to_window_infos(self) -> list[WindowInfo]:
+        """Inspection helper mirroring :meth:`to_app_info` for the window
+        list. The production enumeration path goes through
+        :class:`GnomeShellFocusBackend`'s inherited ``watch_windows``
+        gdbus poll (``ListWindows`` against the daemon-owned bus), which
+        re-derives ``WindowInfo`` from the wire reply, so this is not on
+        the hot path — it exists for tests / diagnostics."""
+        return [_window_info_from_payload(entry) for entry in json.loads(self.windows_payload)]
+
+    def enqueue_raise(self, window_id: str) -> None:
+        """Queue ``window_id`` for the KWin script's next raise poll
+        (#133 follow-up). Bounded by :attr:`MAX_PENDING_RAISES` — the
+        oldest ids fall off the front so a wedged script can't grow the
+        queue unbounded; the most recent tap is always retained."""
+        self._pending_raises.append(window_id)
+        if len(self._pending_raises) > self.MAX_PENDING_RAISES:
+            del self._pending_raises[: -self.MAX_PENDING_RAISES]
+
+    def drain_pending_raises(self) -> str:
+        """Return the queued raise ids as a JSON array string and clear
+        the queue — a raise is consumed exactly once. This is the KWin
+        script's ``DrainPendingRaises`` poll target: on a non-empty
+        reply the script activates each matching window
+        (``workspace.activeWindow = win``)."""
+        payload = json.dumps(self._pending_raises)
+        self._pending_raises = []
+        return payload
+
 
 class DeckdFocusDBusService:
     """Session-bus service that owns ``org.deckd.Focus`` on KDE.
 
     Methods mirror the GNOME Shell extension's contract exactly so
     external consumers (``scripts/watch_focus.py``, ``gdbus`` probes,
-    tests) call the same interface on either desktop. Two methods:
+    tests) call the same interface on either desktop. Four methods —
+    two ``Get``/``List`` read methods the daemon's watchers poll, and
+    two ``Update`` push targets the KWin script feeds:
 
-    * ``GetActiveWindow() -> s`` — returns the cached JSON payload
-      (byte-identical wire shape to the GNOME extension).
-    * ``UpdateActiveWindow(s) -> ()`` — the KWin script's push target;
-      writes through to the shared :class:`DeckdFocusCache`.
+    * ``GetActiveWindow() -> s`` — returns the cached active-window JSON
+      payload (byte-identical wire shape to the GNOME extension).
+    * ``UpdateActiveWindow(s) -> ()`` — the KWin script's focus push
+      target; writes through to the shared :class:`DeckdFocusCache`.
+    * ``ListWindows() -> s`` — returns the cached window-list JSON array
+      (enumeration parity, #133 follow-up); the inherited
+      ``GnomeShellFocusBackend.watch_windows`` gdbus-polls it.
+    * ``UpdateWindowList(s) -> ()`` — the KWin script's window-list push
+      target; writes through to the same cache.
+    * ``DrainPendingRaises() -> s`` — the KWin script's raise-poll
+      target; returns the queued window ids (JSON array) and clears the
+      queue. The inversion that makes raise possible despite KWin scripts
+      being outbound-only (#133 follow-up): the daemon enqueues, the
+      script drains on a ``QTimer`` tick and sets ``workspace.activeWindow``.
 
     The class is wrapped lazily so import-time never depends on
     ``dbus_fast`` (a Linux-only dependency the macOS / X11 paths do not
@@ -748,6 +835,33 @@ class DeckdFocusDBusService:
             @dbus_method()
             def UpdateActiveWindow(self, payload: "s") -> "":  # type: ignore[name-defined]
                 cache.update(payload)
+
+            @dbus_method()
+            def ListWindows(self) -> "s":  # type: ignore[name-defined]
+                # Enumeration surface (#133 follow-up). Byte-identical wire
+                # shape to the GNOME extension's ``ListWindows``: a single
+                # JSON-array string the daemon's inherited
+                # ``watch_windows`` gdbus-poll parses per entry. Served from
+                # the same cache the KWin script's ``UpdateWindowList`` push
+                # writes through.
+                return cache.windows_payload
+
+            @dbus_method()
+            def UpdateWindowList(self, payload: "s") -> "":  # type: ignore[name-defined]
+                # The KWin script's window-list push target — the
+                # enumeration counterpart of ``UpdateActiveWindow``.
+                cache.update_windows(payload)
+
+            @dbus_method()
+            def DrainPendingRaises(self) -> "s":  # type: ignore[name-defined]
+                # The KWin script's raise-poll target (#133 follow-up).
+                # KWin scripts can only ``callDBus`` outbound and cannot
+                # receive inbound methods, so the daemon can't push a raise
+                # command into the compositor; instead the script polls
+                # this on a ``QTimer`` tick and activates each returned
+                # window id. Returns the queued ids as a JSON array and
+                # clears the queue.
+                return cache.drain_pending_raises()
 
         return _DeckdFocusInterface()
 
@@ -808,23 +922,33 @@ class KdeFocusBackend(GnomeShellFocusBackend):
         self._started = False
 
     def capabilities(self) -> frozenset[str]:
-        """Focus-only — the honest surface for KDE today (#133).
+        """Full GNOME parity (#133 follow-up).
 
-        ``KdeFocusBackend`` subclasses :class:`GnomeShellFocusBackend`
-        for the *poll* path only. The KWin script can push focus in
-        (``UpdateActiveWindow``) but there is no KDE-side implementation
-        of enumeration or raise, so advertising the GNOME backend's
-        ``watch_windows`` / ``raise_window`` / ``raise_app`` flags would
-        be dishonest advertisement: the daemon would start those
-        surfaces and the client would sit on a perpetually-empty list
-        (issue #120, decision 8). Override back down to focus-only so
-        each unsupported surface stays in its designed empty state.
-        Matches the ``## Capability matrix`` in
-        ``docs/PLATFORM-PARITY.md``; ``tests/test_platform_parity.py``
-        enforces the agreement. Enumeration/raise parity is future work
-        (the eventual KWin-side implementation re-adds the flags here).
+        #133 forced this down to focus-only because the KWin script
+        could only *push focus in* — there was no KDE-side enumeration or
+        raise, so advertising ``watch_windows`` / ``raise_window`` /
+        ``raise_app`` would have been dishonest (the daemon would start
+        surfaces the client could never populate or act on). The
+        follow-up implements both directions the KWin-script push model
+        allows:
+
+        * **Enumeration** — the KWin script pushes the full window list
+          (``UpdateWindowList``) into the same cache the daemon serves
+          back on ``ListWindows``; the inherited
+          :meth:`GnomeShellFocusBackend.watch_windows` gdbus-polls it
+          unchanged.
+        * **Raise** — KWin scripts can't receive inbound D-Bus, so the
+          daemon enqueues a raise (:meth:`raise_window` / :meth:`raise_app`)
+          and the script drains it on a ``QTimer`` poll
+          (``DrainPendingRaises``) and sets ``workspace.activeWindow``.
+
+        So the honest surface is now the full set. Matches the
+        ``## Capability matrix`` in ``docs/PLATFORM-PARITY.md``;
+        ``tests/test_platform_parity.py`` enforces the agreement.
         """
-        return frozenset({"watch_active_app"})
+        return frozenset(
+            {"watch_active_app", "watch_windows", "raise_window", "raise_app"}
+        )
 
     @property
     def cache(self) -> DeckdFocusCache:
@@ -833,6 +957,55 @@ class KdeFocusBackend(GnomeShellFocusBackend):
         ``GetActiveWindow`` method reads from it (and so does the KDE
         backend's inherited ``gdbus`` poll path, via the bus)."""
         return self._cache
+
+    async def raise_window(self, window_id: str) -> None:
+        """Enqueue ``window_id`` for the KWin script's raise poll (#133
+        follow-up).
+
+        Overrides the inherited GNOME path (which gdbus-calls a
+        daemon-side ``RaiseWindow`` method that does not exist on KDE):
+        the daemon has no way to *call into* KWin, so it resolves the id
+        against its own cached window list and, when the id is still
+        live, enqueues it for the script to drain
+        (:meth:`DeckdFocusCache.drain_pending_raises`) and activate.
+
+        An id absent from the current snapshot retired between
+        enumeration and the user's tap — mirror the GNOME backend's
+        ``false`` return by raising :class:`RaiseWindowFailed` (the
+        server turns it into a diagnostic ``raise_failed`` / ``declined``
+        event, #122) and enqueue nothing, so the script never chases a
+        dead window. Fire-and-forget otherwise: a live enqueue always
+        "succeeds" from the caller's view; whether KWin then honours it
+        is not observable on the push model, matching the fire-and-forget
+        contract in :meth:`PlatformBackend.raise_window`.
+        """
+        live_ids = {w.window_id for w in self._cache.to_window_infos()}
+        if window_id not in live_ids:
+            raise RaiseWindowFailed(window_id)
+        self._cache.enqueue_raise(window_id)
+
+    async def raise_app(self, identity: str) -> bool:
+        """Raise the first cached window matching ``identity`` (#133
+        follow-up).
+
+        The GNOME extension resolves ``RaiseApp`` compositor-side; on KDE
+        the daemon already holds the enumerated window list, so it does
+        the identity match itself (against the same three identity keys
+        the layout matcher uses — ``wm_class`` / ``gtk_application_id`` /
+        ``sandboxed_app_id``) and enqueues the winner's id. Returns
+        ``True`` when a match was found and queued, ``False`` when no open
+        window carries the identity — the same contract the inherited
+        gdbus path returned.
+        """
+        for window in self._cache.to_window_infos():
+            if identity in (
+                window.wm_class,
+                window.gtk_application_id,
+                window.sandboxed_app_id,
+            ):
+                self._cache.enqueue_raise(window.window_id)
+                return True
+        return False
 
     async def start(self) -> None:
         """Own ``org.deckd.Focus`` and export the push surface.
