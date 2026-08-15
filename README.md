@@ -166,7 +166,6 @@ per-platform setup (macOS, KDE Plasma Wayland, X11), phone/tablet pairing,
 - **[Architecture](docs/ARCHITECTURE.md)** — how the daemon, client, and focus watchers fit together.
 - **[Platform parity](docs/PLATFORM-PARITY.md)** — what's verified working on each OS.
 - **[Testing](docs/TESTING.md)** — the test ladder and integration gaps.
-- **[Design doc (INCEPTION)](docs/INCEPTION.md)** — the source of truth for *what* and *why*.
 - **[Agent onboarding](docs/ONBOARDING.md)** — repository map and read order for contributors and agents.
 
 ## License

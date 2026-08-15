@@ -223,7 +223,6 @@ For the full wire shape, the authoritative source is `daemon/deckd/protocol.py` 
 | [ONBOARDING.md](ONBOARDING.md) | Repository map, mandatory read order, dev modes. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System diagram and module index. |
 | [CONTEXT.md](../CONTEXT.md) | Domain lexicon (ubiquitous language). |
-| [INCEPTION.md](INCEPTION.md) | Project origin and design philosophy. |
 | [GUIDE.md](GUIDE.md) | Install, per-platform setup, layout/configuration walkthrough, client features, dev loop. |
 | [README.md](../README.md) | User-facing showcase: pitch, screenshots, status, comparison. |
 | [docs/adr/](adr/) | Architectural decision records (ADR-0001 through ADR-0009+). |

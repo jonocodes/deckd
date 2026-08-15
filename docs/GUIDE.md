@@ -5,8 +5,7 @@ daemon, per-platform setup, writing layouts, the client features, and the
 development loop. For the exact CLI flags, environment variables, and HTTP
 endpoints see [REFERENCE.md](REFERENCE.md); for the system architecture see
 [ARCHITECTURE.md](ARCHITECTURE.md); for what works on which OS see
-[PLATFORM-PARITY.md](PLATFORM-PARITY.md); the full design rationale lives in
-[INCEPTION.md](INCEPTION.md).
+[PLATFORM-PARITY.md](PLATFORM-PARITY.md).
 
 ## Contents
 
@@ -28,7 +27,6 @@ daemon/deckd/      Python daemon: aiohttp server, WebSocket, layout loader, acti
 client/            Vite + React + TS web client (the dumb renderer)
 layouts/           Per-app YAML layouts (default.yaml + one per app)
 scripts/smoke.py   End-to-end test that boots the daemon over WS, clicks every button
-docs/INCEPTION.md  Full design doc — source of truth for *what* and *why*
 ```
 
 ## Web-app layouts

@@ -108,7 +108,6 @@ graph TB
 |---|---|---|
 | **Domain vocabulary** | [CONTEXT.md](../CONTEXT.md) | Ubiquitous language; defines Layout, Widget, Chrome, Action, AppInfo, Match, Bind, etc. |
 | **Operational reference** | [REFERENCE.md](REFERENCE.md) | Canonical CLI flags, env vars, diagnostic endpoints, project status. |
-| **Product intent** | [INCEPTION.md](INCEPTION.md) | Pre-implementation design: architecture, core principles, v1 scope, deferred work. |
 | **ADR index** | [adr/README.md](adr/README.md) | All architecture decisions with summaries and amend/supersede relationships. |
 | **Spike tracker** | [SPIKES.md](SPIKES.md) | Spike progress and implementation plan (de-risking work). |
 | **KDE focus investigation** | [spike-kde-wayland-focus.md](spike-kde-wayland-focus.md) | KWin/Wayland focus detection paths investigated. |
