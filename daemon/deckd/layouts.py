@@ -439,11 +439,28 @@ class Layout(BaseModel):
         is that two layouts whose tokens differ only in case now collide;
         that has never been a supported distinction (ids slugify to
         lowercase, and ``resolve_id`` already matches case-insensitively).
+
+        Tokens are additionally matched against the *last dotted segment*
+        of each identity, so a bare token (``konsole``) covers its
+        reverse-DNS form (``org.kde.konsole``) — the shape KDE's
+        ``resourceClass`` and GNOME's ``get_wm_class`` report for
+        Wayland-native windows (docs/PLATFORM-PARITY.md, KDE backend
+        note). A full token (``org.gnome.Console``) still matches the full
+        identity exactly; this only widens the exact path, it never
+        narrows it.
         """
         if not self.match or self.match == ["default"]:
             return False
-        identities = {value.casefold() for value in (app.app_id, app.wm_class) if value}
-        return any(token.casefold() in identities for token in self.match)
+        tokens = {token.casefold() for token in self.match}
+        identities = [value.casefold() for value in (app.app_id, app.wm_class) if value]
+        for identity in identities:
+            if identity in tokens:
+                return True
+            # Reverse-DNS short name: ``org.kde.konsole`` -> ``konsole``.
+            short = identity.rsplit(".", 1)[-1]
+            if short in tokens:
+                return True
+        return False
 
 
 def load_layout(path: Path) -> Layout:
@@ -576,6 +593,14 @@ def _window_to_app(win: WindowInfo) -> AppInfo:
 
 def _humanize_identity(identity: str) -> str:
     """Turn a machine app identity into a readable window label."""
+    # Reverse-DNS ids occasionally carry a packaging-suffix segment
+    # (``org.telegram.desktop``) that is not part of the app's name —
+    # drop it before taking the last meaningful dotted segment so the
+    # label reads ``Telegram``, not ``Desktop``.
+    for suffix in (".desktop", ".app"):
+        if identity.endswith(suffix):
+            identity = identity[: -len(suffix)]
+            break
     name = identity.rsplit(".", 1)[-1]
     name = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", name)
     name = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", name)

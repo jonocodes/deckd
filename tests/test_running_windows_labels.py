@@ -123,6 +123,9 @@ def test_label_for_window_identity_match_falls_back_to_layout_id() -> None:
         ("thunderbird", "Thunderbird"),
         ("firefox-esr", "Firefox Esr"),
         ("my_app", "My App"),
+        # A trailing packaging suffix is not part of the app's name —
+        # ``org.telegram.desktop`` labels ``Telegram``, not ``Desktop``.
+        ("org.telegram.desktop", "Telegram"),
     ],
 )
 def test_humanize_identity(identity: str, expected: str) -> None:

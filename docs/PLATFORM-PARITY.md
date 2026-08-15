@@ -118,7 +118,14 @@ so KDE could honestly re-advertise them.
   - Per-window identity maps `resourceClass` → `wm_class` and `desktopFileName`
     → `sandboxed_app_id` (KWin's desktop-file id is the closest analogue to the
     GNOME extension's `Meta.App` id), so the layout matcher has both an X11-class
-    and a desktop-file token to compare, matching GNOME behaviour.
+    and a desktop-file token to compare, matching GNOME behaviour. Wayland-native
+    windows report the full reverse-DNS id as their class (`org.kde.konsole`,
+    `org.telegram.desktop`); `Layout.matches_identity` matches a bare layout
+    token (`konsole`) against the last dotted segment, so a `match: [konsole]`
+    layout covers KDE's class and GNOME's `get_wm_class` alike. The running-
+    windows label humanizer drops a trailing `.desktop`/`.app` packaging
+    segment before taking the last dotted segment (`org.telegram.desktop` →
+    `Telegram`, not `Desktop`).
 - **X11** — `xdotool`-based focus polling; no enumeration/raise. Input via
   `uinput` like every Linux path.
 - **macOS** — `osascript` + System Events focus detection; Quartz supplies
