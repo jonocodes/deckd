@@ -240,7 +240,7 @@ Action primitives: `key` (keystroke via uinput), `shell` (subprocess), `dbus` (m
 
 ## 8. Daemon stack & packaging
 
-- **Python 3.12+, asyncio throughout.** Concurrent event sources (WebSocket clients, D-Bus signals, momentum timers) make async the structural choice.
+- **Python 3.11+, asyncio throughout.** Concurrent event sources (WebSocket clients, D-Bus signals, momentum timers) make async the structural choice.
 - **Libraries:** `aiohttp` (HTTP static + WebSocket, one port), `dbus-fast` (async D-Bus), `python-evdev` (uinput), `qrcode` (pairing), `pydantic` or dataclasses for config/message schemas.
 - Go was considered (single-binary distribution) and deferred; Python wins on iteration speed for a personal tool, and the owner knows the ecosystem. Revisit only if "ship one static binary" becomes a goal.
 - **Packaging:** NixOS module providing the systemd **user** service, udev rule, `uinput` kernel module, `input` group membership. Client ships as Vite `dist/` served by the daemon; dev mode runs Vite's dev server proxying WS to the daemon.

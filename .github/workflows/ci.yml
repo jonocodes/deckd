@@ -13,14 +13,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Single Python version (not a matrix) — the project's only declared
-      # support target is 3.12 (Justfile setup recipes pin uv --python 3.12,
-      # pyproject tom 3.12). Narrowing here saves runner-minutes without
-      # losing coverage; widen back to a matrix if a 3.11 fallback is
-      # ever officially supported.
+      # Single Python version (not a matrix) — CI runs the declared floor,
+      # 3.11 (pyproject requires-python >=3.11), so the minimum-supported
+      # version is the one actually tested. Local dev pins 3.12 via the
+      # Justfile (uv --python 3.12); the code uses no version-specific
+      # features, so testing the floor covers the pinned dev version too.
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - uses: actions/setup-node@v4
         with:
@@ -91,7 +91,7 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
       - run: pip install -e ".[dev]"
 

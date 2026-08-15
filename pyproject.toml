@@ -92,4 +92,8 @@ testpaths = ["tests"]
 # leave one behind.
 venvPath = "."
 venv = ".venv"
-pythonVersion = "3.12"
+# Type-check against the declared floor (requires-python >=3.11), not the
+# pinned dev version (uv --python 3.12), so a 3.12-only API surfaces as an
+# error instead of slipping through. CI runs the suite on 3.11 (the floor);
+# see .github/workflows/ci.yml.
+pythonVersion = "3.11"
