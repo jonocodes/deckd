@@ -164,7 +164,12 @@ export function PropertiesPanel({
             onChange={(icon) => onWidgetChange(updateField(widget, "icon", icon))}
           />
 
-          {widget.kind === "button" && (
+          {/* ADR-0006: `color` is button-only — other kinds let their kind
+              identity win and ignore it. We still surface the field on any
+              kind that already carries one, or a hand-authored `color:` on a
+              meter would be stuck: invisible to the panel, unclearable, yet
+              still painted by the editor canvas. */}
+          {(widget.kind === "button" || widget.color != null) && (
             <ColorField
               color={widget.color}
               onChange={(color) => onWidgetChange(updateField(widget, "color", color))}
@@ -365,16 +370,33 @@ const COLOR_PRESETS = [
   "#000000",
 ] as const;
 
-/** The ``<input type="color">`` swatch always wants a 7-char hex literal;
- * non-hex CSS (``hsl(...)``, ``rebeccapurple``) can't be displayed. Return
- * an empty string for those cases — the swatch then falls back to its own
- * default (browser-chosen, e.g. black) without us forcing a misleading
- * "colour is set to black" state. */
-function parseHexColor(value: string | null | undefined): string {
+/** What the swatch shows when nothing is set. ``<input type="color">`` has no
+ * "empty" state, so an unset widget has to display *something*; black is the
+ * browser's own default and reads as "nothing chosen" next to an empty text
+ * field. */
+const UNSET_SWATCH = "#000000";
+
+/** Render ``value`` as the 7-char lowercase hex literal ``<input type="color">``
+ * requires, or "" when it can't be one losslessly.
+ *
+ * Representable: ``#RGB`` shorthand (expanded, ``#fff`` -> ``#ffffff``), plus
+ * case and surrounding whitespace. Not representable: non-hex CSS
+ * (``hsl(...)``, ``rebeccapurple``) and ``#RRGGBBAA``, whose alpha the swatch
+ * has no channel for. Callers must not feed "" to the swatch — the DOM
+ * coerces an unparseable value to black, so the picker would claim a
+ * ``rebeccapurple`` widget is black. See {@link ColorField}. */
+function toSwatchHex(value: string | null | undefined): string {
   if (!value) return "";
-  const match = /^#([0-9a-fA-F]{6})$/.exec(value.trim());
-  if (!match) return "";
-  return `#${match[1].toLowerCase()}`;
+  const hex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(value.trim())?.[1];
+  if (!hex) return "";
+  const full =
+    hex.length === 3
+      ? hex
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : hex;
+  return `#${full.toLowerCase()}`;
 }
 
 function ColorField({
@@ -384,33 +406,48 @@ function ColorField({
   color: string | null | undefined;
   onChange: (color: string | null) => void;
 }) {
-  const handleInputChange = useCallback(
+  const handleColorChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       onChange(e.target.value || null);
     },
     [onChange],
   );
-  const handlePreset = useCallback(
-    (preset: string) => onChange(preset),
-    [onChange],
-  );
+
+  const swatchHex = toSwatchHex(color);
+  // A set colour the picker can't hold. Showing the native swatch here would
+  // both misreport the colour (coerced to black) and put an accidental click
+  // one confirm away from overwriting the authored CSS string, so we show the
+  // real colour read-only and leave editing to the text input — the escape
+  // hatch the schema's any-CSS-string contract needs (#115).
+  const unrepresentable = !!color && swatchHex === "";
 
   return (
     <div className="prop-field">
       <span className="prop-field-label">Color</span>
       <div className="prop-field-color-row">
-        <input
-          className="prop-field-color-swatch"
-          type="color"
-          aria-label="color swatch"
-          value={parseHexColor(color)}
-          onChange={handleInputChange}
-        />
+        {unrepresentable ? (
+          <span
+            className="prop-field-color-preview"
+            role="img"
+            aria-label={`current color ${color}`}
+            title={`${color} — edit as text; the picker holds hex only`}
+            style={{ background: color }}
+          />
+        ) : (
+          <input
+            className="prop-field-color-swatch"
+            type="color"
+            aria-label="color swatch"
+            value={swatchHex || UNSET_SWATCH}
+            onChange={handleColorChange}
+          />
+        )}
         <input
           className="prop-field-input prop-field-color-text"
           type="text"
+          aria-label="color value"
           value={color ?? ""}
-          onChange={handleInputChange}
+          onChange={handleColorChange}
           placeholder="e.g. #1e3a8a or rebeccapurple"
         />
       </div>
@@ -423,7 +460,7 @@ function ColorField({
             style={{ background: preset }}
             aria-label={`use preset ${preset}`}
             title={preset}
-            onClick={() => handlePreset(preset)}
+            onClick={() => onChange(preset)}
           />
         ))}
       </div>

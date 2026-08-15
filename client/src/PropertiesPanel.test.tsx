@@ -236,7 +236,7 @@ describe("PropertiesPanel — button widget", () => {
         onLayoutFieldChange={vi.fn()}
       />,
     );
-    const colorInput = document.querySelector(".prop-field-color-text") as HTMLInputElement;
+    const colorInput = screen.getByLabelText("color value") as HTMLInputElement;
     expect(colorInput.value).toBe("#1e3a8a");
     fireEvent.change(colorInput, { target: { value: "#ff0000" } });
     expect(onChange).toHaveBeenCalledWith({ ...baseButton, color: "#ff0000" });
@@ -318,10 +318,88 @@ describe("PropertiesPanel — button widget", () => {
         onLayoutFieldChange={vi.fn()}
       />,
     );
-    const text = document.querySelector(".prop-field-color-text") as HTMLInputElement;
+    const text = screen.getByLabelText("color value") as HTMLInputElement;
     expect(text.value).toBe("rebeccapurple");
     fireEvent.click(screen.getByLabelText(/use preset #ff0000/i));
     expect(onChange).toHaveBeenCalledWith({ ...baseButton, color: "#ff0000" });
+  });
+
+  it.each([
+    ["#fff", "#ffffff"],
+    ["#1E3A8A", "#1e3a8a"],
+    ["  #3fb950  ", "#3fb950"],
+  ])("swatch shows %s as %s (#115)", (stored, shown) => {
+    // Shorthand, uppercase and padded hex are all colours the swatch *can*
+    // display, so it must — showing black for `#fff` reads as "the widget is
+    // black" when it is white. The stored text is left exactly as authored.
+    render(
+      <PropertiesPanel
+        widget={{ ...baseButton, color: stored }}
+        layoutFields={layoutFields}
+        onWidgetChange={vi.fn()}
+        onLayoutFieldChange={vi.fn()}
+      />,
+    );
+    const swatch = screen.getByLabelText(/color swatch/i) as HTMLInputElement;
+    expect(swatch.value.toLowerCase()).toBe(shown);
+    const text = screen.getByLabelText("color value") as HTMLInputElement;
+    expect(text.value).toBe(stored);
+  });
+
+  it.each(["rebeccapurple", "hsl(220, 70%, 40%)", "#1e3a8a80"])(
+    "shows %s as a read-only preview, not a lying swatch (#115)",
+    (color) => {
+      // `<input type="color">` coerces anything it can't parse to #000000, so
+      // rendering it here would claim a purple widget is black — and put one
+      // stray click between the author and a clobbered CSS string. 8-digit hex
+      // lands here too: the swatch has no alpha channel.
+      render(
+        <PropertiesPanel
+          widget={{ ...baseButton, color }}
+          layoutFields={layoutFields}
+          onWidgetChange={vi.fn()}
+          onLayoutFieldChange={vi.fn()}
+        />,
+      );
+      expect(screen.queryByLabelText(/color swatch/i)).toBeFalsy();
+      expect(screen.getByLabelText(`current color ${color}`)).toBeTruthy();
+      expect((screen.getByLabelText("color value") as HTMLInputElement).value).toBe(color);
+    },
+  );
+
+  it("offers the picker on an unset colour so one can be chosen (#115 AC1)", () => {
+    // The empty case is the main path into the picker — a widget with no
+    // colour is exactly the one an author wants to pick a colour for.
+    const onChange = vi.fn();
+    render(
+      <PropertiesPanel
+        widget={{ id: "b", kind: "button" }}
+        layoutFields={layoutFields}
+        onWidgetChange={onChange}
+        onLayoutFieldChange={vi.fn()}
+      />,
+    );
+    const swatch = screen.getByLabelText(/color swatch/i) as HTMLInputElement;
+    expect(swatch.value.toLowerCase()).toBe("#000000");
+    expect((screen.getByLabelText("color value") as HTMLInputElement).value).toBe("");
+    fireEvent.change(swatch, { target: { value: "#3fb950" } });
+    expect(onChange).toHaveBeenCalledWith({ id: "b", kind: "button", color: "#3fb950" });
+  });
+
+  it("surfaces an already-set colour on a non-button kind so it can be cleared (#115)", () => {
+    // ADR-0006 keeps `color` button-only, but a hand-authored `color:` on a
+    // meter is still painted by the canvas — hiding the field would strand it.
+    const onChange = vi.fn();
+    render(
+      <PropertiesPanel
+        widget={{ id: "m", kind: "meter", color: "#1e3a8a" }}
+        layoutFields={layoutFields}
+        onWidgetChange={onChange}
+        onLayoutFieldChange={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("color value"), { target: { value: "" } });
+    expect("color" in onChange.mock.calls[0][0]).toBe(false);
   });
 
   it("clearing the color text input sets color to null (#115)", () => {
@@ -334,7 +412,7 @@ describe("PropertiesPanel — button widget", () => {
         onLayoutFieldChange={vi.fn()}
       />,
     );
-    const colorInput = document.querySelector(".prop-field-color-text") as HTMLInputElement;
+    const colorInput = screen.getByLabelText("color value") as HTMLInputElement;
     fireEvent.change(colorInput, { target: { value: "" } });
     const changed = onChange.mock.calls[0][0];
     expect("color" in changed).toBe(false);
