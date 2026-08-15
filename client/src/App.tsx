@@ -30,6 +30,7 @@ import {
 import type { CSSProperties } from "react";
 import { useWakeLock } from "./wake-lock";
 import { getDemoLayout, getDemoView, MEDIA_DEMO_STATES, MPRIS_DEMO_STATES, EDITOR_DEMO_LAYOUTS } from "./demo";
+import { usePlaygroundDaemon } from "./playground/usePlaygroundDaemon";
 import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
 import type {
@@ -69,6 +70,13 @@ export function App() {
   // disabled, so the client can be viewed without a daemon. Null in normal
   // daemon-backed operation.
   const demoLayout = getDemoLayout();
+  // Playground spike (#149): ``?playground`` swaps the WebSocket for an
+  // in-browser MockDaemon (virtual apps ticking on a clock), so a visitor
+  // experiences the press→feedback loop with no backend at all.
+  const isPlayground = useMemo(
+    () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("playground"),
+    [],
+  );
   const [layout, setLayout] = useState<ServerLayout | null>(demoLayout);
   // A view demo (``?demo=settings`` / ``?demo=trackpad``) opens straight into
   // that chrome view; otherwise start on the layout grid.
@@ -195,16 +203,29 @@ export function App() {
       setPendingConfirm({ confirmId: m.confirm_id, widgetId: m.widget_id }),
     [],
   );
+  // Both hooks are called unconditionally (rules of hooks); only the enabled
+  // one connects. The real socket steps aside for demo fixtures and for the
+  // playground; the MockDaemon runs only under ``?playground``.
+  const realSocket = useDeckdSocket(
+    onLayout,
+    onWidgetUpdate,
+    onMediaState,
+    onChromeMedia,
+    onConfirmRequest,
+    onRunningWindows,
+    { enabled: !demoLayout && !isPlayground },
+  );
+  const playgroundSocket = usePlaygroundDaemon(
+    onLayout,
+    onWidgetUpdate,
+    onMediaState,
+    onChromeMedia,
+    onConfirmRequest,
+    onRunningWindows,
+    { enabled: isPlayground },
+  );
   const { status, send, authenticate, deauthenticate, hasPassword } =
-    useDeckdSocket(
-      onLayout,
-      onWidgetUpdate,
-      onMediaState,
-      onChromeMedia,
-      onConfirmRequest,
-      onRunningWindows,
-      { enabled: !demoLayout },
-    );
+    isPlayground ? playgroundSocket : realSocket;
   // Look the pressed widget up in the active layout so the modal
   // can show its label / icon (the daemon doesn't send command text
   // on the wire). If the layout has rotated away between the press
