@@ -239,7 +239,7 @@ def _ax_trusted() -> bool | None:
     installed) — "unknown", not "untrusted".
     """
     try:
-        import ApplicationServices
+        import ApplicationServices  # type: ignore[import-not-found]
     except ImportError:
         return None
     # PyObjC's stubs don't declare the AX namespace, but the symbol is

@@ -26,8 +26,13 @@ jobs:
         with:
           node-version: "20"
 
+      # Match `just setup-linux` (.[dev,uinput,dbus]) so the pyright typecheck
+      # resolves the daemon's optional-backend imports (dbus_fast, evdev).
+      # Installing only .[dev] leaves those extras absent and every
+      # dbus_fast/evdev import reads as reportMissingImports — the CI/local
+      # drift the [tool.pyright] note in pyproject.toml warns about.
       - name: Install Python deps
-        run: pip install -e ".[dev]"
+        run: pip install -e ".[dev,uinput,dbus]"
 
       - name: Install client deps
         run: npm install
