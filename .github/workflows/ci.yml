@@ -64,6 +64,11 @@ jobs:
       # browser to pick it up.
       - name: "[5/7] playwright e2e (client end-to-end)"
         run: |
+          # No nix store on the runner, so find-chromium.mjs returns undefined
+          # and Playwright falls back to its own managed browser — which must
+          # be installed first (with system libs). Without this the launch
+          # fails with "Executable doesn't exist … chrome-headless-shell".
+          npx playwright install --with-deps chromium
           npm run build
           npm run test:e2e
         working-directory: client
