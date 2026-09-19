@@ -421,3 +421,11 @@ metrics:
     #!/usr/bin/env bash
     set -euo pipefail
     deckctl metrics
+
+# Run the Nix flake checks: builds packages.deckd and the focus-watcher
+# bundles, evaluates the NixOS + home-manager modules, unit-tests the
+# activation scripts in a sandbox, and boots the packaged daemon on
+# loopback (health, client dist, bundled layouts). Needs Nix with flakes.
+# See docs/GUIDE.md "Nix flake, NixOS, and home-manager".
+nix-check:
+    nix flake check -L

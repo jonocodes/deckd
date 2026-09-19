@@ -196,7 +196,6 @@ Primary development operations. Run `just` (no args) to list all available recip
 
 | Issue | What |
 |-------|------|
-| #17 | NixOS production module |
 | #15 | Screensaver/suspend sync via `StateMessage` D-Bus |
 | #38 | Multiple simultaneous clients with different resolutions |
 | #25 | Multi-backend chooser (user-managed paired-daemon list) |

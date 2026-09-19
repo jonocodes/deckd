@@ -107,3 +107,19 @@ jobs:
 
       - name: "[macOS] platform-parity + macOS backend"
         run: pytest -v tests/test_platform_parity.py tests/test_platform_macos.py
+
+  # Nix packaging: builds packages.deckd + the focus-watcher bundles,
+  # evaluates the NixOS/home-manager modules against dummy configs,
+  # unit-tests the activation scripts in a sandbox, and boots the packaged
+  # daemon on loopback (health, bundled client, bundled layouts). Mirrors
+  # `just nix-check` locally; see nix/tests/.
+  nix:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+
+      - name: "[nix] flake check (packages + module evals + smoke)"
+        run: nix flake check -L

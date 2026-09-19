@@ -424,7 +424,7 @@ sudo udevadm trigger --subsystem-match=misc --sysname-match=uinput
 sudo usermod -aG input "$USER"
 ```
 
-On **NixOS**, don't do the above by hand — `packaging/nixos/deckd-spike.nix` already loads the `uinput` module, installs the same udev rule, creates the `input` group, and adds the daemon user to it (see the NixOS block below). Enable it (or lift those lines into your config) and relog.
+On **NixOS**, don't do the above by hand — the flake's NixOS module loads the `uinput` module, installs the same udev rule, and creates the `input` group (see [Nix flake, NixOS, and home-manager](#nix-flake-nixos-and-home-manager)). Enable it (or lift those lines into your config) and relog.
 
 Log out and back in, then check:
 
@@ -434,22 +434,7 @@ id
 just check-uinput
 ```
 
-On NixOS, import `packaging/nixos/deckd-spike.nix` and enable the spike service:
-
-```nix
-{
-  imports = [ /home/jono/src/deckd/packaging/nixos/deckd-spike.nix ];
-
-  services.deckd-spike = {
-    enable = true;
-    user = "jono";
-    projectDir = "/home/jono/src/deckd";
-    lan = true;
-  };
-}
-```
-
-Run `just setup` and `just build-client` in the checkout before starting the user service.
+Both paths (flake modules or the classic unit) end in the same check above; if `/dev/uinput` is writable, injection is live.
 
 ### Live reload
 
@@ -642,7 +627,91 @@ tail -f deckd.log                       # follow logs (written in the checkout)
 
 **Prefer not to use `just`?** The recipes are thin wrappers you can run by hand — `install-service` is a path-substituting `sed` into `~/.config/systemd/user/` (or `~/Library/LaunchAgents/`) followed by the `systemctl --user enable --now` / `launchctl load` above; `install-focus-extension` is `gnome-extensions pack/install/enable` on `packaging/gnome-shell/deckd-focus@local`. See the `Justfile` for the exact commands.
 
-**NixOS** users can skip all of the above — import the module at [`packaging/nixos/deckd-spike.nix`](../packaging/nixos/deckd-spike.nix), which declares the same user service plus the uinput udev rule and `input` group. See its header for options (`bind`, `port`, …).
+**NixOS** users can skip all of the above — the flake's home-manager module owns the same user service, and the NixOS module owns the udev rule and `input` group. See [Nix flake, NixOS, and home-manager](#nix-flake-nixos-and-home-manager).
+
+## Nix flake, NixOS, and home-manager
+
+The flake at the repo root builds the daemon and the client, and ships
+modules for both halves of a NixOS install. The split mirrors how deckd
+runs: prerequisites are system-wide, the daemon is a per-user session
+service.
+
+| Output | What it is |
+|---|---|
+| `packages.deckd` | daemon + built client + bundled layouts + the udev rule |
+| `packages.deckd-focus-gnome` / `-kwin` | the focus watcher bundles |
+| `nixosModules.deckd` | system prerequisites: `uinput` module, udev rule, `input` group, `openFirewall` |
+| `homeModules.deckd` | the user service: ExecStart, layouts dir, password file |
+| `homeModules.deckd-gnome` / `-kde` | `homeModules.deckd` plus the desktop's focus watcher |
+
+Try it without installing anything (`nix run` serves the bundled client
+and layouts; auth is on by default and the password lands in
+`~/.config/deckd/password`):
+
+```sh
+nix run github:jonocodes/deckd
+```
+
+A NixOS + home-manager install looks like this:
+
+```nix
+# flake.nix of your own config
+inputs.deckd.url = "github:jonocodes/deckd";
+
+# configuration.nix
+imports = [ inputs.deckd.nixosModules.deckd ];
+services.deckd = {
+  enable = true;
+  users = [ "jono" ];    # optional: add to the `input` group (uaccess usually covers it)
+  openFirewall = true;   # only needed when binding beyond localhost
+};
+
+# home.nix
+imports = [ inputs.deckd.homeModules.deckd-gnome ];   # or deckd-kde
+services.deckd = {
+  enable = true;
+  bind = [ "0.0.0.0" ];  # default is localhost-only
+};
+```
+
+`homeModules.deckd` owns:
+
+- a **user** service (`systemd.user.services.deckd`,
+  `WantedBy=graphical-session.target`) running `packages.deckd` with the
+  built client and your writable layouts dir;
+- **layouts seeding**: the bundled layouts are copied into
+  `~/.config/deckd/layouts` on first activation and never overwritten after
+  (`seedLayouts = false` opts out, e.g. when the directory is in a dotfiles
+  repo);
+- the **password file** default (`~/.config/deckd/password`, generated on
+  first start). Point `passwordFile` at a secret if you'd rather manage it.
+
+The full option set is documented inline in the modules
+(`nix/modules/home.nix`, `nix/modules/nixos.nix`); the example above
+covers the ones that matter for install.
+
+**Desktop flavours.** `homeModules.deckd-gnome` installs the
+`deckd-focus@local` Shell extension via `programs.gnome-shell.extensions`;
+it appears after a relogin and needs the dconf database (NixOS GNOME
+enables this). `homeModules.deckd-kde` installs and enables the KWin
+script on every home-manager switch, and hot-starts it when a Plasma
+session is running.
+
+**NixOS without home-manager.** `nixosModules.deckd` covers the system
+half; run the daemon and watcher the classic way above
+(`just install-service`, `just install-focus-extension` /
+`just install-focus-kwin`), or add home-manager.
+
+**Caveats.**
+
+- The package builds against Python 3.12 (nixos-unstable's 3.11 package
+  set has test-only deps that no longer build); the declared floor stays
+  3.11 and CI tests it.
+- Other Wayland compositors have no focus watcher yet, so only GNOME and
+  KDE flavours exist — see [Platform parity](PLATFORM-PARITY.md).
+- Verify the install with `just nix-check` (or `nix flake check`): both
+  build the packages, evaluate the modules, and boot the packaged daemon
+  on loopback.
 
 ## Configuration
 
@@ -732,7 +801,7 @@ The active bind surface is exposed for tooling:
 - `GET /diag` mirrors the same fields for AI-assisted debugging.
 - `deckctl status` prints the pairing URL above the JSON.
 
-The NixOS spike module (`services.deckd-spike`) takes a list-shaped `bind` option (default `[ "127.0.0.1" "::1" ]`) and translates each entry into a `--bind` flag.
+The home-manager module takes the same list as `services.deckd.bind` and translates each entry into a `--bind` flag; the default is `[ ]`, which leaves the daemon's localhost-only default in place. The NixOS module keeps only `port` and `openFirewall` for the system firewall. See [Nix flake, NixOS, and home-manager](#nix-flake-nixos-and-home-manager) and ADR-0009.
 
 ### Per-platform overlay
 
@@ -786,7 +855,7 @@ Try it without sensors: `?demo=meter` loads a backend-free demo with seeded CPU%
 
 ## Why a venv, not a Nix shell?
 
-The daemon is normal Python — `pip install -e .` is the contract. We keep the Nix-based packaging (udev rules, `input` group, `systemd.user.service`) in the lifecycle milestone [#5](https://github.com/jonocodes/deckd/issues/5) for when a clean-machine install story matters; the per-day edit/run loop should not need a sandbox.
+The daemon is normal Python — `pip install -e .` is the contract, and the per-day edit/run loop should not need a sandbox. The flake is the clean-machine install story ([Nix flake, NixOS, and home-manager](#nix-flake-nixos-and-home-manager)): it builds the same source and wires up the udev rule, `input` group, and user service declaratively.
 ### VLC media widgets
 
 The `media` kind is a single responsive composite widget. It uses configured keyboard actions by default, so basic play/pause remains available without extra VLC configuration. Add `media_http` to receive live playback state, timestamps, volume, and text metadata from VLC's local HTTP interface:

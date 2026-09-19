@@ -12,6 +12,17 @@ This document is the primary navigation map for AI agents (and human developers)
 ├── LICENSE                 # MIT
 ├── README.md               # Human-facing showcase: pitch, screenshots, status, comparison
 ├── pyproject.toml          # Python package metadata, deps, entry points
+├── flake.nix               # Nix flake: packages, NixOS + home-manager modules, checks
+├── nix/                    # Flake internals
+│   ├── deckd.nix           # daemon + built client package
+│   ├── focus-gnome.nix     # deckd-focus@local extension bundle
+│   ├── focus-kwin.nix      # deckd-focus KWin script bundle
+│   ├── seed-layouts.nix    # activation-time layouts seeding
+│   ├── seed-layouts.sh     #   the shell unit it wraps
+│   ├── install-kwin.nix    # activation-time KWin script install
+│   ├── install-kwin.sh     #   the shell unit it wraps
+│   ├── modules/            # nixos.nix, home.nix, home-gnome.nix, home-kde.nix
+│   └── tests/              # flake checks: script units, module evals, runtime smoke
 ├── daemon/                 # Python daemon (deckd) — the brains of the system
 │   └── deckd/
 │       ├── __main__.py     # CLI entry point (argparse)
@@ -67,7 +78,7 @@ This document is the primary navigation map for AI agents (and human developers)
 ├── layouts.macos/          # macOS overlay layouts (shadow shared ids)
 ├── packaging/              # Platform packaging artifacts
 │   ├── udev/               # udev rule for /dev/uinput access
-│   ├── nixos/              # NixOS spike module
+│   ├── nixos/              # retired spike module (points at the flake modules)
 │   ├── kwin-script/        # KWin focus script (KDE Plasma Wayland)
 │   └── gnome-shell/        # GNOME Shell focus extension
 ├── scripts/                # Diagnostic and testing utilities
@@ -202,6 +213,8 @@ Run these in order. Each step must pass before the next.
 Step 1 and 3 are cheap type safety gates. Always run at least steps 1–3 before considering changes complete.
 
 One-command reproduction of CI locally (#77): `just test-all` runs the whole ladder in order, with the same per-step headers CI emits so failures identify the subsystem. The GitHub Actions workflow (`.github/workflows/ci.yml`) mirrors the same ladder.
+
+Nix packaging has its own ladder entry: `just nix-check` (or `nix flake check -L`) builds `packages.deckd` and the watcher bundles, evaluates the NixOS and home-manager modules against dummy configs (`nix/tests/modules.nix`), unit-tests the activation scripts in a sandbox (`nix/tests/scripts.nix`), and boots the packaged daemon on loopback to check `/health`, the bundled client, and the bundled layouts (`nix/tests/smoke.nix`).
 
 Host-safe modes (#77): `just smoke` boots the daemon against `scripts/smoke_fixtures/` — no real desktop, no real input devices, no media player required. The `scripts/no-evdev/` shim (used by `client/e2e`) replaces the uinput sink with a logging-only one when the host can't open `/dev/uinput`. The macOS CI job runs the platform-parity + macOS-backend tests only, which read PyObjC capability flags and never require a live desktop or input device.
 

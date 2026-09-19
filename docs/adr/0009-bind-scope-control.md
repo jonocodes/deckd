@@ -102,13 +102,13 @@ where `self.port` is `0`.
 ### NixOS module mirrors the CLI list
 
 `packaging/nixos/deckd-spike.nix`'s `services.deckd-spike` option
-swaps the old `lan = bool` (which only knew about `--host 0.0.0.0`)
-for `bind = listOf str`, default `[ "127.0.0.1" "::1" ]`. Each list
-item becomes one `--bind <ADDR>` flag in the generated `ExecStart`
-script. A module user opting in to LAN exposure sets
-`bind = [ "0.0.0.0" ]`; one restricting to a single Tailscale
-interface sets `bind = [ "iface:tailscale0" ]`. The `lan` flag is
-removed — the module had no users yet.
+(retired — see the Amendment below) swaps the old `lan = bool` (which
+only knew about `--host 0.0.0.0`) for `bind = listOf str`, default
+`[ "127.0.0.1" "::1" ]`. Each list item becomes one `--bind <ADDR>`
+flag in the generated `ExecStart` script. A module user opting in to
+LAN exposure sets `bind = [ "0.0.0.0" ]`; one restricting to a single
+Tailscale interface sets `bind = [ "iface:tailscale0" ]`. The `lan`
+flag is removed — the module had no users yet.
 
 ## Out of scope (deferred, deliberately)
 
@@ -146,3 +146,20 @@ removed — the module had no users yet.
   accidental-exposure risk: the default is localhost-only on both
   v4 and v6, and the NixOS module enforces the same default.
   Opting in to wider exposure is one explicit flag.
+
+## Amendment (2026-09-19): the declarative home moved to home-manager
+
+The bind option described above lived on the NixOS spike module,
+which the flake supersedes (issue #17). The bind surface itself is
+unchanged; only its declarative home moved:
+
+- `homeModules.deckd.bind` owns the `--bind` flags. Its default is
+  `[ ]`, which leaves the daemon's own localhost-only default in
+  place — the same effective default, now stated once in the CLI.
+- `nixosModules.deckd` no longer takes `bind`; it keeps `port` and
+  `openFirewall` for the system firewall.
+- `packaging/nixos/deckd-spike.nix` is retired and throws with a
+  pointer to the flake modules.
+
+The "one explicit flag to opt in" property still holds: set
+`services.deckd.bind = [ "0.0.0.0" ]` in the home-manager module.

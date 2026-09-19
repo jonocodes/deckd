@@ -63,11 +63,11 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Accessibility** — keyboard navigation, visible focus ring, screen-reader landmarks and live announcements, larger controls, high contrast, and reduced motion.
 - [x] **Runs on Linux: GNOME (Wayland), KDE Plasma (Wayland), X11**
 - [x] **Runs on MacOS (barely tested)**
+- [x] **Nix flake** — `nix run` for a trial, plus NixOS and home-manager modules that install the daemon as a session service in one import and wire up the GNOME Shell extension or KWin script. See [Nix flake, NixOS, and home-manager](docs/GUIDE.md#nix-flake-nixos-and-home-manager).
 
 **Planned**
 
 - [ ] **Screensaver & suspend sync** — dim/lock the surface when the desktop sleeps.
-- [ ] **One-step NixOS install** — a production module instead of the current spike.
 - [ ] **Multiple simultaneous clients** with per-device layouts and resolutions.
 - [ ] **Soundboard** — trigger sound clips from the deck.
 - [ ] **Multi-daemon chooser** — pair and pick between several desktops.
@@ -158,6 +158,34 @@ Then open `http://127.0.0.1:8765` in any browser. The full install story —
 per-platform setup (macOS, KDE Plasma Wayland, X11), phone/tablet pairing,
 `/dev/uinput` permissions, and running deckd as a login service — is in the
 [user & setup guide](docs/GUIDE.md#running-deckd).
+
+Prefer Nix? The flake at the repo root packages the daemon and the built
+client:
+
+```sh
+nix run github:jonocodes/deckd        # serves the bundled client + layouts
+just nix-check                        # package build, module evals, smoke test
+```
+
+On NixOS, system prerequisites and the user service are two imports — one
+system-level, one home-manager, plus the desktop flavour that installs the
+focus watcher:
+
+```nix
+# configuration.nix
+imports = [ inputs.deckd.nixosModules.deckd ];
+services.deckd.enable = true;
+
+# home.nix
+imports = [ inputs.deckd.homeModules.deckd-gnome ];  # or homeModules.deckd-kde
+services.deckd = {
+  enable = true;
+  bind = [ "0.0.0.0" ];   # expose on the LAN; default is localhost-only
+};
+```
+
+See [Nix flake, NixOS, and home-manager](docs/GUIDE.md#nix-flake-nixos-and-home-manager)
+for the full option list and caveats.
 
 ## Documentation
 

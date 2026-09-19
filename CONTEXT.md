@@ -70,7 +70,7 @@ Any process that connects to the daemon over WebSocket and renders a layout. Cur
 _Avoid_: frontend, app, device
 
 **Bind**:
-The set of network addresses the daemon's HTTP/WS surface listens on. Configured via the repeatable `--bind ADDR` CLI flag (or the `bind = [...]` NixOS option). Each entry is either a literal IPv4/IPv6 address or `iface:<name>`, which expands to every usable IP on the named interface. The default is `["127.0.0.1", "::1"]` — localhost only on both stacks, so a fresh install is reachable from the host machine but invisible on the LAN. The resolved bind list is exposed on `GET /health` and `GET /diag` as `bind`, `addresses`, and `url`. See ADR-0009.
+The set of network addresses the daemon's HTTP/WS surface listens on. Configured via the repeatable `--bind ADDR` CLI flag (or the `bind = [...]` home-manager option; the NixOS module only mirrors `port` for the firewall). Each entry is either a literal IPv4/IPv6 address or `iface:<name>`, which expands to every usable IP on the named interface. The default is `["127.0.0.1", "::1"]` — localhost only on both stacks, so a fresh install is reachable from the host machine but invisible on the LAN. The resolved bind list is exposed on `GET /health` and `GET /diag` as `bind`, `addresses`, and `url`. See ADR-0009.
 _Avoid_: host, listen address, exposed interface
 
 **Pairing URL**:
