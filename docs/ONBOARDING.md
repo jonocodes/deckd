@@ -190,7 +190,7 @@ Caveats:
 - **`uv.lock` is per-repo, not per-worktree.** A `uv pip install` in one
   worktree edits the lockfile that all worktrees share; if you're
   intentionally diverging dependencies, isolate with a worktree-local
-  venv (`uv venv --python 3.12 .venv`) and commit changes deliberately.
+  venv (`uv venv --python 3.11 .venv`) and commit changes deliberately.
 - **Each worktree needs its own `.venv/`** (run `just setup` per
   worktree); `just test-all` only prepends `./.venv/bin` when one
   exists, so a worktree without one will fall back to whatever Python

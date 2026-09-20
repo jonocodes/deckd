@@ -77,7 +77,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 export PATH="$HOME/.local/bin:$PATH"
 
 # 2. Create the venv and install deps
-uv venv --python 3.12
+uv venv --python 3.11
 uv pip install -e ".[dev,uinput,dbus]"   # aarch64: source-builds python-evdev — see note below
 
 # 3. Install JS client deps (once)

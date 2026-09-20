@@ -147,7 +147,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the component breakdown and
 deckd needs Python 3.11+ and Node 18+. CI tests the 3.11 floor and the 3.12 interpreter the Nix package ships. In brief:
 
 ```sh
-uv venv --python 3.12
+uv venv --python 3.11
 uv pip install -e ".[dev,uinput,dbus]"
 cd client && npm install && cd ..
 just build-client

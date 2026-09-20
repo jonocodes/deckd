@@ -21,7 +21,7 @@ setup-linux:
     # See setup-macos: skip venv creation when flox (or any activation)
     # already owns one, or the empty ./.venv shadows it everywhere.
     if [ -z "${VIRTUAL_ENV:-}" ]; then
-        uv venv --python 3.12 --allow-existing
+        uv venv --python 3.11 --allow-existing
     fi
     if [ "$(uname -m)" = x86_64 ]; then
         uv pip install -e ".[dev,uinput,dbus]"
@@ -47,7 +47,7 @@ setup-macos:
     # pyright picks it over --pythonpath, and playwright boots
     # .venv/bin/deckd. So only create one when nothing is active.
     if [ -z "${VIRTUAL_ENV:-}" ]; then
-        uv venv --python 3.12 --allow-existing
+        uv venv --python 3.11 --allow-existing
     fi
     uv pip install -e ".[dev,macos]"
     cd client && npm install

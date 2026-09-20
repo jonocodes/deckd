@@ -15,8 +15,7 @@ jobs:
 
       # Single Python version (not a matrix) — CI runs the declared floor,
       # 3.11 (pyproject requires-python >=3.11), so the minimum-supported
-      # version is the one actually tested. Local dev pins 3.12 via the
-      # Justfile (uv --python 3.12); the code uses no version-specific
+      # version is the one actually tested. The code uses no version-specific
       # features, so testing the floor covers the pinned dev version too.
       - uses: actions/setup-python@v5
         with:
