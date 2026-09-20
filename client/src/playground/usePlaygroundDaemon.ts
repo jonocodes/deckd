@@ -21,11 +21,11 @@ const noop = () => {};
 
 export function usePlaygroundDaemon(
   onLayout: (m: ServerLayout) => void,
-  _onWidgetUpdate: (m: ServerWidgetUpdate) => void,
+  onWidgetUpdate: (m: ServerWidgetUpdate) => void,
   onMediaState: (m: MediaState) => void,
   onChromeMedia?: (m: ServerChromeMedia) => void,
   _onConfirmRequest?: (m: ServerConfirmRequest) => void,
-  _onRunningWindows?: (m: ServerRunningWindows) => void,
+  onRunningWindows?: (m: ServerRunningWindows) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -35,18 +35,24 @@ export function usePlaygroundDaemon(
   // ``enabled`` — a fresh callback identity must not tear down and restart
   // the clock (that would reset playback on every render).
   const onLayoutRef = useRef(onLayout);
+  const onWidgetUpdateRef = useRef(onWidgetUpdate);
   const onMediaStateRef = useRef(onMediaState);
   const onChromeMediaRef = useRef(onChromeMedia);
+  const onRunningWindowsRef = useRef(onRunningWindows);
   onLayoutRef.current = onLayout;
+  onWidgetUpdateRef.current = onWidgetUpdate;
   onMediaStateRef.current = onMediaState;
   onChromeMediaRef.current = onChromeMedia;
+  onRunningWindowsRef.current = onRunningWindows;
 
   useEffect(() => {
     if (!enabled) return;
     const daemon = new MockDaemon({
       onLayout: (m) => onLayoutRef.current(m),
       onMediaState: (m) => onMediaStateRef.current(m),
+      onWidgetUpdate: (m) => onWidgetUpdateRef.current(m),
       onChromeMedia: (m) => onChromeMediaRef.current?.(m),
+      onRunningWindows: (m) => onRunningWindowsRef.current?.(m),
     });
     daemonRef.current = daemon;
     daemon.start();
