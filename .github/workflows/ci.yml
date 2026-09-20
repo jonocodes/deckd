@@ -123,3 +123,27 @@ jobs:
 
       - name: "[nix] flake check (packages + module evals + smoke)"
         run: nix flake check -L
+
+  # The Nix package ships Python 3.12 (nixos-unstable's 3.11 package set
+  # can't build our dependency closure), so test the interpreter users
+  # actually get on NixOS. The 3.11 floor is covered by the main `test`
+  # job above; this job is the behavioural half of the 3.12 story.
+  test-py312:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # Match the main job's extras so optional-backend imports resolve.
+      - name: Install Python deps
+        run: pip install -e ".[dev,uinput,dbus]"
+
+      - name: "[py3.12] pytest (Python unit + integration)"
+        run: pytest
+
+      - name: "[py3.12] smoke (daemon end-to-end via stable fixture #77)"
+        run: python -u scripts/smoke.py

@@ -2,7 +2,8 @@
   lib,
   # 3.12 rather than the 3.11 floor: nixos-unstable's python311 package
   # set has packages (sphinx-hook among aiohttp's test deps) that no
-  # longer support 3.11. CI still tests the declared 3.11 floor.
+  # longer support 3.11. CI runs the main ladder on the declared 3.11
+  # floor and a pytest + smoke job on this 3.12 build.
   python312,
   buildNpmPackage,
   makeWrapper,

@@ -705,8 +705,9 @@ half; run the daemon and watcher the classic way above
 **Caveats.**
 
 - The package builds against Python 3.12 (nixos-unstable's 3.11 package
-  set has test-only deps that no longer build); the declared floor stays
-  3.11 and CI tests it.
+  set has test-only deps that no longer build). The declared floor stays
+  3.11: CI runs the main ladder on 3.11 and a pytest + smoke job on 3.12,
+  so both the floor and the interpreter Nix ships are covered.
 - Other Wayland compositors have no focus watcher yet, so only GNOME and
   KDE flavours exist — see [Platform parity](PLATFORM-PARITY.md).
 - Verify the install with `just nix-check` (or `nix flake check`): both

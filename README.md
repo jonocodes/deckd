@@ -144,7 +144,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the component breakdown and
 
 ## Getting started
 
-deckd needs Python 3.11+ and Node 18+. In brief:
+deckd needs Python 3.11+ and Node 18+. CI tests the 3.11 floor and the 3.12 interpreter the Nix package ships. In brief:
 
 ```sh
 uv venv --python 3.12
@@ -159,33 +159,81 @@ per-platform setup (macOS, KDE Plasma Wayland, X11), phone/tablet pairing,
 `/dev/uinput` permissions, and running deckd as a login service — is in the
 [user & setup guide](docs/GUIDE.md#running-deckd).
 
-Prefer Nix? The flake at the repo root packages the daemon and the built
-client:
+### Nix
+
+The flake at the repo root builds the daemon and the client, and ships
+modules for both halves of a NixOS install. It needs flakes enabled
+(`experimental-features = nix-command flakes`).
+
+**Try it without installing anything.** `nix run` serves the bundled
+client and layouts on `http://127.0.0.1:8765`; auth is on, and the
+password is generated at `~/.config/deckd/password`:
 
 ```sh
-nix run github:jonocodes/deckd        # serves the bundled client + layouts
-just nix-check                        # package build, module evals, smoke test
+nix run github:jonocodes/deckd
+nix run github:jonocodes/deckd -- --bind 0.0.0.0   # reachable from a phone
+nix run . -- --bind 0.0.0.0                        # from a local checkout
 ```
 
-On NixOS, system prerequisites and the user service are two imports — one
-system-level, one home-manager, plus the desktop flavour that installs the
-focus watcher:
+**NixOS + home-manager.** Add the input, import the system module and
+the home-manager module for your desktop, then rebuild:
 
 ```nix
+# flake.nix (your own config)
+inputs.deckd.url = "github:jonocodes/deckd";
+
 # configuration.nix
 imports = [ inputs.deckd.nixosModules.deckd ];
-services.deckd.enable = true;
+services.deckd = {
+  enable = true;
+  openFirewall = true;        # only needed when binding beyond localhost
+  users = [ "jono" ];         # optional: add to the `input` group
+};
 
 # home.nix
 imports = [ inputs.deckd.homeModules.deckd-gnome ];  # or homeModules.deckd-kde
 services.deckd = {
   enable = true;
-  bind = [ "0.0.0.0" ];   # expose on the LAN; default is localhost-only
+  bind = [ "0.0.0.0" ];       # default is localhost-only
 };
 ```
 
-See [Nix flake, NixOS, and home-manager](docs/GUIDE.md#nix-flake-nixos-and-home-manager)
-for the full option list and caveats.
+```sh
+sudo nixos-rebuild switch --flake .
+```
+
+Relogin after the first switch: the GNOME extension appears once the
+Shell restarts; the KWin script is hot-started when Plasma is running.
+`nix flake update deckd` moves your config to newer commits.
+
+The home-manager module owns:
+
+- `deckd` as a **user** service (`WantedBy=graphical-session.target`) —
+  starts with your desktop session, restarts on failure;
+- `~/.config/deckd/layouts`, seeded once from the package; your edits
+  are never overwritten (`seedLayouts = false` opts out);
+- `~/.config/deckd/password` (generated on first start) — point
+  `passwordFile` at a secret to manage it yourself.
+
+**Home-manager standalone** (no NixOS module, e.g. Nix on another
+distro) uses the same import; the udev rule and `input` group for
+`/dev/uinput` are then yours to install (see
+[uinput permissions](docs/GUIDE.md#uinput-permissions)):
+
+```nix
+{
+  imports = [ inputs.deckd.homeModules.deckd-gnome ];
+  services.deckd.enable = true;
+}
+```
+
+**Without flakes:** `nix profile install github:jonocodes/deckd` (or
+`nix build github:jonocodes/deckd` and run `./result/bin/deckd`), then
+start it yourself; the classic recipes (`just install-service`,
+`just install-focus-extension` / `install-focus-kwin`) still work.
+
+Options, caveats, and the full output list are in the
+[setup guide](docs/GUIDE.md#nix-flake-nixos-and-home-manager).
 
 ## Documentation
 
