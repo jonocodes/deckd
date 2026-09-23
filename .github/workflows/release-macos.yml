@@ -1,0 +1,101 @@
+name: Release macOS app
+
+# Phase 2 of #165: build the self-contained deckd.app on a macOS runner,
+# wrap it in a DMG, and attach it to the GitHub release.
+#
+# The build itself is `just build-macos-dmg` — the same recipe a contributor
+# runs locally (docs/GUIDE.md § "macOS app bundle") — so CI and the documented
+# path can't drift. This job only supplies the runner, the toolchain, and the
+# publish step.
+#
+# arm64 only: macos-14 runners are Apple Silicon, so the DMG targets Apple
+# Silicon Macs. An Intel / universal2 build is a documented follow-up
+# (issue #165, "Open questions").
+#
+# The bundle is ad-hoc signed and NOT notarized (no paid Apple Developer
+# Program), so a browser-downloaded DMG is quarantined — first launch needs
+# right-click → Open or `xattr -dr com.apple.quarantine /Applications/deckd.app`.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the DMG to (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+# Serialise publishes per tag: a second run must not `--clobber` a DMG the
+# first is still uploading. In-flight runs are not cancelled (a release
+# publish is not safely interruptible).
+concurrency:
+  group: release-macos-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  dmg:
+    runs-on: macos-14
+    env:
+      # A pushed tag, or the tag supplied to a manual run.
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: extractions/setup-just@v4
+
+      # PyObjC (the menu-bar wrapper) + PyInstaller. Installing these first
+      # also stops the recipe's `uv pip install` fallback from firing.
+      - name: Install Python deps
+        run: pip install -e ".[macos,packaging]"
+
+      # `npm run build` already runs `tsc --noEmit`, so a type error fails
+      # the release before a broken bundle is frozen in.
+      - name: Build client
+        run: npm ci && npm run build
+        working-directory: client
+
+      # The DMG filename is derived from pyproject's version, so a tag that
+      # disagrees would publish a mislabelled artifact. Only enforced on tag
+      # pushes; a manual run may legitimately attach to an existing tag.
+      - name: Check tag matches pyproject version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="$(just version)"
+          if [ "${RELEASE_TAG#v}" != "$version" ]; then
+            echo "::error::tag ${RELEASE_TAG} does not match pyproject version ${version}"
+            exit 1
+          fi
+
+      - name: Build .app + DMG
+        run: just build-macos-dmg
+
+      - name: Verify the DMG
+        run: hdiutil verify dist/deckd-*.dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deckd-macos-dmg
+          path: dist/deckd-*.dmg
+          if-no-files-found: error
+
+      - name: Attach the DMG to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 \
+            || gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes
+          gh release upload "$RELEASE_TAG" dist/deckd-*.dmg --clobber

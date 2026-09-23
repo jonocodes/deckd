@@ -12,9 +12,15 @@ and layouts are copied in as data under ``Contents/Frameworks`` (where
 ``sys._MEIPASS`` points at runtime).
 """
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(SPECPATH).resolve().parents[1]  # SPECPATH is packaging/macos
+
+# Importable even when the package isn't pip-installed (e.g. a bare
+# ``pyinstaller packaging/macos/deckd.spec`` from a checkout).
+sys.path.insert(0, str(ROOT / "daemon"))
+from deckd.macos_app import BUNDLE_ID, bundle_info_plist  # noqa: E402
 
 version = "0.0.1"
 for line in (ROOT / "pyproject.toml").read_text().splitlines():
@@ -88,14 +94,6 @@ app = BUNDLE(
     coll,
     name="deckd.app",
     icon=icon,
-    bundle_identifier="com.deckd.daemon",
-    info_plist={
-        "LSUIElement": True,
-        "CFBundleName": "deckd",
-        "CFBundleDisplayName": "deckd",
-        "CFBundleShortVersionString": version,
-        "CFBundleVersion": version,
-        "LSMinimumSystemVersion": "12.0",
-        "NSHighResolutionCapable": True,
-    },
+    bundle_identifier=BUNDLE_ID,
+    info_plist=bundle_info_plist(version),
 )

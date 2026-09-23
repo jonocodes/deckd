@@ -69,6 +69,34 @@ def default_log_file() -> Path:
     return Path.home() / "Library" / "Logs" / "deckd.log"
 
 
+def bundle_info_plist(version: str) -> dict[str, object]:
+    """Info.plist entries for ``deckd.app`` (issue #165).
+
+    Kept here (not inline in ``deckd.spec``) so the TCC-relevant keys are
+    unit-testable on the Linux dev/CI hosts.
+
+    ``NSAppleEventsUsageDescription`` is load-bearing: the daemon drives
+    keystrokes and focus by shelling out to ``osascript`` → System Events,
+    and macOS attributes those Apple Events to the *responsible process* —
+    the bundle, not the ``osascript`` child. Without this string the
+    Automation prompt can't be shown, so macOS refuses the event
+    (``errAEEventNotPermitted``, -1743) — the silent failure #165 fixes.
+    """
+    return {
+        "LSUIElement": True,
+        "CFBundleName": "deckd",
+        "CFBundleDisplayName": "deckd",
+        "CFBundleShortVersionString": version,
+        "CFBundleVersion": version,
+        "LSMinimumSystemVersion": "12.0",
+        "NSHighResolutionCapable": True,
+        "NSAppleEventsUsageDescription": (
+            "deckd sends keystrokes and focuses windows through System "
+            "Events when you press buttons on your deck."
+        ),
+    }
+
+
 def seed_layouts(src: Path, dest: Path, *, overlay: Path | None = None) -> bool:
     """Copy bundled layouts into the writable data dir on first run.
 

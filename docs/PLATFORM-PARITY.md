@@ -69,6 +69,8 @@ one of three evidence levels:
 | MPRIS media browser | human-observed **not working**; now says so | no session bus on macOS ([#56](https://github.com/jonocodes/deckd/issues/56) tracks a native replacement). Verified live: the daemon's connect frame is `{"supported": false, …}` |
 | `media` widget (VLC HTTP) | **unverified** | nobody has pointed it at a VLC on a Mac |
 
+**Packaged app ([#165](https://github.com/jonocodes/deckd/issues/165)), checked 2026-09-23 (macOS 26.6.2, Apple Silicon):** the self-contained `deckd.app` builds, launches as a menu-bar app, and serves the surface on loopback — see `docs/GUIDE.md` § "macOS app bundle" for the run and its caveats. The rows above apply to it unchanged: the same TCC grants gate the same features, and because the bundle is ad-hoc signed the grant keys on its content hash, so a rebuild may need re-granting.
+
 The Linux columns are code-and-CI truth. No dated hardware run backs them, and
 the GNOME rows in particular have a history of passing tests while broken on a
 live session — treat them as *unverified* until someone repeats the exercise
