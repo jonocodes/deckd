@@ -68,9 +68,12 @@ jobs:
         run: npm ci && npm run build
         working-directory: client
 
-      # The DMG is named from pyproject's `version` (via `just version`); the
-      # tag is just the release handle and is not required to match it. Tag
-      # however you like — semver, dates, whatever.
+      # The tag (minus a leading `v`) is the release version, so the DMG name,
+      # its volume name, and the app's CFBundleShortVersionString all match
+      # the tag. Rough CalVer (v2026.09.23) or any other `v*` string works.
+      - name: Resolve version from the tag
+        run: echo "DECKD_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+
       - name: Build .app + DMG
         run: just build-macos-dmg
 

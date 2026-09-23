@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import shutil
 import sys
 import threading
@@ -67,6 +68,24 @@ def app_support_dir() -> Path:
 def default_log_file() -> Path:
     """``~/Library/Logs/deckd.log`` — where the app tees its logs."""
     return Path.home() / "Library" / "Logs" / "deckd.log"
+
+
+def bundle_version(pyproject: Path | None = None) -> str:
+    """The version stamped into the bundle (issue #165).
+
+    ``DECKD_VERSION`` wins when set — release CI passes the git tag (minus a
+    leading ``v``), so the tag is the single source for a release and the DMG
+    name, ``CFBundleShortVersionString``, and volume name all agree. Local
+    builds fall back to ``version`` in ``pyproject.toml``.
+    """
+    override = os.environ.get("DECKD_VERSION", "").strip()
+    if override:
+        return override
+    path = pyproject or Path(__file__).resolve().parents[2] / "pyproject.toml"
+    for line in path.read_text().splitlines():
+        if line.startswith("version = "):
+            return line.split("=", 1)[1].strip().strip('"')
+    raise ValueError(f"no version found in {path}")
 
 
 def bundle_info_plist(version: str) -> dict[str, object]:

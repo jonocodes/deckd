@@ -468,10 +468,12 @@ build-macos-app:
     echo "Built dist/deckd.app (ad-hoc signed, not notarized)."
 
 # Wrap dist/deckd.app in a distributable DMG for a GitHub release (#165).
+# ``DECKD_VERSION`` names the artifact (the release workflow sets it from the
+# git tag); otherwise it falls back to pyproject's version.
 build-macos-dmg: build-macos-app
     #!/usr/bin/env bash
     set -euo pipefail
-    version="$(just version)"
+    version="${DECKD_VERSION:-$(just version)}"
     stage="$(mktemp -d)"
     trap 'rm -rf "$stage"' EXIT
     cp -R dist/deckd.app "$stage/"
