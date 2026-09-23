@@ -28,6 +28,8 @@ _Amended by: [0006](0006-widget-visual-styling.md), [0007](0007-chrome-app-ident
 
 Layouts authored in landscape. Portrait transposes every widget's grid diagonally `[x,y,w,h] -> [y,x,h,w]`. Same buttons, same arrangement, cells sized for the surface.
 
+_Superseded by: [0010](0010-grid-reflow.md) — there is no fixed grid shape to author against_
+
 ## 0005 — Future: dynamic widget state for MPRIS and runtime content
 
 [0005-dynamic-widget-state-future.md](0005-dynamic-widget-state-future.md)
@@ -63,3 +65,20 @@ _Amends: [0003](0003-persistent-chrome.md) — chrome knowledge now includes pay
 [0009-bind-scope-control.md](0009-bind-scope-control.md)
 
 Replace `--host` with repeatable `--bind` supporting literal IPs and `iface:<name>`. Default `127.0.0.1` + `::1`. Localhost-only by default; LAN reachability is opt-in.
+
+## 0010 — Grid layout: ordered-list reflow with a banded cell size
+
+[0010-grid-reflow.md](0010-grid-reflow.md)
+
+Widgets become an ordered list that reflows to the viewport; `grid: [x,y,w,h]` coordinates and the portrait transpose are deleted. Cell size is a client-side device preference, never authored in layout YAML.
+
+_Supersedes: [0004](0004-orientation-scaling.md) — authored coordinates + diagonal transpose_
+_Superseded by: [0011](0011-reflow.md) — the sizing geometry, the band, and the overflow default_
+
+## 0011 — Reflow: the row count is the only free variable
+
+[0011-reflow.md](0011-reflow.md)
+
+Sizing picks the row count that makes cells largest, using both axes, so no tuned constants remain. Rows fill to the column count with the remainder in the bottom row; the grid block centres on both axes with rows washed left. `minCell` / `maxCell` gain distinct jobs, and overflow becomes a device setting defaulting to `clip`.
+
+_Supersedes: [0010](0010-grid-reflow.md) — keeps the ordered-list model, replaces the geometry_

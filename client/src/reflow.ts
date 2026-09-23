@@ -1,111 +1,155 @@
-/** Ordered-list reflow geometry (ADR-0010).
+/** Reflow geometry (ADR-0011).
  *
- * The grid has no authored shape: widgets pack in list order, left-to-right,
- * wrapping down, and the client computes how many columns fit the available
- * width against a client-side cell-size target. This module is the pure
- * geometry — given a measured container and the target, it yields the column
- * count and the resolved square cell size. ``ButtonGrid`` feeds it live
- * measurements from a ``ResizeObserver`` and turns the result into
- * ``grid-template-columns`` + a ``--cell-px`` content-sizing var.
+ * The grid has no authored shape. Widgets pack in list order, and the client
+ * derives the whole layout from the measured container in three stages, each
+ * consuming exactly one piece of configuration:
  *
- * Kept side-effect-free (no DOM, no React) so the packing maths is unit
- * testable in isolation. */
+ *   1. CAPACITY      minCell + viewport -> how many cells are VISIBLE
+ *   2. SHAPE         visible count      -> column count + resolved cell size
+ *   3. DISTRIBUTION  cols               -> fill rows, remainder at the bottom
+ *
+ * Stage 2 takes no configuration at all: it is pure arithmetic on the
+ * viewport, and the row count is its only free variable. Stage 3 is ordinary
+ * text-style wrapping, which CSS grid auto-placement already performs — so
+ * this module only has to produce the column count and cell size.
+ *
+ * Kept side-effect-free (no DOM, no React) so the geometry is unit testable in
+ * isolation. ``ButtonGrid`` feeds it live ``ResizeObserver`` measurements. */
 
 export type OverflowMode = "clip" | "shrink-to-fit";
 
 export type ReflowInput = {
   /** Inner width of the grid area, in CSS pixels. */
   containerWidth: number;
-  /** Inner height of the grid area, in CSS pixels. Only consulted for
-   * ``shrink-to-fit`` — ``clip`` never looks at height (it just clips). */
+  /** Inner height of the grid area, in CSS pixels. */
   containerHeight: number;
-  /** Target square cell edge (CSS px). Columns are packed so the resolved
-   * cell size stays near this value; exact-fit distributes leftover width
-   * evenly (no separate max/cap — more columns simply fit as width grows). */
-  cellSize: number;
+  /** Readability floor (device preference): the smallest cell the user is
+   * willing to accept. Under ``clip`` this is a hard promise — the visible
+   * set is trimmed until every cell can meet it. Under ``shrink-to-fit`` it
+   * is never consulted, because nothing is ever trimmed. */
+  minCell: number;
+  /** Comfort cap (device preference): stops two widgets on a 4K panel from
+   * becoming two enormous buttons. */
+  maxCell: number;
   /** Gap between cells, in CSS pixels (matches the CSS ``gap``). */
   gap: number;
-  /** Total occupied cells, counting spans (sum of ``w*h`` over flow widgets).
-   * Used only by ``shrink-to-fit`` to estimate the row count. */
+  /** Total occupied cells, counting spans (sum of ``w*h`` over flow widgets). */
   totalUnits: number;
   mode: OverflowMode;
 };
 
 export type ReflowResult = {
-  /** Number of columns to render (``grid-template-columns: repeat(cols, 1fr)``). */
+  /** Columns to render (``grid-template-columns: repeat(cols, cellPx)``). */
   cols: number;
-  /** Resolved square cell edge in CSS pixels, for ``--cell-px`` content sizing. */
+  /** Rows the visible units occupy at ``cols``. */
+  rows: number;
+  /** Resolved square cell edge in CSS pixels. */
   cellPx: number;
+  /** Units that fit. Equals ``totalUnits`` under ``shrink-to-fit``. */
+  visibleUnits: number;
+  /** Units trimmed by ``clip``. Always 0 under ``shrink-to-fit``. */
+  hiddenUnits: number;
 };
 
-/** Absolute floor for ``shrink-to-fit`` so a pathological layout can't drive
- * cells to zero (or negative) size. */
-const HARD_FLOOR = 16;
+/** Absolute floor so a pathological viewport can't drive cells to zero (or
+ * negative) size. Below this nothing is tappable anyway. */
+export const HARD_FLOOR = 16;
+
+/** How many whole cells of edge ``minCell`` the viewport holds at all.
+ *
+ * Whole ``cols * rows`` deliberately: it is what lets ``clip`` show complete
+ * cells rather than slicing a row at the fold, which is what ADR-0010's
+ * CSS-only ``overflow: hidden`` did. */
+export function capacityUnits(
+  containerWidth: number,
+  containerHeight: number,
+  minCell: number,
+  gap: number,
+): number {
+  const pitch = minCell + gap;
+  if (pitch <= 0) return 0;
+  const cols = Math.floor((containerWidth + gap) / pitch);
+  const rows = Math.floor((containerHeight + gap) / pitch);
+  return Math.max(0, cols) * Math.max(0, rows);
+}
+
+type Shape = { cols: number; rows: number; cell: number };
+
+/** Choose the row count that makes cells largest, and report the column count
+ * and cell edge that follow from it.
+ *
+ * The dominance prune is load-bearing, not an optimisation: skipping the ``R``
+ * whose columns would already hold every unit in ``R - 1`` rows is exactly
+ * what keeps the candidate set closed under ``(rows, cols) -> (cols, rows)``,
+ * so a portrait grid and its landscape counterpart resolve consistently. It
+ * also guarantees plain fill-wrapping yields exactly ``R`` non-empty rows. */
+function bestShape(
+  units: number,
+  width: number,
+  height: number,
+  gap: number,
+  maxCell: number,
+): Shape | null {
+  if (units <= 0 || width <= 0 || height <= 0) return null;
+  const aspect = width / height;
+  // How far a candidate's grid shape sits from the container's shape. Only
+  // consulted to break ties, which happen once ``maxCell`` clamps several
+  // candidates to the same size.
+  const shapeErr = (cols: number, rows: number) =>
+    Math.abs(Math.log(cols / rows / aspect));
+
+  let best: Shape | null = null;
+  let bestErr = Infinity;
+  for (let rows = 1; rows <= units; rows++) {
+    const cols = Math.ceil(units / rows);
+    if ((rows - 1) * cols >= units) continue; // dominated by `rows - 1`
+    const byWidth = (width - (cols - 1) * gap) / cols;
+    const byHeight = (height - (rows - 1) * gap) / rows;
+    const cell = Math.min(byWidth, byHeight);
+    if (cell <= 0) continue;
+    const err = shapeErr(cols, rows);
+    if (
+      best === null ||
+      Math.min(cell, maxCell) - Math.min(best.cell, maxCell) > 1e-9 ||
+      (Math.abs(Math.min(cell, maxCell) - Math.min(best.cell, maxCell)) <= 1e-9 && err < bestErr)
+    ) {
+      best = { cols, rows, cell };
+      bestErr = err;
+    }
+  }
+  return best;
+}
 
 export function computeReflow(input: ReflowInput): ReflowResult {
-  const { containerWidth, containerHeight, cellSize, gap, totalUnits, mode } = input;
-  const w = Math.max(0, containerWidth);
-  const targetPlusGap = cellSize + gap;
-
-  // Columns that fit at the target cell size.
-  const colsForWidth = (width: number) => Math.max(1, Math.floor((width + gap) / targetPlusGap));
-  // Cell edge when ``cols`` columns share the width evenly (no leftover).
-  const cellForCols = (cols: number) => (w - (cols - 1) * gap) / cols;
-
-  let cols = colsForWidth(w);
-  let cellPx = cellForCols(cols);
-
-  // Reflow favours fewer columns (larger cells). Scan downward from the
-  // target — never upward, since the user asked for fewer columns — and
-  // pick the best: prefer perfectly even rows, then at-least-half-full
-  // rows, then fewest total rows. The dynamic max-px cap is tighter on
-  // narrow screens (prevents 2-col phone layouts) and looser on wide ones
-  // (allows 4-col reflow of 7 widgets on a 747px screen).
-  if (totalUnits > 0) {
-    const rowsFor = (c: number) => Math.ceil(totalUnits / c);
-    const fill = (c: number) => totalUnits % c || c;
-    const score = (c: number): number => {
-      if (totalUnits % c === 0) return 0;
-      if (fill(c) >= Math.ceil(c / 2)) return 1;
-      return 2;
-    };
-    const maxPx = Math.min(w / 3, Math.max(cellSize * 1.5, 200));
-    let best = cols;
-    let bestScore = score(cols);
-    let bestRows = rowsFor(cols);
-    for (let c = cols - 1; c >= 2; c--) {
-      if (cellForCols(c) > maxPx) continue;
-      const s = score(c);
-      if (s > bestScore) continue;
-      if (s < bestScore || rowsFor(c) < bestRows || (rowsFor(c) === bestRows && c < best)) {
-        best = c; bestScore = s; bestRows = rowsFor(c);
-      }
-    }
-    cols = best;
-    cellPx = cellForCols(cols);
+  const { containerWidth, containerHeight, minCell, maxCell, gap, totalUnits, mode } = input;
+  const units = Math.max(0, totalUnits);
+  // Not measured yet (first paint, or no ResizeObserver): report everything as
+  // visible at zero size rather than trimming to nothing. Trimming is a
+  // decision that needs a measurement, and reporting nothing visible would
+  // blank the surface for a frame — or forever, in a host without a
+  // ResizeObserver.
+  if (units === 0 || containerWidth <= 0 || containerHeight <= 0) {
+    return { cols: 1, rows: units, cellPx: 0, visibleUnits: units, hiddenUnits: 0 };
   }
 
-  if (mode === "shrink-to-fit" && totalUnits > 0 && containerHeight > 0) {
-    const rowsFor = (c: number) => Math.ceil(totalUnits / c);
-    const fits = (c: number, px: number) => {
-      const rows = rowsFor(c);
-      return rows * px + (rows - 1) * gap <= containerHeight;
-    };
-    // Add columns (which shrinks cells) until every widget fits the height,
-    // or everything is packed into a single row.
-    while (!fits(cols, cellPx) && cols < totalUnits) {
-      cols += 1;
-      cellPx = cellForCols(cols);
-    }
-    // Even packed as wide as it goes it still overflows the height: clamp the
-    // cell to the height budget so the last row is visible, honouring the
-    // hard floor.
-    if (!fits(cols, cellPx)) {
-      const rows = rowsFor(cols);
-      cellPx = Math.min(cellPx, (containerHeight - (rows - 1) * gap) / rows);
-    }
-    cellPx = Math.max(HARD_FLOOR, cellPx);
-  }
+  // Stage 1. ``shrink-to-fit`` never trims, so it never consults capacity —
+  // and therefore never consults ``minCell`` either. ``clip`` trims to whole
+  // cells that can honour the floor, but always shows at least one widget so a
+  // hostile viewport can't blank the surface entirely.
+  const visibleUnits =
+    mode === "shrink-to-fit"
+      ? units
+      : Math.min(units, Math.max(1, capacityUnits(containerWidth, containerHeight, minCell, gap)));
 
-  return { cols, cellPx: Math.max(0, cellPx) };
+  // Stage 2.
+  const shape = bestShape(visibleUnits, containerWidth, containerHeight, gap, maxCell);
+  if (shape === null) return { cols: 1, rows: units, cellPx: 0, visibleUnits: units, hiddenUnits: 0 };
+
+  return {
+    cols: shape.cols,
+    rows: shape.rows,
+    cellPx: Math.max(HARD_FLOOR, Math.min(shape.cell, maxCell)),
+    visibleUnits,
+    hiddenUnits: units - visibleUnits,
+  };
 }

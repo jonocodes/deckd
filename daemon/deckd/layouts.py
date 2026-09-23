@@ -359,12 +359,13 @@ class Layout(BaseModel):
     id: str = ""
     match: list[str] = Field(default_factory=list)
     widgets: list[Widget] = Field(default_factory=list)
-    # What happens when the widgets exceed the capacity the client's cell-size
-    # band yields at the current viewport (ADR-0010). ``clip`` leaves trailing
-    # widgets off-surface; ``shrink-to-fit`` lets cells drop below the band's
-    # floor so all widgets fit. The one genuinely per-layout sizing knob —
-    # every other cell-size concern is a client-side device preference.
-    overflow: Literal["clip", "shrink-to-fit"] = "shrink-to-fit"
+    # What happens when the deck exceeds what the viewport holds at the
+    # client's minimum button size (ADR-0011). ``clip`` (the default) trims
+    # trailing widgets so the survivors keep that size; ``shrink-to-fit`` keeps
+    # every widget by letting cells fall below the floor. The layout supplies
+    # the default and the client may override it per device, so this is the one
+    # sizing knob that is both a layout and a device concern.
+    overflow: Literal["clip", "shrink-to-fit"] = "clip"
     jogstrip: bool = True
     # Chrome app-identity presentation relayed opaquely to the client
     # (ADR-0007). The client renders these in the always-on bottom strip:

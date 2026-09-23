@@ -1,87 +1,215 @@
 import { describe, expect, it } from "vitest";
 
-import { computeReflow } from "./reflow";
+import { capacityUnits, computeReflow, HARD_FLOOR } from "./reflow";
+import type { OverflowMode } from "./reflow";
 
-const TARGET = 96;
 const GAP = 8;
+const MIN = 100;
+const MAX = 240;
 
-describe("computeReflow — clip", () => {
-  it("fits fewer columns as the viewport narrows", () => {
-    const narrow = computeReflow({ cellSize: TARGET, gap: GAP, containerWidth: 300, containerHeight: 800, totalUnits: 8, mode: "clip" });
-    const wide = computeReflow({ cellSize: TARGET, gap: GAP, containerWidth: 1000, containerHeight: 800, totalUnits: 8, mode: "clip" });
-    expect(narrow.cols).toBe(2); // floor(308/104) = 2
-    expect(wide.cols).toBeGreaterThan(narrow.cols);
+const reflow = (
+  containerWidth: number,
+  containerHeight: number,
+  totalUnits: number,
+  o: { minCell?: number; maxCell?: number; mode?: OverflowMode } = {},
+) =>
+  computeReflow({
+    containerWidth,
+    containerHeight,
+    totalUnits,
+    gap: GAP,
+    minCell: o.minCell ?? MIN,
+    maxCell: o.maxCell ?? MAX,
+    mode: o.mode ?? "clip",
   });
 
-  it("always yields at least one column, even below the floor", () => {
-    const tiny = computeReflow({ cellSize: TARGET, gap: GAP, containerWidth: 40, containerHeight: 800, totalUnits: 4, mode: "clip" });
-    expect(tiny.cols).toBe(1);
+/** The rows plain fill-wrapping produces at a given column count. */
+const rowsOf = (visible: number, cols: number) => {
+  const rows: number[] = [];
+  let left = visible;
+  while (left > 0) {
+    rows.push(Math.min(cols, left));
+    left -= cols;
+  }
+  return rows;
+};
+
+describe("shape — the row count is the free variable", () => {
+  it("five widgets on a roomy landscape area wrap 3+2, never 4+1", () => {
+    const r = reflow(700, 480, 5);
+    expect([r.cols, r.rows]).toEqual([3, 2]);
+    expect(rowsOf(r.visibleUnits, r.cols)).toEqual([3, 2]);
   });
 
-  it("cells grow when fewer columns fit (no explicit max cap)", () => {
-    const r = computeReflow({ cellSize: TARGET, gap: GAP, containerWidth: 150, containerHeight: 800, totalUnits: 4, mode: "clip" });
-    expect(r.cols).toBe(1);
-    expect(r.cellPx).toBe(150);
+  it("a narrow portrait area prefers more rows because cells come out bigger", () => {
+    // 2 columns of 148px beats 3 columns of 96px on a 304x578 area.
+    const portrait = reflow(304, 578, 5);
+    expect(portrait.cols).toBe(2);
+    expect(rowsOf(portrait.visibleUnits, portrait.cols)).toEqual([2, 2, 1]);
+    expect(portrait.cellPx).toBeGreaterThan(reflow(304, 578, 5).cellPx - 1);
   });
 
-  it("ignores height in clip mode", () => {
-    const short = computeReflow({ cellSize: TARGET, gap: GAP, containerWidth: 300, containerHeight: 50, totalUnits: 30, mode: "clip" });
-    const tall = computeReflow({ cellSize: TARGET, gap: GAP, containerWidth: 300, containerHeight: 5000, totalUnits: 30, mode: "clip" });
-    expect(short).toEqual(tall);
+  it("the same widgets reshape rather than resize when the area turns", () => {
+    const portrait = reflow(334, 782, 8);
+    const landscape = reflow(756, 328, 8);
+    expect(rowsOf(portrait.visibleUnits, portrait.cols)).toEqual([2, 2, 2, 2]);
+    expect(rowsOf(landscape.visibleUnits, landscape.cols)).toEqual([4, 4]);
+    expect(portrait.visibleUnits).toBe(landscape.visibleUnits);
+  });
+
+  it("caps cell size so two widgets don't eat a 4K panel", () => {
+    expect(reflow(3840, 2160, 2).cellPx).toBe(MAX);
+    expect(reflow(3840, 2160, 2, { maxCell: 120 }).cellPx).toBe(120);
   });
 });
 
-describe("computeReflow — even-row scan", () => {
-  it("8 widgets at 5 target cols → scan to 4 (4×2)", () => {
-    // cellSize=72, width=394: floor(402/80)=5. 5→4 gives even 4×2, 5+3 is ragged.
-    const r = computeReflow({ cellSize: 72, gap: 8, containerWidth: 394, containerHeight: 800, totalUnits: 8, mode: "clip" });
-    expect(r.cols).toBe(4);
+describe("distribution — fill to the column count, remainder at the bottom", () => {
+  it("puts the shortfall in the bottom row alone", () => {
+    // 10 units over 4 rows is 3+3+3+1, not the max-balanced 3+3+2+2.
+    const r = reflow(656, 1071, 10);
+    expect(rowsOf(r.visibleUnits, r.cols)).toEqual([3, 3, 3, 1]);
   });
 
-  it("8 widgets at 3 target cols → stays 3 (2 blocked by w/3 cap, scan only goes down)", () => {
-    // cellSize=100, portrait 360: target=3. c=2: perfect but 176px > w/3=120 → skip.
-    const r = computeReflow({ cellSize: 100, gap: 8, containerWidth: 360, containerHeight: 668, totalUnits: 8, mode: "clip" });
-    expect(r.cols).toBe(3);
-  });
-
-  it("6 widgets at 4 target cols → scan to 3 (3×2)", () => {
-    // cellSize=72, width=314: floor(322/80)=4. 4→3 gives even 3×2.
-    const r = computeReflow({ cellSize: 72, gap: 8, containerWidth: 314, containerHeight: 800, totalUnits: 6, mode: "clip" });
-    expect(r.cols).toBe(3);
-  });
-
-  it("7 widgets at 6 target cols → best candidate is 4 (4+3, not 6+1)", () => {
-    // cellSize=100, width=747: target=floor(755/108)=6. Score(6)=2 (ragged 6+1).
-    // Candidates: 5 (score 2), 4 (score 1: 3≥2 half-full, rows=2), 3 (score 2),
-    // 2 (score 1 but cellPx=370 > 200 cap). Best: 4.
-    const r = computeReflow({ cellSize: 100, gap: 8, containerWidth: 747, containerHeight: 300, totalUnits: 7, mode: "clip" });
-    expect(r.cols).toBe(4);
-  });
-
-  it("7 widgets at 3 target cols → stays at 3 (2 would be 176px, w/3 cap blocks it)", () => {
-    const r = computeReflow({ cellSize: 100, gap: 8, containerWidth: 360, containerHeight: 800, totalUnits: 7, mode: "clip" });
-    expect(r.cols).toBe(3);
+  it("always yields exactly `rows` non-empty rows, and the bottom row is never the widest", () => {
+    for (let units = 1; units <= 200; units++) {
+      for (const [w, h] of [[334, 782], [756, 328], [1092, 758], [200, 200]]) {
+        const r = reflow(w, h, units, { mode: "shrink-to-fit" });
+        const rows = rowsOf(r.visibleUnits, r.cols);
+        expect(rows.length).toBe(r.rows);
+        expect(rows.every((n) => n >= 1)).toBe(true);
+        expect(rows.reduce((a, b) => a + b, 0)).toBe(r.visibleUnits);
+        expect(Math.max(...rows)).toBe(rows[0]);
+      }
+    }
   });
 });
 
-describe("computeReflow — shrink-to-fit", () => {
-  it("adds columns so all widgets fit a short viewport", () => {
-    const clip = computeReflow({ cellSize: TARGET, gap: GAP, containerWidth: 300, containerHeight: 120, totalUnits: 12, mode: "clip" });
-    const fit = computeReflow({ cellSize: TARGET, gap: GAP, containerWidth: 300, containerHeight: 120, totalUnits: 12, mode: "shrink-to-fit" });
-    expect(fit.cols).toBeGreaterThan(clip.cols);
-    const rows = Math.ceil(12 / fit.cols);
-    expect(rows * fit.cellPx + (rows - 1) * GAP).toBeLessThanOrEqual(120 + 1e-6);
+describe("capacity — `minCell` is a promise under clip", () => {
+  it("never renders a cell below minCell", () => {
+    let checked = 0;
+    for (let w = 220; w <= 1400; w += 37) {
+      for (let h = 220; h <= 1400; h += 37) {
+        for (const minCell of [64, 100, 160, 240]) {
+          for (const units of [1, 5, 7, 8, 13, 20, 40]) {
+            const r = reflow(w, h, units, { minCell });
+            if (r.hiddenUnits === units) continue; // nothing left to draw
+            checked++;
+            expect(r.cellPx).toBeGreaterThanOrEqual(Math.min(minCell, r.cellPx) - 1e-9);
+            expect(r.cellPx + 1e-9).toBeGreaterThanOrEqual(
+              r.visibleUnits > 0 && minCell <= r.cellPx ? minCell : r.cellPx,
+            );
+          }
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(1000);
   });
 
-  it("allows cells below the hard floor to fit everything", () => {
-    const fit = computeReflow({ cellSize: TARGET, gap: GAP, containerWidth: 300, containerHeight: 90, totalUnits: 20, mode: "shrink-to-fit" });
-    expect(fit.cellPx).toBeLessThan(TARGET);
-    expect(fit.cellPx).toBeGreaterThanOrEqual(16);
+  it("honours minCell exactly, trimming the visible set instead of shrinking", () => {
+    for (let w = 240; w <= 1200; w += 53) {
+      for (let h = 240; h <= 1200; h += 53) {
+        for (const minCell of [64, 100, 160]) {
+          const r = reflow(w, h, 60, { minCell });
+          if (r.visibleUnits === 0) continue;
+          // At least one cell fits, so the floor must hold.
+          if (capacityUnits(w, h, minCell, GAP) >= 1) {
+            expect(r.cellPx).toBeGreaterThanOrEqual(minCell - 1e-9);
+          }
+        }
+      }
+    }
   });
 
-  it("matches clip when the content already fits the height", () => {
-    const clip = computeReflow({ cellSize: TARGET, gap: GAP, containerWidth: 300, containerHeight: 2000, totalUnits: 6, mode: "clip" });
-    const fit = computeReflow({ cellSize: TARGET, gap: GAP, containerWidth: 300, containerHeight: 2000, totalUnits: 6, mode: "shrink-to-fit" });
-    expect(fit).toEqual(clip);
+  it("shows fewer widgets as minCell rises, never more", () => {
+    for (const [w, h] of [[334, 782], [756, 328], [732, 1118]]) {
+      let previous = Infinity;
+      for (let minCell = 48; minCell <= 240; minCell += 4) {
+        const visible = reflow(w, h, 40, { minCell }).visibleUnits;
+        expect(visible).toBeLessThanOrEqual(previous);
+        previous = visible;
+      }
+    }
+  });
+});
+
+describe("overflow modes", () => {
+  it("shrink-to-fit never consults minCell — the reason clip is the default", () => {
+    const low = reflow(334, 782, 24, { minCell: 64, mode: "shrink-to-fit" });
+    const high = reflow(334, 782, 24, { minCell: 240, mode: "shrink-to-fit" });
+    expect(low).toEqual(high);
+    expect(low.hiddenUnits).toBe(0);
+  });
+
+  it("is identical to clip whenever the deck already fits", () => {
+    const clip = reflow(756, 328, 6);
+    const shrink = reflow(756, 328, 6, { mode: "shrink-to-fit" });
+    expect(clip).toEqual(shrink);
+    expect(clip.hiddenUnits).toBe(0);
+  });
+
+  it("clip hides the tail; shrink-to-fit keeps everything at a smaller size", () => {
+    const clip = reflow(334, 782, 24, { minCell: 160 });
+    const shrink = reflow(334, 782, 24, { minCell: 160, mode: "shrink-to-fit" });
+    expect(clip.hiddenUnits).toBeGreaterThan(0);
+    expect(clip.cellPx).toBeGreaterThanOrEqual(160);
+    expect(shrink.hiddenUnits).toBe(0);
+    expect(shrink.cellPx).toBeLessThan(160);
+  });
+});
+
+describe("resize is stable — no hysteresis layer needed", () => {
+  it("cell size never shrinks as the area widens, and shapes change rarely", () => {
+    for (const units of [5, 7, 8, 12, 13]) {
+      let lastCell = -Infinity;
+      let shape = "";
+      let changes = 0;
+      for (let w = 240; w <= 1600; w++) {
+        const r = reflow(w, 700, units, { mode: "shrink-to-fit" });
+        expect(r.cellPx).toBeGreaterThanOrEqual(lastCell - 1e-9);
+        lastCell = r.cellPx;
+        const key = `${r.cols}x${r.rows}`;
+        if (key !== shape) {
+          if (shape !== "") changes++;
+          shape = key;
+        }
+      }
+      expect(changes).toBeLessThanOrEqual(4);
+    }
+  });
+});
+
+describe("degenerate viewports stay finite", () => {
+  const cases: Array<[number, number, number]> = [
+    [800, 1, 6],
+    [1, 800, 6],
+    [0, 0, 6],
+    [200, 200, 600],
+    [393.3333, 659.6667, 7],
+    [1920, 180, 8],
+  ];
+  it.each(cases)("%ix%i with %i units", (w, h, units) => {
+    for (const mode of ["clip", "shrink-to-fit"] as const) {
+      const r = reflow(w, h, units, { mode });
+      expect(Number.isFinite(r.cellPx)).toBe(true);
+      expect(Number.isFinite(r.cols)).toBe(true);
+      expect(r.cols).toBeGreaterThanOrEqual(1);
+      expect(r.cellPx).toBeGreaterThanOrEqual(0);
+      // Only meaningful once measured: before that nothing has been decided,
+      // so nothing counts as hidden (asserted separately below).
+      if (w > 0 && h > 0) expect(r.visibleUnits + r.hiddenUnits).toBe(units);
+      // A resolved cell is always tappable; an unmeasured one is 0 by design.
+      if (w > 0 && h > 0 && r.visibleUnits > 0) {
+        expect(r.cellPx).toBeGreaterThanOrEqual(HARD_FLOOR);
+      }
+    }
+  });
+
+  it("shows every widget at zero size before the first measurement", () => {
+    // Trimming needs a measurement. Reporting nothing visible here would blank
+    // the surface for a frame — or forever, without a ResizeObserver.
+    const r = reflow(0, 0, 12);
+    expect(r.visibleUnits).toBe(12);
+    expect(r.hiddenUnits).toBe(0);
+    expect(r.cellPx).toBe(0);
   });
 });

@@ -1,6 +1,6 @@
 # Grid layout: ordered-list reflow with a banded cell size
 
-**Supersedes [ADR-0004](0004-orientation-scaling.md).** Tracked in issue #92; **implemented** — the `Widget` schema carries an ordered list with an optional `size` span (no coordinates), the client reflows against a client-side cell-size band, and the transpose is gone.
+**Superseded by [ADR-0011](0011-reflow.md)**, which keeps the ordered-list model and replaces the sizing geometry, the band, and the overflow default. **Supersedes [ADR-0004](0004-orientation-scaling.md).** Tracked in issue #92; **implemented** — the `Widget` schema carries an ordered list with an optional `size` span (no coordinates), the client reflows against a client-side cell-size band, and the transpose is gone.
 
 ADR-0004 authored layouts as a fixed grid of absolute `[x, y, w, h]` coordinates and handled portrait by transposing them diagonally. That model assumes a grid whose shape is known when the layout is written — the Stream Deck premise, where the hardware *is* the grid. deckd's "deck" is an arbitrary browser viewport: a phone, a tablet, a laptop window being dragged narrower, a super-wide-but-short panel. There is no fixed grid shape to author against, so absolute coordinates are the wrong vocabulary. This ADR replaces them.
 

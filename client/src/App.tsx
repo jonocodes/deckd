@@ -14,7 +14,8 @@ import { useMeterStore } from "./meter-store";
 import { useMediaStore } from "./media-store";
 import {
   clampCellSize,
-  useCellSize,
+  useCellBand,
+  useOverflowPreference,
   useBottomScale,
   useContentScale,
   useJogWidth,
@@ -292,16 +293,22 @@ export function App() {
   const trackpad = useTrackpadSettings();
   const wakeLock = useWakeLockSetting();
   const contentScale = useContentScale();
-  const cellSize = useCellSize();
+  const cellBand = useCellBand();
+  const overflowPref = useOverflowPreference();
   // In demo mode, allow the gallery (or any URL-driven caller) to override the
-  // cell size via query param so each frame can be tuned independently.
-  const effectiveCellSize = useMemo(() => {
-    if (!isDemo) return cellSize;
+  // band via query param so each frame can be tuned independently.
+  const effectiveBand = useMemo(() => {
+    if (!isDemo) return cellBand;
     const p = new URLSearchParams(window.location.search);
-    const urlSize = p.get("cellSize");
-    if (urlSize === null) return cellSize;
-    return { size: clampCellSize(Number(urlSize)), setSize: cellSize.setSize };
-  }, [isDemo, cellSize]);
+    const urlMin = p.get("minCell");
+    const urlMax = p.get("maxCell");
+    if (urlMin === null && urlMax === null) return cellBand;
+    return {
+      ...cellBand,
+      minCell: urlMin === null ? cellBand.minCell : clampCellSize(Number(urlMin)),
+      maxCell: urlMax === null ? cellBand.maxCell : clampCellSize(Number(urlMax)),
+    };
+  }, [isDemo, cellBand]);
   const jogWidth = useJogWidth();
   const bottomScale = useBottomScale();
   const labelScale = useLabelScale();
@@ -658,7 +665,7 @@ export function App() {
             {
               "--content-scale": contentScale.scale,
               "--label-scale": labelScale.scale,
-              "--cell-size": `${effectiveCellSize.size}px`,
+              "--cell-size": `${effectiveBand.minCell}px`,
             } as CSSProperties
           }
         >
@@ -736,8 +743,13 @@ export function App() {
               onWakeLockChange={wakeLock.setEnabled}
               contentScale={contentScale.scale}
               onContentScaleChange={contentScale.setScale}
-              cellSize={effectiveCellSize.size}
-              onCellSizeChange={effectiveCellSize.setSize}
+              minCell={effectiveBand.minCell}
+              onMinCellChange={effectiveBand.setMinCell}
+              maxCell={effectiveBand.maxCell}
+              onMaxCellChange={effectiveBand.setMaxCell}
+              overflow={overflowPref.overflow}
+              onOverflowChange={overflowPref.setOverflow}
+              layoutOverflow={layout?.overflow ?? "clip"}
               jogWidth={jogWidth.width}
               onJogWidthChange={jogWidth.setWidth}
               bottomScale={bottomScale.scale}
@@ -797,8 +809,9 @@ export function App() {
           ) : layout ? (
             <ButtonGrid
               widgets={layout.widgets}
-              overflow={layout.overflow}
-              cellSize={effectiveCellSize.size}
+              overflow={overflowPref.overflow ?? layout.overflow ?? "clip"}
+              minCell={effectiveBand.minCell}
+              maxCell={effectiveBand.maxCell}
               onPress={press}
               onJog={jog}
               onJogEnd={jogEnd}
