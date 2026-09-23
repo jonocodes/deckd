@@ -74,7 +74,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [ ] **Multi-daemon chooser** — pair and pick between several desktops.
 - [ ] **Reliable web-app detection** — a browser extension reporting the active tab's real URL, so sites match by domain/path instead of the current window-title heuristic ([#90](https://github.com/jonocodes/deckd/issues/90)).
 - [ ] **Windows support**
-- [ ] **Packing and deployment**
+- [ ] **Packing and deployment** ([#165](https://github.com/jonocodes/deckd/issues/165))
 
 ## Inspiration and Comparison
 

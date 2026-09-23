@@ -440,6 +440,41 @@ metrics:
     set -euo pipefail
     deckctl --port {{DECKD_PORT}} metrics
 
+# Build the self-contained macOS app bundle (dist/deckd.app, issue #165).
+# macOS only: a .app needs Apple tooling, so this refuses to run elsewhere.
+# Installs the [packaging] extra (PyInstaller) on demand and builds the
+# client first if it's missing. Output is ad-hoc signed, not notarized.
+build-macos-app:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(uname)" != "Darwin" ]; then
+        echo "build-macos-app needs macOS; a .app can't be built on $(uname)." >&2
+        exit 1
+    fi
+    if ! command -v pyinstaller >/dev/null 2>&1; then
+        echo "installing PyInstaller ([packaging] extra)..."
+        uv pip install -e ".[packaging]"
+    fi
+    if [ ! -f client/dist/index.html ]; then
+        echo "client/dist missing; building client..."
+        just build-client
+    fi
+    pyinstaller --noconfirm --clean packaging/macos/deckd.spec
+    echo "Built dist/deckd.app (ad-hoc signed, not notarized)."
+
+# Wrap dist/deckd.app in a distributable DMG for a GitHub release (#165).
+build-macos-dmg: build-macos-app
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -n1)"
+    stage="$(mktemp -d)"
+    trap 'rm -rf "$stage"' EXIT
+    cp -R dist/deckd.app "$stage/"
+    ln -s /Applications "$stage/Applications"
+    hdiutil create -volname "deckd ${version}" -srcfolder "$stage" \
+        -ov -format UDZO "dist/deckd-${version}.dmg"
+    echo "Built dist/deckd-${version}.dmg"
+
 # Run the Nix flake checks: builds packages.deckd and the focus-watcher
 # bundles, evaluates the NixOS + home-manager modules, unit-tests the
 # activation scripts in a sandbox, and boots the packaged daemon on

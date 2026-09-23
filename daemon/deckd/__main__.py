@@ -26,7 +26,20 @@ from .media import MediaManager
 from .server import PortInUseError, Server
 
 
-async def _run(server: Server) -> None:
+async def serve(
+    server: Server,
+    *,
+    install_signal_handlers: bool = True,
+    on_started: "Callable[[asyncio.Task[None]], None] | None" = None,
+) -> None:
+    """Run ``server`` until cancelled, then stop it.
+
+    ``install_signal_handlers`` is the CLI path (Ctrl-C / SIGTERM cancel the
+    server). The packaged macOS app owns the main thread for AppKit and runs
+    this on a background thread, where ``loop.add_signal_handler`` is illegal
+    — it passes ``False`` and cancels via ``on_started``'s task handle
+    (issue #165).
+    """
     loop = asyncio.get_running_loop()
     server_task = asyncio.create_task(server.start())
     server.start_focus_watcher()
@@ -42,8 +55,12 @@ async def _run(server: Server) -> None:
     # watcher above.
     server.start_session_state_watcher()
 
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, server_task.cancel)
+    if on_started is not None:
+        on_started(server_task)
+
+    if install_signal_handlers:
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, server_task.cancel)
 
     try:
         await server_task
@@ -95,9 +112,7 @@ def _build_sinks() -> tuple[object | None, ScrollSink, KeySink]:
         return None, LoggingScrollSink(), LoggingKeySink()
 
 
-def main() -> None:
-    from .bind import DEFAULT_BIND
-
+def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="deckd")
     parser.add_argument(
         "--bind",
@@ -187,10 +202,27 @@ def main() -> None:
         help="Append logs to this path in addition to stderr (issue #70).",
     )
     parser.add_argument("-v", "--verbose", action="store_true")
-    args = parser.parse_args()
+    return parser
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = _build_parser()
+    args = parser.parse_args(argv)
 
     if not 0 <= args.scroll_momentum_friction < 1:
         parser.error("--scroll-momentum-friction must be >= 0 and < 1")
+    return args
+
+
+def build_server(args: argparse.Namespace) -> Server:
+    """Assemble a ``Server`` from parsed CLI args.
+
+    Split out of ``main`` so the packaged macOS app can construct a server
+    with its own args and run it on a background thread (issue #165). Raises
+    ``PasswordError`` when the password file is untrustworthy; ``main`` turns
+    that into a CLI refusal.
+    """
+    from .bind import DEFAULT_BIND
 
     setup_logging(
         level=logging.DEBUG if args.verbose else logging.INFO,
@@ -233,10 +265,7 @@ def main() -> None:
         )
     else:
         password_path = args.password_file or default_password_path()
-        try:
-            password = load_or_create_password(password_path)
-        except PasswordError as exc:
-            parser.error(str(exc))
+        password = load_or_create_password(password_path)
 
     # ``dbus-fast`` is an optional extra (issue #27). It backs the ``dbus:``
     # action primitive and MPRIS now-playing — both Linux-only in practice
@@ -322,8 +351,18 @@ def main() -> None:
         )
         server.app.router.add_static("/", args.client_dist, show_index=False, append_version=False)
 
+    return server
+
+
+def main() -> None:
+    args = parse_args()
     try:
-        asyncio.run(_run(server))
+        server = build_server(args)
+    except PasswordError as exc:
+        logging.getLogger("deckd").error("%s", exc)
+        raise SystemExit(2) from None
+    try:
+        asyncio.run(serve(server))
     except PortInUseError as exc:
         # Fail fast with the actionable message instead of a raw asyncio
         # traceback ending in OSError: [Errno 98].
