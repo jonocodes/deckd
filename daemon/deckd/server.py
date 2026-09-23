@@ -573,9 +573,15 @@ class Server:
         media_manager: MediaManager | None = None,
         mpris_backend: MprisBackend | None = None,
         mpris_art_resolver: "Callable[[str | None], Awaitable[tuple[str, bytes] | None]] | None" = None,
+        client_build: str | None = None,
     ) -> None:
         self.layouts_dir = layouts_dir
         self.overlay_dir = overlay_dir
+        # Fingerprint of the client bundle the daemon serves (``--client-dist``),
+        # surfaced on ``/health`` so a running client can spot a stale bundle
+        # and reload. ``None`` when no client dist is configured (dev server,
+        # headless daemon) — the client treats that as "don't check".
+        self.client_build = client_build
         # ``None``/empty disables auth entirely (every connection is treated
         # as authorized). When set, every client must present it.
         self.password = password or None
@@ -1769,6 +1775,10 @@ class Server:
             "addresses": [f"{_url_host_for_log(b)}:{port}" for b in resolved_for_url],
             "url": _bind_url_for(resolved_for_url, port),
         }
+        # Present only when the daemon serves a built client; the client uses
+        # it to notice that the bundle on the daemon changed under it.
+        if self.client_build is not None:
+            body["client_build"] = self.client_build
         return web.json_response(body, headers={"Access-Control-Allow-Origin": "*"},
         )
 

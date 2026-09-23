@@ -215,7 +215,7 @@ export function useDeckdSocket(
   return { status, send, authenticate, deauthenticate, hasPassword };
 }
 
-function resolve_health_url(): string {
+export function resolve_health_url(): string {
   return new URL("/health", window.location.href).toString();
 }
 
