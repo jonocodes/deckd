@@ -108,7 +108,7 @@ just build-client
 just dev-daemon       # listens on http://127.0.0.1:8765, auto-restarts on Python edits
 ```
 
-`just dev-daemon` wraps the daemon in the `deckd-dev` supervisor so Python edits hot-reload (YAML hot-reloads either way). For a one-shot `deckd` invocation use `just run-daemon`. Running multiple `git worktree`s side-by-side? Override the default ports with `DECKD_PORT` / `VITE_PORT` (see [docs/ONBOARDING.md](ONBOARDING.md#worktrees-git-worktree)).
+`just dev-daemon` wraps the daemon in the `deckd-dev` supervisor so Python edits hot-reload (YAML hot-reloads either way). For a one-shot `deckd` invocation use `just run-daemon`. Running multiple `git worktree`s side-by-side? Run `just worktree-adopt` once inside each new checkout — it assigns non-colliding ports, wires the toolchain to the primary checkout's env, and installs dependencies (see [docs/ONBOARDING.md](ONBOARDING.md#worktrees-git-worktree)).
 
 To force a specific platform's setup (e.g. on a CI box): `just setup-linux` or `just setup-macos`.
 

@@ -148,53 +148,149 @@ Key daemon CLI flags (in `daemon/deckd/__main__.py`):
 
 ### Worktrees (`git worktree`)
 
-Each `git worktree add` is a fully independent checkout of the repo. Paths
-inside the daemon, tests, and scripts are anchored to the file's own
-location (`Path(__file__).resolve().parents[N]`), so layouts, fixtures, and
-the built client all resolve correctly without any symlinks or rewrites —
-no code change is required for worktree support.
+Each `git worktree add` is a fully independent checkout. Paths inside the
+daemon, tests, and scripts are anchored to the file's own location
+(`Path(__file__).resolve().parents[N]`), so layouts, fixtures, and the built
+client all resolve correctly with no symlinks or rewrites — **no code change
+is required for worktree support.**
 
-The one resource that *is* shared is the host's port space: every worktree
-that runs `just dev` defaults to `:8765` (daemon) and `:5173` (Vite), so a
-second worktree can't bind the same ports. Override with env vars before
-launching:
+What a fresh worktree *does* lack is everything git deliberately doesn't carry
+across: the gitignored scaffolding (`.envrc`, `.flox/`, `.venv/`,
+`client/node_modules/`, `client/.tls/`) and a port assignment that doesn't
+collide with its siblings. One command fixes all of it:
 
 ```sh
-# worktree 1 (defaults)
-just dev
-
-# worktree 2 — pick free ports and keep them consistent across all recipes
-DECKD_PORT=8766 VITE_PORT=5174 just dev
+cd /path/to/the/new/worktree
+just worktree-adopt
 ```
 
-The dev recipes read these vars and pass them to both halves:
+"Adopt", not "create", because the checkout usually already exists — an agent
+harness (Paseo, Cursor) or a plain `git worktree add` made it, and this claims
+it afterwards. It is idempotent, so it's also the repair command. It:
 
-- `DECKD_PORT` is forwarded as `deckd-dev`'s `--port`; `dev-daemon`,
-  `dev-daemon-lan`, `dev`, and `dev-lan` all honour it.
-- `VITE_PORT` is forwarded as Vite's `--port`. When it's been overridden
-  the recipe drops `--strictPort` so Vite falls through to the next free
-  port instead of failing; it also sets `DECKD_UPSTREAM` so Vite's
-  `/ws`/`/health` proxy reaches the *current* worktree's daemon.
-- `just kill` only tears down the *current* worktree's ports, so two
-  worktrees running side-by-side won't take each other down.
+1. assigns the lowest free port offset and writes it to a gitignored `./.env`
+   (the primary prefers offset 0, but moves off it if those ports are taken);
+2. writes an `.envrc` that resolves the **primary** checkout's flox
+   environment (only if the primary itself uses direnv/flox — the repo doesn't
+   prescribe either), and runs `direnv allow`;
+3. copies gitignored-but-shareable files over, currently `client/.tls`
+   (host-wide certs that otherwise cost a `sudo` prompt per worktree);
+4. runs `just setup` — pass `--no-install` to skip that and do it yourself.
 
-Caveats:
+Then:
 
-- **`just install-service` should only be run from your main checkout.**
-  It writes the literal `$(pwd)` into the systemd unit / launchd plist;
-  doing it from a feature worktree pins the service to a worktree that
-  will eventually be removed.
-- **Live MPRIS / focus smoke tests** (`just smoke-mpris`, `just
-  smoke-focus`) hit the real session bus, so two worktrees can't run
-  them simultaneously.
+```sh
+just worktree-doctor   # why isn't this worktree working? every failure prints its fix
+just worktree-list     # all worktrees, their ports, and whether they're ready
+just worktree-create B # git worktree add ../deckd-B on a new branch, then adopt it
+```
+
+#### Ports
+
+The one genuinely shared resource is the host's port space. Every checkout
+gets an offset applied to all four bases at once, so its ports stay mentally
+grouped:
+
+| offset | `DECKD_PORT` | `VITE_PORT` | `DECKD_E2E_PORT` | `DECKD_SMOKE_PORT` | who |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 8765 | 5173 | 8975 | 18765 | the primary checkout, *if the defaults are free* |
+| 1 | 8766 | 5174 | 8976 | 18766 | first adopted checkout |
+| 2 | 8767 | 5175 | 8977 | 18767 | second, and so on |
+
+The primary prefers offset 0 and normally needs no `.env` at all, so on a
+machine with no installed deckd nothing about the main checkout changes. It
+does **not** own offset 0 though: if something already holds `:8765` — almost
+always an installed deckd service — `worktree-adopt` moves the primary to a
+free offset like any other checkout, and says so. Delete its `.env` and
+re-adopt to move back once the port frees up.
+
+An offset is only free when *all four* of its ports are, so a stray process on
+one port pushes the whole group along rather than producing a half-working
+checkout.
+
+`.env` is loaded automatically by every recipe (`set dotenv-load` in the
+Justfile), so `just dev`, `just kill`, `just smoke`, and `just test-all` all
+target the current checkout with no env-var juggling. An explicit variable
+still wins for a one-off: `DECKD_PORT=9000 just dev`.
+
+- `DECKD_PORT` becomes `deckd-dev`'s `--port` (`dev-daemon`, `dev-daemon-lan`,
+  `dev`, `dev-lan`) — and `deckctl`'s `--port` in `just status`, `diag`,
+  `layouts`, and `metrics`, so those report on *this* checkout's daemon rather
+  than whatever holds the default port.
+- `VITE_PORT` becomes Vite's `--port`; when it differs from 5173 the recipe
+  drops `--strictPort` so Vite falls through if the port is busy, and sets
+  `DECKD_UPSTREAM` so the `/ws` + `/health` proxy reaches *this* checkout's
+  daemon.
+- `DECKD_E2E_PORT` moves the Playwright fixture daemon and its throwaway
+  layouts dir; `DECKD_SMOKE_PORT` moves the in-process smoke server. Together
+  they let two checkouts run `just test-all` simultaneously.
+- `just kill` only tears down the current checkout's ports.
+
+#### Running dev alongside an installed deckd
+
+A machine can run an installed deckd service (systemd/launchd/home-manager)
+and any number of dev instances at once. What's isolated, and what isn't:
+
+**Isolated, no action needed.** Layouts — the service reads
+`~/.config/deckd/layouts`, dev checkouts read their own `./layouts`, so an
+editor save in a dev instance can't touch the service's. Client state — each
+port is a distinct browser origin, so every instance gets its own PWA storage
+and service worker. The password file (`~/.config/deckd/password`) *is*
+shared, which is a convenience rather than a conflict: one password opens
+every instance.
+
+**Handled by the offsets.** Ports, including the primary checkout, per above.
+
+**Not isolated, and can't be.** These act on shared session state, so every
+running daemon competes:
+
+- **Input injection.** Each daemon opens its own uinput device (all named
+  `deckd`) and injects into whatever window currently has focus. Press a
+  button on the service's client and on a dev client and the target app
+  receives both.
+- **MPRIS transport and `dbus:` actions.** Same story — they drive the
+  session's real players and services.
+- **KDE focus (`org.deckd.Focus`).** On KDE the *daemon* owns the bus name,
+  and it requests it with `NameFlag.REPLACE_EXISTING` — so the last daemon to
+  start silently takes focus pushes away from every other one, including the
+  installed service. GNOME is unaffected: there the Shell extension owns the
+  name and daemons only call it, so any number coexist.
+
+In practice: run as many daemons as you like, but only drive *one* client at a
+time, and on KDE expect focus-dependent behaviour to follow the most recently
+started daemon.
+
+#### Toolchain: shared env, per-worktree venv
+
+A worktree has no `.flox/` of its own, and direnv's stdlib `use flox` requires
+a local one — so the generated `.envrc` calls `flox activate -d <primary>`
+directly. flox leaves `$PWD` alone, so the toolchain resolves from the primary
+while this worktree's own `.venv` is the one that gets used. That split is
+deliberate and load-bearing:
+
+- **Toolchain is shared** (python, node) — nothing to rebuild per worktree.
+- **The venv is not.** `uv pip install -e .` bakes an absolute path into the
+  editable install, so a shared venv would silently point `deckd` at whichever
+  worktree installed last.
+
+The manifest's `[profile]` hook is what exports `$PWD/.venv/bin`, but flox
+only sources it for an **interactive** shell — direnv's non-interactive env
+dump never carries it. So the generated `.envrc` adds `.venv/bin` to `PATH`
+(and exports `VIRTUAL_ENV`) itself. Without that, `just dev-daemon` and the
+`deckctl` recipes fail with `deckd-dev: command not found` in an activated
+worktree, even though `.venv/bin/deckd-dev` exists. If you hand-edit `.envrc`,
+keep that block.
+
+Caveats that remain:
+
+- **`just install-service` should only be run from your main checkout.** It
+  writes the literal `$(pwd)` into the systemd unit / launchd plist; from a
+  feature worktree it pins the service to a checkout that will be removed.
+- **Live MPRIS / focus smoke tests** (`just smoke-mpris`, `just smoke-focus`)
+  hit the real session bus, so two worktrees can't run them at once.
 - **`uv.lock` is per-repo, not per-worktree.** A `uv pip install` in one
-  worktree edits the lockfile that all worktrees share; if you're
-  intentionally diverging dependencies, isolate with a worktree-local
-  venv (`uv venv --python 3.11 .venv`) and commit changes deliberately.
-- **Each worktree needs its own `.venv/`** (run `just setup` per
-  worktree); `just test-all` only prepends `./.venv/bin` when one
-  exists, so a worktree without one will fall back to whatever Python
-  is on PATH (flox's, or the active interpreter).
+  worktree edits the lockfile every worktree shares; if you're intentionally
+  diverging dependencies, commit the change deliberately.
 
 ## Verification ladder
 

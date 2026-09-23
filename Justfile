@@ -1,5 +1,12 @@
 # deckd — common commands
 
+# Load a gitignored ./.env if one exists. `just worktree-adopt` writes one per
+# worktree holding that checkout's port assignment, so every recipe below picks
+# up the right ports with no env-var juggling. Nothing else uses it, the
+# primary checkout doesn't need one, and an explicit env var still wins:
+# `DECKD_PORT=9000 just dev`.
+set dotenv-load := true
+
 # `just` (no args) lists available recipes.
 default:
     @just --list
@@ -71,11 +78,14 @@ run-daemon:
 run-daemon-lan:
     VLC_HTTP_PASSWORD=dummy deckd --bind 0.0.0.0 --layouts-dir layouts --verbose
 
-# Default ports. Override with DECKD_PORT / VITE_PORT when running multiple
-# worktrees side-by-side (each `git worktree` lives on its own checkout but
-# still shares the host's port space).
+# Default ports, and the knobs that let worktrees coexist. `just worktree-adopt`
+# writes all four into a per-checkout ./.env (loaded above); set them by hand
+# for a one-off. DECKD_E2E_PORT and DECKD_SMOKE_PORT move the two throwaway
+# test daemons, so two worktrees can run `just test-all` at the same time.
 DECKD_PORT := env_var_or_default("DECKD_PORT", "8765")
 VITE_PORT := env_var_or_default("VITE_PORT", "5173")
+DECKD_E2E_PORT := env_var_or_default("DECKD_E2E_PORT", "8975")
+DECKD_SMOKE_PORT := env_var_or_default("DECKD_SMOKE_PORT", "18765")
 
 # Kill whatever is bound to the two ports we use: the daemon (default :8765)
 # and the Vite dev server (default :5173). Handy when a stale daemon still
@@ -309,9 +319,11 @@ test-client:
 # End-to-end smoke test (boots daemon in-process, fires every action
 # primitive). Uses a stable fixture layout (scripts/smoke_fixtures/)
 # so shipping-layout edits can't break CI (#77). Pass --layouts-dir to
-# point at shipping layouts (or anything else) instead.
+# point at shipping layouts (or anything else) instead. Binds DECKD_SMOKE_PORT
+# (default :18765, well away from any live daemon) so two worktrees can run
+# it concurrently.
 smoke:
-    python -u scripts/smoke.py
+    DECKD_SMOKE_PORT={{DECKD_SMOKE_PORT}} python -u scripts/smoke.py
 
 # Check whether this shell can create a uinput scroll device.
 check-uinput:
@@ -395,8 +407,14 @@ watch-focus-once:
     python -u scripts/watch_focus.py --once
 
 # Hit /health.
+#
+# These four all target DECKD_PORT — i.e. *this* checkout's daemon. Without
+# that, deckctl's own default (:8765) would answer from whatever holds the
+# default port, which on a machine running an installed deckd service is the
+# prod daemon rather than the dev one you just started. To aim at another
+# instance deliberately: `DECKD_PORT=8765 just status`.
 status:
-    deckctl status
+    deckctl --port {{DECKD_PORT}} status
 
 # Hit /diag (issue #70): one-shot machine-readable snapshot of the
 # daemon's focus, input, layouts, sessions, and MPRIS state. Open-auth,
@@ -405,14 +423,14 @@ status:
 diag:
     #!/usr/bin/env bash
     set -euo pipefail
-    deckctl diag
+    deckctl --port {{DECKD_PORT}} diag
 
 # Hit /layouts (issue #70): enumeration of loaded layouts and safe
 # widget summaries (no action bodies).
 layouts:
     #!/usr/bin/env bash
     set -euo pipefail
-    deckctl layouts
+    deckctl --port {{DECKD_PORT}} layouts
 
 # Hit /metrics (issue #71): Prometheus text-format scrape. Open-auth
 # and stdlib-only on the server side; pipe into ``head`` or
@@ -420,7 +438,7 @@ layouts:
 metrics:
     #!/usr/bin/env bash
     set -euo pipefail
-    deckctl metrics
+    deckctl --port {{DECKD_PORT}} metrics
 
 # Run the Nix flake checks: builds packages.deckd and the focus-watcher
 # bundles, evaluates the NixOS + home-manager modules, unit-tests the
@@ -429,3 +447,43 @@ metrics:
 # See docs/GUIDE.md "Nix flake, NixOS, and home-manager".
 nix-check:
     nix flake check -L
+
+# --- Worktrees ------------------------------------------------------------
+# Code needs nothing for `git worktree` (every path resolves from the file's
+# own location). What a fresh checkout lacks is the gitignored scaffolding —
+# .envrc, .venv, client/node_modules, TLS certs — plus a port assignment that
+# doesn't collide with its siblings. See docs/ONBOARDING.md#worktrees-git-worktree.
+
+# "Adopt" because the worktree usually already exists: an agent harness
+# (Paseo, Cursor) or a plain `git worktree add` made it, and this claims it
+# afterwards. Assigns free ports -> ./.env, wires .envrc to the primary
+# checkout's flox env, copies over gitignored bits worth sharing (TLS certs),
+# then runs `just setup`. Idempotent, so it's also the repair command. Pass
+# --no-install to skip the slow dependency step, --force to reassign ports.
+#
+# Make THIS worktree dev-ready: ports, env, dependencies. [--no-install] [--force]
+worktree-adopt *args:
+    @bash scripts/worktree.sh adopt {{args}}
+
+# Checks port assignment (including collisions with siblings), .envrc,
+# toolchain on PATH, venv, and client deps. Every failure prints its fix;
+# exits non-zero if the checkout isn't ready.
+#
+# Why isn't this worktree working?
+worktree-doctor:
+    @bash scripts/worktree.sh doctor
+
+# Every worktree with its assigned ports and readiness. `*` marks this one.
+worktree-list:
+    @bash scripts/worktree.sh list
+
+# For harness-created worktrees, run `worktree-adopt` inside the checkout
+# instead — this is only for the from-scratch case.
+#
+# Add a worktree at ../deckd-<branch> on a new branch off HEAD, then adopt it.
+worktree-create branch *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)/deckd-{{branch}}"
+    git worktree add -b "{{branch}}" "$dir"
+    cd "$dir" && just worktree-adopt {{args}}
