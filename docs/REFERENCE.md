@@ -6,7 +6,8 @@ Canonical operational reference — daemon flags, `deckctl` commands, environmen
 
 ```
 deckd [--bind ADDR] [--port PORT] [--layouts-dir PATH] [--no-overlay]
-      [--no-focus] [--client-dist PATH] [--password-file PATH] [--no-auth]
+      [--no-focus] [--allow-while-locked] [--client-dist PATH]
+      [--password-file PATH] [--no-auth]
       [--scroll-momentum-friction F] [--scroll-momentum-cutoff C]
       [--log-format {text,json}] [--log-file PATH] [-v]
 ```
@@ -20,6 +21,7 @@ deckd [--bind ADDR] [--port PORT] [--layouts-dir PATH] [--no-overlay]
 | `--layouts-dir PATH` | (required) | Directory of per-app YAML layouts. |
 | `--no-overlay` | off | Skip platform overlay (`layouts.linux/`, `layouts.macos/`). |
 | `--no-focus` | off | Disable the focus watcher; serve only the default layout. |
+| `--allow-while-locked` | off | Keep presses / key / type / trackpad / raise working while the desktop session is locked (issue #160). Default: a locked session refuses those surfaces — the client shows the lock takeover, `shell:`+ friends get a `screen_locked` error, and the refusal is recorded as a `lock_dropped` outcome. |
 | `--client-dist PATH` | none | Serve a built client at `/`. |
 | `--password-file PATH` | `$XDG_CONFIG_HOME/deckd/password` | Shared password file. Generated on first start if absent. |
 | `--no-auth` | off | Disable password auth entirely. |

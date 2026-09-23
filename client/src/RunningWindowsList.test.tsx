@@ -108,3 +108,28 @@ describe("RunningWindowsList", () => {
     expect(onTap).toHaveBeenCalledWith("w1");
   });
 });
+describe("RunningWindowsList — session lock (issue #160)", () => {
+  it("reuses the windows-empty slot with the lock-specific copy", () => {
+    render(
+      <RunningWindowsList
+        windows={[
+          { window_id: "1", label: "Firefox", icon: null },
+        ]}
+        lockedHost="nixbox"
+      />,
+    );
+    // A populated list must NOT sit silently disabled; the lock state
+    // replaces the rows with a stated reason naming the host.
+    expect(screen.getAllByText(/Screen locked — unlock nixbox to switch windows/).length).toBeGreaterThan(0);
+    expect(document.querySelectorAll(".windows-row").length).toBe(0);
+  });
+
+  it("renders rows normally when not locked", () => {
+    render(
+      <RunningWindowsList
+        windows={[{ window_id: "1", label: "xterm", icon: null }]}
+      />,
+    );
+    expect(screen.getByText("xterm")).toBeTruthy();
+  });
+});

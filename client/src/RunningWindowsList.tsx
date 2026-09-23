@@ -38,9 +38,23 @@ export type RunningWindowsListProps = {
   /** Per-row tap handler — wired but ignored in v1; stage 3 (#122)
    *  will replace this with a real raise message. */
   onRowTap?: (windowId: string) => void;
+  /** Issue #160: while the desktop session is locked, raise is refused
+   *  daemon-side. Supersedes the rows with the lock-specific empty
+   *  state (reuses the existing ``windows-empty`` slot) naming the host
+   *  to unlock. ``null``/absent = not locked, rows behave normally. */
+  lockedHost?: string | null;
 };
 
-export function RunningWindowsList({ windows, onRowTap }: RunningWindowsListProps) {
+export function RunningWindowsList({ windows, onRowTap, lockedHost }: RunningWindowsListProps) {
+  if (lockedHost) {
+    return (
+      <div className="windows" role="region" aria-label="running programs">
+        <div className="windows-empty">
+          {`Screen locked — unlock ${lockedHost} to switch windows.`}
+        </div>
+      </div>
+    );
+  }
   if (windows === undefined) {
     return (
       <div className="windows" role="region" aria-label="running programs">

@@ -100,11 +100,32 @@ export type LayoutMessage = {
   is_default?: boolean;
 };
 
+/**
+ * Daemon -> client push: two-state session screen awareness (issue
+ *     #160).
+ *
+ *     Two states, not one: ``locked`` means *credentials required* (drives
+ *     the daemon-side refusal of focus-targeting input and the client's
+ *     lock takeover), ``blanked`` means *the session isn't on the screen*
+ *     (GNOME screen blank, with or without Automatic Screen Lock) and
+ *     drives only the client's soft "wake" treatment — input stays enabled
+ *     so a press wakes the machine.
+ *
+ *     Pushed on every transition **and** replayed in the connect snapshot
+ *     (``SERVER.push_session_state_snapshot``) so a phone joining mid-lock
+ *     isn't stuck showing a stale layout. Never sent at all when the
+ *     backend can't observe lock state (no ``session_lock`` /
+ *     ``session_blank`` capability) — the client's default false then
+ *     reads as "not aware", and no lock view can strand on-screen.
+ *     
+ */
 export type StateMessage = {
 
   type: "state";
 
   locked: boolean;
+
+  blanked?: boolean;
 };
 
 export type BrightnessMessage = {

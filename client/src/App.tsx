@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Pencil as PencilIcon, Settings as SettingsIcon, Globe as GlobeIcon } from "lucide-react";
+import { Lock as LockIcon, Moon as MoonIcon, Pencil as PencilIcon, Settings as SettingsIcon, Globe as GlobeIcon } from "lucide-react";
 import { LayoutGrid as LayoutGridIcon, Music as MusicIcon, PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
@@ -38,6 +38,7 @@ import type {
   ServerChromeMedia,
   ServerLayout,
   ServerRunningWindows,
+  ServerState,
   WindowListEntry,
 } from "./protocol";
 import { EDITOR_VIEW_ID, MPRIS_VIEW_ID, WINDOWS_VIEW_ID } from "./protocol";
@@ -62,8 +63,22 @@ const STATUS_LABEL: Record<SocketStatus, string> = {
   open: "live",
   connecting: "reconnecting",
   closed: "disconnected",
-  unauthorized: "locked",
+  // Issue #160 naming collision fix: "locked" now belongs to the
+  // *desktop session* state ("Screen locked"). The deckd-password gate
+  // is "sign-in needed".
+  unauthorized: "sign-in needed",
 };
+
+/** The host the socket is driving. Matters under lock (issue #160) when
+ *  one phone drives two machines: the takeover names which screen needs
+ *  unlocking. The page host is the daemon (served directly or proxied). */
+const HOSTNAME = (() => {
+  try {
+    return window.location.hostname || "your computer";
+  } catch {
+    return "your computer";
+  }
+})();
 
 export function App() {
   // Demo mode (``?demo=<name>``): render a fixture layout with the socket
@@ -177,6 +192,14 @@ export function App() {
   // platform" empty state in the meantime (issue #120 decision 8).
   const [runningWindows, setRunningWindows] = useState<WindowListEntry[] | undefined>(undefined);
   const onRunningWindows = useCallback((m: ServerRunningWindows) => setRunningWindows(m.windows), []);
+  // Two-state session screen awareness (issue #160). ``null`` until the
+  // first ``state`` frame arrives — both halves read false, which is
+  // exactly what a daemon without lock detection ever pushes. ``locked``
+  // drives the lock takeover + daemon-side gated refusals; ``blanked``
+  // (without lock) drives only the soft "asleep" banner and keeps
+  // presses enabled so the first tap wakes the machine.
+  const [sessionState, setSessionState] = useState<ServerState | null>(null);
+  const onSessionState = useCallback((m: ServerState) => setSessionState(m), []);
   // Demo mode has no socket, so seed the media store once on mount with the
   // fixture readings — otherwise a media widget renders as "unavailable".
   const isDemo = demoLayout !== null;
@@ -213,6 +236,7 @@ export function App() {
     onChromeMedia,
     onConfirmRequest,
     onRunningWindows,
+    onSessionState,
     { enabled: !demoLayout && !isPlayground },
   );
   const playgroundSocket = usePlaygroundDaemon(
@@ -226,6 +250,11 @@ export function App() {
   );
   const { status, send, authenticate, deauthenticate, hasPassword } =
     isPlayground ? playgroundSocket : realSocket;
+  // Derived two-state (issue #160). ``locked`` requires credentials —
+  // full takeover of focus-targeting surfaces. ``blanked`` without
+  // ``locked`` is the soft "asleep, press anything to wake" state.
+  const screenLocked = sessionState?.locked ?? false;
+  const screenBlanked = !screenLocked && (sessionState?.blanked ?? false);
   // Look the pressed widget up in the active layout so the modal
   // can show its label / icon (the daemon doesn't send command text
   // on the wire). If the layout has rotated away between the press
@@ -446,6 +475,10 @@ export function App() {
         return;
       }
       if (e.altKey || e.ctrlKey || e.metaKey) return;
+      // Issue #160: while locked, the surfaces these two shortcuts
+      // open (trackpad manual injection, running-windows raise) are
+      // gated — don't invite the user into a dead view.
+      if (screenLocked && (e.key === "1" || e.key === "5")) return;
       if (e.key === "1") {
         e.preventDefault();
         viewOriginRef.current = trackpadBtnRef.current;
@@ -475,7 +508,7 @@ export function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate, view, openTrackpad, openSettings, toggleNowPlaying, toggleEditor, toggleWindows, send, status]);
+  }, [navigate, view, openTrackpad, openSettings, toggleNowPlaying, toggleEditor, toggleWindows, send, status, screenLocked]);
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
@@ -524,8 +557,19 @@ export function App() {
     if (status === "open") setLiveText("Connected");
     else if (status === "connecting") setLiveText("Reconnecting");
     else if (status === "closed") setLiveText("Disconnected");
-    else if (status === "unauthorized") setLiveText("Locked");
+    else if (status === "unauthorized") setLiveText("Sign-in needed");
   }, [status]);
+  // Gesture... issue #160: announce lock / wake transitions so a screen
+  // reader learns the takeover replaced the grid and why.
+  const prevSessionState = useRef(sessionState);
+  useEffect(() => {
+    if (prevSessionState.current === sessionState) return;
+    prevSessionState.current = sessionState;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (sessionState?.locked === true) setLiveText("Screen locked");
+    else if (sessionState?.blanked === true) setLiveText("Screen asleep");
+    else if (sessionState != null) setLiveText("Home");
+  }, [sessionState]);
   useEffect(() => {
     if (prevLayout.current === layout) return;
     prevLayout.current = layout;
@@ -543,7 +587,11 @@ export function App() {
   // absent theme leaves the badge on the default chrome treatment. A
   // layout declaring neither an icon nor a theme renders the chrome
   // unchanged (bold text, no pill) so existing layouts look identical.
-  const appName = layout
+  // Issue #160: while the session is locked the badge reads "Screen
+  // locked" in place of the app name.
+  const appName = screenLocked
+    ? "Screen locked"
+    : layout
     ? (layout.display_name?.trim() || layout.app) + programSuffix
     : "deckd";
   const appTheme = layout?.theme?.trim() || null;
@@ -581,6 +629,19 @@ export function App() {
     );
   }
 
+  // Issue #160: per-capability gate, not a global switch. While the
+  // session is locked, the surfaces that target the focused window
+  // (grid, jogstrip, trackpad) are replaced by the lock takeover;
+  // now playing, settings, and the layout editor keep working (MPRIS
+  // is alive behind the shield, settings are device-local, the editor
+  // writes YAML to disk). The running-windows view is NOT in the
+  // takeover set: its chrome button is disabled while locked, but a
+  // session already on the view renders the list's lock-specific
+  // empty state rather than dead rows (issue #160).
+  const lockBlockedView = view === "layout" || view === "trackpad";
+  const renderLockTakeover = screenLocked && lockBlockedView;
+  const renderBlankBanner = screenBlanked && !screenLocked && view === "layout";
+
   return (
     <>
       <span role="status" className="sr-only">{liveText}</span>
@@ -602,7 +663,23 @@ export function App() {
           }
         >
           <h1 className="sr-only">{headingText}</h1>
-          {view === "trackpad" ? (
+          {renderLockTakeover ? (
+            <div className="lock-takeover" role="status" aria-live="polite">
+              <LockIcon className="lock-takeover-glyph" size={42} aria-hidden />
+              <span className="lock-takeover-title">Screen locked</span>
+              <span className="lock-takeover-sub">
+                {`Controls resume when you unlock ${HOSTNAME}`}
+              </span>
+            </div>
+          ) : (
+            <>
+              {renderBlankBanner && (
+                <div className="lock-banner" role="status" aria-live="polite">
+                  <MoonIcon size={16} aria-hidden />
+                  <span>{`Screen asleep — press anything to wake ${HOSTNAME}`}</span>
+                </div>
+              )}
+              {view === "trackpad" ? (
             <ManualControl
               onPad={pad}
               onTap={padTap}
@@ -701,6 +778,7 @@ export function App() {
             // "Nothing playing" placeholder (decision 8).
             <RunningWindowsList
               windows={wireWindowsToServer(runningWindows)}
+              lockedHost={screenLocked ? HOSTNAME : null}
               onRowTap={(windowId) => {
                 // Stage 3 (#122): raise the tapped window, then close
                 // the overlay back to the focused-app layout. Same
@@ -735,8 +813,10 @@ export function App() {
           ) : (
             <div className="empty">waiting for daemon…</div>
           )}
+            </>
+          )}
         </main>
-        {jogstripEnabled && view !== "settings" && view !== "nowplaying" && view !== "editor" && view !== "windows" && (
+        {jogstripEnabled && !renderLockTakeover && view !== "settings" && view !== "nowplaying" && view !== "editor" && view !== "windows" && (
           <aside
             className="chrome-jogstrip"
             style={{ "--jog-width": jogWidth.width } as CSSProperties}
@@ -773,12 +853,15 @@ export function App() {
             className={`chrome-btn${view === "trackpad" ? " chrome-btn-active" : ""}`}
             aria-label="manual control"
             aria-pressed={view === "trackpad"}
+            disabled={screenLocked}
             onPointerDown={() => {
+              if (screenLocked) return;
               viewOriginRef.current = trackpadBtnRef.current;
               lastChromeFocus.current = trackpadBtnRef.current;
               openTrackpad();
             }}
             onKeyDown={onActivate(() => {
+              if (screenLocked) return;
               viewOriginRef.current = trackpadBtnRef.current;
               lastChromeFocus.current = trackpadBtnRef.current;
               openTrackpad();
@@ -832,17 +915,20 @@ export function App() {
             <PencilIcon size={16} />
           </button>
         </Tooltip>
-        <Tooltip ref={windowsBtnRef} label="running programs">
+        <Tooltip ref={windowsBtnRef} label={screenLocked ? "running programs (locked)" : "running programs"}>
           <button
             className={`chrome-btn${view === "windows" ? " chrome-btn-active" : ""}`}
-            aria-label="running programs"
+            aria-label={screenLocked ? "running programs (locked)" : "running programs"}
             aria-pressed={view === "windows"}
+            disabled={screenLocked}
             onPointerDown={() => {
+              if (screenLocked) return;
               viewOriginRef.current = windowsBtnRef.current;
               lastChromeFocus.current = windowsBtnRef.current;
               toggleWindows();
             }}
             onKeyDown={onActivate(() => {
+              if (screenLocked) return;
               viewOriginRef.current = windowsBtnRef.current;
               lastChromeFocus.current = windowsBtnRef.current;
               toggleWindows();

@@ -256,10 +256,18 @@ def test_x11_backend_does_not_advertise_watch_windows() -> None:
 
 
 def test_gnome_backend_advertises_watch_windows() -> None:
-    """GNOME today implements both surfaces; the windows watcher is
+    """GNOME today implements both surfaces plus both session-state
+    halves (issue #160); the windows and session-state watchers are
     started at daemon boot and the chrome list gets a real snapshot."""
     assert GnomeShellFocusBackend().capabilities() == frozenset(
-        {"watch_active_app", "watch_windows", "raise_window", "raise_app"}
+        {
+            "watch_active_app",
+            "watch_windows",
+            "raise_window",
+            "raise_app",
+            "session_lock",
+            "session_blank",
+        }
     )
 
 

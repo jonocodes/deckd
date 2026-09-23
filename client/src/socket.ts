@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerLayout, ServerMessage, ServerRunningWindows, ServerWidgetUpdate, MediaState } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerLayout, ServerMessage, ServerRunningWindows, ServerState, ServerWidgetUpdate, MediaState } from "./protocol";
 import { wireLayoutToServer, wireWindowsToServer } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
@@ -48,6 +48,7 @@ export function useDeckdSocket(
   onChromeMedia?: (m: ServerChromeMedia) => void,
   onConfirmRequest?: (m: ServerConfirmRequest) => void,
   onRunningWindows?: (m: ServerRunningWindows) => void,
+  onSessionState?: (m: ServerState) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -129,11 +130,26 @@ export function useDeckdSocket(
             const cast: ServerRunningWindows = { ...msg, windows: wireWindowsToServer(msg.windows) ?? [] };
             onRunningWindows(cast);
           }
+          // Issue #160: the two-state session screen awareness. Pushed
+          // on every locked/blanked transition and replayed in the
+          // connect snapshot, so a late joiner isn't stalled on a
+          // stale layout. The handler is optional for the same
+          // forward-compat reason as the other chrome-side frames.
+          else if (msg.type === "state" && onSessionState) {
+            onSessionState(msg);
+          }
           else if (msg.type === "error" && msg.reason === "unauthorized") {
             // Wrong/absent password: stop reconnecting and prompt the user.
             unauthorizedRef.current = true;
             setStatus("unauthorized");
             ws.close();
+          }
+          else if (msg.type === "error" && msg.reason === "screen_locked") {
+            // A client that missed the state transition (issue #160):
+            // the press was refused daemon-side; surface the lock state
+            // locally so the takeover still appears. The connection
+            // itself is fine — do NOT close or stop reconnecting.
+            onSessionState?.({ type: "state", locked: true, blanked: false });
           }
         } catch {
           // ignore malformed
@@ -183,7 +199,7 @@ export function useDeckdSocket(
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onLayout, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, enabled, gen]);
+  }, [onLayout, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, onSessionState, enabled, gen]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;

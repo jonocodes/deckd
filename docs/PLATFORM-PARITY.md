@@ -23,6 +23,8 @@ this table exists to make drift between backends visible at a glance.
 | Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✓ daemon enqueues → KWin script `QTimer`-polls `DrainPendingRaises`, sets `workspace.activeWindow` (#133) | ✗ | ✓ AppKit + Accessibility (AX half needs the grant) |
 | Window row → layout match (icon / display name) | ✓ `wm_class` matches the layout token | ✓ `resourceClass` → `wm_class`, `desktopFileName` → `sandboxed_app_id` (#133) | n/a | ✓ identity matching is case-insensitive (#140), so `CGWindowList`'s `Firefox` matches the `firefox` token |
 | Raise app (`raise:`) | ✓ extension `RaiseApp` (#137) | ✓ daemon matches identity in its cached list, enqueues the winner (#133) | ✗ | ✗ |
+| Session lock awareness (`session_lock`) | ✓ `login1` session `LockedHint` (system bus, cross-DE signal) | ✗ follow-up — plugs into the `watch_session_state` seam | ✗ | ✗ follow-up |
+| Session blank awareness (`session_blank`) | ✓ `org.gnome.ScreenSaver.GetActive` poll | ✗ (`org.freedesktop.ScreenSaver` would be the source — follow-up) | ✗ | ✗ follow-up |
 | MPRIS media (chrome media icon + `nowplaying`) | ✓ session-bus MPRIS | ✓ | ✓ | ✗ — no session bus; the daemon sends `chrome_media.supported = false` and the view says "unsupported on this platform". A MediaRemote-based equivalent is [#56](https://github.com/jonocodes/deckd/issues/56) |
 | `media` widget (VLC HTTP backend) | ✓ | ✓ | ✓ | ◑ unverified — plain HTTP to VLC's web interface, no platform-specific path |
 | `dbus:` action | ✓ | ✓ | ✓ | ✗ — a Mac has no GNOME/KDE services to call |
