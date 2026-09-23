@@ -22,6 +22,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = REPO_ROOT / "scripts" / "codegen_protocol_ts.py"
 
@@ -164,27 +166,38 @@ def test_generated_output_is_parseable_typescript() -> None:
     protocol.ts; we wrap the file in a tiny shim that declares those
     stubs so the check exercises the emitter, not cross-file
     resolution.
+
+    Invoke the *pinned* compiler from client/node_modules rather than
+    bare ``npx tsc``: npx silently downloads the newest published
+    TypeScript when the client deps aren't installed, so the Python-only
+    CI job was typechecking against whatever npm shipped that day. That
+    is how TS5112 (new in 5.9 — "tsconfig.json is present but will not be
+    loaded if files are specified on commandline") broke this test
+    without a single line of the emitter changing. Skip instead when the
+    toolchain isn't there; the full `test` job always has it.
     """
     import tempfile
+    tsc = REPO_ROOT / "client" / "node_modules" / ".bin" / "tsc"
+    if not tsc.exists():
+        pytest.skip("client toolchain not installed; run `npm ci` in client/")
+
     out = _run_codegen()
     shim = "type Icon = unknown;\n"  # stub for the layouts-layer Icon
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".ts", prefix="protocol.generated.", delete=False
-    ) as f:
-        f.write(shim + out)
-        ts_path = Path(f.name)
-    try:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Run from a directory with no tsconfig.json in it. With files named
+        # on the commandline tsc ignores the config anyway, and from 5.9 on it
+        # errors out rather than just ignoring it.
+        ts_path = Path(tmpdir) / "protocol.generated.check.ts"
+        ts_path.write_text(shim + out)
         result = subprocess.run(
-            ["npx", "tsc", "--noEmit", "--skipLibCheck",
+            [str(tsc), "--noEmit", "--skipLibCheck",
              "--strict", "--target", "es2020",
              "--module", "esnext", "--moduleResolution", "bundler",
              str(ts_path)],
             capture_output=True,
             text=True,
-            cwd=REPO_ROOT / "client",
+            cwd=tmpdir,
         )
         assert result.returncode == 0, (
             f"generated TS failed to typecheck:\n{result.stdout}\n{result.stderr}"
         )
-    finally:
-        ts_path.unlink(missing_ok=True)
