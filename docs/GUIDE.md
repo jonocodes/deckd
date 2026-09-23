@@ -648,7 +648,19 @@ The bundle is **ad-hoc signed, not notarized** (no paid Apple Developer Program)
 xattr -dr com.apple.quarantine /Applications/deckd.app
 ```
 
-Then grant the TCC permissions as for the source build (see [macOS](#macos) above): Accessibility, System Events, and — for window titles — Screen Recording. The app seeds layouts into `~/Library/Application Support/deckd/layouts` on first run and logs to `~/Library/Logs/deckd.log`. The menu offers Open surface / Open layouts folder / Restart server / Allow LAN access / Quit; it stays localhost-only until you enable LAN access. This path is not yet verified on hardware.
+Then grant the TCC permissions as for the source build (see [macOS](#macos) above): Accessibility, System Events, and — for window titles — Screen Recording. The app seeds layouts into `~/Library/Application Support/deckd/layouts` on first run and logs to `~/Library/Logs/deckd.log`. The menu offers Open surface / Open layouts folder / Restart server / Allow LAN access / Quit; it stays localhost-only until you enable LAN access.
+
+Because the bundle is ad-hoc signed, its code identity is its content hash: **every rebuild changes it, so macOS may ask you to re-grant Accessibility / System Events after an upgrade.** Remove the stale `deckd` entry from System Settings → Privacy & Security and re-add the app if a grant stops working.
+
+Verified so far (macOS 26.6.2, Apple Silicon): the bundle builds, launches as a menu-bar app, seeds layouts, and serves the surface on `127.0.0.1:8765` with logs in `~/Library/Logs/deckd.log`. The injected-input features still depend on the three TCC grants, which need a human on the target Mac to confirm — the same caveat as the source build.
+
+#### Releasing a DMG
+
+Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workflows/release-macos.yml) on a `macos-14` runner: it builds the client, freezes the app, wraps it in a DMG (the same `just build-macos-dmg` recipe above), and attaches the DMG to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag.
+
+The tag (minus a leading `v`) is the version for that release: it names the DMG (`deckd-<version>.dmg`), its volume, and the app's `CFBundleShortVersionString`. So a rough CalVer tag like `v2026.09.23` yields `deckd-2026.09.23.dmg`. No scheme is enforced — any `v*` string works. For a local build without a tag, `just build-macos-dmg` falls back to `version` in `pyproject.toml`.
+
+The DMG is **arm64 only** (Apple Silicon): `macos-14` runners are Apple Silicon. An Intel / `universal2` build is a follow-up ([#165](https://github.com/jonocodes/deckd/issues/165), "Open questions").
 
 **NixOS** users can skip all of the above — the flake's home-manager module owns the same user service, and the NixOS module owns the udev rule and `input` group. See [Nix flake, NixOS, and home-manager](#nix-flake-nixos-and-home-manager).
 

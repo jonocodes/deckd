@@ -48,6 +48,39 @@ def test_seed_layouts_first_run_then_noop(tmp_path: Path) -> None:
     assert "edited" in (dest / "default.yaml").read_text()
 
 
+def test_bundle_version_prefers_env_override(monkeypatch, tmp_path: Path) -> None:
+    # The release workflow passes the git tag (minus its `v`) this way, so a
+    # rough CalVer tag is fine — no PEP 440 normalisation applies here.
+    monkeypatch.setenv("DECKD_VERSION", "2026.09.23")
+    assert macos_app.bundle_version(tmp_path / "pyproject.toml") == "2026.09.23"
+
+
+def test_bundle_version_falls_back_to_pyproject(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("DECKD_VERSION", "   ")
+    pyproject = tmp_path / "pyproject.toml"
+    _write(pyproject, '[project]\nname = "deckd"\nversion = "1.2.3"\n')
+    assert macos_app.bundle_version(pyproject) == "1.2.3"
+
+
+def test_bundle_info_plist_declares_tcc_usage() -> None:
+    plist = macos_app.bundle_info_plist("1.2.3")
+    assert plist["CFBundleShortVersionString"] == "1.2.3"
+    assert plist["CFBundleVersion"] == "1.2.3"
+    # Menu-bar only: no Dock icon, no main window.
+    assert plist["LSUIElement"] is True
+    # The daemon drives System Events via osascript; without this string
+    # macOS denies the Apple Event with no prompt (issue #165).
+    assert plist["NSAppleEventsUsageDescription"]
+
+
+def test_bundle_info_plist_has_no_empty_strings() -> None:
+    # An empty usage description suppresses the TCC prompt, so none of the
+    # string values may be blank.
+    for key, value in macos_app.bundle_info_plist("0.0.1").items():
+        if isinstance(value, str):
+            assert value.strip(), key
+
+
 def test_app_argv_defaults_to_localhost(tmp_path: Path) -> None:
     argv = macos_app.app_argv(
         layouts_dir=tmp_path / "layouts", client_dist=tmp_path / "web"

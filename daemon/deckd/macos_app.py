@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
+import os
 import shutil
 import sys
 import threading
@@ -67,6 +68,52 @@ def app_support_dir() -> Path:
 def default_log_file() -> Path:
     """``~/Library/Logs/deckd.log`` — where the app tees its logs."""
     return Path.home() / "Library" / "Logs" / "deckd.log"
+
+
+def bundle_version(pyproject: Path | None = None) -> str:
+    """The version stamped into the bundle (issue #165).
+
+    ``DECKD_VERSION`` wins when set — release CI passes the git tag (minus a
+    leading ``v``), so the tag is the single source for a release and the DMG
+    name, ``CFBundleShortVersionString``, and volume name all agree. Local
+    builds fall back to ``version`` in ``pyproject.toml``.
+    """
+    override = os.environ.get("DECKD_VERSION", "").strip()
+    if override:
+        return override
+    path = pyproject or Path(__file__).resolve().parents[2] / "pyproject.toml"
+    for line in path.read_text().splitlines():
+        if line.startswith("version = "):
+            return line.split("=", 1)[1].strip().strip('"')
+    raise ValueError(f"no version found in {path}")
+
+
+def bundle_info_plist(version: str) -> dict[str, object]:
+    """Info.plist entries for ``deckd.app`` (issue #165).
+
+    Kept here (not inline in ``deckd.spec``) so the TCC-relevant keys are
+    unit-testable on the Linux dev/CI hosts.
+
+    ``NSAppleEventsUsageDescription`` is load-bearing: the daemon drives
+    keystrokes and focus by shelling out to ``osascript`` → System Events,
+    and macOS attributes those Apple Events to the *responsible process* —
+    the bundle, not the ``osascript`` child. Without this string the
+    Automation prompt can't be shown, so macOS refuses the event
+    (``errAEEventNotPermitted``, -1743) — the silent failure #165 fixes.
+    """
+    return {
+        "LSUIElement": True,
+        "CFBundleName": "deckd",
+        "CFBundleDisplayName": "deckd",
+        "CFBundleShortVersionString": version,
+        "CFBundleVersion": version,
+        "LSMinimumSystemVersion": "12.0",
+        "NSHighResolutionCapable": True,
+        "NSAppleEventsUsageDescription": (
+            "deckd sends keystrokes and focuses windows through System "
+            "Events when you press buttons on your deck."
+        ),
+    }
 
 
 def seed_layouts(src: Path, dest: Path, *, overlay: Path | None = None) -> bool:

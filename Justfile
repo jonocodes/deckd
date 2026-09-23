@@ -440,6 +440,11 @@ metrics:
     set -euo pipefail
     deckctl --port {{DECKD_PORT}} metrics
 
+# Print the version from pyproject.toml. The single source for artifact
+# names (the DMG) and the release tag guard, so they can't drift.
+version:
+    @sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -n1
+
 # Build the self-contained macOS app bundle (dist/deckd.app, issue #165).
 # macOS only: a .app needs Apple tooling, so this refuses to run elsewhere.
 # Installs the [packaging] extra (PyInstaller) on demand and builds the
@@ -463,10 +468,12 @@ build-macos-app:
     echo "Built dist/deckd.app (ad-hoc signed, not notarized)."
 
 # Wrap dist/deckd.app in a distributable DMG for a GitHub release (#165).
+# ``DECKD_VERSION`` names the artifact (the release workflow sets it from the
+# git tag); otherwise it falls back to pyproject's version.
 build-macos-dmg: build-macos-app
     #!/usr/bin/env bash
     set -euo pipefail
-    version="$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -n1)"
+    version="${DECKD_VERSION:-$(just version)}"
     stage="$(mktemp -d)"
     trap 'rm -rf "$stage"' EXIT
     cp -R dist/deckd.app "$stage/"

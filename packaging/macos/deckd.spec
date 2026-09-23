@@ -12,15 +12,23 @@ and layouts are copied in as data under ``Contents/Frameworks`` (where
 ``sys._MEIPASS`` points at runtime).
 """
 import os
+import sys
 from pathlib import Path
 
 ROOT = Path(SPECPATH).resolve().parents[1]  # SPECPATH is packaging/macos
 
-version = "0.0.1"
-for line in (ROOT / "pyproject.toml").read_text().splitlines():
-    if line.startswith("version = "):
-        version = line.split("=", 1)[1].strip().strip('"')
-        break
+# Importable even when the package isn't pip-installed (e.g. a bare
+# ``pyinstaller packaging/macos/deckd.spec`` from a checkout).
+sys.path.insert(0, str(ROOT / "daemon"))
+from deckd.macos_app import (  # noqa: E402
+    BUNDLE_ID,
+    bundle_info_plist,
+    bundle_version,
+)
+
+# ``DECKD_VERSION`` (set by the release workflow from the git tag) wins;
+# otherwise pyproject's ``version``.
+version = bundle_version(ROOT / "pyproject.toml")
 
 # Optional custom icon: generate an .icns (e.g. from client/public/icon.svg)
 # and point DECKD_ICON at it, otherwise the default PyInstaller icon is used.
@@ -88,14 +96,6 @@ app = BUNDLE(
     coll,
     name="deckd.app",
     icon=icon,
-    bundle_identifier="com.deckd.daemon",
-    info_plist={
-        "LSUIElement": True,
-        "CFBundleName": "deckd",
-        "CFBundleDisplayName": "deckd",
-        "CFBundleShortVersionString": version,
-        "CFBundleVersion": version,
-        "LSMinimumSystemVersion": "12.0",
-        "NSHighResolutionCapable": True,
-    },
+    bundle_identifier=BUNDLE_ID,
+    info_plist=bundle_info_plist(version),
 )
