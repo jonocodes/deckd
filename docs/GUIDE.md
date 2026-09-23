@@ -261,6 +261,8 @@ That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws
 
 **Contrast:** `tailscale serve` **(persistent URL, no dev server).** If you want an installable PWA at `https://<host>.<tailnet>.ts.net/` (no port, works without any process running on the desktop besides the daemon), that's a different setup — `just build-client` + `just run-daemon` + `tailscale serve --bg 8765`. Tailscale proxies `:443 → 127.0.0.1:8765`, the daemon serves the built `client/dist/`. You lose HMR but gain a URL that survives closing your dev terminals. Not covered by any `just` recipe yet — file an issue if you want one.
 
+**Staying fresh (and never cached).** The phone is never left holding a stale bundle: the daemon serves `index.html`, `manifest.json`, and the icon with `Cache-Control: no-store`, keeps Vite's content-hashed `/assets/*` files immutable, and reports a fingerprint of the served bundle at `/health`. A running client re-checks that fingerprint every 30 seconds and whenever the installed PWA resumes (or regains connectivity), then reloads itself if the daemon's bundle changed — so `just build-client` + daemon restart rolls every phone forward automatically. There is no service worker and no offline mode; see [ADR-0011](adr/0011-client-freshness.md).
+
 ### Client chrome
 
 Every layout renders inside a persistent **chrome** shell that the daemon does not know about:

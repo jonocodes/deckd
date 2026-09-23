@@ -57,7 +57,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
 - [x] **Addressable client views** — the layout, manual control, now playing, settings, editor, and running-windows views have their own URL paths for deep links and browser history.
 - [x] **Keep screen awake** while the surface is in use.
-- [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
+- [x] **Install to home screen** (PWA) for a fullscreen, app-like surface. The daemon serves the shell uncached and the client auto-reloads when the served bundle changes, so installed clients can't get stuck on a stale UI. See [ADR-0011](docs/adr/0011-client-freshness.md).
 - [x] **Password auth** — every client authenticates with a shared password (on by default; `--no-auth` disables it for local development). See [Client auth](docs/GUIDE.md#client-auth).
 - [x] **LAN scope control** — bind the daemon to a specific network interface (`--bind iface:wlan0`) or literal address; defaults to localhost-only for safety.
 - [x] **Accessibility** — keyboard navigation, visible focus ring, screen-reader landmarks and live announcements, larger controls, high contrast, and reduced motion.

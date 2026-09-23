@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import logging
 import os
 import signal
@@ -88,6 +89,85 @@ def _build_sinks() -> tuple[object | None, ScrollSink, KeySink]:
             "platform sink unavailable; falling back to logging only: %s", exc
         )
         return None, LoggingScrollSink(), LoggingKeySink()
+
+
+def _client_build_id(dist: Path) -> str:
+    """Stable fingerprint of a built client tree.
+
+    Hashes every file's relative path and bytes, so a rebuilt bundle always
+    yields a new id (Vite renames content-hashed assets, and the walk covers
+    unhashed files like ``manifest.json`` too). The running client compares
+    this value against the one it saw last and hard-reloads when it changes —
+    see ``client/src/update-check.ts``.
+    """
+    digest = hashlib.sha256()
+    for path in sorted(p for p in dist.rglob("*") if p.is_file()):
+        digest.update(path.relative_to(dist).as_posix().encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()[:12]
+
+
+@web.middleware
+async def _client_cache_headers(
+    request: web.Request, handler: Callable[[web.Request], Any]
+) -> web.StreamResponse:
+    """Force a fresh shell without giving up content-addressed caching.
+
+    The SPA HTML, manifest, and other unhashed files answer ``no-store`` so a
+    phone (including an installed PWA) must re-fetch them from the daemon.
+    ``/assets/*`` files are content-hashed by Vite — a changed byte means a
+    changed filename — so those stay immutable and cheap to cache. A handler
+    that sets its own ``Cache-Control`` is never overridden.
+    """
+    response = await handler(request)
+    route = request.match_info.route
+    if not (
+        getattr(route, "name", None) in ("client_spa", "client_spa_fallback")
+        or isinstance(getattr(route, "resource", None), web.StaticResource)
+    ):
+        return response
+    if "Cache-Control" not in response.headers:
+        if request.path.startswith("/assets/"):
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        else:
+            response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def _add_client_routes(server: Server, dist: Path) -> None:
+    """Serve the built client at ``/`` with the freshness headers.
+
+    Split out of ``main`` so tests can boot an app around a throwaway dist
+    directory without the full argparse surface.
+    """
+    index_text = (dist / "index.html").read_text()
+
+    async def spa(_req: web.Request) -> web.Response:
+        # SPA fallback: serve the built index.html for any path
+        # without a file extension that isn't a reserved route
+        # (``/ws``, ``/health``, ``/reload``, ``/layout/...``).
+        return web.Response(text=index_text, content_type="text/html")
+
+    # Register the SPA routes BEFORE add_static so they win the
+    # match for ``/`` and other extension-less paths. ``add_static``
+    # would otherwise claim ``/`` first and return a directory
+    # listing, breaking ``/?demo=meter``-style entry points.
+    #
+    # The fallback regex must not swallow real files: ``[^.]+$`` admits
+    # deep links like ``/settings`` and ``/now-playing`` (client view
+    # routes, ADR-0011's reload target) while letting dotted paths
+    # (``/assets/*``, ``/manifest.json``) fall through to the static
+    # handler. Reserved daemon routes are excluded explicitly.
+    server.app.router.add_get("/", spa, name="client_spa")
+    server.app.router.add_get(
+        "/{path:(?!ws$|health$|reload$|layout($|/))[^.]+$}",
+        spa,
+        name="client_spa_fallback",
+    )
+    server.app.router.add_static("/", dist, show_index=False, append_version=False)
+    server.app.middlewares.append(_client_cache_headers)
 
 
 def main() -> None:
@@ -269,6 +349,14 @@ def main() -> None:
             len(seed),
         )
 
+    # Fingerprint the served client so ``/health`` can tell a running client
+    # whether the bundle it loaded is still the one on disk (issue: stale
+    # installed PWAs). Recomputed per daemon start — the deploy path is
+    # rebuild + restart.
+    client_build = (
+        _client_build_id(args.client_dist) if args.client_dist is not None else None
+    )
+
     server = Server(
         layouts_dir=args.layouts_dir,
         bind=args.bind if args.bind is not None else list(DEFAULT_BIND),
@@ -286,26 +374,11 @@ def main() -> None:
         password=password,
         sensor_manager=default_sensor_manager(),
         media_manager=MediaManager(),
+        client_build=client_build,
     )
 
     if args.client_dist is not None:
-        index_text = (args.client_dist / "index.html").read_text()
-
-        async def spa(_req):
-            # SPA fallback: serve the built index.html for any path
-            # without a file extension that isn't a reserved route
-            # (``/ws``, ``/health``, ``/reload``, ``/layout/...``).
-            return web.Response(text=index_text, content_type="text/html")
-
-        # Register the SPA routes BEFORE add_static so they win the
-        # match for ``/`` and other extension-less paths. ``add_static``
-        # would otherwise claim ``/`` first and return a directory
-        # listing, breaking ``/?demo=meter``-style entry points.
-        server.app.router.add_get("/", spa)
-        server.app.router.add_get(
-            "/{path:^(?!ws$|health$|reload$|layout($|/)).+}", spa
-        )
-        server.app.router.add_static("/", args.client_dist, show_index=False, append_version=False)
+        _add_client_routes(server, args.client_dist)
 
     try:
         asyncio.run(_run(server))

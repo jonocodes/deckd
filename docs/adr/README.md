@@ -63,3 +63,17 @@ _Amends: [0003](0003-persistent-chrome.md) — chrome knowledge now includes pay
 [0009-bind-scope-control.md](0009-bind-scope-control.md)
 
 Replace `--host` with repeatable `--bind` supporting literal IPs and `iface:<name>`. Default `127.0.0.1` + `::1`. Localhost-only by default; LAN reachability is opt-in.
+
+## 0010 — Grid layout: ordered-list reflow with a banded cell size
+
+[0010-grid-reflow.md](0010-grid-reflow.md)
+
+Widgets are an ordered list that the client packs and wraps (no absolute coordinates); portrait falls out of reflow, and cell size is a client-side per-device band.
+
+_Supersedes: [0004](0004-orientation-scaling.md)_
+
+## 0011 — Client freshness: fingerprinted bundle + auto-reload, no offline cache
+
+[0011-client-freshness.md](0011-client-freshness.md)
+
+The daemon fingerprints its client dist into `/health`; the shell answers `no-store`, hashed assets stay immutable, and the client reloads when the fingerprint changes. No service worker, no offline cache; protocol version negotiation is explicitly out of scope.
