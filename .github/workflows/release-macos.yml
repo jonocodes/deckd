@@ -68,18 +68,9 @@ jobs:
         run: npm ci && npm run build
         working-directory: client
 
-      # The DMG filename is derived from pyproject's version, so a tag that
-      # disagrees would publish a mislabelled artifact. Only enforced on tag
-      # pushes; a manual run may legitimately attach to an existing tag.
-      - name: Check tag matches pyproject version
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          version="$(just version)"
-          if [ "${RELEASE_TAG#v}" != "$version" ]; then
-            echo "::error::tag ${RELEASE_TAG} does not match pyproject version ${version}"
-            exit 1
-          fi
-
+      # The DMG is named from pyproject's `version` (via `just version`); the
+      # tag is just the release handle and is not required to match it. Tag
+      # however you like — semver, dates, whatever.
       - name: Build .app + DMG
         run: just build-macos-dmg
 

@@ -656,7 +656,9 @@ Verified so far (macOS 26.6.2, Apple Silicon): the bundle builds, launches as a 
 
 #### Releasing a DMG
 
-Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workflows/release-macos.yml) on a `macos-14` runner: it builds the client, freezes the app, wraps it in a DMG (the same `just build-macos-dmg` recipe above), and attaches the DMG to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag. The tag must match `version` in `pyproject.toml` (the workflow checks this) — the DMG is named from it.
+Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workflows/release-macos.yml) on a `macos-14` runner: it builds the client, freezes the app, wraps it in a DMG (the same `just build-macos-dmg` recipe above), and attaches the DMG to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag.
+
+There's no enforced versioning scheme — the tag is just the release handle, and any `v*` string works. The DMG *filename* comes from `version` in `pyproject.toml` (`just version`), so bump that when you want the artifact to carry a new number; the tag and that version don't have to agree.
 
 The DMG is **arm64 only** (Apple Silicon): `macos-14` runners are Apple Silicon. An Intel / `universal2` build is a follow-up ([#165](https://github.com/jonocodes/deckd/issues/165), "Open questions").
 
