@@ -82,6 +82,17 @@ deckctl [--host HOST] [--port PORT] [--password PASSWORD] <command>
 |----------|---------|
 | `DECKD_PASSWORD` | Passed by `vite.config.ts` proxy to the daemon. Also consumed by local scripts. |
 | `VITE_BASE_PATH` | Base URL when deploying to a subdirectory (e.g. GitHub Pages). |
+| `DECKD_UPSTREAM` | Daemon origin the Vite dev-server proxy forwards `/ws` and `/health` to (default `http://127.0.0.1:8765`). |
+
+### Development ports
+
+Read by the Justfile, and written per-worktree into a gitignored `./.env` by `just worktree-adopt` (see [ONBOARDING.md](ONBOARDING.md#worktrees-git-worktree)). An explicit variable overrides the `.env`.
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `DECKD_PORT` | `8765` | Daemon port for every `dev-*` / `run-*` recipe, and the pair `just kill` frees. |
+| `VITE_PORT` | `5173` | Vite dev-server port. When overridden, `--strictPort` is dropped so Vite can fall through. |
+| `DECKD_E2E_PORT` | `8975` | Playwright fixture daemon, so two worktrees can run `just test-all` at once. |
 
 ## Authentication
 
@@ -162,6 +173,10 @@ Primary development operations. Run `just` (no args) to list all available recip
 | `just watch-focus` | Print active-app changes in real time. |
 | `just install-focus-extension` | Install the GNOME Shell focus extension. |
 | `just install-focus-kwin` | Install the KDE Plasma KWin focus script. |
+| `just worktree-adopt` | Make the current `git worktree` checkout dev-ready: ports, `.envrc`, shared gitignored files, `just setup`. Idempotent. |
+| `just worktree-doctor` | Diagnose a worktree that is not working; every failure prints its fix. |
+| `just worktree-list` | All worktrees with their assigned ports and readiness. |
+| `just worktree-create BRANCH` | `git worktree add ../deckd-BRANCH` on a new branch, then adopt it. |
 
 ## Shipped behavior, limitations, and planned work
 

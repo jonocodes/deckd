@@ -29,6 +29,9 @@ client/.tls/
 # direnv
 .direnv/
 
+# Per-worktree port assignment written by `just worktree-adopt`
+/.env
+
 .flox
 
 # shotput workspace-copy (image-inline clients only; not needed on OpenCode web)

@@ -1,5 +1,12 @@
 # deckd — common commands
 
+# Load a gitignored ./.env if one exists. `just worktree-adopt` writes one per
+# worktree holding that checkout's port assignment, so every recipe below picks
+# up the right ports with no env-var juggling. Nothing else uses it, the
+# primary checkout doesn't need one, and an explicit env var still wins:
+# `DECKD_PORT=9000 just dev`.
+set dotenv-load := true
+
 # `just` (no args) lists available recipes.
 default:
     @just --list
@@ -71,11 +78,13 @@ run-daemon:
 run-daemon-lan:
     VLC_HTTP_PASSWORD=dummy deckd --bind 0.0.0.0 --layouts-dir layouts --verbose
 
-# Default ports. Override with DECKD_PORT / VITE_PORT when running multiple
-# worktrees side-by-side (each `git worktree` lives on its own checkout but
-# still shares the host's port space).
+# Default ports, and the knobs that let worktrees coexist. `just worktree-adopt`
+# writes all three into a per-worktree ./.env (loaded above); set them by hand
+# for a one-off. DECKD_E2E_PORT moves the Playwright fixture daemon so two
+# worktrees can run `just test-all` at the same time.
 DECKD_PORT := env_var_or_default("DECKD_PORT", "8765")
 VITE_PORT := env_var_or_default("VITE_PORT", "5173")
+DECKD_E2E_PORT := env_var_or_default("DECKD_E2E_PORT", "8975")
 
 # Kill whatever is bound to the two ports we use: the daemon (default :8765)
 # and the Vite dev server (default :5173). Handy when a stale daemon still
@@ -429,3 +438,43 @@ metrics:
 # See docs/GUIDE.md "Nix flake, NixOS, and home-manager".
 nix-check:
     nix flake check -L
+
+# --- Worktrees ------------------------------------------------------------
+# Code needs nothing for `git worktree` (every path resolves from the file's
+# own location). What a fresh checkout lacks is the gitignored scaffolding —
+# .envrc, .venv, client/node_modules, TLS certs — plus a port assignment that
+# doesn't collide with its siblings. See docs/ONBOARDING.md#worktrees-git-worktree.
+
+# "Adopt" because the worktree usually already exists: an agent harness
+# (Paseo, Cursor) or a plain `git worktree add` made it, and this claims it
+# afterwards. Assigns free ports -> ./.env, wires .envrc to the primary
+# checkout's flox env, copies over gitignored bits worth sharing (TLS certs),
+# then runs `just setup`. Idempotent, so it's also the repair command. Pass
+# --no-install to skip the slow dependency step, --force to reassign ports.
+#
+# Make THIS worktree dev-ready: ports, env, dependencies. [--no-install] [--force]
+worktree-adopt *args:
+    @bash scripts/worktree.sh adopt {{args}}
+
+# Checks port assignment (including collisions with siblings), .envrc,
+# toolchain on PATH, venv, and client deps. Every failure prints its fix;
+# exits non-zero if the checkout isn't ready.
+#
+# Why isn't this worktree working?
+worktree-doctor:
+    @bash scripts/worktree.sh doctor
+
+# Every worktree with its assigned ports and readiness. `*` marks this one.
+worktree-list:
+    @bash scripts/worktree.sh list
+
+# For harness-created worktrees, run `worktree-adopt` inside the checkout
+# instead — this is only for the from-scratch case.
+#
+# Add a worktree at ../deckd-<branch> on a new branch off HEAD, then adopt it.
+worktree-create branch *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)/deckd-{{branch}}"
+    git worktree add -b "{{branch}}" "$dir"
+    cd "$dir" && just worktree-adopt {{args}}
