@@ -627,6 +627,23 @@ tail -f deckd.log                       # follow logs (written in the checkout)
 
 **Prefer not to use `just`?** The recipes are thin wrappers you can run by hand — `install-service` is a path-substituting `sed` into `~/.config/systemd/user/` (or `~/Library/LaunchAgents/`) followed by the `systemctl --user enable --now` / `launchctl load` above; `install-focus-extension` is `gnome-extensions pack/install/enable` on `packaging/gnome-shell/deckd-focus@local`. See the `Justfile` for the exact commands.
 
+### macOS app bundle (experimental, [#165](https://github.com/jonocodes/deckd/issues/165))
+
+Beyond the source-checkout + LaunchAgent path above, deckd can be built as a self-contained `deckd.app`: a private Python runtime, the built client, and the layouts in one bundle, driven by a menu-bar UI. The target Mac needs no Python, Node, or Homebrew. Build it **on a Mac** (a `.app` needs Apple tooling):
+
+```sh
+just build-macos-app     # -> dist/deckd.app
+just build-macos-dmg     # -> dist/deckd-<version>.dmg
+```
+
+The bundle is **ad-hoc signed, not notarized** (no paid Apple Developer Program). A DMG downloaded through a browser is quarantined by Gatekeeper, so the first launch needs either right-click → Open, or:
+
+```sh
+xattr -dr com.apple.quarantine /Applications/deckd.app
+```
+
+Then grant the TCC permissions as for the source build (see [macOS](#macos) above): Accessibility, System Events, and — for window titles — Screen Recording. The app seeds layouts into `~/Library/Application Support/deckd/layouts` on first run and logs to `~/Library/Logs/deckd.log`. The menu offers Open surface / Open layouts folder / Restart server / Allow LAN access / Quit; it stays localhost-only until you enable LAN access. This path is not yet verified on hardware.
+
 **NixOS** users can skip all of the above — the flake's home-manager module owns the same user service, and the NixOS module owns the udev rule and `input` group. See [Nix flake, NixOS, and home-manager](#nix-flake-nixos-and-home-manager).
 
 ## Nix flake, NixOS, and home-manager

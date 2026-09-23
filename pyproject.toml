@@ -44,6 +44,12 @@ macos = [
   "pyobjc-framework-Cocoa>=10.0",
   "pyobjc-framework-ApplicationServices>=10.0",
 ]
+packaging = [
+  # PyInstaller freezes the daemon + client into the self-contained
+  # deckd.app bundle (issue #165). macOS-only in practice, but installing
+  # it elsewhere is harmless; the build recipes refuse to run off-mac.
+  "pyinstaller>=6.0",
+]
 uinput = [
   # x86_64 gets the prebuilt evdev-binary wheel. Other arches (notably
   # aarch64) have no evdev-binary wheel, so fall back to the sdist `evdev`,
