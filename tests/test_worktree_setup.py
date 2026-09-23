@@ -11,6 +11,7 @@ is the port bookkeeping around it.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
@@ -22,6 +23,7 @@ SCRIPT = REPO_ROOT / "scripts" / "worktree.sh"
 BASE_DECKD = 8765
 BASE_VITE = 5173
 BASE_E2E = 8975
+BASE_SMOKE = 18765
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -30,9 +32,23 @@ def _git(cwd: Path, *args: str) -> str:
     ).stdout
 
 
-def _run(cwd: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def _run(
+    cwd: Path, *args: str, busy: str = ""
+) -> subprocess.CompletedProcess[str]:
+    """Drive the script with a pinned view of which ports are occupied.
+
+    Without ``DECKD_WORKTREE_BUSY_PORTS`` the allocator probes real sockets,
+    so results would depend on what happens to be listening on the machine
+    running the suite — a developer with a deckd on :8765 would see different
+    offsets than CI. Default to "nothing is busy" and let individual tests
+    declare otherwise.
+    """
     return subprocess.run(
-        ["bash", str(SCRIPT), *args], cwd=cwd, capture_output=True, text=True
+        ["bash", str(SCRIPT), *args],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        env={**os.environ, "DECKD_WORKTREE_BUSY_PORTS": busy},
     )
 
 
@@ -75,6 +91,47 @@ def test_primary_keeps_the_default_ports(primary: Path) -> None:
     assert "primary checkout" in result.stdout
 
 
+def test_primary_moves_off_an_occupied_default_port(primary: Path) -> None:
+    """The primary prefers offset 0 but doesn't own it. On a machine that also
+    runs an installed deckd service, :8765 is already taken before any dev
+    daemon starts, and the main checkout has to move like anyone else —
+    otherwise `just dev` there just fails on address-in-use forever."""
+    result = _run(primary, "adopt", "--no-install", busy=str(BASE_DECKD))
+    assert result.returncode == 0, result.stderr
+
+    assert _dotenv(primary / ".env")["DECKD_PORT"] == str(BASE_DECKD + 1)
+    assert "already taken" in result.stdout
+
+
+def test_primary_offset_leaves_room_for_worktrees(primary: Path) -> None:
+    """A displaced primary claims its offset like any other checkout, so
+    siblings adopted afterwards must route around it rather than collide."""
+    _run(primary, "adopt", "--no-install", busy=str(BASE_DECKD))
+    wt = _add_worktree(primary, "feature-a")
+    _run(wt, "adopt", "--no-install", busy=str(BASE_DECKD))
+
+    assert _dotenv(primary / ".env")["DECKD_PORT"] == str(BASE_DECKD + 1)
+    assert _dotenv(wt / ".env")["DECKD_PORT"] == str(BASE_DECKD + 2)
+
+
+def test_doctor_flags_a_primary_on_an_occupied_default_port(primary: Path) -> None:
+    result = _run(primary, "doctor", busy=str(BASE_DECKD))
+    assert result.returncode == 1
+    assert "already in use" in result.stdout
+    assert "just worktree-adopt" in result.stdout
+
+
+def test_adopt_skips_offsets_whose_ports_are_taken(primary: Path) -> None:
+    """A port can be held by something that isn't a worktree at all — a stray
+    daemon, an unrelated dev server. Offsets are only free if all four of
+    their ports are."""
+    wt = _add_worktree(primary, "feature-a")
+    # Offset 1 is blocked by its smoke port alone; offset 2 by its Vite port.
+    busy = f"{BASE_SMOKE + 1} {BASE_VITE + 2}"
+    assert _run(wt, "adopt", "--no-install", busy=busy).returncode == 0
+    assert _dotenv(wt / ".env")["DECKD_PORT"] == str(BASE_DECKD + 3)
+
+
 def test_adopt_assigns_the_first_free_offset(primary: Path) -> None:
     wt = _add_worktree(primary, "feature-a")
     assert _run(wt, "adopt", "--no-install").returncode == 0
@@ -84,6 +141,7 @@ def test_adopt_assigns_the_first_free_offset(primary: Path) -> None:
         "DECKD_PORT": str(BASE_DECKD + 1),
         "VITE_PORT": str(BASE_VITE + 1),
         "DECKD_E2E_PORT": str(BASE_E2E + 1),
+        "DECKD_SMOKE_PORT": str(BASE_SMOKE + 1),
     }
 
 
@@ -193,6 +251,20 @@ def test_adopt_wires_envrc_to_the_primary_flox_env(primary: Path) -> None:
     envrc = (wt / ".envrc").read_text()
     assert f'flox activate -d "{primary}"' in envrc
     assert "use flox" in envrc  # local .flox/ still wins if one appears
+
+
+def test_envrc_adds_the_worktree_venv_to_path(primary: Path) -> None:
+    """flox's [profile] hook that exports $PWD/.venv/bin only runs for an
+    interactive shell, so direnv's non-interactive env dump never carries it.
+    Without this the venv's console scripts (deckd-dev, deckctl) are missing
+    from an activated worktree and `just dev-daemon` fails."""
+    (primary / ".flox").mkdir()
+    wt = _add_worktree(primary, "feature-a")
+    assert _run(wt, "adopt", "--no-install").returncode == 0
+
+    envrc = (wt / ".envrc").read_text()
+    assert "PATH_add .venv/bin" in envrc
+    assert 'export VIRTUAL_ENV="$PWD/.venv"' in envrc
 
 
 def test_adopt_leaves_an_existing_envrc_alone(primary: Path) -> None:

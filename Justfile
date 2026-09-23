@@ -79,12 +79,13 @@ run-daemon-lan:
     VLC_HTTP_PASSWORD=dummy deckd --bind 0.0.0.0 --layouts-dir layouts --verbose
 
 # Default ports, and the knobs that let worktrees coexist. `just worktree-adopt`
-# writes all three into a per-worktree ./.env (loaded above); set them by hand
-# for a one-off. DECKD_E2E_PORT moves the Playwright fixture daemon so two
-# worktrees can run `just test-all` at the same time.
+# writes all four into a per-checkout ./.env (loaded above); set them by hand
+# for a one-off. DECKD_E2E_PORT and DECKD_SMOKE_PORT move the two throwaway
+# test daemons, so two worktrees can run `just test-all` at the same time.
 DECKD_PORT := env_var_or_default("DECKD_PORT", "8765")
 VITE_PORT := env_var_or_default("VITE_PORT", "5173")
 DECKD_E2E_PORT := env_var_or_default("DECKD_E2E_PORT", "8975")
+DECKD_SMOKE_PORT := env_var_or_default("DECKD_SMOKE_PORT", "18765")
 
 # Kill whatever is bound to the two ports we use: the daemon (default :8765)
 # and the Vite dev server (default :5173). Handy when a stale daemon still
@@ -318,9 +319,11 @@ test-client:
 # End-to-end smoke test (boots daemon in-process, fires every action
 # primitive). Uses a stable fixture layout (scripts/smoke_fixtures/)
 # so shipping-layout edits can't break CI (#77). Pass --layouts-dir to
-# point at shipping layouts (or anything else) instead.
+# point at shipping layouts (or anything else) instead. Binds DECKD_SMOKE_PORT
+# (default :18765, well away from any live daemon) so two worktrees can run
+# it concurrently.
 smoke:
-    python -u scripts/smoke.py
+    DECKD_SMOKE_PORT={{DECKD_SMOKE_PORT}} python -u scripts/smoke.py
 
 # Check whether this shell can create a uinput scroll device.
 check-uinput:
@@ -404,8 +407,14 @@ watch-focus-once:
     python -u scripts/watch_focus.py --once
 
 # Hit /health.
+#
+# These four all target DECKD_PORT — i.e. *this* checkout's daemon. Without
+# that, deckctl's own default (:8765) would answer from whatever holds the
+# default port, which on a machine running an installed deckd service is the
+# prod daemon rather than the dev one you just started. To aim at another
+# instance deliberately: `DECKD_PORT=8765 just status`.
 status:
-    deckctl status
+    deckctl --port {{DECKD_PORT}} status
 
 # Hit /diag (issue #70): one-shot machine-readable snapshot of the
 # daemon's focus, input, layouts, sessions, and MPRIS state. Open-auth,
@@ -414,14 +423,14 @@ status:
 diag:
     #!/usr/bin/env bash
     set -euo pipefail
-    deckctl diag
+    deckctl --port {{DECKD_PORT}} diag
 
 # Hit /layouts (issue #70): enumeration of loaded layouts and safe
 # widget summaries (no action bodies).
 layouts:
     #!/usr/bin/env bash
     set -euo pipefail
-    deckctl layouts
+    deckctl --port {{DECKD_PORT}} layouts
 
 # Hit /metrics (issue #71): Prometheus text-format scrape. Open-auth
 # and stdlib-only on the server side; pipe into ``head`` or
@@ -429,7 +438,7 @@ layouts:
 metrics:
     #!/usr/bin/env bash
     set -euo pipefail
-    deckctl metrics
+    deckctl --port {{DECKD_PORT}} metrics
 
 # Run the Nix flake checks: builds packages.deckd and the focus-watcher
 # bundles, evaluates the NixOS + home-manager modules, unit-tests the

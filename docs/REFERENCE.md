@@ -86,13 +86,14 @@ deckctl [--host HOST] [--port PORT] [--password PASSWORD] <command>
 
 ### Development ports
 
-Read by the Justfile, and written per-worktree into a gitignored `./.env` by `just worktree-adopt` (see [ONBOARDING.md](ONBOARDING.md#worktrees-git-worktree)). An explicit variable overrides the `.env`.
+Read by the Justfile, and written per-worktree into a gitignored `./.env` by `just worktree-adopt` (see [ONBOARDING.md](ONBOARDING.md#worktrees-git-worktree)). An explicit variable overrides the `.env`. The primary checkout also gets a `.env` if its defaults are already taken — e.g. by an installed deckd service.
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `DECKD_PORT` | `8765` | Daemon port for every `dev-*` / `run-*` recipe, and the pair `just kill` frees. |
+| `DECKD_PORT` | `8765` | Daemon port for every `dev-*` / `run-*` recipe, `deckctl` in `status` / `diag` / `layouts` / `metrics`, and the pair `just kill` frees. |
 | `VITE_PORT` | `5173` | Vite dev-server port. When overridden, `--strictPort` is dropped so Vite can fall through. |
 | `DECKD_E2E_PORT` | `8975` | Playwright fixture daemon, so two worktrees can run `just test-all` at once. |
+| `DECKD_SMOKE_PORT` | `18765` | In-process `just smoke` server, so two worktrees can smoke-test at once. |
 
 ## Authentication
 

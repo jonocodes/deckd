@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -54,32 +55,40 @@ class FakeScrollSink:
         pass
 
 
+# Port for the throwaway in-process server. Fixed high port by default so the
+# smoke run never touches a live daemon; overridable so two worktrees can run
+# `just smoke` (or `just test-all`) at once — see
+# docs/ONBOARDING.md#worktrees-git-worktree.
+PORT = int(os.environ.get("DECKD_SMOKE_PORT", "18765"))
+BASE = f"http://127.0.0.1:{PORT}"
+
+
 async def main(layouts_dir: Path) -> None:
     print(f"starting server (layouts: {layouts_dir})...", flush=True)
     server = Server(
         layouts_dir=layouts_dir,
         host="127.0.0.1",
-        port=18765,
+        port=PORT,
         scroll=ScrollController(FakeScrollSink()),
     )
     runner = web.AppRunner(server.app)
     await runner.setup()
-    site = web.TCPSite(runner, "127.0.0.1", 18765)
+    site = web.TCPSite(runner, "127.0.0.1", PORT)
     await site.start()
     print("server up", flush=True)
     try:
         print("hitting health...", flush=True)
         async with ClientSession() as http:
-            async with http.get("http://127.0.0.1:18765/health") as r:
+            async with http.get(f"{BASE}/health") as r:
                 body = await r.json()
                 print("health:", body, flush=True)
 
             # /reload
-            async with http.post("http://127.0.0.1:18765/reload") as r:
+            async with http.post(f"{BASE}/reload") as r:
                 print("reload:", await r.json(), flush=True)
 
         print("connecting ws...", flush=True)
-        async with websockets.connect("ws://127.0.0.1:18765/ws", open_timeout=2, close_timeout=2) as ws:
+        async with websockets.connect(f"ws://127.0.0.1:{PORT}/ws", open_timeout=2, close_timeout=2) as ws:
             print("ws open", flush=True)
             first = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
             print("first:", first["type"], [w["id"] for w in first["widgets"]])

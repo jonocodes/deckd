@@ -168,7 +168,8 @@ just worktree-adopt
 harness (Paseo, Cursor) or a plain `git worktree add` made it, and this claims
 it afterwards. It is idempotent, so it's also the repair command. It:
 
-1. assigns the lowest free port offset and writes it to a gitignored `./.env`;
+1. assigns the lowest free port offset and writes it to a gitignored `./.env`
+   (the primary prefers offset 0, but moves off it if those ports are taken);
 2. writes an `.envrc` that resolves the **primary** checkout's flox
    environment (only if the primary itself uses direnv/flox — the repo doesn't
    prescribe either), and runs `direnv allow`;
@@ -186,43 +187,99 @@ just worktree-create B # git worktree add ../deckd-B on a new branch, then adopt
 
 #### Ports
 
-The one genuinely shared resource is the host's port space. Every worktree
-gets an offset applied to all three bases at once, so its ports stay mentally
+The one genuinely shared resource is the host's port space. Every checkout
+gets an offset applied to all four bases at once, so its ports stay mentally
 grouped:
 
-| offset | `DECKD_PORT` | `VITE_PORT` | `DECKD_E2E_PORT` | who |
-| --- | --- | --- | --- | --- |
-| 0 | 8765 | 5173 | 8975 | the primary checkout, always |
-| 1 | 8766 | 5174 | 8976 | first adopted worktree |
-| 2 | 8767 | 5175 | 8977 | second, and so on |
+| offset | `DECKD_PORT` | `VITE_PORT` | `DECKD_E2E_PORT` | `DECKD_SMOKE_PORT` | who |
+| --- | --- | --- | --- | --- | --- |
+| 0 | 8765 | 5173 | 8975 | 18765 | the primary checkout, *if the defaults are free* |
+| 1 | 8766 | 5174 | 8976 | 18766 | first adopted checkout |
+| 2 | 8767 | 5175 | 8977 | 18767 | second, and so on |
 
-The primary keeps the defaults and never needs a `.env`, so nothing about the
-main checkout changes. `.env` is loaded automatically by every recipe
-(`set dotenv-load` in the Justfile), so `just dev`, `just kill`, and
-`just test-all` all target the current worktree with no env-var juggling. An
-explicit variable still wins for a one-off: `DECKD_PORT=9000 just dev`.
+The primary prefers offset 0 and normally needs no `.env` at all, so on a
+machine with no installed deckd nothing about the main checkout changes. It
+does **not** own offset 0 though: if something already holds `:8765` — almost
+always an installed deckd service — `worktree-adopt` moves the primary to a
+free offset like any other checkout, and says so. Delete its `.env` and
+re-adopt to move back once the port frees up.
+
+An offset is only free when *all four* of its ports are, so a stray process on
+one port pushes the whole group along rather than producing a half-working
+checkout.
+
+`.env` is loaded automatically by every recipe (`set dotenv-load` in the
+Justfile), so `just dev`, `just kill`, `just smoke`, and `just test-all` all
+target the current checkout with no env-var juggling. An explicit variable
+still wins for a one-off: `DECKD_PORT=9000 just dev`.
 
 - `DECKD_PORT` becomes `deckd-dev`'s `--port` (`dev-daemon`, `dev-daemon-lan`,
-  `dev`, `dev-lan`).
+  `dev`, `dev-lan`) — and `deckctl`'s `--port` in `just status`, `diag`,
+  `layouts`, and `metrics`, so those report on *this* checkout's daemon rather
+  than whatever holds the default port.
 - `VITE_PORT` becomes Vite's `--port`; when it differs from 5173 the recipe
   drops `--strictPort` so Vite falls through if the port is busy, and sets
-  `DECKD_UPSTREAM` so the `/ws` + `/health` proxy reaches *this* worktree's
+  `DECKD_UPSTREAM` so the `/ws` + `/health` proxy reaches *this* checkout's
   daemon.
-- `DECKD_E2E_PORT` moves the Playwright fixture daemon (and its throwaway
-  layouts dir), so two worktrees can run `just test-all` simultaneously.
-- `just kill` only tears down the current worktree's ports.
+- `DECKD_E2E_PORT` moves the Playwright fixture daemon and its throwaway
+  layouts dir; `DECKD_SMOKE_PORT` moves the in-process smoke server. Together
+  they let two checkouts run `just test-all` simultaneously.
+- `just kill` only tears down the current checkout's ports.
+
+#### Running dev alongside an installed deckd
+
+A machine can run an installed deckd service (systemd/launchd/home-manager)
+and any number of dev instances at once. What's isolated, and what isn't:
+
+**Isolated, no action needed.** Layouts — the service reads
+`~/.config/deckd/layouts`, dev checkouts read their own `./layouts`, so an
+editor save in a dev instance can't touch the service's. Client state — each
+port is a distinct browser origin, so every instance gets its own PWA storage
+and service worker. The password file (`~/.config/deckd/password`) *is*
+shared, which is a convenience rather than a conflict: one password opens
+every instance.
+
+**Handled by the offsets.** Ports, including the primary checkout, per above.
+
+**Not isolated, and can't be.** These act on shared session state, so every
+running daemon competes:
+
+- **Input injection.** Each daemon opens its own uinput device (all named
+  `deckd`) and injects into whatever window currently has focus. Press a
+  button on the service's client and on a dev client and the target app
+  receives both.
+- **MPRIS transport and `dbus:` actions.** Same story — they drive the
+  session's real players and services.
+- **KDE focus (`org.deckd.Focus`).** On KDE the *daemon* owns the bus name,
+  and it requests it with `NameFlag.REPLACE_EXISTING` — so the last daemon to
+  start silently takes focus pushes away from every other one, including the
+  installed service. GNOME is unaffected: there the Shell extension owns the
+  name and daemons only call it, so any number coexist.
+
+In practice: run as many daemons as you like, but only drive *one* client at a
+time, and on KDE expect focus-dependent behaviour to follow the most recently
+started daemon.
 
 #### Toolchain: shared env, per-worktree venv
 
 A worktree has no `.flox/` of its own, and direnv's stdlib `use flox` requires
 a local one — so the generated `.envrc` calls `flox activate -d <primary>`
-directly. flox leaves `$PWD` alone, so the manifest's `$PWD/.venv` profile hook
-still finds *this* worktree's venv. That split is deliberate and load-bearing:
+directly. flox leaves `$PWD` alone, so the toolchain resolves from the primary
+while this worktree's own `.venv` is the one that gets used. That split is
+deliberate and load-bearing:
 
 - **Toolchain is shared** (python, node) — nothing to rebuild per worktree.
 - **The venv is not.** `uv pip install -e .` bakes an absolute path into the
   editable install, so a shared venv would silently point `deckd` at whichever
   worktree installed last.
+
+The manifest's `[profile]` hook is what exports `$PWD/.venv/bin`, but flox
+only sources it for an **interactive** shell — direnv's non-interactive env
+dump never carries it. So the generated `.envrc` adds `.venv/bin` to `PATH`
+(and exports `VIRTUAL_ENV`) itself. Without that, `just dev-daemon` and the
+`deckctl` recipes fail with `deckd-dev: command not found` in an activated
+worktree, even though `.venv/bin/deckd-dev` exists. If you hand-edit `.envrc`,
+keep that block.
 
 Caveats that remain:
 
