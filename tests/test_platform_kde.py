@@ -451,8 +451,15 @@ def test_kde_backend_capabilities_reach_gnome_parity() -> None:
     assert caps == frozenset(
         {"watch_active_app", "watch_windows", "raise_window", "raise_app"}
     )
-    # And the parity is with the GNOME backend it subclasses.
-    assert caps == GnomeShellFocusBackend().capabilities()
+    # Parity with the GNOME backend it subclasses on exactly these four
+    # flags. The GNOME-only session-state pair (``session_lock`` /
+    # ``session_blank``, issue #160) is deliberately NOT inherited: the
+    # GNOME ``org.gnome.ScreenSaver`` probe doesn't exist on KDE, and a
+    # capability whose observer is missing could strand the client in a
+    # lock view it can't clear. KDE's sources are a follow-up.
+    gnome_caps = GnomeShellFocusBackend().capabilities()
+    assert caps <= gnome_caps
+    assert gnome_caps - caps == {"session_lock", "session_blank"}
 
 
 @pytest.mark.asyncio

@@ -36,6 +36,11 @@ async def _run(server: Server) -> None:
     # stays unconditional at the call site. macOS gained the surface
     # in #135 via Quartz CGWindowList.
     server.start_windows_watcher()
+    # Session lock/blank watcher (issue #160). No-op when the backend
+    # lacks the ``session_lock`` / ``session_blank`` capabilities (X11,
+    # headless, macOS until its follow-up) — same shape as the windows
+    # watcher above.
+    server.start_session_state_watcher()
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, server_task.cancel)
@@ -126,6 +131,15 @@ def main() -> None:
         "--no-focus",
         action="store_true",
         help="Disable the focus watcher (serve only the default layout)",
+    )
+    parser.add_argument(
+        "--allow-while-locked",
+        action="store_true",
+        help=(
+            "Keep actions working while the desktop session is locked "
+            "(issue #160 default: locked sessions refuse presses, key/"
+            "type injection, jog, trackpad, and window raising)."
+        ),
     )
     parser.add_argument(
         "--client-dist",
@@ -284,6 +298,7 @@ def main() -> None:
         focus_backend=focus_backend,
         overlay_dir=overlay_dir,
         password=password,
+        allow_while_locked=args.allow_while_locked,
         sensor_manager=default_sensor_manager(),
         media_manager=MediaManager(),
     )

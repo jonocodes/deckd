@@ -13,13 +13,14 @@ the code lacks, or a flag the doc marks ✗, fails here — so a capability
 change must update the table in the same PR, and dishonest advertisement
 (the #133 class) cannot merge.
 
-Scope: only the three compositor-axis capabilities gated by
+Scope: the four compositor-axis capabilities gated by
 ``capabilities()`` (``watch_active_app`` / ``watch_windows`` /
-``raise_window``). The input-injection rows below them are informational
-(no capability flag) and are not checked. See the issue's "Scope /
-decisions" for why. Live-bus verification of the rows is out of scope
-(that's the #129–#131 harness in ``docs/TESTING.md``); this check is
-pure and fast.
+``raise_window`` / the issue-#160 session-state pair
+``session_lock`` / ``session_blank``). The input-injection rows below
+them are informational (no capability flag) and are not checked. See the
+issue's "Scope / decisions" for why. Live-bus verification of the rows is
+out of scope (that's the #129–#131 harness in ``docs/TESTING.md``); this
+check is pure and fast.
 
 macOS is enumerated by advertised flags only — ``MacFocusBackend()``
 constructs without PyObjC and ``capabilities()`` never touches Quartz —
@@ -45,7 +46,13 @@ _DOC = Path(__file__).resolve().parents[1] / "docs" / "PLATFORM-PARITY.md"
 # ``capabilities()``. Keyed by the substring the doc's leading table
 # cell uses to name each row (the ``(`flag`)`` in the "Capability"
 # column).
-_GATED_CAPABILITIES = ("watch_active_app", "watch_windows", "raise_window")
+_GATED_CAPABILITIES = (
+    "watch_active_app",
+    "watch_windows",
+    "raise_window",
+    "session_lock",
+    "session_blank",
+)
 
 # Map each matrix column to the backend that column describes. The value
 # is a substring that uniquely identifies the column header; the backend

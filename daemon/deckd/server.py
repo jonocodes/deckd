@@ -61,7 +61,7 @@ if TYPE_CHECKING:
     from .bind import ResolvedBind
     from .input import KeySink
     from .layouts import Action, Macro, Widget
-    from .platform import AppInfo, PlatformBackend, SensorManager, SensorReading, WindowInfo
+    from .platform import AppInfo, PlatformBackend, SensorManager, SensorReading, SessionState, WindowInfo
 
 from . import PASSWORD_HEADER
 
@@ -569,6 +569,7 @@ class Server:
         focus_backend: "PlatformBackend | None" = None,
         overlay_dir: Path | None = None,
         password: str | None = None,
+        allow_while_locked: bool = False,
         sensor_manager: "SensorManager | None" = None,
         media_manager: MediaManager | None = None,
         mpris_backend: MprisBackend | None = None,
@@ -714,6 +715,18 @@ class Server:
         self._sensor_task: asyncio.Task[None] | None = None
         self._media_task: asyncio.Task[None] | None = None
         self._windows_task: asyncio.Task[None] | None = None
+        self._session_state_task: asyncio.Task[None] | None = None
+        # Session screen awareness (issue #160). The backend may take a
+        # couple of seconds to answer the first poll, so the daemon
+        # opens on "nothing wrong" — which is also what the client's
+        # default reads as when the backend never produces a ``state``
+        # frame (no capability, never a strand).
+        self._session_locked = False
+        self._session_blanked = False
+        # ``--allow-while-locked`` opt-out: keeps today's ungated
+        # behaviour for setups that want remote control to run behind
+        # the shield (e.g. fully scripted kiosks).
+        self._allow_while_locked = allow_while_locked
         self._current_error: str | None = None
         self._deckd_window_focused = False
         # Stage 2 (#120 / #126): last pushed running-windows snapshot,
@@ -1109,7 +1122,146 @@ class Server:
         self._windows_task = asyncio.create_task(self.run_windows_watcher())
         return self._windows_task
 
-    # -- layouts-dir watcher -------------------------------------------------
+    # -- session lock/blank watcher (issue #160) ------------------------------
+    #
+    # Mirrors the windows-watcher shape: one long-running task, one
+    # backend method, capability-gated at start. Started when the
+    # backend advertises *either* half (``session_lock`` /
+    # ``session_blank``); a backend can only ever hold both or neither
+    # today, but the check reads per-flag so a future backend with only
+    # the lock half doesn't drag the other in.
+
+    async def run_session_state_watcher(self) -> None:
+        """Poll the backend's session state and broadcast a
+        :class:`p.StateMessage` on every transition.
+
+        The state is daemon-wide (one desktop), so the broadcast is
+        global chrome: every connected session sees the transition,
+        matching how ``running_windows`` behaves.
+        """
+        if self.focus_backend is None:
+            return
+        if not self._session_state_capable():
+            log.debug("watch_session_state skipped: backend lacks capability")
+            return
+        try:
+            async for state in self.focus_backend.watch_session_state():
+                await self._on_session_state(state)
+        except Exception as exc:
+            log.warning("session-state watcher exited: %s", exc)
+
+    async def _on_session_state(self, state: "SessionState") -> None:
+        """Watch listener: record, emit a diagnostic event, broadcast (#160).
+
+        The event emission is awaited inline so the watcher stays
+        ordered; the websocket broadcast is a task so one slow client
+        can't stall the loop.
+        """
+        locked, blanked = state.locked, state.blanked
+        if locked == self._session_locked and blanked == self._session_blanked:
+            return
+        self._session_locked = locked
+        self._session_blanked = blanked
+        log.info("session state: locked=%s blanked=%s", locked, blanked)
+        try:
+            await self.events.emit(
+                DiagnosticEvent(
+                    name="session_state",
+                    ts=time.time(),
+                    data={"locked": locked, "blanked": blanked},
+                    correlation_id=current_correlation_id(),
+                )
+            )
+        except Exception as exc:  # diagnostics must never gate the state push
+            log.debug("session_state event emit failed: %s", exc)
+        # Broadcast is a task: one slow client can't stall the watcher.
+        asyncio.create_task(
+            self._broadcast_message(p.StateMessage(type="state", locked=locked, blanked=blanked))
+        )
+
+    async def _broadcast_message(self, msg: "p.ServerMessage") -> None:
+        dead: list[Session] = []
+        for session in list(self._sessions):
+            try:
+                await session.send(msg)
+            except (ConnectionResetError, RuntimeError, ConnectionError):
+                dead.append(session)
+        for session in dead:
+            self._sessions.discard(session)
+
+    def _session_state_capable(self) -> bool:
+        """True when the active backend can observe either half of the
+        session's screen state (``session_lock`` / ``session_blank``).
+        The single gate all three entry points share (watcher start,
+        watcher run, connect snapshot) — issue #160."""
+        return bool(
+            self.focus_backend is not None
+            and {"session_lock", "session_blank"} & self.focus_backend.capabilities()
+        )
+
+    def _lock_gate_active(self) -> bool:
+        """True when presses that target the focused window must refuse.
+
+        Only ``locked`` gates the input path — a blanked-but-not-locked
+        session keeps input enabled so the first press wakes the
+        screen (issue #160).
+        """
+        return self._session_locked and not self._allow_while_locked
+
+    async def _refuse_locked(self, session: Session, what: str, primitive: str) -> None:
+        """Record a lock-refused attempt and reply with an error frame.
+
+        Same shape as :meth:`_injection_blocked` (ring-buffer + metric +
+        ``guard_dropped``-class outcome), plus an :class:`p.ErrorMessage`
+        reply so a client that missed the state transition still
+        surfaces something real to the user (#160).
+        """
+        log.info("[gate] refusing %r %s; session locked", what, primitive)
+        self.metrics.record_action(primitive, "lock_dropped")
+        self.recent_actions.add(
+            ActionRecord(
+                ts=time.time(),
+                layout_id=self._current_app_id,
+                widget_id=str(what)[:64],
+                primitive=primitive,
+                outcome="lock_dropped",
+                command_text=None,
+                error="session locked",
+            )
+        )
+        try:
+            await session.send(p.ErrorMessage(type="error", reason="screen_locked"))
+        except (ConnectionResetError, RuntimeError, ConnectionError):
+            pass
+
+    async def push_session_state_snapshot(self, session: Session) -> None:
+        """Replay the current session state to a just-connected client.
+
+        Capability-gated, not unconditional: a daemon whose backend
+        can't observe lock state never knew about the feature, so its
+        "all-false" answer is indistinguishable from *no session-state
+        surface here* — and never sending a frame keeps the client's
+        default (not locked) honest while old tests / clients stay on
+        the two-frame contract they already know.
+        """
+        backend = self.focus_backend
+        if backend is None or not self._session_state_capable():
+            return
+        await session.send(
+            p.StateMessage(
+                type="state",
+                locked=self._session_locked,
+                blanked=self._session_blanked,
+            )
+        )
+
+    def start_session_state_watcher(self) -> asyncio.Task[None] | None:
+        if self._session_state_task is not None or not self._session_state_capable():
+            return None
+        self._session_state_task = asyncio.create_task(
+            self.run_session_state_watcher()
+        )
+        return self._session_state_task
 
     async def run_layouts_watcher(self) -> None:
         """Long-running task: reload layouts when a YAML file in the layouts
@@ -2259,6 +2411,11 @@ class Server:
             # change. A backend without ``watch_windows`` is a silent
             # no-op; the chrome view's empty state is the signal.
             await self.push_running_windows_snapshot(session)
+            # Issue #160: replay the session-state snapshot so a phone
+            # joining mid-lock isn't stuck showing a stale layout. An
+            # unobserving backend answers all-false — the honest
+            # "no session-state surface here".
+            await self.push_session_state_snapshot(session)
             async for raw in ws:
                 if raw.type != WSMsgType.TEXT:
                     continue
@@ -2299,19 +2456,29 @@ class Server:
                 await session.push_current()
             return
         if msg_type == "jog":
+            if self._lock_gate_active():
+                return  # high-frequency scroll: drop, don't flood error frames
             msg = p.JogMessage.model_validate(data)
             self.scroll.jog(msg.id, msg.delta)
             return
         if msg_type == "jog_end":
+            if self._lock_gate_active():
+                return
             jog_end = p.JogEndMessage.model_validate(data)
             self.scroll.jog_end(jog_end.id, jog_end.velocity)
             return
         if msg_type == "pad":
+            if self._lock_gate_active():
+                await self._refuse_locked(session, "pad", "pad")
+                return
             pad = p.PadMessage.model_validate(data)
             if self.key_sink is not None:
                 self.key_sink.emit_pointer(pad.dx, pad.dy)
             return
         if msg_type == "pad_tap":
+            if self._lock_gate_active():
+                await self._refuse_locked(session, "pad_tap", "pad_tap")
+                return
             tap = p.PadTapMessage.model_validate(data)
             if self.key_sink is not None:
                 button = "right" if tap.fingers == 2 else "left"
@@ -2319,6 +2486,9 @@ class Server:
                 self.key_sink.emit_click(button, False)
             return
         if msg_type == "pad_drag":
+            if self._lock_gate_active():
+                await self._refuse_locked(session, "pad_drag", "pad_drag")
+                return
             drag = p.PadDragMessage.model_validate(data)
             if self.key_sink is not None:
                 self.key_sink.emit_click("left", drag.state == "start")
@@ -2327,6 +2497,12 @@ class Server:
             tmsg = p.TypeMessage.model_validate(data)
             if self._injection_blocked(tmsg.text):
                 return
+            # Issue #160: injection lands on the unlock prompt (uinput is a
+            # kernel-level virtual device the shield can't tell from a real
+            # keyboard) — refuse before the sink ever sees it.
+            if self._lock_gate_active():
+                await self._refuse_locked(session, tmsg.text, "type")
+                return
             if self.key_sink is not None:
                 for combo in text_to_combos(tmsg.text):
                     self.key_sink.emit_key(combo)
@@ -2334,6 +2510,9 @@ class Server:
         if msg_type == "key":
             kmsg = p.KeyMessage.model_validate(data)
             if self._injection_blocked(kmsg.combo):
+                return
+            if self._lock_gate_active():
+                await self._refuse_locked(session, kmsg.combo, "key")
                 return
             if self.key_sink is not None:
                 self.key_sink.emit_key(parse_key_combo(kmsg.combo))
@@ -2386,6 +2565,12 @@ class Server:
             await session.push_current()
             return
         if msg_type == "raise_window":
+            if self._lock_gate_active():
+                # Issue #160: raising a window needs focus the shield won't
+                # grant — refuse explicitly so the client surfaces why.
+                raise_msg = p.RaiseWindowMessage.model_validate(data)
+                await self._refuse_locked(session, raise_msg.window_id, "raise")
+                return
             raise_msg = p.RaiseWindowMessage.model_validate(data)
             await self._dispatch_raise_window(raise_msg)
             return
@@ -2476,6 +2661,16 @@ class Server:
 
     async def _dispatch_press(self, session: Session, data: dict) -> None:
         press = p.PressMessage.model_validate(data)
+        # Issue #160: while locked, presses are refused daemon-side —
+        # ``shell:`` / ``url:`` actions are lock-screen bypasses for
+        # arbitrary command execution, and ``key:``/``type:`` subsets of
+        # button macros land on the unlock prompt. The client mirrors
+        # the same policy in its lock takeover; the gate catches a
+        # client that missed the transition. Reply with an
+        # :class:`ErrorMessage` so something real surfaces.
+        if self._lock_gate_active():
+            await self._refuse_locked(session, press.id, "press")
+            return
         widget = self._find_widget(press.id)
         action_widget_id = press.id
         if widget is None and ":" in press.id:
@@ -2868,7 +3063,7 @@ class Server:
             await asyncio.sleep(3600)
 
     async def stop(self) -> None:
-        for task in (self._focus_task, self._windows_task, self._layouts_task, self._sensor_task, self._media_task):
+        for task in (self._focus_task, self._windows_task, self._session_state_task, self._layouts_task, self._sensor_task, self._media_task):
             if task is not None:
                 task.cancel()
                 try:

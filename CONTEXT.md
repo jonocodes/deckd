@@ -76,3 +76,17 @@ _Avoid_: host, listen address, exposed interface
 **Pairing URL**:
 The single `http://<bind-host>:<port>/` URL a phone types into its browser to reach the daemon. Surfaced as the `url` field on `/health` and `/diag`, and prepended above the JSON body of `deckctl status`. Prefers IPv4 over IPv6 so a phone on a typical home LAN doesn't get a `http://[::1]:.../` link it can't resolve. The password gate still has to be cleared by every non-localhost client; the pairing URL is a convenience, not a bypass.
 _Avoid_: connection URL, daemon URL
+
+### Session screen state (issue #160)
+
+**Screen locked**:
+The desktop session requires credentials (GNOME lock, `loginctl lock-session` — detected via the `login1` session's `LockedHint`). The client renders the full lock takeover over focus-targeting surfaces, the app badge reads "Screen locked", and the daemon **refuses** presses, key/type injection, jog/trackpad input, and window raising (with an `error` frame, reason `screen_locked`, recorded as `lock_dropped`). Now playing, settings, and the layout editor keep working. Not the same state as the deckd password gate.
+_Avoid_: sign-in, login gate, password screen
+
+**Sign-in needed**:
+The deckd *client-auth* state: an `unauthorized` socket — the user has to type the deckd shared password. The connection status label and aria-live copy. Reserved wording: "locked" belongs to the session state below, never to the password gate.
+_Avoid_: locked, screen locked, auth screen
+
+**Screen blanked**:
+The session isn't on the screen (GNOME screen blank). Detection and *policy* are deliberately separate: blanking alone (`org.gnome.ScreenSaver.GetActive`) with Automatic Screen Lock off keeps input **enabled** — a press wakes the machine, exactly like poking a real keyboard. Only the soft "Screen asleep — press anything to wake" banner shows. Blanked **and** locked is the lock takeover.
+_Avoid_: screen off, standby, sleep

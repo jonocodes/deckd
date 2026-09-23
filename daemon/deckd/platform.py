@@ -110,6 +110,29 @@ class SensorReading:
     stale: bool = False
 
 
+@dataclass(frozen=True)
+class SessionState:
+    """Two-state session screen awareness (issue #160).
+
+    Two states, not one — the obvious single ``locked: bool`` driven by
+    ``org.gnome.ScreenSaver.GetActive`` is wrong, because that property
+    goes true for a *blank that hasn't locked yet* and stays true forever
+    when Automatic Screen Lock is off (gating input on it would forfeit
+    "wake my desktop from my phone"):
+
+    - ``locked`` — credentials are required (``login1`` ``LockedHint``,
+      which is the cross-DE half and also catches ``loginctl
+      lock-session``). Drives the daemon-side refusal.
+    - ``blanked`` — the session isn't on the screen (``GnomeScreenSaver``
+      ``ActiveChanged`` / ``GetActive``). Drives only the client UI; a
+      blanked-but-not-locked session keeps input enabled so the first
+      press wakes the shield.
+    """
+
+    locked: bool = False
+    blanked: bool = False
+
+
 class SensorSource:
     """Named data source the daemon pushes to the client.
 
@@ -365,6 +388,29 @@ class PlatformBackend:
         the same reason — implementations that own resources override
         this pair together."""
 
+    async def watch_session_state(
+        self, *, interval_s: float = 2.0
+    ) -> AsyncIterator[SessionState]:
+        """Yield a :class:`SessionState` on every locked/blanked transition.
+
+        Only backends that can observe the desktop's lock state
+        (normally the GNOME backend, via ``org.gnome.ScreenSaver`` and
+        the ``login1`` session's ``LockedHint``) override this and
+        advertise the ``session_lock`` / ``session_blank`` capabilities
+        alongside. The default refuses with
+        :class:`UnimplementedCapability`, mirroring
+        :meth:`watch_windows`: the daemon checks the capabilities
+        *before* starting the watcher, so a legacy backend (X11, macOS
+        until its follow-up, headless) never produces a ``state`` frame
+        and the client never strands itself in a lock view it can't
+        clear.
+        """
+        raise UnimplementedCapability(
+            "this backend does not implement watch_session_state",
+            capability="session_lock",
+        )
+        yield  # type: ignore[unreachable]  # make this an async generator for override compat
+
     async def get_active_app(self) -> AppInfo:
         raise NotImplementedError
 
@@ -442,7 +488,24 @@ class GnomeShellFocusBackend(PlatformBackend):
         # ``capabilities()`` back down to focus-only (#133), since it has
         # no KWin-side enumeration/raise implementation to back these
         # flags.
-        return frozenset({"watch_active_app", "watch_windows", "raise_window", "raise_app"})
+        #
+        # Session screen awareness (issue #160) joins here too: GNOME can
+        # observe both halves (``org.gnome.ScreenSaver.GetActive`` for
+        # the blank, ``login1`` ``LockedHint`` for the lock), so both
+        # flags are honest on this backend. A backend that can't observe
+        # lock state must NOT advertise them — the client keys its lock
+        # takeover off the ``state`` frames these caps gate, and no
+        # frame must mean no lock view (never a strand).
+        return frozenset(
+            {
+                "watch_active_app",
+                "watch_windows",
+                "raise_window",
+                "raise_app",
+                "session_lock",
+                "session_blank",
+            }
+        )
 
     async def get_active_app(self) -> AppInfo:
         out = await _run(
@@ -538,6 +601,107 @@ class GnomeShellFocusBackend(PlatformBackend):
             "--object-path", self.OBJECT_PATH, "--method",
             f"{self.INTERFACE}.RaiseApp", identity,
         )
+        return _parse_single_bool_tuple(out)
+
+    async def watch_session_state(
+        self, *, interval_s: float = 2.0
+    ) -> AsyncIterator[SessionState]:
+        """Poll GNOME's blank + lock state and yield on every transition.
+
+        Two gdbus shell-outs per tick — deliberately *poll*, not
+        signal-subscribe: the GNOME native signal pumps for focus and
+        windows arrived later exactly because signal pumps are
+        fragile; here two ``gdbus call``s every couple of seconds is
+        cheap for a desktop daemon, self-healing when the session bus
+        is unreachable, and shares the failure model of every other
+        watcher in this backend (log once, sleep through, keep going).
+
+        Poll cadence is an order of magnitude slower than the focus
+        tick on purpose: lock/blank transitions matter at conversation
+        speed, and a missed transition is self-correcting (the next
+        tick catches it; the client also receives the same state in
+        its connect snapshot).
+        """
+        last: SessionState | None = None
+        while True:
+            try:
+                state = await self._session_state_once()
+            except Exception as exc:  # surface bus failures without killing the watcher
+                log.debug("watch_session_state: %s", exc)
+                state = None
+            if state is not None and state != last:
+                last = state
+                yield state
+            await asyncio.sleep(interval_s)
+
+    async def _session_state_once(self) -> SessionState:
+        blanked = await self._screensaver_active()
+        locked = await self._login_locked_hint()
+        return SessionState(locked=locked, blanked=blanked)
+
+    async def _screensaver_active(self) -> bool:
+        """``org.gnome.ScreenSaver.GetActive`` on the session bus.
+
+        Answers true not only for an actual lock but also for a plain
+        screen blank — callers must pair this with the ``login1``
+        ``LockedHint`` and keep the two states separate (issue #160).
+        Raises :class:`RuntimeError` on failure like every other `_run`-based
+        query; the caller catches and treats it as *not blanked* so a
+        stale/absent ``org.gnome.ScreenSaver`` never gates anything.
+        """
+        out = await _run(
+            "gdbus",
+            "call",
+            "--session",
+            "--dest",
+            "org.gnome.ScreenSaver",
+            "--object-path",
+            "/org/gnome/ScreenSaver",
+            "--method",
+            "org.gnome.ScreenSaver.GetActive",
+        )
+        return _parse_single_bool_tuple(out)
+
+    async def _login_locked_hint(self) -> bool:
+        """``login1`` session ``LockedHint`` on the *system* bus.
+
+        The cross-DE lock signal (caught by GNOME's own lock, KDE, and
+        ``loginctl lock-session`` alike). The session id comes from
+        ``XDG_SESSION_ID`` — the daemon is a per-user session service,
+        so the variable the desktop session exports is authoritative;
+        when absent (rare: ssh-sourced invocation) the call can't be
+        made and the lock half stays false.
+        """
+        session_id = os.environ.get("XDG_SESSION_ID", "")
+        if not session_id:
+            # One-shot warning: the *lock* half silently reading False is
+            # the worst degradation this backend can take — RemoteOps
+            # that shell out would keep running behind a locked screen.
+            if not getattr(self, "_warned_no_session_id", False):
+                self._warned_no_session_id = True
+                log.warning(
+                    "XDG_SESSION_ID unset; login1 LockedHint (session lock "
+                    "detection, issue #160) cannot resolve — the daemon "
+                    "will treat this session as never-locked. Start deckd "
+                    "from inside the desktop session."
+                )
+            return False
+        try:
+            out = await _run(
+                "gdbus",
+                "call",
+                "--system",
+                "--dest",
+                "org.freedesktop.login1",
+                "--object-path",
+                f"/org/freedesktop/login1/session/{session_id}",
+                "--method",
+                "org.freedesktop.DBus.Properties.Get",
+                "org.freedesktop.login1.Session",
+                "LockedHint",
+            )
+        except RuntimeError:
+            return False
         return _parse_single_bool_tuple(out)
 
 
@@ -945,6 +1109,14 @@ class KdeFocusBackend(GnomeShellFocusBackend):
         So the honest surface is now the full set. Matches the
         ``## Capability matrix`` in ``docs/PLATFORM-PARITY.md``;
         ``tests/test_platform_parity.py`` enforces the agreement.
+
+        Notably NOT re-added: the GNOME backend's ``session_lock`` /
+        ``session_blank`` flags (issue #160). On KDE the GNOME
+        ``org.gnome.ScreenSaver`` probe doesn't exist; the cross-DE
+        half (``login1`` ``LockedHint``) + ``org.freedesktop.ScreenSaver``
+        dropping-in is a follow-up, and advertising sessions state
+        without a working observer could strand the client in a lock
+        view it can't clear.
         """
         return frozenset(
             {"watch_active_app", "watch_windows", "raise_window", "raise_app"}

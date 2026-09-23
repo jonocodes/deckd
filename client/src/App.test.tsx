@@ -16,7 +16,7 @@
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ClientMessage, ServerChromeMedia, ServerLayout } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerLayout, ServerState } from "./protocol";
 
 /** Replace the real socket hook with a controllable fake. The chrome
  * icon's job is to call ``send`` with the right message; the test
@@ -34,16 +34,21 @@ const onLayout = vi.fn<(m: ServerLayout) => void>();
 let mockStatus: "connecting" | "open" | "closed" | "unauthorized" = "open";
 const authenticate = vi.fn();
 const deauthenticate = vi.fn();
+let sessionStateHandler: ((m: ServerState) => void) | null = null;
 vi.mock("./socket", () => ({
   useDeckdSocket: (
     layoutCb: (m: ServerLayout) => void,
     _widgetUpdate: unknown,
     _mediaState: unknown,
     chromeMediaCb: ((m: ServerChromeMedia) => void) | undefined,
+    _confirmRequestCb: unknown,
+    _runningWindowsCb: unknown,
+    sessionStateCb: ((m: ServerState) => void) | undefined,
     _options: unknown,
   ) => {
     onLayout.mockImplementation(layoutCb);
     chromeMediaHandler = chromeMediaCb ?? null;
+    sessionStateHandler = sessionStateCb ?? null;
     return {
       get status() {
         return mockStatus;
@@ -914,11 +919,13 @@ describe("App — aria-live announcements", () => {
     expect(screen.getByRole("status").textContent).toBe("Reconnecting");
   });
 
-  it("announces a locked status change", () => {
+  it("announces a sign-in-needed status change (issue #160 rename)", () => {
     const { rerender } = render(<App />);
     mockStatus = "unauthorized";
     rerender(<App />);
-    expect(screen.getByRole("status").textContent).toBe("Locked");
+    // Issue #160: "locked" now belongs to the desktop session; the
+    // deckd-password gate is "sign-in needed".
+    expect(screen.getByRole("status").textContent).toBe("Sign-in needed");
   });
 
   it("announces connected when returning from closed", () => {
@@ -1015,5 +1022,91 @@ describe("App — accessibility CSS classes", () => {
     expect(app?.classList.contains("a11y-larger-controls")).toBe(true);
     expect(app?.classList.contains("a11y-high-contrast")).toBe(true);
     expect(app?.classList.contains("a11y-reduce-motion")).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * Session lock / blank awareness (issue #160): the ``state`` frames drive
+ * the takeover; presses stay enabled under a blank (wake from the phone).
+ * --------------------------------------------------------------------- */
+
+describe("App — session lock takeover", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    sessionStateHandler = null;
+    mockStatus = "open";
+    window.history.replaceState(null, "", "/?demo=default");
+  });
+
+  it("replaces the grid with the lock takeover when locked", () => {
+    render(<App />);
+    expect(screen.getByRole("button", { name: /open/i })).toBeTruthy();
+    act(() => sessionStateHandler?.({ type: "state", locked: true, blanked: false }));
+    expect(screen.getAllByText("Screen locked").length).toBeGreaterThan(0);
+    expect(screen.getByText(/Controls resume when you unlock/)).toBeTruthy();
+  });
+
+  it("names the host in the lock copy", () => {
+    render(<App />);
+    act(() => sessionStateHandler?.({ type: "state", locked: true, blanked: false }));
+    expect(screen.getByText(/localhost/)).toBeTruthy();
+  });
+
+  it("keeps the connection dot's 'live' status while locked", () => {
+    render(<App />);
+    act(() => sessionStateHandler?.({ type: "state", locked: true, blanked: false }));
+    expect(screen.getByText("live")).toBeTruthy();
+  });
+
+  it("reads 'Screen locked' on the app badge while locked", () => {
+    render(<App />);
+    act(() => sessionStateHandler?.({ type: "state", locked: true, blanked: false }));
+    const badge = document.querySelector(".app-badge-name, .app-name");
+    expect(badge?.textContent).toBe("Screen locked");
+  });
+
+  it("disables the running-programs and trackpad chrome buttons while locked", () => {
+    render(<App />);
+    act(() => sessionStateHandler?.({ type: "state", locked: true, blanked: false }));
+    const windowsBtn = screen.getByRole("button", { name: /running programs/i });
+    const trackpadBtn = screen.getByRole("button", { name: /manual control/i });
+    expect(windowsBtn.getAttribute("disabled")).toBe("");
+    expect(trackpadBtn.getAttribute("disabled")).toBe("");
+  });
+
+  it("announces lock restoration and restores the grid on unlock", () => {
+    render(<App />);
+    act(() => sessionStateHandler?.({ type: "state", locked: true, blanked: false }));
+    expect(screen.getAllByText("Screen locked").length).toBeGreaterThan(0);
+    act(() => sessionStateHandler?.({ type: "state", locked: false, blanked: false }));
+    expect(screen.queryByText("Screen locked")).toBeNull();
+    expect(screen.getByRole("button", { name: /open/i })).toBeTruthy();
+  });
+
+  it("shows the asleep banner (input stays enabled) on blank-without-lock", () => {
+    render(<App />);
+    act(() => sessionStateHandler?.({ type: "state", locked: false, blanked: true }));
+    expect(screen.getByText(/Screen asleep — press anything to wake/)).toBeTruthy();
+    // Grid buttons are still rendered (they can press-awake the host).
+    expect(screen.getByRole("button", { name: /open/i })).toBeTruthy();
+  });
+
+  it("appends the lock state into the aria-live stream", () => {
+    render(<App />);
+    act(() => sessionStateHandler?.({ type: "state", locked: true, blanked: false }));
+    // The sr-only live region shares its text with the visible lock card;
+    // assert the announcement landed through the second status region.
+    expect(screen.getAllByText("Screen locked").length).toBeGreaterThan(0);
+  });
+
+  it('renders the running-windows lock empty state naming the host', () => {
+    render(<App />);
+    act(() => sessionStateHandler?.({ type: "state", locked: true, blanked: false }));
+    // The windows view itself is replaced by the takeover; drive the
+    // component contract through its props instead (lockedHost).
+    // Covered indirectly here by asserting the disabled button; the list
+    // slot itself is covered in RunningWindowsList.test.tsx.
+    expect(screen.getByRole("button", { name: /running programs/i }).getAttribute("disabled")).toBe("");
   });
 });

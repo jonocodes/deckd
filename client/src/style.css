@@ -661,6 +661,56 @@ button:focus-visible {
 }
 
 /* ---------------------------------------------------------------------------
+ * Session lock / blank takeover (issue #160): while the desktop session
+ * is locked, focus-targeting surfaces (grid, trackpad, running-windows)
+ * are replaced in full by the lock card. The connection dot stays green
+ * (the socket is fine — reusing the disconnected treatment would send
+ * people off to restart the daemon). ``lock-banner`` is the soft
+ * "asleep, press anything to wake" strip for the blank-without-lock
+ * state, where input deliberately stays enabled.
+ * ------------------------------------------------------------------------- */
+.lock-takeover {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 100%;
+  color: var(--text, #e6ebf0);
+  text-align: center;
+  padding: 20px;
+}
+
+.lock-takeover-glyph {
+  opacity: 0.6;
+}
+
+.lock-takeover-title {
+  font-size: calc(20px * var(--label-scale, 1));
+  font-weight: 700;
+}
+
+.lock-takeover-sub {
+  color: #8a96a3;
+  font-size: calc(14px * var(--label-scale, 1));
+  max-width: 30ch;
+}
+
+.lock-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: #1b222a;
+  border: 1px dashed #2a333d;
+  color: #8a96a3;
+  font-size: calc(13px * var(--label-scale, 1));
+  margin: 8px auto 0 auto;
+}
+
+/* ---------------------------------------------------------------------------
  * Settings / diagnostics view: read-only key/value list shown in place of
  * the grid when the chrome settings button is toggled on.
  * ------------------------------------------------------------------------- */
