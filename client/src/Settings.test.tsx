@@ -19,8 +19,13 @@ function renderSettings(overrides: Partial<Parameters<typeof Settings>[0]> = {})
     onWakeLockChange: () => {},
     contentScale: 1,
     onContentScaleChange: () => {},
-    cellSize: 100,
-    onCellSizeChange: () => {},
+    minCell: 100,
+    onMinCellChange: () => {},
+    maxCell: 240,
+    onMaxCellChange: () => {},
+    overflow: null,
+    onOverflowChange: () => {},
+    layoutOverflow: "clip" as const,
     jogWidth: 1,
     onJogWidthChange: () => {},
     bottomScale: 1,
@@ -53,6 +58,24 @@ describe("Settings — log out", () => {
     const btn = screen.getByRole("button", { name: /log out/i });
     fireEvent.click(btn);
     expect(onDeauthenticate).toHaveBeenCalledOnce();
+  });
+});
+
+describe("Settings — layout help link", () => {
+  afterEach(cleanup);
+
+  it("opens the explainer when the link is wired", () => {
+    const onOpenHelp = vi.fn();
+    renderSettings({ onOpenHelp });
+    fireEvent.click(screen.getByRole("button", { name: /how layout and sizing work/i }));
+    expect(onOpenHelp).toHaveBeenCalledOnce();
+  });
+
+  it("hides the link when no handler is supplied", () => {
+    renderSettings();
+    expect(
+      screen.queryByRole("button", { name: /how layout and sizing work/i }),
+    ).toBeNull();
   });
 });
 

@@ -24,6 +24,7 @@ let
         ../client/index.html
         ../client/gallery.html
         ../client/screenshots.html
+        ../client/help.html
         ../client/package.json
         ../client/package-lock.json
         ../client/tsconfig.json

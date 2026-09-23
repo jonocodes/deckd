@@ -17,7 +17,9 @@ const INVERT_KEY = "deckd.scrollInvert";
 const PAD_SENS_KEY = "deckd.trackpadSensitivity";
 const WAKE_LOCK_KEY = "deckd.wakeLock";
 const CONTENT_SCALE_KEY = "deckd.contentScale";
-const CELL_SIZE_KEY = "deckd.cellSize";
+const MIN_CELL_KEY = "deckd.minCell";
+const MAX_CELL_KEY = "deckd.maxCell";
+const OVERFLOW_KEY = "deckd.overflow";
 const JOG_WIDTH_KEY = "deckd.jogWidth";
 const BOTTOM_SCALE_KEY = "deckd.bottomScale";
 const LABEL_SCALE_KEY = "deckd.labelScale";
@@ -32,16 +34,19 @@ export const SCROLL_SCALE_MIN = 1;
 export const SCROLL_SCALE_MAX = 20;
 export const SCROLL_SCALE_DEFAULT = 3;
 
-// Target cell size (ADR-0010): the square cell edge (CSS px) the grid packs
-// columns around. Cells grow/shrink to fill the width evenly (no separate max
-// cap — more columns simply fit as width grows, keeping the result near the
-// target). A client-side per-device preference (ADR-0006, like content scale)
-// — never authored in the layout YAML. Icon/label size derives from the
-// resolved cell size via CSS container units.
-export const CELL_SIZE_MIN = 64;
-export const CELL_SIZE_MAX = 240;
-export const CELL_SIZE_DEFAULT = 100;
+// The readability floor and the comfort cap (ADR-0011). Cell size itself is
+// *derived* from the viewport — neither value sets it directly. The floor
+// decides how many buttons are visible: under `clip` the client trims the deck
+// until every cell can honour it, so it is a promise rather than a hint. The
+// cap only stops a nearly-empty deck from becoming a few enormous buttons.
+// Client-side per-device preferences (ADR-0006), never authored in layout
+// YAML. Icon/label size derives from the resolved cell size via CSS container
+// units.
+export const CELL_SIZE_MIN = 48;
+export const CELL_SIZE_MAX = 400;
 export const CELL_SIZE_STEP = 4;
+export const MIN_CELL_DEFAULT = 100;
+export const MAX_CELL_DEFAULT = 240;
 
 // Secondary nudge applied on top of the cell-derived content size (issue #37):
 // 1.0 leaves the derived look, and the user can bias icon/label a little
@@ -115,7 +120,7 @@ function roundToStep(n: number, step: number): number {
 }
 
 export function clampCellSize(n: number): number {
-  if (!Number.isFinite(n)) return CELL_SIZE_DEFAULT;
+  if (!Number.isFinite(n)) return MIN_CELL_DEFAULT;
   return roundToStep(Math.max(CELL_SIZE_MIN, Math.min(CELL_SIZE_MAX, n)), CELL_SIZE_STEP);
 }
 
@@ -197,31 +202,87 @@ function readInitialContentScale(): number {
 }
 
 
-function readInitialCellSize(): number {
+function readInitialCell(urlParam: string, key: string, fallback: number): number {
   try {
-    const url = new URLSearchParams(window.location.search).get("cellSize");
+    const url = new URLSearchParams(window.location.search).get(urlParam);
     if (url !== null) return clampCellSize(Number(url));
-    const stored = localStorage.getItem(CELL_SIZE_KEY);
+    const stored = localStorage.getItem(key);
     if (stored !== null) return clampCellSize(Number(stored));
   } catch {
     // see readInitialScale.
   }
-  return CELL_SIZE_DEFAULT;
+  return fallback;
 }
 
-/** The target cell size (ADR-0010): the square cell edge (CSS px) the grid
- * packs columns around. Client-side per-device preference; drives the
- * ``--cell-size`` CSS var and is fed to the reflow maths. */
-export function useCellSize() {
-  const [size, setSizeState] = useState<number>(readInitialCellSize);
+/** What to do when the deck exceeds what the viewport holds at the floor
+ * (ADR-0011). ``null`` means "follow the layout" and is the default: the
+ * layout's ``overflow`` field supplies the starting policy, and the user may
+ * override it per device. This is the one sizing decision that is genuinely
+ * both a layout concern and a device concern, so both get a say. */
+export type OverflowPreference = "clip" | "shrink-to-fit" | null;
 
-  const setSize = useCallback((n: number) => {
-    const clamped = clampCellSize(n);
-    setSizeState(clamped);
-    safeSet(CELL_SIZE_KEY, String(clamped));
+function readInitialOverflow(): OverflowPreference {
+  try {
+    const url = new URLSearchParams(window.location.search).get("overflow");
+    const raw = url ?? localStorage.getItem(OVERFLOW_KEY);
+    if (raw === "clip" || raw === "shrink-to-fit") return raw;
+  } catch {
+    // see readInitialScale.
+  }
+  return null;
+}
+
+/** The device's override of the layout's overflow policy. */
+export function useOverflowPreference() {
+  const [overflow, setOverflowState] = useState<OverflowPreference>(readInitialOverflow);
+
+  const setOverflow = useCallback((next: OverflowPreference) => {
+    setOverflowState(next);
+    try {
+      if (next === null) localStorage.removeItem(OVERFLOW_KEY);
+      else localStorage.setItem(OVERFLOW_KEY, next);
+    } catch {
+      // see safeSet.
+    }
   }, []);
 
-  return { size, setSize };
+  return { overflow, setOverflow };
+}
+
+/** The readability floor and the comfort cap (ADR-0011). The pair lives in one
+ * hook because the two must stay ordered: pushing the floor past the cap drags
+ * the cap up with it, and vice versa, so the band can never invert. */
+export function useCellBand() {
+  const [minCell, setMinState] = useState<number>(() =>
+    readInitialCell("minCell", MIN_CELL_KEY, MIN_CELL_DEFAULT),
+  );
+  const [maxCell, setMaxState] = useState<number>(() =>
+    readInitialCell("maxCell", MAX_CELL_KEY, MAX_CELL_DEFAULT),
+  );
+
+  const setMinCell = useCallback((n: number) => {
+    const clamped = clampCellSize(n);
+    setMinState(clamped);
+    safeSet(MIN_CELL_KEY, String(clamped));
+    setMaxState((currentMax) => {
+      if (currentMax >= clamped) return currentMax;
+      safeSet(MAX_CELL_KEY, String(clamped));
+      return clamped;
+    });
+  }, []);
+
+  const setMaxCell = useCallback((n: number) => {
+    const clamped = clampCellSize(n);
+    setMaxState(clamped);
+    safeSet(MAX_CELL_KEY, String(clamped));
+    setMinState((currentMin) => {
+      if (currentMin <= clamped) return currentMin;
+      safeSet(MIN_CELL_KEY, String(clamped));
+      return clamped;
+    });
+  }, []);
+
+  return { minCell, maxCell, setMinCell, setMaxCell };
 }
 
 function readInitialJogWidth(): number {

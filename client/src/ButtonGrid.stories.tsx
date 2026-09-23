@@ -5,7 +5,7 @@ import { DEMO_LAYOUTS } from "./demo";
 import {
   CELL_SIZE_MIN,
   CELL_SIZE_MAX,
-  CELL_SIZE_DEFAULT,
+  MIN_CELL_DEFAULT,
   CELL_SIZE_STEP,
   CONTENT_SCALE_DEFAULT,
   CONTENT_SCALE_MAX,
@@ -20,7 +20,7 @@ const noop = () => {};
 type Controls = { contentScale: number; cellSize: number };
 
 const controls = {
-  args: { contentScale: CONTENT_SCALE_DEFAULT, cellSize: CELL_SIZE_DEFAULT },
+  args: { contentScale: CONTENT_SCALE_DEFAULT, cellSize: MIN_CELL_DEFAULT },
   argTypes: {
     contentScale: {
       control: { type: "range" as const, min: CONTENT_SCALE_MIN, max: CONTENT_SCALE_MAX, step: CONTENT_SCALE_STEP },
@@ -56,7 +56,7 @@ function Frame({
         scrollInvert={false}
         onMediaCommand={noop}
         showKeyHints={showKeyHints}
-        cellSize={cellSize}
+        minCell={cellSize}
       />
     </div>
   );

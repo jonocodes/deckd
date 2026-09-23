@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Info as InfoIcon } from "lucide-react";
 import { useOrientation } from "./orientation";
 import {
   BOTTOM_SCALE_MAX,
@@ -22,6 +23,7 @@ import {
   SCROLL_SCALE_MAX,
   SCROLL_SCALE_MIN,
 } from "./settings-store";
+import type { OverflowPreference } from "./settings-store";
 import type { ServerLayout } from "./protocol";
 
 type SocketStatus = "connecting" | "open" | "closed";
@@ -39,8 +41,18 @@ type Props = {
   onWakeLockChange: (v: boolean) => void;
   contentScale: number;
   onContentScaleChange: (n: number) => void;
-  cellSize: number;
-  onCellSizeChange: (n: number) => void;
+  minCell: number;
+  onMinCellChange: (n: number) => void;
+  maxCell: number;
+  onMaxCellChange: (n: number) => void;
+  /** The device's override of the layout's overflow policy; null follows the
+   * layout (ADR-0011). */
+  overflow: OverflowPreference;
+  onOverflowChange: (next: OverflowPreference) => void;
+  /** What the active layout asks for, shown so "Follow layout" isn't opaque. */
+  layoutOverflow: "clip" | "shrink-to-fit";
+  /** Open the in-app explainer for the sizing controls below (ADR-0011). */
+  onOpenHelp?: () => void;
   jogWidth: number;
   onJogWidthChange: (n: number) => void;
   bottomScale: number;
@@ -83,8 +95,14 @@ export function Settings({
   onWakeLockChange,
   contentScale,
   onContentScaleChange,
-  cellSize,
-  onCellSizeChange,
+  minCell,
+  onMinCellChange,
+  maxCell,
+  onMaxCellChange,
+  overflow,
+  onOverflowChange,
+  layoutOverflow,
+  onOpenHelp,
   jogWidth,
   onJogWidthChange,
   bottomScale,
@@ -192,25 +210,73 @@ export function Settings({
 
       <h2 className="settings-title settings-title-sub">Display</h2>
       <div className="settings-controls">
-        {/* Cell size target (ADR-0010): the square cell edge (CSS px) the grid
-            packs columns around. Cells fill the width evenly — more columns fit
-            as the viewport widens, keeping the result near the target. */}
+        {/* The cell-size band (ADR-0011). Cell size is derived from the
+            viewport, so these two don't set it — the floor decides how many
+            buttons are visible, the cap stops a sparse deck from ballooning. */}
         <div className="settings-control">
-          <span className="settings-control-label">Cell size</span>
+          <span className="settings-control-label">Min button size</span>
           <input
             type="range"
             className="slider"
-            aria-label="Cell size"
+            aria-label="Min button size"
             min={CELL_SIZE_MIN}
             max={CELL_SIZE_MAX}
             step={CELL_SIZE_STEP}
-            value={cellSize}
-            onChange={(e) => onCellSizeChange(Number(e.target.value))}
+            value={minCell}
+            onChange={(e) => onMinCellChange(Number(e.target.value))}
           />
           <span className="settings-control-value" aria-live="polite">
-            {cellSize}px
+            {minCell}px
           </span>
         </div>
+        <div className="settings-control">
+          <span className="settings-control-label">Max button size</span>
+          <input
+            type="range"
+            className="slider"
+            aria-label="Max button size"
+            min={CELL_SIZE_MIN}
+            max={CELL_SIZE_MAX}
+            step={CELL_SIZE_STEP}
+            value={maxCell}
+            onChange={(e) => onMaxCellChange(Number(e.target.value))}
+          />
+          <span className="settings-control-value" aria-live="polite">
+            {maxCell}px
+          </span>
+        </div>
+        {/* The one sizing decision that is both a layout concern and a device
+            concern (ADR-0011), so both get a say: the layout ships a default
+            and this overrides it. "Follow layout" clears the override. */}
+        <div className="settings-control settings-control-choice">
+          <span className="settings-control-label">When there&rsquo;s no room</span>
+          <div className="settings-choice" role="group" aria-label="When there's no room">
+            {(
+              [
+                [null, "Follow layout", `Layout says: ${layoutOverflow === "clip" ? "hide extras" : "shrink buttons"}`],
+                ["clip", "Hide extras", "Keep buttons at least the minimum size"],
+                ["shrink-to-fit", "Shrink buttons", "Show every button, however small"],
+              ] as const
+            ).map(([value, label, hint]) => (
+              <button
+                key={label}
+                type="button"
+                className="settings-choice-option"
+                aria-pressed={overflow === value}
+                title={hint}
+                onClick={() => onOverflowChange(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {onOpenHelp ? (
+          <button type="button" className="settings-help-link" onClick={onOpenHelp}>
+            <InfoIcon size={15} aria-hidden />
+            <span>How layout and sizing work</span>
+          </button>
+        ) : null}
         <div className="settings-control">
           <span className="settings-control-label">Content nudge</span>
           <input

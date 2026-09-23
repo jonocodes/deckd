@@ -4,7 +4,7 @@ import { DEMO_LAYOUTS } from "./demo";
 import {
   CELL_SIZE_MIN,
   CELL_SIZE_MAX,
-  CELL_SIZE_DEFAULT,
+  MIN_CELL_DEFAULT,
   CELL_SIZE_STEP,
 } from "./settings-store";
 
@@ -15,7 +15,7 @@ const noop = () => {};
 type Controls = { cellSize: number };
 
 const controls = {
-  args: { cellSize: CELL_SIZE_DEFAULT },
+  args: { cellSize: MIN_CELL_DEFAULT },
   argTypes: {
     cellSize: {
       control: { type: "range" as const, min: CELL_SIZE_MIN, max: CELL_SIZE_MAX, step: CELL_SIZE_STEP },
@@ -52,7 +52,7 @@ function Device({
           onJogEnd={noop}
           scrollScale={3}
           scrollInvert={false}
-          cellSize={cellSize}
+          minCell={cellSize}
         />
       </div>
       <span style={{ fontSize: 12, color: "#8a96a3" }}>

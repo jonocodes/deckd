@@ -55,7 +55,7 @@ class LayoutMessage(BaseModel):
     # Overflow behaviour for the client's reflow (ADR-0010): ``clip`` drops
     # trailing widgets off-surface, ``shrink-to-fit`` shrinks cells below the
     # band floor so all fit. Relayed from the layout's ``overflow`` field.
-    overflow: Literal["clip", "shrink-to-fit"] = "shrink-to-fit"
+    overflow: Literal["clip", "shrink-to-fit"] = "clip"
     jogstrip_enabled: bool = True
     # Chrome app badge (ADR-0007), relayed opaquely. The client renders a
     # branded pill in the always-on bottom strip from these three:

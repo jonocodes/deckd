@@ -10,7 +10,7 @@ import type { MediaReading } from "./media-store";
 import type { MeterReading } from "./meter-store";
 import { computeReflow } from "./reflow";
 import type { OverflowMode } from "./reflow";
-import { CELL_SIZE_DEFAULT } from "./settings-store";
+import { MAX_CELL_DEFAULT, MIN_CELL_DEFAULT } from "./settings-store";
 import { onActivate } from "./a11y";
 
 /** Gap between cells, in CSS pixels. Kept in sync with ``.grid { gap }`` so the
@@ -24,15 +24,20 @@ type Props = {
   onJogEnd: (id: string, velocity: number) => void;
   scrollScale: number;
   scrollInvert: boolean;
-  /** Overflow behaviour when widgets exceed the capacity the band yields at
-   * the current viewport (ADR-0010): ``clip`` (default) leaves trailing
-   * widgets off-surface; ``shrink-to-fit`` shrinks cells below the floor so
-   * every widget fits. Comes from the layout's ``overflow`` field. */
+  /** What to do when the deck exceeds what the viewport holds at ``minCell``
+   * (ADR-0011): ``clip`` (default) trims trailing widgets so the survivors
+   * keep their size; ``shrink-to-fit`` keeps every widget by letting cells
+   * fall below the floor. Resolved by ``App`` from the device preference,
+   * falling back to the layout's ``overflow`` field. */
   overflow?: OverflowMode;
-  /** Cell size target (client-side device preference, ADR-0010). Columns are
-   * packed around this value; cells fill the width evenly. Defaults let
-   * harnesses that don't wire settings still render sensibly. */
-  cellSize?: number;
+  /** Readability floor (client-side device preference, ADR-0011): the smallest
+   * cell the user accepts. Decides how many widgets are visible under
+   * ``clip``; ignored entirely under ``shrink-to-fit``. Defaults let harnesses
+   * that don't wire settings still render sensibly. */
+  minCell?: number;
+  /** Comfort cap (client-side device preference, ADR-0011): stops a nearly
+   * empty deck from becoming a few enormous buttons. */
+  maxCell?: number;
   /** Latest reading per sensor source. Missing sources render with no
    * value (bar empty, "—" numeric). Stale readings show the bar at
    * its last position with a dimmed readout. */
@@ -102,8 +107,9 @@ export function ButtonGrid({
   onJogEnd,
   scrollScale,
   scrollInvert,
-  overflow = "shrink-to-fit",
-  cellSize = CELL_SIZE_DEFAULT,
+  overflow = "clip",
+  minCell = MIN_CELL_DEFAULT,
+  maxCell = MAX_CELL_DEFAULT,
   meterReadings,
   labelScale,
   mediaStates,
@@ -112,35 +118,62 @@ export function ButtonGrid({
 }: Props) {
   const [gridRef, size] = useMeasuredSize();
 
-  // Cells occupied by flow widgets (spans counted), used by shrink-to-fit to
-  // estimate the row count. ``full`` widgets leave the flow, so they don't add.
-  const totalUnits = widgets.reduce((sum, w) => {
-    if (w.size === "full") return sum;
+  // Cells occupied by flow widgets (spans counted). ``full`` widgets leave the
+  // flow, so they don't add.
+  const unitsOf = (w: Widget) => {
+    if (w.size === "full") return 0;
     const [cw, ch] = spanOf(w);
-    return sum + cw * ch;
-  }, 0);
+    return cw * ch;
+  };
+  const totalUnits = widgets.reduce((sum, w) => sum + unitsOf(w), 0);
 
-  const { cols, cellPx } = computeReflow({
+  const { cols, rows, cellPx, visibleUnits } = computeReflow({
     containerWidth: size.width,
     containerHeight: size.height,
-    cellSize,
+    minCell,
+    maxCell,
     gap: GRID_GAP,
     totalUnits,
     mode: overflow,
   });
 
+  // ADR-0011: ``clip`` trims the deck rather than letting CSS crop it, so the
+  // surface never shows a row sliced in half at the fold. Strict order, so the
+  // prefix stops at the first widget that would not fit whole — we never skip
+  // a wide widget to squeeze in a later narrow one. ``full`` widgets cost no
+  // units and so always survive the trim.
+  const shown =
+    visibleUnits >= totalUnits
+      ? widgets
+      : (() => {
+          let used = 0;
+          return widgets.filter((w) => {
+            const units = unitsOf(w);
+            if (used + units > visibleUnits) return false;
+            used += units;
+            return true;
+          });
+        })();
+
   // Square, fixed tracks: every column is ``cellPx`` wide and every implicit
   // row is ``cellPx`` tall, so a cell is square and an ``[w, h]`` span is
-  // exactly ``w`` columns by ``h`` rows (gaps included). Leftover width is
-  // centered and leftover height sits below (both set in ``.grid`` CSS).
+  // exactly ``w`` columns by ``h`` rows (gaps included). CSS grid's own
+  // auto-placement performs the fill-and-wrap, and ``justify-content: center``
+  // on a fixed track list centres the block while leaving short rows washed
+  // left against it — exactly the distribution ADR-0011 specifies.
   const gridStyle: CSSProperties = {
     gridTemplateColumns: `repeat(${cols}, ${cellPx}px)`,
     gridAutoRows: `${cellPx}px`,
+    // Centre the block vertically too, but only when it genuinely fits: a
+    // spanned widget can wrap into more rows than the maths predicted, and
+    // centring an overflowing grid would crop its top as well as its bottom.
+    alignContent:
+      rows * cellPx + Math.max(0, rows - 1) * GRID_GAP <= size.height ? "center" : "start",
   };
 
   return (
     <div ref={gridRef} className="grid" style={gridStyle}>
-      {widgets.map((w) => {
+      {shown.map((w) => {
         const full = w.size === "full";
         const [cw, ch] = spanOf(w);
         // Cap a span at the current column count so a too-wide widget doesn't

@@ -1,0 +1,418 @@
+/* Styles for the user-facing layout help page (<ReflowHelp>).
+ *
+ * Imported by BOTH the app (main.tsx) and the standalone help.html entry, so
+ * the two mounts look identical without the standalone page having to pull in
+ * the whole app stylesheet. Everything is namespaced `help-` for that reason.
+ *
+ * The base block below duplicates style.css intentionally: help.html does not
+ * import style.css (it would ship the entire app CSS for one page), so it
+ * needs its own reset. In the app these declarations are simply redundant. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: #12161b;
+  color: #e6e9ef;
+  font-family: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* The app stylesheet zeroes button chrome globally; help.html does not load
+   it, so repeat the reset here. A bare element selector (not `.help button`)
+   so it stays weaker than the component classes below, which are what give
+   the close, preset and dialog buttons their look. */
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Keyboard focus ring, standalone only: in-app, style.css draws the app's own
+   focus treatment and a second outline here would show through as a double. */
+.help-page button:focus-visible,
+.help-page input:focus-visible {
+  outline: 2px solid #7dd3fc;
+  outline-offset: 2px;
+}
+
+.help-page {
+  height: 100dvh;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+/* The card: fills the app surface in-app, bounds the scrolling page standalone. */
+.help {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  height: 100%;
+  padding: 18px 16px 28px;
+  border: 1px solid #2a333d;
+  border-radius: 16px;
+  background: #11161b;
+  color: #e6e9ef;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.help-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.help-title {
+  flex: 1;
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.help-close {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  margin: -4px -4px 0 0;
+  border-radius: 999px;
+  background: #1b222a;
+  color: #e6e9ef;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.help-lede {
+  margin: 0 0 4px;
+  color: #8a96a3;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.help-section {
+  padding: 18px 0;
+  border-top: 1px solid #232a32;
+}
+
+.help-heading {
+  margin: 0 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #7dd3fc;
+}
+
+.help-body {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #c7ced8;
+}
+
+.help-body b,
+.help-note b {
+  color: #e6e9ef;
+}
+
+/* --- sandbox ------------------------------------------------------------ */
+
+.help-stage {
+  display: flex;
+  justify-content: center;
+  margin: 6px 0 12px;
+}
+
+/* The drawing area. 1px inset shadow instead of a border so the frame's
+   content box is exactly `width`, matching the pixels computeReflow saw. */
+.help-frame {
+  position: relative;
+  background: #0f141a;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px #2a333d;
+  overflow: hidden;
+}
+
+.help-grid {
+  display: grid;
+}
+
+.help-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  min-height: 0;
+  border-radius: 3px;
+  background: #1b222a;
+  box-shadow: inset 0 0 0 1px #2a333d;
+  color: #6b7785;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+
+/* Button 1 is called out so sequence is visible as the grid reshapes. */
+.help-cell-first {
+  background: #14364a;
+  box-shadow: inset 0 0 0 1px #7dd3fc;
+  color: #7dd3fc;
+  font-weight: 700;
+}
+
+.help-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 26px;
+  height: 26px;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.help-resize::after {
+  content: "";
+  position: absolute;
+  right: 5px;
+  bottom: 5px;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid #7dd3fc;
+  border-bottom: 2px solid #7dd3fc;
+}
+
+.help-stats {
+  margin: 0 0 12px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: #8a96a3;
+}
+
+.help-stats b {
+  color: #e6e9ef;
+}
+
+.help-hidden {
+  color: #e0a33e;
+}
+
+.help-presets {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.help-presets button {
+  padding: 6px 14px;
+  border: 1px solid #2a333d;
+  border-radius: 999px;
+  background: #1b222a;
+  color: #e6e9ef;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.help-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.help-control {
+  display: grid;
+  grid-template-columns: minmax(64px, 22%) 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.help-control-label {
+  font-size: 12px;
+  color: #8a96a3;
+  letter-spacing: 0.03em;
+}
+
+.help-control-value {
+  min-width: 46px;
+  text-align: right;
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #7dd3fc;
+}
+
+/* Mirrors `.slider` in style.css; kept separate so help.html doesn't need the
+   app stylesheet. */
+.help-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #14364a, #2a333d);
+  outline: none;
+  touch-action: pan-x;
+  cursor: pointer;
+}
+
+.help-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #7dd3fc;
+  border: 2px solid #101418;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.help-slider::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #7dd3fc;
+  border: 2px solid #101418;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.help-note {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border-left: 2px solid #e0a33e;
+  background: #161b16;
+  border-radius: 0 8px 8px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #b6bec9;
+}
+
+/* --- illustrated examples ---------------------------------------------- */
+
+.help-pair {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 18px;
+}
+
+.help-example {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.help-example figcaption {
+  max-width: 150px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #8a96a3;
+}
+
+.help-example-on figcaption {
+  color: #7dd3fc;
+}
+
+.help-you {
+  color: #7dd3fc;
+  font-weight: 700;
+}
+
+/* Clips the scaled-down drawing; layout inside runs at true pixels. */
+.help-diagram {
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.help-footer {
+  margin-top: 18px;
+  border-left: 0;
+  background: transparent;
+  padding: 0;
+  color: #8a96a3;
+}
+
+/* --- apply-on-close dialog --------------------------------------------- */
+
+.help-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(4, 8, 12, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.help-dialog {
+  width: 100%;
+  max-width: 340px;
+  padding: 20px;
+  border: 1px solid #2a333d;
+  border-radius: 16px;
+  background: #11161b;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.help-dialog-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.help-dialog-body {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #c7ced8;
+}
+
+.help-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.help-dialog-button {
+  padding: 9px 16px;
+  border: 1px solid #2a333d;
+  border-radius: 999px;
+  background: #1b222a;
+  color: #e6e9ef;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.help-dialog-primary {
+  border-color: #7dd3fc;
+  background: #7dd3fc;
+  color: #06222e;
+}

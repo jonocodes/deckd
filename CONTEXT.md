@@ -14,9 +14,17 @@ _Avoid_: profile, config, scene
 A single interactive element placed on a page. Current kinds: `button`, `jogstrip`, `trackpad`, `meter`, `stats`, `media`. A media widget is a composite surface with internal playback, position, volume, and metadata controls.
 _Avoid_: control, element, tile
 
-**Grid placement**:
-The `[x, y, w, h]` coordinates that position a widget within a page's grid. Columns and rows are defined by the layout; coordinates are zero-based.
-_Avoid_: position, slot, cell
+**Reflow**:
+How the client turns a layout's ordered widget list into a grid (ADR-0011). Recomputed live from the measured area on every resize and orientation change. Three stages: **capacity** (how many cells are visible at the user's minimum button size), **shape** (the row count that makes cells largest, which fixes the column count and cell size), and **distribution** (rows fill to the column count, the remainder landing in the bottom row). There are no authored coordinates and no transpose.
+_Avoid_: layout pass, packing, tiling
+
+**Cell**:
+One square slot in the reflowed grid. A widget occupies one cell by default, or `size: [w, h]` cells. Cell size is *derived* from the viewport — never authored in layout YAML, and not set directly by any setting.
+_Avoid_: tile, square, grid item
+
+**Capacity**:
+How many whole cells the current area holds at the user's minimum button size. Under `clip` the deck is trimmed to it, so trailing widgets can be hidden; under `shrink-to-fit` it is never consulted.
+_Avoid_: budget, limit, max widgets
 
 **Chrome**:
 The persistent UI shell that surrounds every layout. Consists of a bottom strip (app badge, connection indicator, manual control mode button, settings button) and a right-side jogstrip. Chrome is always visible; layouts render in the remaining space. The right-side jogstrip can be disabled per-layout with `jogstrip: false`. The bottom strip's app badge optionally carries a `display_name`, a `theme` colour, and an `icon` (ADR-0007) the daemon relays opaquely from the active layout.

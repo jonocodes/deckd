@@ -160,9 +160,12 @@ def test_blank_widget_rejects_content_fields(field: str, value: object) -> None:
         Widget.model_validate({"id": "gap", "kind": "blank", field: value})
 
 
-def test_layout_overflow_defaults_to_shrink_to_fit() -> None:
+def test_layout_overflow_defaults_to_clip() -> None:
+    """ADR-0011 flipped this from shrink-to-fit: under shrink-to-fit the
+    visible count is always every widget, so the client never consults the
+    reader's minimum button size and that preference goes dead."""
     layout = Layout.model_validate({"match": ["x"], "widgets": []})
-    assert layout.overflow == "shrink-to-fit"
+    assert layout.overflow == "clip"
 
 
 def test_layout_accepts_shrink_to_fit_overflow() -> None:

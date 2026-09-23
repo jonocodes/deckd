@@ -19,7 +19,7 @@ import { GripVertical, Minimize, Maximize, Columns2, Plus, Minus } from "lucide-
 import { computeReflow } from "./reflow";
 import type { OverflowMode } from "./reflow";
 import type { Widget, WidgetSize } from "./protocol";
-import { CELL_SIZE_DEFAULT } from "./settings-store";
+import { CELL_SIZE_MAX, MIN_CELL_DEFAULT } from "./settings-store";
 import { Icon } from "./Icon";
 
 const GRID_GAP = 8;
@@ -252,7 +252,7 @@ export function EditorCanvas({
   onWidgetChange,
   onOverflowChange,
   onSelectWidget,
-  cellSize = CELL_SIZE_DEFAULT,
+  cellSize = MIN_CELL_DEFAULT,
 }: Props) {
   const [gridRef, size] = useMeasuredSize();
   const [previewWidth, setPreviewWidth] = useState(0);
@@ -294,7 +294,8 @@ export function EditorCanvas({
   const { cols, cellPx } = computeReflow({
     containerWidth: displayWidth,
     containerHeight: size.height,
-    cellSize,
+    minCell: cellSize,
+    maxCell: CELL_SIZE_MAX,
     gap: GRID_GAP,
     totalUnits,
     mode: overflow,

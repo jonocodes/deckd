@@ -382,12 +382,19 @@ button:focus-visible {
  * Layout grid area (chrome-excluded)
  * ------------------------------------------------------------------------- */
 
-/* Ordered-list reflow grid (ADR-0010). ``grid-template-columns`` and
-   ``grid-auto-rows`` are set inline by ``ButtonGrid`` from the measured width
-   and the cell-size band: fixed square ``cellPx`` tracks. Leftover width is
-   centered (``justify-content``) and leftover height sits below the top-
-   aligned rows (``align-content: start``) — horizontal fill only, by choice.
-   ``overflow: hidden`` realises ``clip`` overflow: rows past the fold are cut. */
+/* Ordered-list reflow grid (ADR-0011). ``grid-template-columns``,
+   ``grid-auto-rows`` and ``align-content`` are all set inline by
+   ``ButtonGrid`` from the measured area: fixed square ``cellPx`` tracks.
+
+   ``justify-content: center`` on a *fixed* track list is what produces the
+   specified alignment for free — the whole grid block is centred, while a
+   short final row stays washed left against the block's left edge, so columns
+   line up. Vertical centring is inline rather than here because it is
+   conditional (start, not centre, when a spanned widget wraps the block past
+   the available height — centring an overflowing grid would crop its top too).
+
+   ``overflow: hidden`` is now only a backstop: ADR-0011's ``clip`` trims the
+   widget list to whole cells before render, so rows are never sliced. */
 .grid {
   display: grid;
   gap: 8px;
@@ -3465,4 +3472,65 @@ select.prop-field-input {
 .confirm-modal-cancel:focus-visible {
   outline: 2px solid #4b91f1;
   outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Settings: segmented choice control (ADR-0011's "when there's no room").
+ * A radio group in behaviour, buttons in markup so the pressed state is
+ * conveyed by ``aria-pressed`` and the whole row stays thumb-sized.
+ * ------------------------------------------------------------------------- */
+
+.settings-control-choice {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.settings-choice {
+  display: flex;
+  gap: 6px;
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
+.settings-choice-option {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 9px;
+  border: 1px solid #2a333d;
+  background: #1b222a;
+  color: #e6e9ef;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  touch-action: manipulation;
+}
+
+.settings-choice-option[aria-pressed="true"] {
+  background: #59b8df;
+  border-color: #59b8df;
+  color: #06222e;
+  font-weight: 700;
+}
+
+/* Link into the in-app layout explainer (ADR-0011), sitting under the sizing
+   controls it describes. Full-width so it reads as a row, not a stray button. */
+.settings-help-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #2a333d;
+  border-radius: 9px;
+  background: #161c22;
+  color: #7dd3fc;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.settings-help-link:hover {
+  border-color: #3a4a57;
 }

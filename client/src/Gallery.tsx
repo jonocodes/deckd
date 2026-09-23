@@ -3,7 +3,7 @@ import { DEMO_NAMES } from "./demo";
 import {
   CELL_SIZE_MIN,
   CELL_SIZE_MAX,
-  CELL_SIZE_DEFAULT,
+  MIN_CELL_DEFAULT,
   CELL_SIZE_STEP,
 } from "./settings-store";
 
@@ -76,7 +76,7 @@ export function Gallery() {
   const [demo, setDemo] = useState(DEMO_NAMES[0] ?? "firefox");
   const [orientation, setOrientation] = useState<Orientation>("landscape");
   const [keyHints, setKeyHints] = useState(false);
-  const [cellSize, setCellSize] = useState(CELL_SIZE_DEFAULT);
+  const [cellSize, setCellSize] = useState(MIN_CELL_DEFAULT);
 
   return (
     <div className="gallery">
