@@ -75,10 +75,23 @@ export default defineConfig({
       // Ladle reuses this vite config but supplies its own stories entry,
       // so guard on ``VITE_LADLE_APP_ID`` (set by the ladle CLI) to avoid
       // clobbering Ladle's input and ending up with 0 stories built.
-      ...(process.env.VITE_LADLE_APP_ID ? {} : { input: ["index.html", "gallery.html", "screenshots.html"] }),
+      ...(process.env.VITE_LADLE_APP_ID
+        ? {}
+        : { input: ["index.html", "gallery.html", "screenshots.html", "help.html"] }),
       output: {
         manualChunks(id) {
           if (id.includes("node_modules/simple-icons")) return "simple-icons";
+          // React in its own chunk, so an entry that renders no icons doesn't
+          // get the whole glyph set pulled in beside it. Without this the
+          // standalone help page (help.html) preloads lucide simply because
+          // React happened to land in the same chunk.
+          if (
+            id.includes("node_modules/react/") ||
+            id.includes("node_modules/react-dom/") ||
+            id.includes("node_modules/scheduler/")
+          ) {
+            return "react";
+          }
           if (id.includes("node_modules/lucide-react")) return "lucide";
         },
       },

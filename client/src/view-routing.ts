@@ -1,4 +1,11 @@
-export type View = "layout" | "trackpad" | "settings" | "nowplaying" | "editor" | "windows";
+export type View =
+  | "layout"
+  | "trackpad"
+  | "settings"
+  | "nowplaying"
+  | "editor"
+  | "windows"
+  | "help";
 
 const PATH_BY_VIEW: Record<View, string> = {
   layout: "/",
@@ -7,6 +14,9 @@ const PATH_BY_VIEW: Record<View, string> = {
   nowplaying: "/now-playing",
   editor: "/editor",
   windows: "/windows",
+  // Reached from Settings rather than an always-on chrome button: it explains
+  // the sizing controls sitting right above the link (ADR-0011).
+  help: "/help",
 };
 
 const VIEW_BY_PATH: Record<string, View> = Object.fromEntries(

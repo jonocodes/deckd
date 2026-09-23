@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { capacityUnits, computeReflow, HARD_FLOOR } from "./reflow";
+import { capacityUnits, computeReflow, fillRows, HARD_FLOOR } from "./reflow";
 import type { OverflowMode } from "./reflow";
 
 const GAP = 8;
@@ -23,37 +23,26 @@ const reflow = (
     mode: o.mode ?? "clip",
   });
 
-/** The rows plain fill-wrapping produces at a given column count. */
-const rowsOf = (visible: number, cols: number) => {
-  const rows: number[] = [];
-  let left = visible;
-  while (left > 0) {
-    rows.push(Math.min(cols, left));
-    left -= cols;
-  }
-  return rows;
-};
-
 describe("shape — the row count is the free variable", () => {
   it("five widgets on a roomy landscape area wrap 3+2, never 4+1", () => {
     const r = reflow(700, 480, 5);
     expect([r.cols, r.rows]).toEqual([3, 2]);
-    expect(rowsOf(r.visibleUnits, r.cols)).toEqual([3, 2]);
+    expect(fillRows(r.visibleUnits, r.cols)).toEqual([3, 2]);
   });
 
   it("a narrow portrait area prefers more rows because cells come out bigger", () => {
     // 2 columns of 148px beats 3 columns of 96px on a 304x578 area.
     const portrait = reflow(304, 578, 5);
     expect(portrait.cols).toBe(2);
-    expect(rowsOf(portrait.visibleUnits, portrait.cols)).toEqual([2, 2, 1]);
+    expect(fillRows(portrait.visibleUnits, portrait.cols)).toEqual([2, 2, 1]);
     expect(portrait.cellPx).toBeGreaterThan(reflow(304, 578, 5).cellPx - 1);
   });
 
   it("the same widgets reshape rather than resize when the area turns", () => {
     const portrait = reflow(334, 782, 8);
     const landscape = reflow(756, 328, 8);
-    expect(rowsOf(portrait.visibleUnits, portrait.cols)).toEqual([2, 2, 2, 2]);
-    expect(rowsOf(landscape.visibleUnits, landscape.cols)).toEqual([4, 4]);
+    expect(fillRows(portrait.visibleUnits, portrait.cols)).toEqual([2, 2, 2, 2]);
+    expect(fillRows(landscape.visibleUnits, landscape.cols)).toEqual([4, 4]);
     expect(portrait.visibleUnits).toBe(landscape.visibleUnits);
   });
 
@@ -67,20 +56,35 @@ describe("distribution — fill to the column count, remainder at the bottom", (
   it("puts the shortfall in the bottom row alone", () => {
     // 10 units over 4 rows is 3+3+3+1, not the max-balanced 3+3+2+2.
     const r = reflow(656, 1071, 10);
-    expect(rowsOf(r.visibleUnits, r.cols)).toEqual([3, 3, 3, 1]);
+    expect(fillRows(r.visibleUnits, r.cols)).toEqual([3, 3, 3, 1]);
   });
 
   it("always yields exactly `rows` non-empty rows, and the bottom row is never the widest", () => {
     for (let units = 1; units <= 200; units++) {
       for (const [w, h] of [[334, 782], [756, 328], [1092, 758], [200, 200]]) {
         const r = reflow(w, h, units, { mode: "shrink-to-fit" });
-        const rows = rowsOf(r.visibleUnits, r.cols);
+        const rows = fillRows(r.visibleUnits, r.cols);
         expect(rows.length).toBe(r.rows);
         expect(rows.every((n) => n >= 1)).toBe(true);
         expect(rows.reduce((a, b) => a + b, 0)).toBe(r.visibleUnits);
         expect(Math.max(...rows)).toBe(rows[0]);
       }
     }
+  });
+});
+
+describe("fillRows — the row breakdown the help page reports", () => {
+  it("fills each row to the column count, remainder alone at the bottom", () => {
+    expect(fillRows(10, 3)).toEqual([3, 3, 3, 1]);
+    expect(fillRows(5, 3)).toEqual([3, 2]);
+    expect(fillRows(8, 4)).toEqual([4, 4]);
+    expect(fillRows(3, 5)).toEqual([3]);
+    expect(fillRows(0, 3)).toEqual([]);
+  });
+
+  it("never emits a zero-width row and guards a non-positive column count", () => {
+    expect(fillRows(7, 0)).toEqual([1, 1, 1, 1, 1, 1, 1]);
+    expect(fillRows(7, -2)).toEqual([1, 1, 1, 1, 1, 1, 1]);
   });
 });
 

@@ -45,6 +45,7 @@ import type {
 import { EDITOR_VIEW_ID, MPRIS_VIEW_ID, WINDOWS_VIEW_ID } from "./protocol";
 import { isTypingTarget, onActivate } from "./a11y";
 import { Editor } from "./Editor";
+import { ReflowHelp } from "./ReflowHelp";
 import { ConfirmModal } from "./ConfirmModal";
 import type { Widget, ConfirmRequestMessage } from "./protocol";
 import { wireWindowsToServer } from "./protocol";
@@ -542,6 +543,7 @@ export function App() {
     if (view === "trackpad") return "Manual control";
     if (view === "nowplaying") return "Now playing";
     if (view === "settings") return "Settings";
+    if (view === "help") return "Button layout help";
     if (view === "editor") return "Layout editor";
     if (view === "windows") return "Running programs";
     if (layout?.error) return "Layout error";
@@ -770,6 +772,22 @@ export function App() {
               onReduceMotionChange={reduceMotion.setEnabled}
               showKeyHints={showKeyHints.enabled}
               onShowKeyHintsChange={showKeyHints.setEnabled}
+              onOpenHelp={() => navigate("help")}
+            />
+          ) : view === "help" ? (
+            // User-facing explainer for the grid geometry (ADR-0011). Opened
+            // from Settings and seeded with this device's live band, so the
+            // sandbox starts where the user actually is. Applying writes the
+            // same two preferences the Settings sliders write.
+            <ReflowHelp
+              minCell={effectiveBand.minCell}
+              maxCell={effectiveBand.maxCell}
+              overflow={overflowPref.overflow ?? layout?.overflow ?? "clip"}
+              onApply={({ minCell, maxCell }) => {
+                effectiveBand.setMinCell(minCell);
+                effectiveBand.setMaxCell(maxCell);
+              }}
+              onClose={() => navigate("settings")}
             />
           ) : view === "editor" ? (
             <Editor
@@ -952,9 +970,9 @@ export function App() {
         </Tooltip>
         <Tooltip ref={settingsBtnRef} label="settings">
           <button
-            className={`chrome-btn${view === "settings" ? " chrome-btn-active" : ""}`}
+            className={`chrome-btn${view === "settings" || view === "help" ? " chrome-btn-active" : ""}`}
             aria-label="settings"
-            aria-pressed={view === "settings"}
+            aria-pressed={view === "settings" || view === "help"}
             onPointerDown={() => {
               viewOriginRef.current = settingsBtnRef.current;
               lastChromeFocus.current = settingsBtnRef.current;

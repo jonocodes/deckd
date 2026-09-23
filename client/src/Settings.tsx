@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Info as InfoIcon } from "lucide-react";
 import { useOrientation } from "./orientation";
 import {
   BOTTOM_SCALE_MAX,
@@ -50,6 +51,8 @@ type Props = {
   onOverflowChange: (next: OverflowPreference) => void;
   /** What the active layout asks for, shown so "Follow layout" isn't opaque. */
   layoutOverflow: "clip" | "shrink-to-fit";
+  /** Open the in-app explainer for the sizing controls below (ADR-0011). */
+  onOpenHelp?: () => void;
   jogWidth: number;
   onJogWidthChange: (n: number) => void;
   bottomScale: number;
@@ -99,6 +102,7 @@ export function Settings({
   overflow,
   onOverflowChange,
   layoutOverflow,
+  onOpenHelp,
   jogWidth,
   onJogWidthChange,
   bottomScale,
@@ -267,6 +271,12 @@ export function Settings({
             ))}
           </div>
         </div>
+        {onOpenHelp ? (
+          <button type="button" className="settings-help-link" onClick={onOpenHelp}>
+            <InfoIcon size={15} aria-hidden />
+            <span>How layout and sizing work</span>
+          </button>
+        ) : null}
         <div className="settings-control">
           <span className="settings-control-label">Content nudge</span>
           <input

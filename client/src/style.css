@@ -3511,3 +3511,26 @@ select.prop-field-input {
   color: #06222e;
   font-weight: 700;
 }
+
+/* Link into the in-app layout explainer (ADR-0011), sitting under the sizing
+   controls it describes. Full-width so it reads as a row, not a stray button. */
+.settings-help-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid #2a333d;
+  border-radius: 9px;
+  background: #161c22;
+  color: #7dd3fc;
+  font-size: 12px;
+  letter-spacing: 0.03em;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.settings-help-link:hover {
+  border-color: #3a4a57;
+}

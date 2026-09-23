@@ -73,6 +73,22 @@ export function capacityUnits(
   return Math.max(0, cols) * Math.max(0, rows);
 }
 
+/** Split ``visibleUnits`` into rows of at most ``cols``, filling each row left
+ * to right so the remainder lands in the bottom row alone (ADR-0011 stage 3).
+ * Returns one count per non-empty row: 10 units at 3 columns -> ``[3, 3, 3, 1]``.
+ *
+ * The renderer gets this for free from CSS grid auto-placement (``ButtonGrid``
+ * just hands ``cols`` to ``grid-template-columns``). This helper exists so
+ * surfaces that draw their own rectangles — the user-facing help page — can
+ * report the row shape without re-deriving a rule the layout already owns. */
+export function fillRows(visibleUnits: number, cols: number): number[] {
+  const units = Math.max(0, Math.floor(visibleUnits));
+  const perRow = Math.max(1, Math.floor(cols));
+  const rows: number[] = [];
+  for (let left = units; left > 0; left -= perRow) rows.push(Math.min(perRow, left));
+  return rows;
+}
+
 type Shape = { cols: number; rows: number; cell: number };
 
 /** Choose the row count that makes cells largest, and report the column count

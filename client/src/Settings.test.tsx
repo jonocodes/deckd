@@ -61,6 +61,24 @@ describe("Settings — log out", () => {
   });
 });
 
+describe("Settings — layout help link", () => {
+  afterEach(cleanup);
+
+  it("opens the explainer when the link is wired", () => {
+    const onOpenHelp = vi.fn();
+    renderSettings({ onOpenHelp });
+    fireEvent.click(screen.getByRole("button", { name: /how layout and sizing work/i }));
+    expect(onOpenHelp).toHaveBeenCalledOnce();
+  });
+
+  it("hides the link when no handler is supplied", () => {
+    renderSettings();
+    expect(
+      screen.queryByRole("button", { name: /how layout and sizing work/i }),
+    ).toBeNull();
+  });
+});
+
 describe("Settings — accessibility toggles", () => {
   afterEach(cleanup);
 

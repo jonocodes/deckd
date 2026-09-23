@@ -59,3 +59,4 @@ ADR-0010 made overflow layout-only, as "layout-semantic rather than device-ergon
 - `settings-store.ts` replaces `useCellSize` with `useCellBand` (which keeps floor ≤ cap) and adds `useOverflowPreference`. Keys: `deckd.minCell`, `deckd.maxCell`, `deckd.overflow`.
 - Settings gains **Min button size**, **Max button size**, and **When there's no room** (Follow layout / Hide extras / Shrink buttons).
 - The interactive model, with both orientations at true ratios, lives at `docs/mockups/reflow-adr0011.html`.
+- The user-facing explainer ships as `client/src/ReflowHelp.tsx`, mounted in-app at `/help` (linked from Settings) and standalone as `help.html`. It imports the real `reflow.ts`, so its diagrams are the product's own geometry rather than a second implementation. `fillRows` is exported from the module for the page's row breakdown — the same rule CSS grid auto-placement applies in `ButtonGrid`.
