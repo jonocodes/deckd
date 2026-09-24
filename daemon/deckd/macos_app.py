@@ -59,6 +59,21 @@ def overlay_src(root: Path) -> Path:
     return root / "layouts.macos"
 
 
+def menubar_icon_paths(root: Path) -> tuple[Path, Path] | None:
+    """The ``(1x, 2x)`` menu-bar template PNGs, or ``None`` if not bundled.
+
+    Frozen builds put them at the bundle root (``root`` is ``sys._MEIPASS``);
+    a source checkout keeps them beside the spec in ``packaging/macos``.
+    ``packaging/macos/menubar.py`` loads both reps into one template image.
+    """
+    candidates = (root, root / "packaging" / "macos")
+    for base in candidates:
+        one_x = base / "deckd-menubar.png"
+        if one_x.is_file():
+            return one_x, base / "deckd-menubar@2x.png"
+    return None
+
+
 def app_support_dir() -> Path:
     """``~/Library/Application Support/deckd`` — the writable data dir."""
     return Path.home() / "Library" / "Application Support" / APP_SUPPORT_DIRNAME

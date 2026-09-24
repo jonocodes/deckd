@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 300" width="800" height="300" role="img" aria-label="deckd — context-aware controller (light)">
+  <title>deckd logo (light)</title>
+  <defs>
+    <linearGradient id="bgGradL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#F1F5F9"/>
+    </linearGradient>
+    <linearGradient id="tileGradL" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E2E8F0"/>
+      <stop offset="100%" stop-color="#CBD5E1"/>
+    </linearGradient>
+    <linearGradient id="tileGradLAlt" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#F1F5F9"/>
+      <stop offset="100%" stop-color="#E2E8F0"/>
+    </linearGradient>
+    <linearGradient id="activeGradL" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FB923C"/>
+      <stop offset="100%" stop-color="#F43F5E"/>
+    </linearGradient>
+    <radialGradient id="activeGlowL" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FB923C" stop-opacity="0.30"/>
+      <stop offset="60%" stop-color="#F43F5E" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#F43F5E" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="300" fill="url(#bgGradL)" rx="24"/>
+  <rect width="800" height="300" rx="24" fill="none" stroke="#E2E8F0" stroke-width="1"/>
+
+  <!-- Ambient glow behind active tile -->
+  <ellipse cx="160" cy="150" rx="110" ry="90" fill="url(#activeGlowL)"/>
+
+  <!-- 3x3 grid -->
+  <g>
+    <rect x="64"  y="54"  width="56" height="56" rx="11" fill="url(#tileGradL)"/>
+    <rect x="132" y="54"  width="56" height="56" rx="11" fill="url(#tileGradLAlt)"/>
+    <rect x="200" y="54"  width="56" height="56" rx="11" fill="url(#tileGradL)"/>
+    <rect x="64"  y="122" width="56" height="56" rx="11" fill="url(#tileGradL)"/>
+    <rect x="132" y="122" width="56" height="56" rx="11" fill="url(#activeGradL)"/>
+    <rect x="200" y="122" width="56" height="56" rx="11" fill="url(#tileGradLAlt)"/>
+    <rect x="64"  y="190" width="56" height="56" rx="11" fill="url(#tileGradL)"/>
+    <rect x="132" y="190" width="56" height="56" rx="11" fill="url(#tileGradL)"/>
+    <rect x="200" y="190" width="56" height="56" rx="11" fill="url(#tileGradL)"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="320" y="180"
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-weight="800" font-size="104" fill="#0F172A" letter-spacing="-5">deckd</text>
+
+  <circle cx="324" cy="212" r="4" fill="#F43F5E"/>
+  <text x="338" y="217"
+        font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
+        font-weight="500" font-size="13" fill="#64748B" letter-spacing="2.8">CONTEXT-AWARE CONTROLLER</text>
+</svg>

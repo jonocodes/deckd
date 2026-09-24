@@ -30,6 +30,28 @@ def test_resource_root_frozen(monkeypatch, tmp_path: Path) -> None:
     assert macos_app.resource_root() == tmp_path
 
 
+def test_menubar_icon_paths_frozen_layout(tmp_path: Path) -> None:
+    # Frozen: the spec drops the template PNGs at the bundle root.
+    _write(tmp_path / "deckd-menubar.png", "")
+    assert macos_app.menubar_icon_paths(tmp_path) == (
+        tmp_path / "deckd-menubar.png",
+        tmp_path / "deckd-menubar@2x.png",
+    )
+
+
+def test_menubar_icon_paths_source_layout(tmp_path: Path) -> None:
+    # Source checkout: the PNGs sit beside the spec in packaging/macos.
+    _write(tmp_path / "packaging" / "macos" / "deckd-menubar.png", "")
+    assert macos_app.menubar_icon_paths(tmp_path) == (
+        tmp_path / "packaging" / "macos" / "deckd-menubar.png",
+        tmp_path / "packaging" / "macos" / "deckd-menubar@2x.png",
+    )
+
+
+def test_menubar_icon_paths_absent(tmp_path: Path) -> None:
+    assert macos_app.menubar_icon_paths(tmp_path) is None
+
+
 def test_seed_layouts_first_run_then_noop(tmp_path: Path) -> None:
     src = tmp_path / "bundled"
     _write(src / "default.yaml", "id: default\n")
