@@ -226,6 +226,24 @@ ladle:
 screenshots:
     cd client && node screenshots.mjs
 
+# Rasterises client/public/icon.svg (the source of truth) into the PWA any +
+# maskable PNGs, the apple-touch-icon, and packaging/macos/deckd.icns. Uses
+# the e2e Chromium, so client/node_modules must be installed; the .icns step
+# is macOS-only (iconutil) and is skipped elsewhere.
+#
+# Regenerate all app icons from the brand SVG
+icons:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd client && node render-icons.mjs
+    cd ..
+    if command -v iconutil >/dev/null 2>&1; then
+        iconutil -c icns build/deckd.iconset -o packaging/macos/deckd.icns
+        echo "Wrote packaging/macos/deckd.icns"
+    else
+        echo "iconutil not found (not macOS); skipped .icns, PNGs are up to date."
+    fi
+
 # Run the full verification ladder (docs/ONBOARDING.md) in order:
 # typechecks first (cheap gates), then Python unit/integration, then
 # TypeScript compile, client unit tests, Playwright e2e, the daemon

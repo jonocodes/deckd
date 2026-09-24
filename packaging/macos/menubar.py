@@ -22,6 +22,7 @@ from deckd.macos_app import (
     client_dist,
     default_log_file,
     layouts_src,
+    menubar_icon_paths,
     overlay_src,
     resource_root,
     seed_layouts,
@@ -32,6 +33,34 @@ log = logging.getLogger("deckd.menubar")
 
 def _surface_url(port: int = DEFAULT_PORT) -> str:
     return f"http://127.0.0.1:{port}/"
+
+
+def _menubar_image():
+    """The brand mark as a menu-bar template image, or ``None`` if unbundled.
+
+    Loads the bundled 1x/@2x template PNGs into one 18pt NSImage and marks it
+    a template, so macOS tints it to match the current menu-bar appearance.
+    """
+    from AppKit import NSImage, NSImageRep
+
+    paths = menubar_icon_paths(resource_root())
+    if paths is None:
+        return None
+    image = NSImage.alloc().initWithSize_((18.0, 18.0))
+    added = False
+    for path in paths:
+        if not path.is_file():
+            continue
+        rep = NSImageRep.imageRepWithContentsOfFile_(str(path))
+        if rep is None:
+            continue
+        rep.setSize_((18.0, 18.0))
+        image.addRepresentation_(rep)
+        added = True
+    if not added:
+        return None
+    image.setTemplate_(True)
+    return image
 
 
 def _prepare() -> tuple[Path, Path, Path]:
@@ -55,6 +84,7 @@ def main() -> None:
     from AppKit import (
         NSApp,
         NSApplication,
+        NSImage,
         NSMenu,
         NSMenuItem,
         NSStatusBar,
@@ -129,7 +159,22 @@ def main() -> None:
     status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(
         NSVariableStatusItemLength
     )
-    status_item.button().setTitle_("deckd")
+    # The menu bar wants a monochrome template image, not the full-colour
+    # brand mark: the system tints a template for light/dark. Prefer the
+    # bundled brand mark, fall back to the matching SF Symbol (macOS 11+,
+    # we ship 12+), and finally to the text title.
+    button = status_item.button()
+    icon = _menubar_image()
+    if icon is None:
+        icon = NSImage.imageWithSystemSymbolName_accessibilityDescription_(
+            "square.grid.2x2", "deckd"
+        )
+        if icon is not None:
+            icon.setTemplate_(True)
+    if icon is not None:
+        button.setImage_(icon)
+    else:
+        button.setTitle_("deckd")
 
     menu = NSMenu.alloc().init()
     add_item(menu, target, "Open deckd surface", "openSurface:")

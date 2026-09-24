@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 18 18" width="18" height="18" role="img" aria-label="deckd">
+  <title>deckd menu-bar mark</title>
+  <!-- Monochrome template for the macOS status item: only the alpha channel
+       matters, macOS tints it for light/dark. Three dim tiles + one bright
+       "active" tile echo the full brand mark. 6.5px tiles, 2px gap, 1.5px
+       padding — ~16px of ink in an 18px canvas, the menu-bar convention. -->
+  <g fill="#000">
+    <rect x="1.5" y="1.5" width="6.5" height="6.5" rx="1.6" opacity="0.5"/>
+    <rect x="10"  y="1.5" width="6.5" height="6.5" rx="1.6" opacity="1"/>
+    <rect x="1.5" y="10"  width="6.5" height="6.5" rx="1.6" opacity="0.5"/>
+    <rect x="10"  y="10"  width="6.5" height="6.5" rx="1.6" opacity="0.5"/>
+  </g>
+</svg>
