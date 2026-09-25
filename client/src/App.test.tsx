@@ -370,6 +370,7 @@ describe("App — chrome button tooltips", () => {
       // independent of that detail.
       { name: /now playing/i, tipId: "now playing" },
       { name: "layout editor", tipId: "layout editor" },
+      { name: "fullscreen", tipId: "fullscreen" },
       { name: "settings", tipId: "settings" },
     ];
     for (const c of cases) {
@@ -393,6 +394,7 @@ describe("App — chrome button tooltips", () => {
       screen.getByRole("button", { name: "manual control" }),
       screen.getByRole("button", { name: /now playing/i }),
       screen.getByRole("button", { name: "layout editor" }),
+      screen.getByRole("button", { name: "fullscreen" }),
       screen.getByRole("button", { name: "settings" }),
     ];
     for (const b of iconOnly) {
@@ -1108,5 +1110,65 @@ describe("App — session lock takeover", () => {
     // Covered indirectly here by asserting the disabled button; the list
     // slot itself is covered in RunningWindowsList.test.tsx.
     expect(screen.getByRole("button", { name: /running programs/i }).getAttribute("disabled")).toBe("");
+  });
+});
+
+/* ---------------------------------------------------------------------
+   Fullscreen chrome toggle (phone-friendly full-surface mode).
+   jsdom implements no Fullscreen API, so we stub the three members the
+   hook touches and drive state through the DOM's "fullscreenchange"
+   event, exactly as a real browser would.
+   --------------------------------------------------------------------- */
+describe("App — fullscreen toggle", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    window.history.replaceState(null, "", "/?demo=default");
+  });
+  afterEach(() => {
+    const doc = document as unknown as Record<string, unknown>;
+    delete doc.fullscreenEnabled;
+    delete doc.fullscreenElement;
+    delete (document.documentElement as unknown as Record<string, unknown>).requestFullscreen;
+    delete doc.exitFullscreen;
+  });
+
+  it("requests fullscreen on tap, then exits on the second tap", async () => {
+    render(<App />);
+    const button = screen.getByRole("button", { name: "fullscreen" });
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+
+    const doc = document as unknown as Record<string, unknown>;
+    doc.fullscreenEnabled = true;
+
+    const requestFullscreen = vi.fn(() => Promise.resolve());
+    (document.documentElement as unknown as Record<string, unknown>).requestFullscreen =
+      requestFullscreen;
+
+    fireEvent.pointerDown(button);
+    await waitFor(() => expect(requestFullscreen).toHaveBeenCalledTimes(1));
+
+    // A real browser flips fullscreenElement then fires the event.
+    doc.fullscreenElement = document.documentElement;
+    fireEvent(document, new Event("fullscreenchange"));
+    const pressed = screen.getByRole("button", { name: "exit fullscreen" });
+    expect(pressed.getAttribute("aria-pressed")).toBe("true");
+
+    const exitFullscreen = vi.fn(() => Promise.resolve());
+    (document as unknown as Record<string, unknown>).exitFullscreen = exitFullscreen;
+
+    fireEvent.pointerDown(pressed);
+    await waitFor(() => expect(exitFullscreen).toHaveBeenCalledTimes(1));
+
+    doc.fullscreenElement = null;
+    fireEvent(document, new Event("fullscreenchange"));
+    expect(screen.getByRole("button", { name: "fullscreen" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("is a no-op when the Fullscreen API is unavailable", () => {
+    render(<App />);
+    // No stubs installed: fullscreenEnabled is undefined.
+    fireEvent.pointerDown(screen.getByRole("button", { name: "fullscreen" }));
+    expect(screen.getByRole("button", { name: "fullscreen" }).getAttribute("aria-pressed")).toBe("false");
   });
 });

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Lock as LockIcon, Moon as MoonIcon, Pencil as PencilIcon, Settings as SettingsIcon, Globe as GlobeIcon } from "lucide-react";
+import { Lock as LockIcon, Moon as MoonIcon, Pencil as PencilIcon, Settings as SettingsIcon, Globe as GlobeIcon, Maximize as MaximizeIcon, Minimize as MinimizeIcon } from "lucide-react";
 import { LayoutGrid as LayoutGridIcon, Music as MusicIcon, PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
@@ -30,6 +30,7 @@ import {
 } from "./settings-store";
 import type { CSSProperties } from "react";
 import { useWakeLock } from "./wake-lock";
+import { useFullscreen } from "./fullscreen";
 import { getDemoLayout, getDemoView, MEDIA_DEMO_STATES, MPRIS_DEMO_STATES, EDITOR_DEMO_LAYOUTS } from "./demo";
 import { usePlaygroundDaemon } from "./playground/usePlaygroundDaemon";
 import { Icon } from "./Icon";
@@ -322,6 +323,11 @@ export function App() {
   // screen on. Visibility is handled inside the hook.
   useWakeLock(wakeLock.enabled && status === "open");
 
+  // Fullscreen toggle (hides browser chrome on phone/desktop). The
+  // ``fullscreenchange`` sync inside the hook keeps the icon honest when
+  // the browser exits fullscreen on its own (back gesture, Esc).
+  const [isFullscreen, toggleFullscreen] = useFullscreen();
+
   const press = (id: string) => send({ type: "press", id });
   const jog = (id: string, delta: number) => send({ type: "jog", id, delta });
   const jogEnd = (id: string, velocity: number) => send({ type: "jog_end", id, velocity });
@@ -405,6 +411,7 @@ export function App() {
   // Refs to the chrome buttons themselves, so focus restoration knows
   // where to land when a view closes.
   const trackpadBtnRef = useRef<HTMLButtonElement | null>(null);
+  const fullscreenBtnRef = useRef<HTMLButtonElement | null>(null);
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const mediaBtnRef = useRef<HTMLButtonElement | null>(null);
   const editorBtnRef = useRef<HTMLButtonElement | null>(null);
@@ -966,6 +973,17 @@ export function App() {
             })}
           >
             <LayoutGridIcon size={18} />
+          </button>
+        </Tooltip>
+        <Tooltip ref={fullscreenBtnRef} label={isFullscreen ? "exit fullscreen" : "fullscreen"}>
+          <button
+            className="chrome-btn"
+            aria-label={isFullscreen ? "exit fullscreen" : "fullscreen"}
+            aria-pressed={isFullscreen}
+            onPointerDown={toggleFullscreen}
+            onKeyDown={onActivate(toggleFullscreen)}
+          >
+            {isFullscreen ? <MinimizeIcon size={18} /> : <MaximizeIcon size={18} />}
           </button>
         </Tooltip>
         <Tooltip ref={settingsBtnRef} label="settings">
