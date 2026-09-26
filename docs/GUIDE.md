@@ -662,6 +662,44 @@ The tag (minus a leading `v`) is the version for that release: it names the DMG 
 
 The DMG is **arm64 only** (Apple Silicon): `macos-14` runners are Apple Silicon. An Intel / `universal2` build is a follow-up ([#165](https://github.com/jonocodes/deckd/issues/165), "Open questions").
 
+### Linux AppImage (experimental, [#168](https://github.com/jonocodes/deckd/issues/168))
+
+Beyond the source-checkout + systemd user unit path above, deckd can be built as a self-contained AppImage: a private Python runtime, the built client, and the layouts in one file. The target machine needs no Python, Node, or checkout. Build it **on Linux** (appimagetool wraps a PyInstaller tree in a squashfs):
+
+```sh
+just build-linux-appimage   # -> dist/deckd-<version>-<arch>.AppImage
+```
+
+The AppImage is **unsigned** and deliberately **not sandboxed**: a sandbox cannot write the udev rule, see `/dev/uinput`, reach the session bus, or install the compositor plugin (see [ADR-0012](adr/0012-linux-distribution-appimage.md), which rules out Flatpak/Snap). Download it, make it executable, and run it:
+
+```sh
+chmod +x deckd-<version>-x86_64.AppImage
+./deckd-<version>-x86_64.AppImage
+```
+
+It seeds layouts into `~/.local/share/deckd/layouts` on first run and logs to `~/.local/share/deckd/deckd.log`. It stays localhost-only until you add `--bind 0.0.0.0`, exactly like the daemon.
+
+If `libfuse2` is missing (Ubuntu 22.04+/Debian 12 no longer ship it), run with `--appimage-extract-and-run` or set `APPIMAGE_EXTRACT_AND_RUN=1`.
+
+#### uinput, the focus watcher, and autostart
+
+Two things the AppImage can't do by itself. `/dev/uinput` needs a udev rule and the `input` group (a root action), and the focus watcher is desktop-specific. The AppImage carries both — the rule and the GNOME/KWin sources sit under `usr/share/deckd/integration` — and a `deckd-install-system-integration.sh` is attached next to every release. Run it once with `sudo`, pointing at the AppImage:
+
+```sh
+chmod +x deckd-install-system-integration.sh
+sudo ./deckd-install-system-integration.sh ./deckd-<version>-x86_64.AppImage
+```
+
+It installs the udev rule and adds you to `input`, installs the GNOME Shell extension or KWin script for the detected desktop (override with `--desktop gnome|kde`), and writes `~/.config/autostart/deckd.desktop` so deckd starts with your session. Re-run with `--uninstall` to remove all of it. **Log out and back in** for the group change to take effect. The autostart entry points at the AppImage's path, so keep it where it is (or re-run the helper after moving it).
+
+From a source checkout the same helper is `just install-system-integration` (it stages the assets and calls the script with `sudo`; pass `--desktop gnome`, `--uninstall`, etc. as extra args).
+
+#### Releasing an AppImage
+
+Pushing a `v*` tag runs [`.github/workflows/release-linux.yml`](../.github/workflows/release-linux.yml): it builds **x86_64** on `ubuntu-24.04` and **aarch64** on `ubuntu-24.04-arm`, smoke-tests each payload (`--help`), and attaches both AppImages plus `deckd-install-system-integration.sh` to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag. aarch64 source-builds `python-evdev` (there is no `evdev-binary` wheel for it).
+
+The tag minus its leading `v` is the version, so `v2026.09.23` yields `deckd-2026.09.23-x86_64.AppImage` and `deckd-2026.09.23-aarch64.AppImage`. A local build without a tag falls back to `version` in `pyproject.toml`.
+
 **NixOS** users can skip all of the above — the flake's home-manager module owns the same user service, and the NixOS module owns the udev rule and `input` group. See [Nix flake, NixOS, and home-manager](#nix-flake-nixos-and-home-manager).
 
 ## Nix flake, NixOS, and home-manager

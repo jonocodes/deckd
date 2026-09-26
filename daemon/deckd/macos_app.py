@@ -1,10 +1,14 @@
 """Helpers for the packaged macOS app bundle (issue #165).
 
-Platform-independent pieces of the menu-bar wrapper: resource discovery,
-first-run layout seeding, argv construction for the embedded server, and a
-background-thread server runner. These live in the daemon package (rather
-than ``packaging/macos/menubar.py``) so they can be unit-tested on Linux —
-AppKit itself cannot be.
+macOS-specific pieces of the menu-bar wrapper: the bundle id, the writable
+Application Support / Logs locations, the ``Info.plist``, and the
+background-thread server runner the AppKit wrapper needs. The platform-
+independent packaging mechanics (payload discovery, layout seeding, argv and
+version) live in ``deckd.app_bundle`` and are re-exported here so
+``packaging/macos/menubar.py`` keeps importing them from one place.
+
+Everything in this module runs on the Linux dev/CI hosts; AppKit itself does
+not, which is why ``menubar.py`` stays a thin wrapper.
 
 The wrapper that uses them is ``packaging/macos/menubar.py``, frozen by
 ``packaging/macos/deckd.spec`` into ``deckd.app``.
@@ -14,16 +18,40 @@ from __future__ import annotations
 import argparse
 import asyncio
 import logging
-import os
-import shutil
 import sys
 import threading
 from pathlib import Path
 
+from .app_bundle import (
+    DEFAULT_PORT,
+    app_argv,
+    bundle_version,
+    client_dist,
+    layouts_src,
+    resource_root,
+    seed_layouts,
+)
+
+__all__ = [
+    "BUNDLE_ID",
+    "DEFAULT_PORT",
+    "APP_SUPPORT_DIRNAME",
+    "ServerRunner",
+    "app_argv",
+    "app_support_dir",
+    "bundle_info_plist",
+    "bundle_version",
+    "client_dist",
+    "default_log_file",
+    "layouts_src",
+    "overlay_src",
+    "resource_root",
+    "seed_layouts",
+]
+
 log = logging.getLogger("deckd.macos_app")
 
 BUNDLE_ID = "com.deckd.daemon"
-DEFAULT_PORT = 8765
 
 # The daemon already defaults its password to ``~/.config/deckd/password``;
 # keep that so the app and a CLI run share one secret. Layouts, however,
@@ -32,32 +60,11 @@ DEFAULT_PORT = 8765
 APP_SUPPORT_DIRNAME = "deckd"
 
 
-def resource_root() -> Path:
-    """Directory holding the bundled Resources.
-
-    PyInstaller sets ``sys._MEIPASS`` to the onedir payload (inside
-    ``deckd.app/Contents/Frameworks``); in a source checkout we fall back to
-    the repo root so ``menubar.py`` can be exercised without freezing.
-    """
-    meipass = getattr(sys, "_MEIPASS", None)
-    if meipass:
-        return Path(meipass)
-    return Path(__file__).resolve().parents[2]
-
-
-def client_dist(root: Path) -> Path:
-    """Bundled client build (``client/dist`` copied to ``web``)."""
-    return root / "web"
-
-
-def layouts_src(root: Path) -> Path:
-    """Bundled layouts directory."""
-    return root / "layouts"
-
-
 def overlay_src(root: Path) -> Path:
     """Bundled macOS overlay layouts (``layouts.macos``)."""
-    return root / "layouts.macos"
+    from .app_bundle import overlay_src as _overlay_src
+
+    return _overlay_src(root, "macos")
 
 
 def menubar_icon_paths(root: Path) -> tuple[Path, Path] | None:
@@ -83,24 +90,6 @@ def app_support_dir() -> Path:
 def default_log_file() -> Path:
     """``~/Library/Logs/deckd.log`` — where the app tees its logs."""
     return Path.home() / "Library" / "Logs" / "deckd.log"
-
-
-def bundle_version(pyproject: Path | None = None) -> str:
-    """The version stamped into the bundle (issue #165).
-
-    ``DECKD_VERSION`` wins when set — release CI passes the git tag (minus a
-    leading ``v``), so the tag is the single source for a release and the DMG
-    name, ``CFBundleShortVersionString``, and volume name all agree. Local
-    builds fall back to ``version`` in ``pyproject.toml``.
-    """
-    override = os.environ.get("DECKD_VERSION", "").strip()
-    if override:
-        return override
-    path = pyproject or Path(__file__).resolve().parents[2] / "pyproject.toml"
-    for line in path.read_text().splitlines():
-        if line.startswith("version = "):
-            return line.split("=", 1)[1].strip().strip('"')
-    raise ValueError(f"no version found in {path}")
 
 
 def bundle_info_plist(version: str) -> dict[str, object]:
@@ -129,57 +118,6 @@ def bundle_info_plist(version: str) -> dict[str, object]:
             "Events when you press buttons on your deck."
         ),
     }
-
-
-def seed_layouts(src: Path, dest: Path, *, overlay: Path | None = None) -> bool:
-    """Copy bundled layouts into the writable data dir on first run.
-
-    Returns ``True`` when it seeded, ``False`` when ``dest`` already existed.
-    An existing directory is never overwritten, so a user's hand-edited
-    layouts survive an app upgrade (mirrors the Nix module's seed-once
-    behaviour). The per-platform overlay is copied to the sibling
-    ``<dest>.macos`` directory the daemon auto-discovers.
-    """
-    if dest.exists():
-        return False
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(src, dest)
-    if overlay is not None and overlay.is_dir():
-        overlay_dest = dest.parent / f"{dest.name}.macos"
-        if not overlay_dest.exists():
-            shutil.copytree(overlay, overlay_dest)
-    return True
-
-
-def app_argv(
-    *,
-    layouts_dir: Path,
-    client_dist: Path,
-    port: int = DEFAULT_PORT,
-    bind: list[str] | None = None,
-    password_file: Path | None = None,
-    log_file: Path | None = None,
-    verbose: bool = False,
-) -> list[str]:
-    """Build the daemon argv the app passes to ``parse_args``.
-
-    Localhost-only unless ``bind`` is given (the menu's LAN toggle supplies
-    ``["0.0.0.0"]``), so the default stays safe.
-    """
-    argv = [
-        "--layouts-dir", str(layouts_dir),
-        "--client-dist", str(client_dist),
-        "--port", str(port),
-    ]
-    for addr in bind or []:
-        argv += ["--bind", addr]
-    if password_file is not None:
-        argv += ["--password-file", str(password_file)]
-    if log_file is not None:
-        argv += ["--log-file", str(log_file)]
-    if verbose:
-        argv.append("--verbose")
-    return argv
 
 
 class ServerRunner:

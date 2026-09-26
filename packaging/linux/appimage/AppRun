@@ -1,0 +1,13 @@
+#!/bin/sh
+# deckd AppImage entry point (issue #168).
+#
+# The frozen launcher resolves its payload via sys._MEIPASS, so it needs no
+# path setup here: it seeds layouts into the writable XDG data dir and runs
+# the daemon against the bundled client. Extra args pass through, e.g.
+#
+#     ./deckd-<version>-x86_64.AppImage --bind 0.0.0.0
+#
+# to expose the surface on the LAN (localhost-only by default).
+set -e
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/deckd" "$@"
