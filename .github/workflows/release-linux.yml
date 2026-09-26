@@ -1,0 +1,110 @@
+name: Release Linux AppImage
+
+# Phase 2 of #168: build the self-contained deckd AppImage on a Linux runner
+# and attach it to the GitHub release.
+#
+# The build itself is `just build-linux-appimage` — the same recipe a
+# contributor runs locally (docs/GUIDE.md § "Linux AppImage") — so CI and the
+# documented path can't drift. This job only supplies the runner, the
+# toolchain, and the publish step.
+#
+# Two architectures, one matrix: x86_64 on ubuntu-24.04 (arm64 hosted runners
+# are free for public repos). aarch64 has no evdev-binary wheel, so the recipe
+# source-builds python-evdev before freezing.
+#
+# The AppImage is unsigned; users run it directly (`chmod +x`, then execute).
+# The root-only uinput step rides along as an install helper bundled inside the
+# AppImage at usr/share/deckd/integration/install-system-integration.sh.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the AppImage to (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+# Serialise publishes per tag: a second run must not `--clobber` an AppImage
+# the first is still uploading. In-flight runs are not cancelled.
+concurrency:
+  group: release-linux-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  appimage:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+    runs-on: ${{ matrix.runner }}
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - uses: extractions/setup-just@v4
+
+      # librsvg2-bin gives the recipe rsvg-convert for the icon; build-essential
+      # provides the compiler evdev's source build needs on aarch64.
+      - name: Install build tools
+        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin build-essential
+
+      # evdev (uinput) + dbus-fast ([dbus]) + PyInstaller. Installing these
+      # first also stops the recipe's `uv pip install` fallback from firing.
+      - name: Install Python deps
+        run: pip install -e ".[uinput,dbus,packaging]"
+
+      # `npm run build` already runs `tsc --noEmit`, so a type error fails
+      # the release before a broken bundle is frozen in.
+      - name: Build client
+        run: npm ci && npm run build
+        working-directory: client
+
+      # The tag (minus a leading `v`) is the release version, so the AppImage
+      # name and the daemon's version agree with the tag.
+      - name: Resolve version from the tag
+        run: echo "DECKD_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
+
+      - name: Build AppImage
+        run: just build-linux-appimage
+
+      # Boot the frozen payload: --help parses args and exits before the
+      # server starts, which proves the bundle's interpreter and imports work.
+      - name: Smoke-test the AppImage
+        run: APPIMAGE_EXTRACT_AND_RUN=1 dist/deckd-*.AppImage --help >/dev/null
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deckd-linux-appimage-${{ matrix.arch }}
+          path: |
+            dist/deckd-*.AppImage
+            dist/deckd-install-system-integration.sh
+          if-no-files-found: error
+
+      - name: Attach the AppImage to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$RELEASE_TAG" >/dev/null 2>&1 \
+            || gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes
+          gh release upload "$RELEASE_TAG" \
+            dist/deckd-*.AppImage dist/deckd-install-system-integration.sh --clobber

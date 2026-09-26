@@ -482,6 +482,88 @@ build-macos-dmg: build-macos-app
         -ov -format UDZO "dist/deckd-${version}.dmg"
     echo "Built dist/deckd-${version}.dmg"
 
+# Build the self-contained Linux AppImage (dist/deckd-<version>-<arch>.AppImage,
+# issue #168). Linux only: appimagetool wraps a PyInstaller onedir tree in a
+# squashfs. Installs the [uinput,dbus,packaging] extras on demand and builds
+# the client first if it's missing. The udev rule and focus-watcher sources ride
+# along under usr/share/deckd/integration for the install helper.
+build-linux-appimage:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "$(uname)" != "Linux" ]; then
+        echo "build-linux-appimage needs Linux; an AppImage can't be built on $(uname)." >&2
+        exit 1
+    fi
+    arch="$(uname -m)"
+    if ! command -v pyinstaller >/dev/null 2>&1; then
+        echo "installing packaging deps..."
+        uv pip install -e ".[uinput,dbus,packaging]"
+    fi
+    if [ "$arch" != "x86_64" ]; then
+        echo "note: $arch has no evdev-binary wheel; ensuring a source build." >&2
+        PYTHON="$(command -v python)" bash scripts/install_evdev_source.sh \
+            || echo "warn: evdev source build failed; key injection will no-op." >&2
+    fi
+    if [ ! -f client/dist/index.html ]; then
+        echo "client/dist missing; building client..."
+        just build-client
+    fi
+    pyinstaller --noconfirm --clean packaging/linux/deckd.spec
+
+    version="${DECKD_VERSION:-$(just version)}"
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
+    appdir="$work/deckd.AppDir"
+    mkdir -p "$appdir/usr/bin" "$appdir/usr/share/deckd/integration/gnome-shell" \
+             "$appdir/usr/share/deckd/integration/kwin-script"
+    cp -R dist/deckd/. "$appdir/usr/bin/"
+    cp packaging/udev/70-deckd-uinput.rules "$appdir/usr/share/deckd/integration/"
+    cp -R packaging/gnome-shell/deckd-focus@local "$appdir/usr/share/deckd/integration/gnome-shell/"
+    cp -R packaging/kwin-script/deckd-focus "$appdir/usr/share/deckd/integration/kwin-script/"
+    cp packaging/linux/install-system-integration.sh "$appdir/usr/share/deckd/integration/"
+    cp packaging/linux/appimage/AppRun "$appdir/AppRun"
+    chmod +x "$appdir/AppRun"
+    cp packaging/linux/appimage/deckd.desktop "$appdir/"
+    # appimagetool wants deckd.png (or deckd.svg) at the AppDir root.
+    if command -v rsvg-convert >/dev/null 2>&1; then
+        rsvg-convert -w 512 -h 512 -o "$appdir/deckd.png" client/public/icon.svg
+    elif command -v magick >/dev/null 2>&1; then
+        magick -background none client/public/icon.svg -resize 512x512 "$appdir/deckd.png"
+    elif command -v convert >/dev/null 2>&1; then
+        convert -background none client/public/icon.svg -resize 512x512 "$appdir/deckd.png"
+    else
+        cp client/public/icon.svg "$appdir/deckd.svg"
+    fi
+
+    tooling="${XDG_CACHE_HOME:-$HOME/.cache}/deckd/appimagetool-${arch}.AppImage"
+    if [ ! -x "$tooling" ]; then
+        echo "fetching appimagetool (${arch})..."
+        mkdir -p "$(dirname "$tooling")"
+        curl -fsSL -o "$tooling" \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${arch}.AppImage"
+        chmod +x "$tooling"
+    fi
+    export ARCH="$arch"
+    APPIMAGE_EXTRACT_AND_RUN=1 "$tooling" "$appdir" "dist/deckd-${version}-${arch}.AppImage"
+    cp packaging/linux/install-system-integration.sh dist/deckd-install-system-integration.sh
+    echo "Built dist/deckd-${version}-${arch}.AppImage (+ dist/deckd-install-system-integration.sh)"
+
+# Stage the integration assets from a checkout and run the privileged helper
+# for the current user (issue #168): udev rule + input group (root), plus the
+# focus watcher and an XDG autostart entry (user). Prompts for sudo. Useful for
+# a source install and for testing the helper without building an AppImage.
+# Extra args pass through (e.g. `--desktop gnome`, `--uninstall`).
+install-system-integration *args:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    stage="$(mktemp -d)"
+    trap 'rm -rf "$stage"' EXIT
+    mkdir -p "$stage/gnome-shell" "$stage/kwin-script"
+    cp packaging/udev/70-deckd-uinput.rules "$stage/"
+    cp -R packaging/gnome-shell/deckd-focus@local "$stage/gnome-shell/"
+    cp -R packaging/kwin-script/deckd-focus "$stage/kwin-script/"
+    sudo packaging/linux/install-system-integration.sh --assets "$stage" {{args}}
+
 # Run the Nix flake checks: builds packages.deckd and the focus-watcher
 # bundles, evaluates the NixOS + home-manager modules, unit-tests the
 # activation scripts in a sandbox, and boots the packaged daemon on

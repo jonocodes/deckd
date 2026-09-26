@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=deckd
+Comment=App-aware touch control surface
+Exec=deckd
+Icon=deckd
+Categories=Utility;
+Terminal=false
