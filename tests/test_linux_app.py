@@ -6,6 +6,7 @@ arrangement as ``test_app.py`` for the macOS bundle.
 """
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -90,3 +91,42 @@ def test_build_argv_localhost_by_default(monkeypatch, tmp_path: Path) -> None:
 
     argv = linux_app.build_argv()
     assert "--bind" not in argv
+
+
+def _fake_appdir(tmp_path: Path) -> Path:
+    """An AppDir skeleton with the frozen launcher and integration assets."""
+    appdir = tmp_path / "deckd.AppDir"
+    (appdir / "usr" / "bin").mkdir(parents=True)
+    exe = appdir / "usr" / "bin" / "deckd"
+    exe.write_text("#!/bin/sh\n")
+    integration = appdir / "usr" / "share" / "deckd" / "integration"
+    _write(integration / "70-deckd-uinput.rules", "KERNEL==\"uinput\"\n")
+    _write(integration / "gnome-shell" / "deckd-focus@local" / "extension.js", "// x\n")
+    return appdir
+
+
+def test_integration_src_is_beside_the_launcher(monkeypatch, tmp_path: Path) -> None:
+    appdir = _fake_appdir(tmp_path)
+    monkeypatch.setattr(linux_app.sys, "executable", str(appdir / "usr" / "bin" / "deckd"))
+
+    assert linux_app.integration_src() == appdir / "usr" / "share" / "deckd" / "integration"
+
+
+def test_extract_integration_copies_tree(monkeypatch, tmp_path: Path) -> None:
+    appdir = _fake_appdir(tmp_path)
+    monkeypatch.setattr(linux_app.sys, "executable", str(appdir / "usr" / "bin" / "deckd"))
+    dest = tmp_path / "out"
+
+    linux_app.extract_integration(dest)
+
+    assert (dest / "70-deckd-uinput.rules").is_file()
+    assert (dest / "gnome-shell" / "deckd-focus@local" / "extension.js").is_file()
+
+
+def test_extract_integration_rejects_missing_assets(monkeypatch, tmp_path: Path) -> None:
+    appdir = _fake_appdir(tmp_path)
+    shutil.rmtree(appdir / "usr" / "share")
+    monkeypatch.setattr(linux_app.sys, "executable", str(appdir / "usr" / "bin" / "deckd"))
+
+    with pytest.raises(FileNotFoundError):
+        linux_app.extract_integration(tmp_path / "out")

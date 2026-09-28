@@ -92,6 +92,18 @@ jobs:
       - name: Smoke-test the AppImage
         run: APPIMAGE_EXTRACT_AND_RUN=1 dist/deckd-*.AppImage --help >/dev/null
 
+      # The install helper extracts its assets with `--appimage-extract`, and
+      # falls back to this launcher flag when a binfmt wrapper intercepts the
+      # AppImage first. Exercise the fallback so a release can't ship without
+      # the assets it needs.
+      - name: Smoke-test integration extraction
+        run: |
+          tmp="$(mktemp -d)"
+          APPIMAGE_EXTRACT_AND_RUN=1 dist/deckd-*.AppImage --extract-integration "$tmp"
+          test -f "$tmp/70-deckd-uinput.rules"
+          test -d "$tmp/gnome-shell/deckd-focus@local"
+          test -f "$tmp/install-system-integration.sh"
+
       - uses: actions/upload-artifact@v4
         with:
           name: deckd-linux-appimage-${{ matrix.arch }}

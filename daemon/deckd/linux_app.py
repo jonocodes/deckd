@@ -12,6 +12,8 @@ Linux tooling.
 from __future__ import annotations
 
 import os
+import shutil
+import sys
 from pathlib import Path
 
 from .app_bundle import (
@@ -28,12 +30,15 @@ from .app_bundle import seed_layouts as _seed_layouts
 __all__ = [
     "APP_NAME",
     "DEFAULT_PORT",
+    "EXTRACT_INTEGRATION_FLAG",
     "app_argv",
     "build_argv",
     "bundle_version",
     "client_dist",
     "data_dir",
     "default_log_file",
+    "extract_integration",
+    "integration_src",
     "layouts_src",
     "overlay_src",
     "prepare",
@@ -42,6 +47,13 @@ __all__ = [
 ]
 
 APP_NAME = "deckd"
+
+# Frozen-launcher-only flag: copy the AppDir's integration assets (udev rule,
+# focus watchers, install helper) to a directory and exit. The install helper
+# falls back to it when the AppImage runtime won't honour `--appimage-extract`
+# — e.g. a binfmt wrapper like NixOS's `programs.appimage` runs the payload
+# directly, so the runtime's own extraction flags never reach it.
+EXTRACT_INTEGRATION_FLAG = "--extract-integration"
 
 
 def data_dir() -> Path:
@@ -70,6 +82,25 @@ def default_log_file() -> Path:
 def overlay_src(root: Path) -> Path:
     """Bundled Linux overlay layouts (``layouts.linux``)."""
     return _overlay_src(root, "linux")
+
+
+def integration_src() -> Path:
+    """Bundled system-integration assets in the AppDir.
+
+    The AppImage recipe places the udev rule, the GNOME/KWin focus watchers,
+    and ``install-system-integration.sh`` under ``usr/share/deckd/integration``
+    beside the frozen launcher (``usr/bin/deckd``).
+    """
+    return Path(sys.executable).resolve().parents[1] / "share" / "deckd" / "integration"
+
+
+def extract_integration(dest: Path) -> None:
+    """Copy the bundled integration assets to ``dest`` (created if needed)."""
+    src = integration_src()
+    if not src.is_dir():
+        raise FileNotFoundError(f"no bundled integration assets at {src}")
+    dest.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(src, dest, dirs_exist_ok=True)
 
 
 def seed_layouts(src: Path, dest: Path, *, overlay: Path | None = None) -> bool:

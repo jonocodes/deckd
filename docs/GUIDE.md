@@ -690,7 +690,9 @@ chmod +x deckd-install-system-integration.sh
 sudo ./deckd-install-system-integration.sh ./deckd-<version>-x86_64.AppImage
 ```
 
-It installs the udev rule and adds you to `input`, installs the GNOME Shell extension or KWin script for the detected desktop (override with `--desktop gnome|kde`), and writes `~/.config/autostart/deckd.desktop` so deckd starts with your session. Re-run with `--uninstall` to remove all of it. **Log out and back in** for the group change to take effect. The autostart entry points at the AppImage's path, so keep it where it is (or re-run the helper after moving it).
+It installs the udev rule and adds you to `input`, installs the GNOME Shell extension or KWin script for the detected desktop (override with `--desktop gnome|kde`), and writes `~/.config/autostart/deckd.desktop` so deckd starts with your session. **Log out and back in** for the group change to take effect. The autostart entry points at the AppImage's path, so keep it where it is (or re-run the helper after moving it).
+
+Re-run with `--uninstall` to undo the install. It removes exactly what the helper created — recorded per user in `/var/lib/deckd/system-integration.<user>.state` — so a pre-existing `input` membership or focus extension (say, from a NixOS/home-manager install) is left alone. If the AppImage runtime never sees `--appimage-extract` (a binfmt wrapper such as NixOS's `programs.appimage` runs the payload directly), the helper falls back to the bundled launcher's `--extract-integration` and still works.
 
 From a source checkout the same helper is `just install-system-integration` (it stages the assets and calls the script with `sudo`; pass `--desktop gnome`, `--uninstall`, etc. as extra args).
 
