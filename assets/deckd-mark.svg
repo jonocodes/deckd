@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="deckd mark">
+  <title>deckd mark</title>
+  <defs>
+    <linearGradient id="markBg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B1220"/>
+      <stop offset="100%" stop-color="#1E1B4B"/>
+    </linearGradient>
+    <linearGradient id="markTile" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#334155"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <linearGradient id="markTileAlt" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="100%" stop-color="#334155"/>
+    </linearGradient>
+    <linearGradient id="markActive" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FB923C"/>
+      <stop offset="100%" stop-color="#F43F5E"/>
+    </linearGradient>
+    <radialGradient id="markGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FB923C" stop-opacity="0.55"/>
+      <stop offset="60%" stop-color="#F43F5E" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#F43F5E" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect width="512" height="512" rx="112" fill="url(#markBg)"/>
+
+  <!-- Ambient glow behind active tile -->
+  <ellipse cx="256" cy="256" rx="190" ry="160" fill="url(#markGlow)"/>
+
+  <!-- 3x3 grid: 96px tiles, 32px gap, 80px padding -->
+  <g>
+    <rect x="80"  y="80"  width="96" height="96" rx="20" fill="url(#markTile)"/>
+    <rect x="208" y="80"  width="96" height="96" rx="20" fill="url(#markTileAlt)"/>
+    <rect x="336" y="80"  width="96" height="96" rx="20" fill="url(#markTile)"/>
+
+    <rect x="80"  y="208" width="96" height="96" rx="20" fill="url(#markTile)"/>
+    <rect x="208" y="208" width="96" height="96" rx="20" fill="url(#markActive)"/>
+    <rect x="336" y="208" width="96" height="96" rx="20" fill="url(#markTileAlt)"/>
+
+    <rect x="80"  y="336" width="96" height="96" rx="20" fill="url(#markTile)"/>
+    <rect x="208" y="336" width="96" height="96" rx="20" fill="url(#markTile)"/>
+    <rect x="336" y="336" width="96" height="96" rx="20" fill="url(#markTile)"/>
+  </g>
+</svg>

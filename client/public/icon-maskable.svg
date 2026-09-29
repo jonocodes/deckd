@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="deckd mark — maskable">
+  <title>deckd mark (maskable)</title>
+  <!-- Full-bleed background: maskable icons must paint edge to edge, so no
+       rounded corners here — the launcher supplies the mask shape. -->
+  <defs>
+    <linearGradient id="mbg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B1220"/>
+      <stop offset="100%" stop-color="#1E1B4B"/>
+    </linearGradient>
+    <linearGradient id="mt" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#334155"/><stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+    <linearGradient id="ma" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FB923C"/><stop offset="100%" stop-color="#F43F5E"/>
+    </linearGradient>
+    <radialGradient id="mg" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FB923C" stop-opacity="0.55"/>
+      <stop offset="60%" stop-color="#F43F5E" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#F43F5E" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="url(#mbg)"/>
+
+  <!-- Glow behind the top-right active tile -->
+  <ellipse cx="332" cy="180" rx="200" ry="170" fill="url(#mg)"/>
+
+  <!-- 2x2 grid pulled into the maskable safe circle: 128px tiles, 24px gap,
+       116px padding. Outer tile corners sit ~198px from centre, inside the
+       205px safe radius (80% of 512 / 2). -->
+  <rect x="116" y="116" width="128" height="128" rx="24" fill="url(#mt)"/>
+  <rect x="268" y="116" width="128" height="128" rx="24" fill="url(#ma)"/>
+  <rect x="116" y="268" width="128" height="128" rx="24" fill="url(#mt)"/>
+  <rect x="268" y="268" width="128" height="128" rx="24" fill="url(#mt)"/>
+</svg>

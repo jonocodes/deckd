@@ -30,15 +30,22 @@ from deckd.macos_app import (  # noqa: E402
 # otherwise pyproject's ``version``.
 version = bundle_version(ROOT / "pyproject.toml")
 
-# Optional custom icon: generate an .icns (e.g. from client/public/icon.svg)
-# and point DECKD_ICON at it, otherwise the default PyInstaller icon is used.
-icon = os.environ.get("DECKD_ICON")
-if icon and not Path(icon).is_file():
-    raise SystemExit(f"DECKD_ICON set but not found: {icon}")
+# App icon: the committed ``deckd.icns`` (built from client/public/icon.svg by
+# ``just icons``). ``DECKD_ICON`` overrides it; otherwise the default
+# PyInstaller icon is used when the .icns is missing.
+icon = os.environ.get("DECKD_ICON") or str(ROOT / "packaging/macos/deckd.icns")
+if not Path(icon).is_file():
+    if os.environ.get("DECKD_ICON"):
+        raise SystemExit(f"DECKD_ICON set but not found: {icon}")
+    icon = None
 
 datas = [
     (str(ROOT / "client/dist"), "web"),
     (str(ROOT / "layouts"), "layouts"),
+    # Menu-bar status-item template (monochrome, light/dark aware). Placed at
+    # the bundle root so ``resource_root() / "deckd-menubar.png"`` resolves.
+    (str(ROOT / "packaging/macos/deckd-menubar.png"), "."),
+    (str(ROOT / "packaging/macos/deckd-menubar@2x.png"), "."),
 ]
 if (ROOT / "layouts.macos").is_dir():
     datas.append((str(ROOT / "layouts.macos"), "layouts.macos"))
