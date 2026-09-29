@@ -10,6 +10,7 @@
 # It reads its assets from an *extracted* AppImage layout:
 #
 #   <assets>/70-deckd-uinput.rules
+#   <assets>/deckd.png
 #   <assets>/gnome-shell/deckd-focus@local/...
 #   <assets>/kwin-script/deckd-focus/...
 #
@@ -33,10 +34,10 @@
 #   --no-autostart    Do not write ~/.config/autostart/deckd.desktop
 #   --uninstall       Remove what this helper installed (recorded in
 #                     /var/lib/deckd/system-integration.<user>.state): the udev
-#                     rule, the focus watcher, the autostart entry, and the
-#                     user's `input` membership — the last two only if this
-#                     helper created them, so a NixOS/home-manager install
-#                     isn't disturbed.
+#                     rule, the focus watcher, the app icon, the autostart
+#                     entry, and the user's `input` membership — the last ones
+#                     only if this helper created them, so a NixOS/home-manager
+#                     install isn't disturbed.
 #   -h, --help
 #
 # Re-running install is safe: assets are replaced, not appended.
@@ -120,6 +121,7 @@ S_UDEV=0
 S_GROUP=0
 S_GNOME=0
 S_KDE=0
+S_ICON=0
 S_AUTOSTART=0
 
 state_get() {
@@ -133,6 +135,7 @@ load_state() {
     v="$(state_get group)";     [ -n "$v" ] && S_GROUP="$v"
     v="$(state_get gnome)";     [ -n "$v" ] && S_GNOME="$v"
     v="$(state_get kde)";       [ -n "$v" ] && S_KDE="$v"
+    v="$(state_get icon)";      [ -n "$v" ] && S_ICON="$v"
     v="$(state_get autostart)"; [ -n "$v" ] && S_AUTOSTART="$v"
     return 0
 }
@@ -144,6 +147,7 @@ udev=$S_UDEV
 group=$S_GROUP
 gnome=$S_GNOME
 kde=$S_KDE
+icon=$S_ICON
 autostart=$S_AUTOSTART
 EOF
     chmod 0644 "$STATE_FILE"
@@ -288,6 +292,21 @@ remove_kwin_script() {
     [ -d "$kw" ] && { note "- removing KWin script $KWIN_ID"; rm -rf "$kw"; } || true
 }
 
+install_icon() {
+    [ -f "$ASSETS_DIR/deckd.png" ] || { note "! no icon in assets; skipping"; return 0; }
+    local dest="$HOME_DIR/.local/share/icons/hicolor/512x512/apps/deckd.png"
+    note "+ installing app icon $dest"
+    mkdir -p "$(dirname "$dest")"
+    cp "$ASSETS_DIR/deckd.png" "$dest"
+    S_ICON=1
+    own "$(dirname "$dest")"
+}
+
+remove_icon() {
+    local dest="$HOME_DIR/.local/share/icons/hicolor/512x512/apps/deckd.png"
+    [ -f "$dest" ] && { note "- removing app icon $dest"; rm -f "$dest"; } || true
+}
+
 install_autostart() {
     [ "$AUTOSTART" -eq 1 ] || return 0
     [ -n "$APPIMAGE" ] || { note "! no AppImage path given; skipping autostart"; return 0; }
@@ -300,6 +319,7 @@ install_autostart() {
 Type=Application
 Name=deckd
 Comment=App-aware touch control surface
+Icon=deckd
 Exec="$abs"
 Terminal=false
 X-GNOME-Autostart-enabled=true
@@ -327,6 +347,7 @@ if [ "$UNINSTALL" -eq 1 ]; then
     [ "$S_AUTOSTART" = 1 ] && remove_autostart || true
     [ "$S_GNOME" = 1 ] && remove_gnome_extension || true
     [ "$S_KDE" = 1 ] && remove_kwin_script || true
+    [ "$S_ICON" = 1 ] && remove_icon || true
     [ "$S_UDEV" = 1 ] && remove_udev_rule || true
     [ "$S_GROUP" = 1 ] && remove_input_group || true
     rm -f "$STATE_FILE"
@@ -341,6 +362,7 @@ resolve_assets
 
 echo "Installing deckd system integration for $TARGET_USER"
 install_focus_watcher
+install_icon
 install_autostart
 install_udev
 write_state

@@ -63,10 +63,11 @@ jobs:
 
       - uses: extractions/setup-just@v4
 
-      # librsvg2-bin gives the recipe rsvg-convert for the icon; build-essential
-      # provides the compiler evdev's source build needs on aarch64.
+      # build-essential provides the compiler evdev's source build needs on
+      # aarch64. Icons come from the committed PNGs (`just icons`), so no
+      # SVG rasterizer is required.
       - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y librsvg2-bin build-essential
+        run: sudo apt-get update && sudo apt-get install -y build-essential
 
       # evdev (uinput) + dbus-fast ([dbus]) + PyInstaller. Installing these
       # first also stops the recipe's `uv pip install` fallback from firing.
@@ -101,6 +102,7 @@ jobs:
           tmp="$(mktemp -d)"
           APPIMAGE_EXTRACT_AND_RUN=1 dist/deckd-*.AppImage --extract-integration "$tmp"
           test -f "$tmp/70-deckd-uinput.rules"
+          test -f "$tmp/deckd.png"
           test -d "$tmp/gnome-shell/deckd-focus@local"
           test -f "$tmp/install-system-integration.sh"
 

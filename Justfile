@@ -542,16 +542,20 @@ build-linux-appimage:
     cp packaging/linux/appimage/AppRun "$appdir/AppRun"
     chmod +x "$appdir/AppRun"
     cp packaging/linux/appimage/deckd.desktop "$appdir/"
-    # appimagetool wants deckd.png (or deckd.svg) at the AppDir root.
-    if command -v rsvg-convert >/dev/null 2>&1; then
-        rsvg-convert -w 512 -h 512 -o "$appdir/deckd.png" client/public/icon.svg
-    elif command -v magick >/dev/null 2>&1; then
-        magick -background none client/public/icon.svg -resize 512x512 "$appdir/deckd.png"
-    elif command -v convert >/dev/null 2>&1; then
-        convert -background none client/public/icon.svg -resize 512x512 "$appdir/deckd.png"
-    else
-        cp client/public/icon.svg "$appdir/deckd.svg"
-    fi
+    # Icons: the committed PNGs are the single source of truth (regenerate with
+    # `just icons`). appimagetool turns the root deckd.png into .DirIcon, and the
+    # hicolor copies let desktop integration resolve the .desktop's Icon=deckd.
+    [ -f client/public/icon-512.png ] \
+        || { echo "missing client/public/icon-512.png; run: just icons" >&2; exit 1; }
+    cp client/public/icon-512.png "$appdir/deckd.png"
+    for size in 192 512; do
+        mkdir -p "$appdir/usr/share/icons/hicolor/${size}x${size}/apps"
+        cp "client/public/icon-${size}.png" \
+            "$appdir/usr/share/icons/hicolor/${size}x${size}/apps/deckd.png"
+    done
+    # The install helper copies the icon into the user's theme, so it rides
+    # along in the integration tree it extracts.
+    cp client/public/icon-512.png "$appdir/usr/share/deckd/integration/deckd.png"
 
     tooling="${XDG_CACHE_HOME:-$HOME/.cache}/deckd/appimagetool-${arch}.AppImage"
     if [ ! -x "$tooling" ]; then
@@ -580,6 +584,7 @@ install-system-integration *args:
     cp packaging/udev/70-deckd-uinput.rules "$stage/"
     cp -R packaging/gnome-shell/deckd-focus@local "$stage/gnome-shell/"
     cp -R packaging/kwin-script/deckd-focus "$stage/kwin-script/"
+    cp client/public/icon-512.png "$stage/deckd.png"
     sudo packaging/linux/install-system-integration.sh --assets "$stage" {{args}}
 
 # Run the Nix flake checks: builds packages.deckd and the focus-watcher
