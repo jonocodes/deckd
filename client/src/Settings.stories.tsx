@@ -46,6 +46,7 @@ export const Default: Story = () => (
       onReduceMotionChange={noop}
       showKeyHints={false}
       onShowKeyHintsChange={noop}
+      onOpenEditor={noop}
     />
   </main>
 );
