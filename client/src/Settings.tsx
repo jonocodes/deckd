@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Info as InfoIcon } from "lucide-react";
+import { Info as InfoIcon, Pencil as PencilIcon } from "lucide-react";
 import { useOrientation } from "./orientation";
 import {
   BOTTOM_SCALE_MAX,
@@ -53,6 +53,10 @@ type Props = {
   layoutOverflow: "clip" | "shrink-to-fit";
   /** Open the in-app explainer for the sizing controls below (ADR-0011). */
   onOpenHelp?: () => void;
+  /** Open the layout editor. The editor's launch point moved out of the
+   * always-on bottom chrome into Settings — editing is occasional, so the
+   * button doesn't need to occupy the crowded bottom bar full-time. */
+  onOpenEditor?: () => void;
   jogWidth: number;
   onJogWidthChange: (n: number) => void;
   bottomScale: number;
@@ -103,6 +107,7 @@ export function Settings({
   onOverflowChange,
   layoutOverflow,
   onOpenHelp,
+  onOpenEditor,
   jogWidth,
   onJogWidthChange,
   bottomScale,
@@ -147,6 +152,17 @@ export function Settings({
 
   return (
     <div className="settings" role="region" aria-label="Settings">
+      {onOpenEditor ? (
+        <button
+          type="button"
+          className="settings-editor-launch"
+          onClick={onOpenEditor}
+        >
+          <PencilIcon size={18} aria-hidden="true" />
+          <span>Edit layout</span>
+        </button>
+      ) : null}
+
       <h2 className="settings-title">Scroll</h2>
       <div className="settings-controls">
         <div className="settings-control">

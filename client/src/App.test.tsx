@@ -110,30 +110,19 @@ describe("App — chrome media icon", () => {
     expect(screen.getByRole("heading", { name: /manual control/i })).toBeTruthy();
   });
 
-  it("renders the editor button in the bottom chrome", () => {
+  it("no longer renders an editor button in the bottom chrome", () => {
+    // The editor's launch point moved into Settings (declutter, portrait
+    // phones) — the always-on bottom chrome no longer carries it.
     render(<App />);
-    expect(screen.getByRole("button", { name: "layout editor" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "layout editor" })).toBeNull();
   });
 
-  it("sends select_view on editor button click and applies the active class", () => {
+  it("launches the editor from Settings and sends select_view", () => {
     render(<App />);
-    const button = screen.getByRole("button", { name: "layout editor" });
-    expect(button.className).not.toContain("chrome-btn-active");
-    fireEvent.pointerDown(button);
+    fireEvent.keyDown(window, { key: "3" }); // open settings
+    fireEvent.click(screen.getByRole("button", { name: /edit layout/i }));
     expect(send).toHaveBeenCalledWith({ type: "select_view", view: "editor" });
-    expect(button.className).toContain("chrome-btn-active");
-  });
-
-  it("sends clear_view on a second editor button click and removes the active class", () => {
-    render(<App />);
-    const button = screen.getByRole("button", { name: "layout editor" });
-    fireEvent.pointerDown(button); // open
-    fireEvent.pointerDown(button); // close
-    expect(send.mock.calls.map((c) => c[0])).toEqual([
-      { type: "select_view", view: "editor" },
-      { type: "clear_view" },
-    ]);
-    expect(button.className).not.toContain("chrome-btn-active");
+    expect(screen.getByRole("region", { name: "layout editor" })).toBeTruthy();
   });
 
   it("renders the browser placeholder in place of the focused-app layout while open", () => {
@@ -274,7 +263,7 @@ describe("App — chrome media icon passive indicator", () => {
  * global chrome, and hiding it per-platform would make the chrome strip
  * differ between a user's Linux box and their Mac.
  */
-describe("App — now playing unsupported on this platform", () => {
+describe("App — now playing button visibility", () => {
   afterEach(cleanup);
   beforeEach(() => {
     send.mockReset();
@@ -294,11 +283,13 @@ describe("App — now playing unsupported on this platform", () => {
     });
   }
 
-  function openBrowser() {
-    fireEvent.pointerDown(screen.getByRole("button", { name: /now playing/i }));
-  }
+  const mediaButton = () =>
+    screen.queryByRole("button", { name: /now playing/i });
 
-  it("shows the unsupported empty state when the daemon reports supported=false", () => {
+  it("hides the button when the host has no media support", () => {
+    // macOS has no session bus: ``supported: false`` (and ``available:
+    // false``) means the button would only ever say "unsupported". A
+    // control that can never do anything is pure clutter — drop it.
     render(<App />);
     pushChromeMedia({
       available: false,
@@ -306,44 +297,33 @@ describe("App — now playing unsupported on this platform", () => {
       playing_count: 0,
       supported: false,
     });
-    openBrowser();
-    expect(
-      screen.getByText("now playing: unsupported on this platform"),
-    ).toBeTruthy();
-    expect(screen.queryByText("Nothing playing")).toBeNull();
+    expect(mediaButton()).toBeNull();
   });
 
-  it("keeps the chrome button visible when unsupported", () => {
-    render(<App />);
-    pushChromeMedia({
-      available: false,
-      playing: false,
-      playing_count: 0,
-      supported: false,
-    });
-    expect(screen.getByRole("button", { name: /now playing/i })).toBeTruthy();
-  });
-
-  it("keeps the transient empty state when supported is omitted", () => {
-    // An older daemon doesn't send the field; absence must read as
-    // "supported", not as "unsupported" — otherwise every pre-upgrade
-    // daemon would claim the platform can't do media.
+  it("hides the button when no player is present", () => {
+    // ``available: false`` on a supported host means nothing is playing
+    // and nothing is paused — there's no media to control, so the button
+    // gets out of the way (declutter, portrait phones).
     render(<App />);
     pushChromeMedia({ available: false, playing: false, playing_count: 0 });
-    openBrowser();
-    expect(screen.getByText("Nothing playing")).toBeTruthy();
+    expect(mediaButton()).toBeNull();
   });
 
-  it("keeps the transient empty state when supported is true", () => {
+  it("shows the button when a player is present but paused", () => {
+    // Gate on a media *session* existing, not on active playback: a paused
+    // player is still worth opening to resume, and hiding the button the
+    // instant media pauses would be jarring layout churn.
     render(<App />);
-    pushChromeMedia({
-      available: false,
-      playing: false,
-      playing_count: 0,
-      supported: true,
-    });
-    openBrowser();
-    expect(screen.getByText("Nothing playing")).toBeTruthy();
+    pushChromeMedia({ available: true, playing: false, playing_count: 0 });
+    expect(mediaButton()).toBeTruthy();
+  });
+
+  it("shows the button before any chrome_media frame arrives", () => {
+    // No frame yet — or a daemon predating the ``available`` field —
+    // reads as "present", preserving the old always-visible behaviour so
+    // pre-upgrade daemons don't silently lose the button.
+    render(<App />);
+    expect(mediaButton()).toBeTruthy();
   });
 });
 
@@ -369,7 +349,6 @@ describe("App — chrome button tooltips", () => {
       // (issue #62, AC #3). A regex keeps the tooltip test
       // independent of that detail.
       { name: /now playing/i, tipId: "now playing" },
-      { name: "layout editor", tipId: "layout editor" },
       { name: "fullscreen", tipId: "fullscreen" },
       { name: "settings", tipId: "settings" },
     ];
@@ -388,12 +367,11 @@ describe("App — chrome button tooltips", () => {
 
   it("chrome buttons without a visible label get a tooltip; buttons with a label do not", () => {
     render(<App />);
-    // The three chrome buttons are icon-only (a single <svg> child)
-    // and carry aria-label only — they get the tooltip wrapper.
+    // The chrome buttons are icon-only (a single <svg> child) and carry
+    // aria-label only — they get the tooltip wrapper.
     const iconOnly = [
       screen.getByRole("button", { name: "manual control" }),
       screen.getByRole("button", { name: /now playing/i }),
-      screen.getByRole("button", { name: "layout editor" }),
       screen.getByRole("button", { name: "fullscreen" }),
       screen.getByRole("button", { name: "settings" }),
     ];
@@ -460,14 +438,6 @@ describe("App — chrome keyboard activation", () => {
     expect(send).toHaveBeenCalledWith({ type: "select_view", view: "mpris" });
   });
 
-  it("Enter activates the editor button and sends select_view", () => {
-    render(<App />);
-    const button = screen.getByRole("button", { name: "layout editor" });
-    fireEvent.keyDown(button, { key: "Enter" });
-    expect(button.className).toContain("chrome-btn-active");
-    expect(send).toHaveBeenCalledWith({ type: "select_view", view: "editor" });
-  });
-
   it("non-activation keys do not toggle the chrome view", () => {
     render(<App />);
     const button = screen.getByRole("button", { name: "settings" });
@@ -480,11 +450,9 @@ describe("App — chrome keyboard activation", () => {
     const manual = screen.getByRole("button", { name: "manual control" });
     const settings = screen.getByRole("button", { name: "settings" });
     const media = screen.getByRole("button", { name: /now playing/i });
-    const editor = screen.getByRole("button", { name: "layout editor" });
     expect(manual.getAttribute("aria-pressed")).toBe("false");
     expect(settings.getAttribute("aria-pressed")).toBe("false");
     expect(media.getAttribute("aria-pressed")).toBe("false");
-    expect(editor.getAttribute("aria-pressed")).toBe("false");
     fireEvent.keyDown(manual, { key: "Enter" });
     expect(manual.getAttribute("aria-pressed")).toBe("true");
   });
@@ -530,9 +498,11 @@ describe("App — keyboard shortcuts", () => {
   });
 
   it("pressing 4 opens the editor view and sends select_view", () => {
+    // The editor button left the bottom chrome (it lives in Settings now),
+    // but the ``4`` power-user shortcut still opens the editor directly.
     render(<App />);
     fireEvent.keyDown(window, { key: "4" });
-    expect(screen.getByRole("button", { name: "layout editor" }).className).toContain("chrome-btn-active");
+    expect(screen.getByRole("region", { name: "layout editor" })).toBeTruthy();
     expect(send).toHaveBeenCalledWith({ type: "select_view", view: "editor" });
   });
 
@@ -548,9 +518,9 @@ describe("App — keyboard shortcuts", () => {
   it("Escape clears the editor view and sends clear_view", () => {
     render(<App />);
     fireEvent.keyDown(window, { key: "4" });
-    expect(screen.getByRole("button", { name: "layout editor" }).className).toContain("chrome-btn-active");
+    expect(screen.getByRole("region", { name: "layout editor" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.getByRole("button", { name: "layout editor" }).className).not.toContain("chrome-btn-active");
+    expect(screen.queryByRole("region", { name: "layout editor" })).toBeNull();
     expect(send.mock.calls.map((c) => c[0])).toContainEqual({ type: "clear_view" });
   });
 
@@ -630,14 +600,16 @@ describe("App — focus restoration", () => {
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "settings" }));
   });
 
-  it("returns focus to the editor button after closing the editor view", async () => {
+  it("returns focus to the settings button after closing the editor view", async () => {
+    // The editor button moved into Settings, so its keyboard focus origin
+    // is now the settings chrome button — focus lands there on close.
     render(<App />);
     fireEvent.keyDown(window, { key: "4" });
     await act(async () => {
       fireEvent.keyDown(window, { key: "Escape" });
     });
     await new Promise((r) => setTimeout(r, 100));
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "layout editor" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "settings" }));
   });
 });
 

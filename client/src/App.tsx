@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Lock as LockIcon, Moon as MoonIcon, Pencil as PencilIcon, Settings as SettingsIcon, Globe as GlobeIcon, Maximize as MaximizeIcon, Minimize as MinimizeIcon } from "lucide-react";
+import { Lock as LockIcon, Moon as MoonIcon, Settings as SettingsIcon, Globe as GlobeIcon, Maximize as MaximizeIcon, Minimize as MinimizeIcon } from "lucide-react";
 import { LayoutGrid as LayoutGridIcon, Music as MusicIcon, PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
@@ -414,7 +414,6 @@ export function App() {
   const fullscreenBtnRef = useRef<HTMLButtonElement | null>(null);
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const mediaBtnRef = useRef<HTMLButtonElement | null>(null);
-  const editorBtnRef = useRef<HTMLButtonElement | null>(null);
   const windowsBtnRef = useRef<HTMLButtonElement | null>(null);
   // Remember the chrome button that opened the current view so a
   // window-level Escape (where ``e.target`` is the body, not a
@@ -511,8 +510,11 @@ export function App() {
         openSettings();
       } else if (e.key === "4") {
         e.preventDefault();
-        viewOriginRef.current = editorBtnRef.current;
-        lastChromeFocus.current = editorBtnRef.current;
+        // The editor button now lives inside Settings (not the bottom
+        // chrome), so its focus origin is the settings button — that's
+        // where focus returns when the editor closes via the keyboard.
+        viewOriginRef.current = settingsBtnRef.current;
+        lastChromeFocus.current = settingsBtnRef.current;
         toggleEditor();
       } else if (e.key === "5") {
         e.preventDefault();
@@ -527,6 +529,22 @@ export function App() {
 
   const jogstripEnabled = layout?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
+
+  // Bottom-chrome button visibility (declutter, portrait phones). The
+  // manual-control, now-playing and running-programs buttons all act on a
+  // live daemon connection — with no ``open`` socket there's nothing to
+  // drive, so they're hidden until the connection is back. ``unauthorized``
+  // never reaches here (PasswordGate takes the whole screen above), so the
+  // only non-connected states are ``connecting`` / ``closed``.
+  const connected = status === "open";
+  // Now-playing button appears only when a media *session* actually exists.
+  // Gate on ``available`` (a player is present, even if paused) rather than
+  // ``playing`` so the button doesn't flicker away every time media pauses —
+  // a paused player is still worth opening to resume. ``null`` (no frame yet
+  // / a daemon predating the field) reads as present, preserving the old
+  // always-visible behaviour; only an explicit ``available: false`` — no
+  // player, or a host without media support — hides it.
+  const showMediaButton = connected && chromeMedia?.available !== false;
 
   // Stage 1 fallback header (issue #123): when the daemon reports this
   // push is a genuine focus-driven default fallback (``is_default``),
@@ -780,6 +798,7 @@ export function App() {
               showKeyHints={showKeyHints.enabled}
               onShowKeyHintsChange={showKeyHints.setEnabled}
               onOpenHelp={() => navigate("help")}
+              onOpenEditor={toggleEditor}
             />
           ) : view === "help" ? (
             // User-facing explainer for the grid geometry (ADR-0011). Opened
@@ -886,95 +905,82 @@ export function App() {
           <span className="connection-dot" />
           <span className="connection-label">{statusLabel}</span>
         </span>
-        <Tooltip ref={trackpadBtnRef} label="manual control">
-          <button
-            className={`chrome-btn${view === "trackpad" ? " chrome-btn-active" : ""}`}
-            aria-label="manual control"
-            aria-pressed={view === "trackpad"}
-            disabled={screenLocked}
-            onPointerDown={() => {
-              if (screenLocked) return;
-              viewOriginRef.current = trackpadBtnRef.current;
-              lastChromeFocus.current = trackpadBtnRef.current;
-              openTrackpad();
-            }}
-            onKeyDown={onActivate(() => {
-              if (screenLocked) return;
-              viewOriginRef.current = trackpadBtnRef.current;
-              lastChromeFocus.current = trackpadBtnRef.current;
-              openTrackpad();
-            })}
-          >
-            <PointerIcon size={18} />
-          </button>
-        </Tooltip>
-        <Tooltip ref={mediaBtnRef} label="now playing">
-          <button
-            className={`chrome-btn${view === "nowplaying" ? " chrome-btn-active" : ""}${chromeMedia?.playing ? " chrome-btn-playing" : ""}`}
-            aria-label={chromeMedia?.playing ? "now playing" : "now playing"}
-            aria-pressed={view === "nowplaying"}
-            onPointerDown={() => {
-              viewOriginRef.current = mediaBtnRef.current;
-              lastChromeFocus.current = mediaBtnRef.current;
-              toggleNowPlaying();
-            }}
-            onKeyDown={onActivate(() => {
-              viewOriginRef.current = mediaBtnRef.current;
-              lastChromeFocus.current = mediaBtnRef.current;
-              toggleNowPlaying();
-            })}
-          >
-            <MusicIcon size={18} />
-            {/* The pulsing green dot is a colour-only state carrier (issue
-                #62, AC #3). The screen-reader-only text below gives
-                assistive tech the same info a sighted user gets from the
-                dot, so the playback state isn't conveyed by colour alone. */}
-            <span className="chrome-btn-sr-status">
-              {chromeMedia?.playing ? "now playing" : "idle"}
-            </span>
-          </button>
-        </Tooltip>
-        <Tooltip ref={editorBtnRef} label="layout editor">
-          <button
-            className={`chrome-btn${view === "editor" ? " chrome-btn-active" : ""}`}
-            aria-label="layout editor"
-            aria-pressed={view === "editor"}
-            onPointerDown={() => {
-              viewOriginRef.current = editorBtnRef.current;
-              lastChromeFocus.current = editorBtnRef.current;
-              toggleEditor();
-            }}
-            onKeyDown={onActivate(() => {
-              viewOriginRef.current = editorBtnRef.current;
-              lastChromeFocus.current = editorBtnRef.current;
-              toggleEditor();
-            })}
-          >
-            <PencilIcon size={16} />
-          </button>
-        </Tooltip>
-        <Tooltip ref={windowsBtnRef} label={screenLocked ? "running programs (locked)" : "running programs"}>
-          <button
-            className={`chrome-btn${view === "windows" ? " chrome-btn-active" : ""}`}
-            aria-label={screenLocked ? "running programs (locked)" : "running programs"}
-            aria-pressed={view === "windows"}
-            disabled={screenLocked}
-            onPointerDown={() => {
-              if (screenLocked) return;
-              viewOriginRef.current = windowsBtnRef.current;
-              lastChromeFocus.current = windowsBtnRef.current;
-              toggleWindows();
-            }}
-            onKeyDown={onActivate(() => {
-              if (screenLocked) return;
-              viewOriginRef.current = windowsBtnRef.current;
-              lastChromeFocus.current = windowsBtnRef.current;
-              toggleWindows();
-            })}
-          >
-            <LayoutGridIcon size={18} />
-          </button>
-        </Tooltip>
+        {connected && (
+          <Tooltip ref={trackpadBtnRef} label="manual control">
+            <button
+              className={`chrome-btn${view === "trackpad" ? " chrome-btn-active" : ""}`}
+              aria-label="manual control"
+              aria-pressed={view === "trackpad"}
+              disabled={screenLocked}
+              onPointerDown={() => {
+                if (screenLocked) return;
+                viewOriginRef.current = trackpadBtnRef.current;
+                lastChromeFocus.current = trackpadBtnRef.current;
+                openTrackpad();
+              }}
+              onKeyDown={onActivate(() => {
+                if (screenLocked) return;
+                viewOriginRef.current = trackpadBtnRef.current;
+                lastChromeFocus.current = trackpadBtnRef.current;
+                openTrackpad();
+              })}
+            >
+              <PointerIcon size={18} />
+            </button>
+          </Tooltip>
+        )}
+        {showMediaButton && (
+          <Tooltip ref={mediaBtnRef} label="now playing">
+            <button
+              className={`chrome-btn${view === "nowplaying" ? " chrome-btn-active" : ""}${chromeMedia?.playing ? " chrome-btn-playing" : ""}`}
+              aria-label="now playing"
+              aria-pressed={view === "nowplaying"}
+              onPointerDown={() => {
+                viewOriginRef.current = mediaBtnRef.current;
+                lastChromeFocus.current = mediaBtnRef.current;
+                toggleNowPlaying();
+              }}
+              onKeyDown={onActivate(() => {
+                viewOriginRef.current = mediaBtnRef.current;
+                lastChromeFocus.current = mediaBtnRef.current;
+                toggleNowPlaying();
+              })}
+            >
+              <MusicIcon size={18} />
+              {/* The pulsing green dot is a colour-only state carrier (issue
+                  #62, AC #3). The screen-reader-only text below gives
+                  assistive tech the same info a sighted user gets from the
+                  dot, so the playback state isn't conveyed by colour alone. */}
+              <span className="chrome-btn-sr-status">
+                {chromeMedia?.playing ? "now playing" : "idle"}
+              </span>
+            </button>
+          </Tooltip>
+        )}
+        {connected && (
+          <Tooltip ref={windowsBtnRef} label={screenLocked ? "running programs (locked)" : "running programs"}>
+            <button
+              className={`chrome-btn${view === "windows" ? " chrome-btn-active" : ""}`}
+              aria-label={screenLocked ? "running programs (locked)" : "running programs"}
+              aria-pressed={view === "windows"}
+              disabled={screenLocked}
+              onPointerDown={() => {
+                if (screenLocked) return;
+                viewOriginRef.current = windowsBtnRef.current;
+                lastChromeFocus.current = windowsBtnRef.current;
+                toggleWindows();
+              }}
+              onKeyDown={onActivate(() => {
+                if (screenLocked) return;
+                viewOriginRef.current = windowsBtnRef.current;
+                lastChromeFocus.current = windowsBtnRef.current;
+                toggleWindows();
+              })}
+            >
+              <LayoutGridIcon size={18} />
+            </button>
+          </Tooltip>
+        )}
         <Tooltip ref={fullscreenBtnRef} label={isFullscreen ? "exit fullscreen" : "fullscreen"}>
           <button
             className="chrome-btn"

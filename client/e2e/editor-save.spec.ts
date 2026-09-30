@@ -1,7 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 
 async function enterEditor(page: Page) {
-  await page.getByRole("button", { name: "layout editor" }).click();
+  // The editor launch point moved out of the bottom chrome into settings.
+  await page.getByRole("button", { name: "settings" }).click();
+  await page.getByRole("button", { name: /edit layout/i }).click();
   await page.locator(".editor-header").waitFor();
 }
 
