@@ -10,7 +10,7 @@ Output: ``dist/deckd/`` (a PyInstaller onedir tree). The AppImage recipe
 copies it into ``deckd.AppDir/usr/bin`` and wraps it with ``appimagetool``.
 
 The entry point is ``packaging/linux/launcher.py``; the built client and
-layouts are copied in as data under ``sys._MEIPASS`` (the ``_internal`` dir),
+decks are copied in as data under ``sys._MEIPASS`` (the ``_internal`` dir),
 where ``deckd.app_bundle`` looks for them. The udev rule and focus-watcher
 sources are *not* frozen in — they are system integration, not runtime, and
 the AppImage recipe places them under ``usr/share/deckd/integration`` where
@@ -27,12 +27,12 @@ sys.path.insert(0, str(ROOT / "daemon"))
 
 datas = [
     (str(ROOT / "client/dist"), "web"),
-    (str(ROOT / "layouts"), "layouts"),
+    (str(ROOT / "decks"), "decks"),
 ]
-# Per-platform overlay, if present. The daemon auto-discovers ``layouts.linux``
-# beside the layouts dir (see ``_overlay_dir_for``); app_bundle seeds it.
-if (ROOT / "layouts.linux").is_dir():
-    datas.append((str(ROOT / "layouts.linux"), "layouts.linux"))
+# Per-platform overlay, if present. The daemon auto-discovers ``decks.linux``
+# beside the decks dir (see ``_overlay_dir_for``); app_bundle seeds it.
+if (ROOT / "decks.linux").is_dir():
+    datas.append((str(ROOT / "decks.linux"), "decks.linux"))
 
 a = Analysis(
     [str(ROOT / "packaging/linux/launcher.py")],

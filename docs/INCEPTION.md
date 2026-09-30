@@ -2,7 +2,7 @@
 
 **Status:** Pre-implementation design. This document captures the full design exploration and all decisions made. It is intended as a complete handoff to an implementation-planning session.
 
-**One-line pitch:** deckd is an application-aware touch control surface for the Linux desktop — a Stream Deck-like deck of buttons, sliders, scroll strips, and a trackpad mode, rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps layouts automatically.
+**One-line pitch:** deckd is an application-aware touch control surface for the Linux desktop — a Stream Deck-like deck of buttons, sliders, scroll strips, and a trackpad mode, rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps decks automatically.
 
 **Owner context:** Solo personal project. Primary target machine is a NixOS desktop running GNOME on Wayland. Owner is an experienced software developer (Python, Go, infra, NixOS) but a hardware novice. Planning-first, documentation-oriented workflow. macOS support is explicitly deferred but must not be architecturally foreclosed.
 
@@ -17,7 +17,7 @@ The device/app shows a small grid of touch controls that change based on which a
 - Client is a **web app** (no custom hardware in v1). Runs fullscreen in a phone/tablet browser, or in a desktop browser tab for development.
 - Daemon runs on the Linux desktop, GNOME/Wayland first.
 - Widgets: buttons, pages, scroll strip (jog), trackpad mode, a settings page (brightness concept reserved for future hardware; on a phone the OS manages the screen).
-- App-aware layout switching driven by focused-window detection.
+- App-aware deck switching driven by focused-window detection.
 - Actions: keystroke injection, shell commands, D-Bus calls — all defined in config, never special-cased in code.
 
 **Explicitly deferred:** dedicated LCD hardware (Section 9 preserves that path), macOS backend (Section 10), Windows, any streaming-specific integrations (OBS etc. — those are just config entries).
@@ -33,7 +33,7 @@ Two components, sharp boundary:
 ```
 ┌──────────────────────────┐         WebSocket (JSON)        ┌──────────────────────┐
 │  Client (browser, React) │ ◄─────────────────────────────► │  deckd (Python)      │
-│  "dumb renderer"         │   layouts down, events up       │  "all the brains"    │
+│  "dumb renderer"         │   decks down, events up       │  "all the brains"    │
 └──────────────────────────┘                                 └──────┬───────────────┘
                                                                     │
                                               ┌─────────────────────┼──────────────────────┐
@@ -44,9 +44,9 @@ Two components, sharp boundary:
                                                                Night Light, idle)
 ```
 
-**Core principle — semantics over the wire.** The daemon sends *layout descriptions* ("six buttons with these labels/icons, a scroll strip here"); the client renders them natively and sends back *semantic events* ("button 3 tapped", "jog delta +40", "pad moved dx,dy"). The client never knows what an action does; the daemon never renders pixels. This is what makes the client swappable (phone browser today, dedicated hardware later, another machine's browser tomorrow) and the daemon portable (the OS-touching parts are isolated).
+**Core principle — semantics over the wire.** The daemon sends *deck descriptions* ("six buttons with these labels/icons, a scroll strip here"); the client renders them natively and sends back *semantic events* ("button 3 tapped", "jog delta +40", "pad moved dx,dy"). The client never knows what an action does; the daemon never renders pixels. This is what makes the client swappable (phone browser today, dedicated hardware later, another machine's browser tomorrow) and the daemon portable (the OS-touching parts are isolated).
 
-**Core principle — the daemon is app-agnostic.** deckd's core has zero knowledge of any particular application. "Open Spotify", "OBS scene 3", "mute call" are entries in layout config files that fire a generic action (keystroke / shell / D-Bus) — never special-cased Python. This is a deliberate rejection of the feature-creep failure mode observed in WebDeck (community criticism: "contains lots of random logic (bloatware) by default related to OBS, Spotify, your GPU").
+**Core principle — the daemon is app-agnostic.** deckd's core has zero knowledge of any particular application. "Open Spotify", "OBS scene 3", "mute call" are entries in deck config files that fire a generic action (keystroke / shell / D-Bus) — never special-cased Python. This is a deliberate rejection of the feature-creep failure mode observed in WebDeck (community criticism: "contains lots of random logic (bloatware) by default related to OBS, Spotify, your GPU").
 
 **Platform abstraction layer.** All OS-specific behavior lives behind a small interface so macOS later is "one more backend class", not a fork:
 
@@ -144,7 +144,7 @@ This is the app-awareness engine and the least-standardized piece:
   3. XWayland fallback — only sees XWayland windows; inadequate alone.
 - Check `echo $XDG_SESSION_TYPE` first; support both backends behind `watch_active_app()`.
 
-The daemon matches the reported app identity (`app_id`/`WM_CLASS`) against layout config keys, with a default layout as fallback.
+The daemon matches the reported app identity (`app_id`/`WM_CLASS`) against deck config keys, with a default deck as fallback.
 
 ---
 
@@ -160,7 +160,7 @@ The daemon matches the reported app identity (`app_id`/`WM_CLASS`) against layou
 
 ### 5.2 Hot path bypasses React
 
-React owns layout rendering (the grid of widgets). Drags do **not** go through React state: the interactive surface handles pointer events imperatively, computes deltas, throttles to `requestAnimationFrame`, fires WebSocket messages directly, and moves any on-screen handle with a direct style transform. This is what keeps finger-tracking at 60fps; a state-update-per-pointermove would jank.
+React owns deck rendering (the grid of widgets). Drags do **not** go through React state: the interactive surface handles pointer events imperatively, computes deltas, throttles to `requestAnimationFrame`, fires WebSocket messages directly, and moves any on-screen handle with a direct style transform. This is what keeps finger-tracking at 60fps; a state-update-per-pointermove would jank.
 
 ### 5.3 Rendering feedback
 
@@ -168,7 +168,7 @@ Because the client renders natively, visual feedback (button press states, slide
 
 ### 5.4 Connection lifecycle
 
-Prior-art lesson (WebDeck's most-complained bug is reconnection): build it in from day one. On WebSocket close: show a "reconnecting…" overlay, retry with exponential backoff, re-request current layout on reconnect. Never silently go stale. Daemon side: client connects → daemon immediately pushes the layout for the currently focused app.
+Prior-art lesson (WebDeck's most-complained bug is reconnection): build it in from day one. On WebSocket close: show a "reconnecting…" overlay, retry with exponential backoff, re-request current deck on reconnect. Never silently go stale. Daemon side: client connects → daemon immediately pushes the deck for the currently focused app.
 
 ---
 
@@ -180,7 +180,7 @@ Message shapes (starting point — implementation may refine):
 
 ```jsonc
 // daemon → client
-{ "type": "layout", "app": "firefox", "page": "main", "widgets": [
+{ "type": "deck", "app": "firefox", "page": "main", "widgets": [
     { "id": "b1", "kind": "button", "label": "Mute", "icon": "mic-off", "grid": [0,0,1,1] },
     { "id": "jog", "kind": "jogstrip", "orientation": "vertical", "grid": [3,0,1,3] },
     { "id": "pad", "kind": "trackpad", "grid": [0,1,3,2] }
@@ -204,10 +204,10 @@ Message shapes (starting point — implementation may refine):
 
 ## 7. Configuration model
 
-Per-app layout files (YAML or JSON, owner preference — they like markdown/config-driven systems), matched on `app_id`/`WM_CLASS`, plus a `default` layout. Actions are generic primitives only:
+Per-app deck files (YAML or JSON, owner preference — they like markdown/config-driven systems), matched on `app_id`/`WM_CLASS`, plus a `default` deck. Actions are generic primitives only:
 
 ```yaml
-# layouts/firefox.yaml
+# decks/firefox.yaml
 match: ["firefox", "org.mozilla.firefox"]
 pages:
   main:
@@ -244,7 +244,7 @@ Action primitives: `key` (keystroke via uinput), `shell` (subprocess), `dbus` (m
 - **Libraries:** `aiohttp` (HTTP static + WebSocket, one port), `dbus-fast` (async D-Bus), `python-evdev` (uinput), `qrcode` (pairing), `pydantic` or dataclasses for config/message schemas.
 - Go was considered (single-binary distribution) and deferred; Python wins on iteration speed for a personal tool, and the owner knows the ecosystem. Revisit only if "ship one static binary" becomes a goal.
 - **Packaging:** NixOS module providing the systemd **user** service, udev rule, `uinput` kernel module, `input` group membership. Client ships as Vite `dist/` served by the daemon; dev mode runs Vite's dev server proxying WS to the daemon.
-- **CLI:** `deckctl` speaking to the daemon over a local socket — `status`, `qr`, `brightness N`, `reload` (re-read layouts). No GNOME Shell extension, no tray dependency (GNOME has no native tray; systemd + CLI is the GNOME-native shape).
+- **CLI:** `deckctl` speaking to the daemon over a local socket — `status`, `qr`, `brightness N`, `reload` (re-read decks). No GNOME Shell extension, no tray dependency (GNOME has no native tray; systemd + CLI is the GNOME-native shape).
 
 ---
 
@@ -258,7 +258,7 @@ Full exploration summary so the option stays open. The architecture was designed
 
 **Selected (if/when built): Waveshare ESP32-S3-Touch-LCD-2** (~$18–22, Amazon ASIN B0DTTL56ZR). 2" 240×320 IPS, capacitive touch (CST816D, I2C), ST7789T3 display (SPI), ESP32-S3R8, USB-C with native USB (clean CDC serial, no CH340 driver), PWM-controllable backlight, good Waveshare wiki/demos. Runner-ups documented: classic CYD ESP32-2432S028R (~$8–15, resistive touch, huge community — witnessmenow/ESP32-Cheap-Yellow-Display repo); JC2432W328C (2.8" capacitive CYD-clone, ~$15 with case, expect pin-definition tweaks vs tutorials); Waveshare 1.69" (tiny; only 4–6 comfortable buttons). Touch-target math: comfortable buttons ≈14mm; 2.8" fits 8, 2" fits ~6, 1.69" fits 4. Pages compensate for smaller screens. Mounting idea: the flat valley between a Kinesis Advantage's key wells (3M VHB tape or a printed bracket, not permanent glue).
 
-**Hardware client architecture (dumb terminal):** PC daemon renders the layout to a framebuffer (Pillow) — 240×320×16-bit ≈ 150KB full frame; use partial dirty-rect updates for smooth slider/drag feedback — shipped over USB CDC serial; firmware blits via SPI and reports touch DOWN/MOVE/UP with coordinates; `BL <0-255>` command drives backlight PWM; firmware boots into "backlight off, wait for host" so a rebooting board never strobes before the daemon reconnects. Firmware never changes when layouts change. Power draw ~100–180mA from USB — irrelevant against the 500mA USB 2.0 budget. E-ink comparison for the record: panel refresh 9mW / frontlight ≤60mA / total 30–110mA, but the tradeoffs above rule it out.
+**Hardware client architecture (dumb terminal):** PC daemon renders the deck to a framebuffer (Pillow) — 240×320×16-bit ≈ 150KB full frame; use partial dirty-rect updates for smooth slider/drag feedback — shipped over USB CDC serial; firmware blits via SPI and reports touch DOWN/MOVE/UP with coordinates; `BL <0-255>` command drives backlight PWM; firmware boots into "backlight off, wait for host" so a rebooting board never strobes before the daemon reconnects. Firmware never changes when decks change. Power draw ~100–180mA from USB — irrelevant against the 500mA USB 2.0 budget. E-ink comparison for the record: panel refresh 9mW / frontlight ≤60mA / total 30–110mA, but the tradeoffs above rule it out.
 
 **Android-phone-as-device (explored, superseded by web app):** ADB TCP port forwarding is the pragmatic USB transport (`adb forward`, plain sockets, sub-ms latency); AOA (USB Accessory mode) is the "proper" peripheral protocol via libusb; both became moot once the client went browser-based — a phone browser over LAN/Tailscale (or an ADB-forwarded port) achieves the same with no native app to build.
 
@@ -266,7 +266,7 @@ Full exploration summary so the option stays open. The architecture was designed
 
 ## 10. macOS path (deferred, architecturally reserved)
 
-Only the platform backend changes; protocol, client, widgets, layouts all carry over.
+Only the platform backend changes; protocol, client, widgets, decks all carry over.
 
 - **Injection:** Quartz Event Services — `CGEventCreateMouseEvent` / `CGEventCreateScrollWheelEvent` + `CGEventPost`, reachable from Python via PyObjC. Requires one-time **Accessibility** (and possibly Input Monitoring) grants in System Settings; unsigned rebuilds can silently invalidate the grant (known PyObjC annoyance; a Swift helper is the eventual clean fix, not needed now).
 - **Focus:** `NSWorkspace.frontmostApplication` + change notifications (simpler than Linux — no X11/Wayland split).
@@ -279,14 +279,14 @@ Only the platform backend changes; protocol, client, widgets, layouts all carry 
 
 Researched July 2026. Three clusters:
 
-1. **Elgato-hardware ecosystem** (Stream Deck + Linux drivers like DeUX, OpenDeck): assumes purchased hardware; irrelevant as a platform, but **OpenDeck's button/plugin editor UI is flagged as a future reference** for deckd's layout editor (drag-to-arrange grid, icon picker, per-button action forms — look before building, don't reinvent badly).
+1. **Elgato-hardware ecosystem** (Stream Deck + Linux drivers like DeUX, OpenDeck): assumes purchased hardware; irrelevant as a platform, but **OpenDeck's button/plugin editor UI is flagged as a future reference** for deckd's deck editor (drag-to-arrange grid, icon picker, per-button action forms — look before building, don't reinvent badly).
 2. **Software remote decks** (WebDeck, Macro Deck, Touch Portal, Stream-Pi, ODeck): closest neighbors. **WebDeck** is the nearest match (browser-based, self-hosted, Flask + Flask-SocketIO) and is **Windows-only with Linux explicitly deferred by its maintainer** — the exact gap deckd fills. Lessons adopted: QR pairing (great UX, adopt); reconnection is the chronic complaint (design for it from day one); integration bloat is the failure mode (rejected via the app-agnostic-core principle).
 3. **DIY hardware decks** (FreeTouchDeck on ESP32/CYD — standalone Bluetooth HID keyboard, self-hosted web configurator on-device, but no host daemon and no app-awareness; Starkpad — open-source touchscreen deck with virtual keyboard/touchpad modes, good hardware reference).
 
 **KDE Connect / GSConnect** was evaluated and rejected as a foundation: its remote-input is a closed fixed feature, not a programmable surface; extending it means writing a plugin inside a GNOME Shell extension (fragile, wrong layer). Use it as a working reference for pairing/reconnection design, and as an interim phone-trackpad during development.
 
 **deckd's genuine differentiators (validated as underserved):**
-(a) focus-driven automatic layout switching from OS window-focus tracking — existing tools use manual profile paging or streaming-software triggers, not general desktop focus;
+(a) focus-driven automatic deck switching from OS window-focus tracking — existing tools use manual profile paging or streaming-software triggers, not general desktop focus;
 (b) uinput-level relative scroll and trackpad injection — existing tools live at the send-a-hotkey abstraction;
 (c) Linux/GNOME/Wayland-first, where the leading browser-based alternative doesn't run at all.
 
@@ -302,11 +302,11 @@ Researched July 2026. Three clusters:
 **Then milestones:**
 
 3. Daemon skeleton: asyncio core, aiohttp WS + static serving, config loader, platform-backend interface with the Linux implementation wrapping spike code.
-4. Client skeleton: Vite/React/TS, layout renderer for `button` + `jogstrip`, pointer-event hot path, reconnect overlay, PWA manifest.
-5. Layout switching: wire focus watcher → layout push; per-app YAML configs; `key`/`shell`/`page` actions.
+4. Client skeleton: Vite/React/TS, deck renderer for `button` + `jogstrip`, pointer-event hot path, reconnect overlay, PWA manifest.
+5. Deck switching: wire focus watcher → deck push; per-app YAML configs; `key`/`shell`/`page` actions.
 6. Trackpad widget: relative deltas, tap/drag-lock/two-finger gestures, libinput acceleration.
 7. Lifecycle polish: screensaver/suspend D-Bus sync, QR pairing, token auth, `deckctl`, NixOS module.
-8. Later: layout-editor UI (reference OpenDeck), Night-Light-aware theming, momentum tuning, macOS backend, optional ESP32 hardware client speaking a serial variant of the protocol.
+8. Later: deck-editor UI (reference OpenDeck), Night-Light-aware theming, momentum tuning, macOS backend, optional ESP32 hardware client speaking a serial variant of the protocol.
 
 **Open questions for implementation planning:**
 

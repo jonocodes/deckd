@@ -1,7 +1,7 @@
 """Dev supervisor: runs the daemon as a child and restarts it on Python edits.
 
-Layout YAML is watched by the daemon itself (see
-``Server.run_layouts_watcher``) so live-config editing works regardless of
+Deck YAML is watched by the daemon itself (see
+``Server.run_decks_watcher``) so live-config editing works regardless of
 whether this supervisor is running. This process exists solely because
 Python doesn't hot-reload itself — any edit under ``daemon/**/*.py``
 requires spawning a fresh process.
@@ -28,7 +28,7 @@ log = logging.getLogger("deckd.dev")
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DAEMON_DIR = REPO_ROOT / "daemon"
-LAYOUTS_DIR = REPO_ROOT / "layouts"
+DECKS_DIR = REPO_ROOT / "decks"
 DEFAULT_PORT = 8765
 
 
@@ -38,8 +38,8 @@ async def _start_daemon(port: int, child_args: list[str]) -> asyncio.subprocess.
         "-u",
         "-m",
         "deckd",
-        "--layouts-dir",
-        str(LAYOUTS_DIR),
+        "--decks-dir",
+        str(DECKS_DIR),
         "--port",
         str(port),
         *child_args,

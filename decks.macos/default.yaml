@@ -1,5 +1,5 @@
-# Mac fallback layout. Used when no per-app layout matches. Same `id` as
-# `layouts/default.yaml` so the overlay-replaces-base loader picks this
+# Mac fallback deck. Used when no per-app deck matches. Same `id` as
+# `decks/default.yaml` so the overlay-replaces-base loader picks this
 # one on Mac without touching the shared base.
 match:
   - default

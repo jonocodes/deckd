@@ -32,16 +32,16 @@ export default defineConfig({
     },
   ],
   webServer: {
-    // Copy the repo layouts into a throwaway tmp dir so an e2e save cycle
+    // Copy the repo decks into a throwaway tmp dir so an e2e save cycle
     // never mutates the human-owned YAML — suffixed with the port so two
     // worktrees running e2e concurrently don't stomp each other's copy.
-    // DECKD_BIN: ./.venv is the plain-uv layout; a flox checkout has no
+    // DECKD_BIN: ./.venv is the plain-uv deck; a flox checkout has no
     // ./.venv and gets `deckd` from the activated env on PATH.
     //
     // --no-focus: without it the e2e daemon watches the *developer's* real
     // desktop focus (macOS always has a working backend), so the editor
-    // opens on whatever app happens to be frontmost — "No layout for
-    // firefox yet" instead of the default layout the specs assert on.
+    // opens on whatever app happens to be frontmost — "No deck for
+    // firefox yet" instead of the default deck the specs assert on.
     // DECKD_FAKE_INPUT: log injections instead of performing them; the
     // PYTHONPATH=scripts/no-evdev shadow only covers the Linux sink.
     // mpris.yaml is copied in so the daemon's now-playing pump gate
@@ -50,7 +50,7 @@ export default defineConfig({
     // can assert the surface + chrome dot without a session bus or a
     // real MPRIS player on the runner (see daemon/deckd/__main__.py).
     command:
-      `cd .. && DECKD_BIN=.venv/bin/deckd && [ -x "$DECKD_BIN" ] || DECKD_BIN=deckd; rm -rf /tmp/deckd-e2e-layouts-${e2ePort} && mkdir /tmp/deckd-e2e-layouts-${e2ePort} && cp layouts/default.yaml layouts/editor.yaml layouts/mpris.yaml /tmp/deckd-e2e-layouts-${e2ePort}/ && rm -f client/e2e/.daemon.log && PYTHONUNBUFFERED=1 PYTHONPATH=scripts/no-evdev DECKD_FAKE_INPUT=1 DECKD_FAKE_MPRIS=client/e2e/fixtures/mpris-seed.json "$DECKD_BIN" --layouts-dir /tmp/deckd-e2e-layouts-${e2ePort} --client-dist client/dist --no-auth --no-focus --port ${e2ePort} --verbose > client/e2e/.daemon.log 2>&1`,
+      `cd .. && DECKD_BIN=.venv/bin/deckd && [ -x "$DECKD_BIN" ] || DECKD_BIN=deckd; rm -rf /tmp/deckd-e2e-decks-${e2ePort} && mkdir /tmp/deckd-e2e-decks-${e2ePort} && cp decks/default.yaml decks/editor.yaml decks/mpris.yaml /tmp/deckd-e2e-decks-${e2ePort}/ && rm -f client/e2e/.daemon.log && PYTHONUNBUFFERED=1 PYTHONPATH=scripts/no-evdev DECKD_FAKE_INPUT=1 DECKD_FAKE_MPRIS=client/e2e/fixtures/mpris-seed.json "$DECKD_BIN" --decks-dir /tmp/deckd-e2e-decks-${e2ePort} --client-dist client/dist --no-auth --no-focus --port ${e2ePort} --verbose > client/e2e/.daemon.log 2>&1`,
     cwd: __dirname,
     port: e2ePort,
     reuseExistingServer: false,

@@ -1,8 +1,8 @@
 [project]
 dependencies = [
   "aiohttp>=3.9",
-  "pyyaml>=6.0", # Comment-preserving YAML round-trip for the layout write API (issues  # #84 / #85 / #99): the editor reconciles a client snapshot onto a
-  # fresh on-disk re-read so a hand-authored layout's comments and key
+  "pyyaml>=6.0", # Comment-preserving YAML round-trip for the deck write API (issues  # #84 / #85 / #99): the editor reconciles a client snapshot onto a
+  # fresh on-disk re-read so a hand-authored deck's comments and key
   # order survive a one-field save. PyYAML stays for the load path.
   "ruamel.yaml>=0.18",
   "pydantic>=2.6",
@@ -23,7 +23,7 @@ version = "0.0.1"
 [project.optional-dependencies]
 dbus = [
   # dbus-fast backs the ``dbus:`` action primitive and MPRIS now-playing
-  # (issue #27). Both are Linux-only in practice — the default layout's
+  # (issue #27). Both are Linux-only in practice — the default deck's
   # targets (org.mpris.*, org.freedesktop.login1.*, org.gnome.ScreenSaver)
   # don't exist on macOS, which has no session bus — so this is an opt-in
   # extra rather than a base dep. ``__main__`` probes the import and wires

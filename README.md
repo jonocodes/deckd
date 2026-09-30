@@ -1,13 +1,13 @@
 # deckd
 
-App-aware touch control surface for your desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a manual control mode (a single combined trackpad + keyboard passthrough), rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps layouts automatically.
+App-aware touch control surface for your desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a manual control mode (a single combined trackpad + keyboard passthrough), rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps decks automatically.
 
 ## Uses
 
 - Control your desktop from your phone, or tablet, or laptop
 - Control multiple computers from one surface
 - Control slides/presentations
-- Get custom controls for each app you are using — including **websites**: play/pause and skip on YouTube or Netflix, or turn a site into an on-screen piano (see [Web-app layouts](docs/GUIDE.md#web-app-layouts); title-based, so best-effort today)
+- Get custom controls for each app you are using — including **websites**: play/pause and skip on YouTube or Netflix, or turn a site into an on-screen piano (see [Web-app decks](docs/GUIDE.md#web-app-decks); title-based, so best-effort today)
 - Automatically switch display depending on which app is active
 - Expose hotkeys for launching apps, or keyboard shortcuts
 - Use phone as a mouse, scrollbar, and keyboard controller
@@ -39,24 +39,24 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 
 **Working today**
 
-- [x] **Automatic per-app layouts** — focus a window on the desktop and the phone's browser flips to that app's buttons automatically.
-- [x] **Web-app layouts** — treat a website as an app. A layout can claim a site by matching the browser's window title (e.g. YouTube and Netflix media controls), driving each site's own keyboard shortcuts. See [Web-app layouts](docs/GUIDE.md#web-app-layouts).
+- [x] **Automatic per-app decks** — focus a window on the desktop and the phone's browser flips to that app's buttons automatically.
+- [x] **Web-app decks** — treat a website as an app. A deck can claim a site by matching the browser's window title (e.g. YouTube and Netflix media controls), driving each site's own keyboard shortcuts. See [Web-app decks](docs/GUIDE.md#web-app-decks).
 - [x] **Buttons** that fire keystrokes, shell commands, launch a terminal, or call D-Bus methods.
 - [x] **Macros** — chain multiple actions in a single button press, with delays and optional continue-on-error.
 - [x] **Button styling** — bundled icons (Lucide glyphs + Simple Icons brand logos) and per-button background colours, set in YAML.
 - [x] **Scroll strip** — an always-on right-side jogstrip to scroll the focused window, with release momentum.
-- [x] **Manual control mode** — the phone becomes a trackpad (move, tap, right-click, drag-lock) and a keyboard, so you can type into and point at the focused app for the things layouts don't cover (URL bars, chat boxes, ad-hoc commands).
+- [x] **Manual control mode** — the phone becomes a trackpad (move, tap, right-click, drag-lock) and a keyboard, so you can type into and point at the focused app for the things decks don't cover (URL bars, chat boxes, ad-hoc commands).
 - [x] **App badge** — the focused app's name, icon, and accent color show in the bottom bar so you can tell at a glance what you're controlling.
 - [x] **Chrome media indicator** — the media icon sprouts a pulsing green dot whenever a media player is playing (passive playback indicator), independent of the browser view.
 - [x] **Now playing** — control any supported media player (Spotify, Firefox, VLC, etc.) from a dedicated chrome view, with album art, per-player transport controls, and now-playing metadata.
 - [x] **Session lock awareness** — when the desktop session locks, the phone swaps to a "Screen locked" takeover and the daemon refuses presses / injection / trackpad / window raising (`--allow-while-locked` opts out); a plain screen blank keeps input live so a press wakes the machine.
-- [x] **Running programs list** — tap a layout-grid icon in the bottom chrome to open a list of every open window on the host, labeled by the layout the window would match. Tap a row to raise (focus) that window and close the list. Enumeration and raise are GNOME-only today (via the focus extension); other backends show the list's "unsupported on this platform" empty state.
+- [x] **Running programs list** — tap a deck-grid icon in the bottom chrome to open a list of every open window on the host, labeled by the deck the window would match. Tap a row to raise (focus) that window and close the list. Enumeration and raise are GNOME-only today (via the focus extension); other backends show the list's "unsupported on this platform" empty state.
 - [x] **VLC media widgets** — full VLC control surface with play/pause, seek, volume, album art. Configurable art sources (VLC embedded art + iTunes fallback).
 - [x] **Live sensor widgets** — meter and stats widgets pushed to the client in real time (CPU %, memory %, etc.), bound to daemon-side sensor sources.
-- [x] **GUI layout editor** — build and edit layouts from the browser without hand-editing YAML: a widget palette, a drag-to-reorder reflow canvas with span and overflow controls, a properties panel (labels, icons via a searchable picker, colours, actions and macros), and new-layout creation — saved back to disk over the write API. In development, but usable today. See [Layout editor](docs/GUIDE.md#layout-editor).
-- [x] **Live layout editing** — edit a layout file on the desktop (by hand or via the GUI editor) and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
+- [x] **GUI deck editor** — build and edit decks from the browser without hand-editing YAML: a widget palette, a drag-to-reorder reflow canvas with span and overflow controls, a properties panel (labels, icons via a searchable picker, colours, actions and macros), and new-deck creation — saved back to disk over the write API. In development, but usable today. See [Deck editor](docs/GUIDE.md#deck-editor).
+- [x] **Live deck editing** — edit a deck file on the desktop (by hand or via the GUI editor) and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
-- [x] **Addressable client views** — the layout, manual control, now playing, settings, editor, and running-windows views have their own URL paths for deep links and browser history.
+- [x] **Addressable client views** — the deck, manual control, now playing, settings, editor, and running-windows views have their own URL paths for deep links and browser history.
 - [x] **Keep screen awake** while the surface is in use.
 - [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
 - [x] **Password auth** — every client authenticates with a shared password (on by default; `--no-auth` disables it for local development). See [Client auth](docs/GUIDE.md#client-auth).
@@ -69,7 +69,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 **Planned**
 
 - [ ] **Screensaver & suspend sync** — dim/lock the surface when the desktop sleeps.
-- [ ] **Multiple simultaneous clients** with per-device layouts and resolutions.
+- [ ] **Multiple simultaneous clients** with per-device decks and resolutions.
 - [ ] **Soundboard** — trigger sound clips from the deck.
 - [ ] **Multi-daemon chooser** — pair and pick between several desktops.
 - [ ] **Reliable web-app detection** — a browser extension reporting the active tab's real URL, so sites match by domain/path instead of the current window-title heuristic ([#90](https://github.com/jonocodes/deckd/issues/90)).
@@ -86,15 +86,15 @@ The original inspiration was the Stream Deck, and I like all these projects. I w
 | Controller agnostic | ✅ | ❌ | ✅ | ❌ | ✅ |
 | Cross platform | ✅ | ✅ | ✅ | ❌ | ✅ |
 | Connection | Browser (WiFi) | USB | WiFi | Built-in | WiFi |
-| Custom layouts | ✅ | ✅ | ❌ | 🟡 | ❌ |
-| Custom layouts for web apps* | ✅ | ❌ | ❌| ❌ |❌ |
+| Custom decks | ✅ | ✅ | ❌ | 🟡 | ❌ |
+| Custom decks for web apps* | ✅ | ❌ | ❌| ❌ |❌ |
 | Open source | ✅ | 🟡† | ✅ | ❌ | ✅ |
 | Browser-based client | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Keyboard command triggering | ✅ | ✅ | 🟡 | 🟡 | ❌ |
 | Global media control | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Mouse/touchpad control | ✅ | ❌ | ✅ | ❌ | ✅ |
 
-\*Make layouts for any website with keyboard controls. Examples: YouTube, Google Meet, Twitch
+\*Make decks for any website with keyboard controls. Examples: YouTube, Google Meet, Twitch
 
 †[OpenDeck](https://github.com/nekename/OpenDeck#showcase), and [Boatswain](https://flathub.org/en/apps/com.feaneron.Boatswain) are open source; Elgato's SDK is not
 
@@ -114,13 +114,13 @@ The original inspiration was the Stream Deck, and I like all these projects. I w
           │            (aiohttp, asyncio)        │
           │                                      │
           │  ┌──────────┐  ┌──────────┐          │
-          │  │  Layout  │  │  Action  │          │
+          │  │   Deck   │  │  Action  │          │
           │  │  Loader  │  │ Dispatch │          │
           │  └──────────┘  └────┬─────┘          │
           │         │           │                │
           └─────────┼───────────┼────────────────┘
                     │           │
-        layouts/*.yaml    ┌─────┴─────┬──────────┐
+        decks/*.yaml    ┌─────┴─────┬──────────┐
                           │           │          │
                       uinput       shell     D-Bus
                      (evdev)     (subprocess)  gdbus
@@ -167,7 +167,7 @@ modules for both halves of a NixOS install. It needs flakes enabled
 (`experimental-features = nix-command flakes`).
 
 **Try it without installing anything.** `nix run` serves the bundled
-client and layouts on `http://127.0.0.1:8765`; auth is on, and the
+client and decks on `http://127.0.0.1:8765`; auth is on, and the
 password is generated at `~/.config/deckd/password`:
 
 ```sh
@@ -211,8 +211,8 @@ The home-manager module owns:
 
 - `deckd` as a **user** service (`WantedBy=graphical-session.target`) —
   starts with your desktop session, restarts on failure;
-- `~/.config/deckd/layouts`, seeded once from the package; your edits
-  are never overwritten (`seedLayouts = false` opts out);
+- `~/.config/deckd/decks`, seeded once from the package; your edits
+  are never overwritten (`seedDecks = false` opts out);
 - `~/.config/deckd/password` (generated on first start) — point
   `passwordFile` at a secret to manage it yourself.
 
@@ -236,9 +236,29 @@ start it yourself; the classic recipes (`just install-service`,
 Options, caveats, and the full output list are in the
 [setup guide](docs/GUIDE.md#nix-flake-nixos-and-home-manager).
 
+## Upgrading from the `layout` era
+
+The per-app control set is now called a **deck**, not a **layout** (issue #105).
+The rename is a hard cutover — there are no aliases and no directory fallback —
+so the daemon and client must be upgraded together, and an existing config
+directory has to move:
+
+```sh
+mv layouts decks             # plus layouts.<platform> → decks.<platform> if present
+```
+
+The wire protocol (`LayoutMessage` → `DeckMessage`, `type: "layout"` →
+`"deck"`), the demo pin (`?layout=<name>` → `?deck=<name>`,
+`HelloMessage.layout` → `.deck`), HTTP endpoints (`/layouts` → `/decks`,
+`/layout/<id>` → `/deck/<id>`), the `/diag` JSON keys (`layouts` → `decks`,
+`layout_id` → `deck_id`), the `deckctl layout|layouts` subcommands, the
+`--decks-dir` flag, the home-manager `decksDir` option, and the Prometheus
+`deckd_layout_*` counters all moved with it. "Layout" now means only the
+on-screen arrangement (grid/reflow) — see [CONTEXT.md](CONTEXT.md).
+
 ## Documentation
 
-- **[User & setup guide](docs/GUIDE.md)** — install, per-platform setup, writing layouts, the client features, and the development loop.
+- **[User & setup guide](docs/GUIDE.md)** — install, per-platform setup, writing decks, the client features, and the development loop.
 - **[Reference](docs/REFERENCE.md)** — every CLI flag, environment variable, and HTTP endpoint.
 - **[Architecture](docs/ARCHITECTURE.md)** — how the daemon, client, and focus watchers fit together.
 - **[Platform parity](docs/PLATFORM-PARITY.md)** — what's verified working on each OS.

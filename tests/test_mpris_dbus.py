@@ -18,9 +18,9 @@ Coverage mirrors the issue's acceptance criteria:
   * ``send_command`` translates browser commands to MPRIS methods
   * ``NameOwnerChanged`` adds/removes rows (rename = remove then add)
   * ``PropertiesChanged`` updates a row's state live
-  * the connect-only-if-needed factory yields ``None`` when no layout
+  * the connect-only-if-needed factory yields ``None`` when no deck
     uses ``nowplaying``
-  * the idle-while-no-layout gate is exercised at the pump layer
+  * the idle-while-no-deck gate is exercised at the pump layer
 """
 from __future__ import annotations
 
@@ -984,8 +984,8 @@ async def test_start_installs_match_rules() -> None:
 
 
 @pytest.mark.asyncio
-async def test_connect_mpris_backend_returns_none_when_no_layout_has_nowplaying() -> None:
-    """The factory only opens the bus when at least one loaded layout
+async def test_connect_mpris_backend_returns_none_when_no_deck_has_nowplaying() -> None:
+    """The factory only opens the bus when at least one loaded deck
     declares a ``nowplaying`` widget (issue #52 acceptance criterion 1)."""
 
     captured: dict[str, Any] = {}
@@ -995,7 +995,7 @@ async def test_connect_mpris_backend_returns_none_when_no_layout_has_nowplaying(
         captured["bus"] = bus
         return bus
 
-    store = _store_with_layouts(
+    store = _store_with_decks(
         [
             ("default", [{"id": "btn", "kind": "button"}]),
             ("firefox", [{"id": "btn", "kind": "button"}]),
@@ -1008,11 +1008,11 @@ async def test_connect_mpris_backend_returns_none_when_no_layout_has_nowplaying(
 
 
 @pytest.mark.asyncio
-async def test_connect_mpris_backend_returns_backend_when_a_layout_has_nowplaying() -> None:
+async def test_connect_mpris_backend_returns_backend_when_a_deck_has_nowplaying() -> None:
     def factory(_bt: Any) -> FakeDbusBus:
         return FakeDbusBus()
 
-    store = _store_with_layouts(
+    store = _store_with_decks(
         [
             (
                 "mpris",
@@ -1026,35 +1026,35 @@ async def test_connect_mpris_backend_returns_backend_when_a_layout_has_nowplayin
 
 
 # ---------------------------------------------------------------------------
-# Layout-store test helper (lightweight stand-in for LayoutStore.values)
+# Deck-store test helper (lightweight stand-in for DeckStore.values)
 # ---------------------------------------------------------------------------
 
 
-def _store_with_layouts(spec: list[tuple[str, list[dict[str, Any]]]]) -> Any:
-    """A duck-typed :class:`LayoutStore` exposing ``.layouts``.
+def _store_with_decks(spec: list[tuple[str, list[dict[str, Any]]]]) -> Any:
+    """A duck-typed :class:`DeckStore` exposing ``.decks``.
 
-    The factory only reads ``layout.widgets[*].kind``, so a namedtuple
-    per fake layout is enough — no need for a three-class ladder.
+    The factory only reads ``deck.widgets[*].kind``, so a namedtuple
+    per fake deck is enough — no need for a three-class ladder.
     """
 
-    def _layout(spec_id: str, widget_specs: list[dict[str, Any]]) -> Any:
-        layout = type("L", (), {})()
-        layout.id = spec_id
+    def _deck(spec_id: str, widget_specs: list[dict[str, Any]]) -> Any:
+        deck = type("L", (), {})()
+        deck.id = spec_id
         widgets: list[Any] = []
         for w in widget_specs:
             widget = type("W", (), {})()
             widget.id = w.get("id")
             widget.kind = w.get("kind")
             widgets.append(widget)
-        layout.widgets = widgets
-        return layout
+        deck.widgets = widgets
+        return deck
 
     class _Store:
         def __init__(self) -> None:
-            self._layouts: list[Any] = [_layout(_id, ws) for _id, ws in spec]
+            self._decks: list[Any] = [_deck(_id, ws) for _id, ws in spec]
 
         @property
-        def layouts(self) -> list[Any]:
-            return list(self._layouts)
+        def decks(self) -> list[Any]:
+            return list(self._decks)
 
     return _Store()

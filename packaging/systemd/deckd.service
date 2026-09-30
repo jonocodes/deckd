@@ -25,7 +25,7 @@ WorkingDirectory=@PROJECT_DIR@
 # Auth is on by default: the shared password is read from (or generated at)
 # ~/.config/deckd/password on first start. Localhost-only bind by default;
 # add `--bind 0.0.0.0` (or `--bind iface:wlan0`) to expose it on the LAN.
-ExecStart=@PROJECT_DIR@/.venv/bin/deckd --layouts-dir @PROJECT_DIR@/layouts --client-dist @PROJECT_DIR@/client/dist
+ExecStart=@PROJECT_DIR@/.venv/bin/deckd --decks-dir @PROJECT_DIR@/decks --client-dist @PROJECT_DIR@/client/dist
 Restart=on-failure
 RestartSec=2
 

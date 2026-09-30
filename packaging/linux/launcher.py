@@ -1,7 +1,7 @@
 """PyInstaller entry point for the deckd Linux AppImage (issue #168).
 
 Frozen by ``packaging/linux/deckd.spec`` into the AppImage payload. It seeds
-the bundled layouts into the writable XDG data dir, then runs the daemon
+the bundled decks into the writable XDG data dir, then runs the daemon
 against the bundled client. Only ever frozen — the daemon never imports this.
 
 Extra CLI args pass straight through, so

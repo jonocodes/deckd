@@ -24,15 +24,15 @@ from deckd.platform import RaiseWindowFailed
 from conftest import make_test_server
 
 
-_DEFAULT_LAYOUT = """
+_DEFAULT_DECK = """
 match:
   - default
 widgets: []
 """
 
 
-def _layouts_dir(tmp_path: Path) -> Path:
-    (tmp_path / "default.yaml").write_text(_DEFAULT_LAYOUT)
+def _decks_dir(tmp_path: Path) -> Path:
+    (tmp_path / "default.yaml").write_text(_DEFAULT_DECK)
     return tmp_path
 
 
@@ -73,7 +73,7 @@ async def _collect_events(server, coro) -> list[DiagnosticEvent]:
 @pytest.mark.asyncio
 async def test_raise_window_happy_path_calls_backend_no_event(tmp_path: Path) -> None:
     backend = _RaiseBackend(capabilities=frozenset({"raise_window"}), behaviour=None)
-    server, *_ = make_test_server(layouts_dir=_layouts_dir(tmp_path), focus_backend=backend)
+    server, *_ = make_test_server(decks_dir=_decks_dir(tmp_path), focus_backend=backend)
     msg = p.RaiseWindowMessage(type="raise_window", window_id="42")
     events = await _collect_events(server, server._dispatch_raise_window(msg))
     assert backend.calls == ["42"]
@@ -86,7 +86,7 @@ async def test_raise_window_declined_emits_raise_failed(tmp_path: Path) -> None:
         capabilities=frozenset({"raise_window"}),
         behaviour=RaiseWindowFailed("gone"),
     )
-    server, *_ = make_test_server(layouts_dir=_layouts_dir(tmp_path), focus_backend=backend)
+    server, *_ = make_test_server(decks_dir=_decks_dir(tmp_path), focus_backend=backend)
     msg = p.RaiseWindowMessage(type="raise_window", window_id="gone")
     events = await _collect_events(server, server._dispatch_raise_window(msg))
     failed = [e for e in events if e.name == "raise_failed"]
@@ -97,7 +97,7 @@ async def test_raise_window_declined_emits_raise_failed(tmp_path: Path) -> None:
 @pytest.mark.asyncio
 async def test_raise_window_unsupported_backend_emits_raise_failed(tmp_path: Path) -> None:
     backend = _RaiseBackend(capabilities=frozenset({"watch_active_app"}), behaviour=None)
-    server, *_ = make_test_server(layouts_dir=_layouts_dir(tmp_path), focus_backend=backend)
+    server, *_ = make_test_server(decks_dir=_decks_dir(tmp_path), focus_backend=backend)
     msg = p.RaiseWindowMessage(type="raise_window", window_id="1")
     events = await _collect_events(server, server._dispatch_raise_window(msg))
     # Never reaches the backend — the capability gate short-circuits.
@@ -112,7 +112,7 @@ async def test_raise_window_unexpected_error_emits_raise_failed(tmp_path: Path) 
         capabilities=frozenset({"raise_window"}),
         behaviour=RuntimeError("bus down"),
     )
-    server, *_ = make_test_server(layouts_dir=_layouts_dir(tmp_path), focus_backend=backend)
+    server, *_ = make_test_server(decks_dir=_decks_dir(tmp_path), focus_backend=backend)
     msg = p.RaiseWindowMessage(type="raise_window", window_id="7")
     events = await _collect_events(server, server._dispatch_raise_window(msg))
     failed = [e for e in events if e.name == "raise_failed"]

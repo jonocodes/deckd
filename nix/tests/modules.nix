@@ -42,7 +42,7 @@ let
   '';
 
   # ---------------------------------------------------------------------
-  # home-manager base module: owns the user service, layouts, password.
+  # home-manager base module: owns the user service, decks, password.
   # ---------------------------------------------------------------------
   homeBase = {
     home.username = "alice";
@@ -63,7 +63,7 @@ let
             "iface:wlan0"
           ];
           port = 9000;
-          layoutsDir = "/home/alice/my-layouts";
+          decksDir = "/home/alice/my-decks";
           passwordFile = "/run/secrets/deckd-password";
           extraArgs = [ "--verbose" ];
         };
@@ -77,7 +77,7 @@ let
     partOf = home.config.systemd.user.services.deckd.Unit.PartOf;
     wantedBy = home.config.systemd.user.services.deckd.Install.WantedBy;
     restart = home.config.systemd.user.services.deckd.Service.Restart;
-    activation = home.config.home.activation.deckdSeedLayouts;
+    activation = home.config.home.activation.deckdSeedDecks;
   });
 
   homeTest = pkgs.runCommand "deckd-home-module-test" {
@@ -89,8 +89,8 @@ let
     jq -e '.execStart[0] | contains("0.0.0.0")' "$probe" >/dev/null
     jq -e '.execStart[0] | contains("iface:wlan0")' "$probe" >/dev/null
     jq -e '.execStart[0] | contains("--port 9000")' "$probe" >/dev/null
-    jq -e '.execStart[0] | contains("--layouts-dir")' "$probe" >/dev/null
-    jq -e '.execStart[0] | contains("/home/alice/my-layouts")' "$probe" >/dev/null
+    jq -e '.execStart[0] | contains("--decks-dir")' "$probe" >/dev/null
+    jq -e '.execStart[0] | contains("/home/alice/my-decks")' "$probe" >/dev/null
     jq -e '.execStart[0] | contains("--password-file")' "$probe" >/dev/null
     jq -e '.execStart[0] | contains("/run/secrets/deckd-password")' "$probe" >/dev/null
     jq -e '.execStart[0] | contains("--verbose")' "$probe" >/dev/null
@@ -98,7 +98,7 @@ let
     jq -e '.partOf | index("graphical-session.target")' "$probe" >/dev/null
     jq -e '.wantedBy | index("graphical-session.target")' "$probe" >/dev/null
     jq -e '.restart == "on-failure"' "$probe" >/dev/null
-    jq -e '.activation.data | contains("deckd-seed-layouts")' "$probe" >/dev/null
+    jq -e '.activation.data | contains("deckd-seed-decks")' "$probe" >/dev/null
     touch $out
   '';
 

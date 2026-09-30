@@ -422,7 +422,7 @@ async def test_kde_backend_get_active_app_default_cache_round_trips_all_none(
     """Before any KWin push lands, ``GetActiveWindow`` returns the
     cache's empty default (all-nulls JSON); the inherited gdbus-poll
     parse maps that back to a fully-null ``AppInfo`` so the daemon
-    starts on the default layout without surprises."""
+    starts on the default deck without surprises."""
 
     async def fake_run(*args: str) -> str:
         return repr((DeckdFocusCache.EMPTY_PAYLOAD,))

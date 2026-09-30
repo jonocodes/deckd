@@ -1,7 +1,7 @@
 """Helpers for the packaged Linux AppImage (issue #168).
 
 Linux-specific pieces of the AppImage launcher: the writable XDG data dir and
-log file, the ``layouts.linux`` overlay, and first-run seeding. The
+log file, the ``decks.linux`` overlay, and first-run seeding. The
 platform-independent mechanics live in ``deckd.app_bundle``; the frozen entry
 point is ``packaging/linux/launcher.py``.
 
@@ -21,11 +21,11 @@ from .app_bundle import (
     app_argv,
     bundle_version,
     client_dist,
-    layouts_src,
+    decks_src,
     resource_root,
 )
 from .app_bundle import overlay_src as _overlay_src
-from .app_bundle import seed_layouts as _seed_layouts
+from .app_bundle import seed_decks as _seed_decks
 
 __all__ = [
     "APP_NAME",
@@ -39,11 +39,11 @@ __all__ = [
     "default_log_file",
     "extract_integration",
     "integration_src",
-    "layouts_src",
+    "decks_src",
     "overlay_src",
     "prepare",
     "resource_root",
-    "seed_layouts",
+    "seed_decks",
 ]
 
 APP_NAME = "deckd"
@@ -59,8 +59,8 @@ EXTRACT_INTEGRATION_FLAG = "--extract-integration"
 def data_dir() -> Path:
     """``$XDG_DATA_HOME/deckd`` (``~/.local/share/deckd``) — writable data.
 
-    Layouts must be writable (the editor saves back to disk) but the AppImage
-    payload is a read-only squashfs mount, so layouts are seeded here on first
+    Decks must be writable (the editor saves back to disk) but the AppImage
+    payload is a read-only squashfs mount, so decks are seeded here on first
     run. The shared password stays on the config side
     (``$XDG_CONFIG_HOME/deckd/password``), which the daemon already defaults to.
     """
@@ -80,7 +80,7 @@ def default_log_file() -> Path:
 
 
 def overlay_src(root: Path) -> Path:
-    """Bundled Linux overlay layouts (``layouts.linux``)."""
+    """Bundled Linux overlay decks (``decks.linux``)."""
     return _overlay_src(root, "linux")
 
 
@@ -103,27 +103,27 @@ def extract_integration(dest: Path) -> None:
     shutil.copytree(src, dest, dirs_exist_ok=True)
 
 
-def seed_layouts(src: Path, dest: Path, *, overlay: Path | None = None) -> bool:
-    """Seed layouts + the ``.linux`` overlay into the writable data dir."""
-    return _seed_layouts(src, dest, overlay=overlay, overlay_suffix="linux")
+def seed_decks(src: Path, dest: Path, *, overlay: Path | None = None) -> bool:
+    """Seed decks + the ``.linux`` overlay into the writable data dir."""
+    return _seed_decks(src, dest, overlay=overlay, overlay_suffix="linux")
 
 
 def prepare() -> tuple[Path, Path, Path]:
-    """Seed writable data, returning (layouts_dir, client_dist, log_file)."""
+    """Seed writable data, returning (decks_dir, client_dist, log_file)."""
     root = resource_root()
-    layouts_dir = data_dir() / "layouts"
-    seed_layouts(layouts_src(root), layouts_dir, overlay=overlay_src(root))
+    decks_dir = data_dir() / "decks"
+    seed_decks(decks_src(root), decks_dir, overlay=overlay_src(root))
     log_file = default_log_file()
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    return layouts_dir, client_dist(root), log_file
+    return decks_dir, client_dist(root), log_file
 
 
 def build_argv(extra: list[str] | None = None) -> list[str]:
-    """Daemon argv for the AppImage: seeded layouts, bundled client, log file.
+    """Daemon argv for the AppImage: seeded decks, bundled client, log file.
 
     ``extra`` is passed through so the user can add flags (e.g.
     ``--bind 0.0.0.0`` to expose the surface on the LAN). Localhost-only by
     default.
     """
-    layouts_dir, web, log_file = prepare()
-    return app_argv(layouts_dir=layouts_dir, client_dist=web, log_file=log_file) + list(extra or [])
+    decks_dir, web, log_file = prepare()
+    return app_argv(decks_dir=decks_dir, client_dist=web, log_file=log_file) + list(extra or [])

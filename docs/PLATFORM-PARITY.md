@@ -21,7 +21,7 @@ this table exists to make drift between backends visible at a glance.
 | Focus detection (`watch_active_app`) | ✓ GNOME Shell extension over `org.deckd.Focus` | ✓ KWin script pushes into daemon-owned cache (#31) | ✓ `xdotool` poll | ✓ `osascript` + System Events |
 | Window enumeration (`watch_windows`) | ✓ extension `ListWindows` | ✓ KWin script pushes `UpdateWindowList` → daemon `ListWindows` (#133) | ✗ | ✓ Quartz `CGWindowList` — app names only (titles need Screen Recording) |
 | Raise window (`raise_window`) | ✓ extension `RaiseWindow` (#127) | ✓ daemon enqueues → KWin script `QTimer`-polls `DrainPendingRaises`, sets `workspace.activeWindow` (#133) | ✗ | ✓ AppKit + Accessibility (AX half needs the grant) |
-| Window row → layout match (icon / display name) | ✓ `wm_class` matches the layout token | ✓ `resourceClass` → `wm_class`, `desktopFileName` → `sandboxed_app_id` (#133) | n/a | ✓ identity matching is case-insensitive (#140), so `CGWindowList`'s `Firefox` matches the `firefox` token |
+| Window row → deck match (icon / display name) | ✓ `wm_class` matches the deck token | ✓ `resourceClass` → `wm_class`, `desktopFileName` → `sandboxed_app_id` (#133) | n/a | ✓ identity matching is case-insensitive (#140), so `CGWindowList`'s `Firefox` matches the `firefox` token |
 | Raise app (`raise:`) | ✓ extension `RaiseApp` (#137) | ✓ daemon matches identity in its cached list, enqueues the winner (#133) | ✗ | ✗ |
 | Session lock awareness (`session_lock`) | ✓ `login1` session `LockedHint` (system bus, cross-DE signal) | ✗ follow-up — plugs into the `watch_session_state` seam | ✗ | ✗ follow-up |
 | Session blank awareness (`session_blank`) | ✓ `org.gnome.ScreenSaver.GetActive` poll | ✗ (`org.freedesktop.ScreenSaver` would be the source — follow-up) | ✗ | ✗ follow-up |
@@ -58,7 +58,7 @@ one of three evidence levels:
 |---|---|---|
 | Focus detection | machine-verified | `/diag` reports app + title |
 | Window enumeration | machine + human | 8 windows over a live `running_windows` frame; human confirms the switcher list renders |
-| Window row → layout match | unit-tested; **unverified on hardware** ([#140](https://github.com/jonocodes/deckd/issues/140)) | was broken (`Firefox` row never matched the `firefox` token; `icon: null` seen live 2026-08-06); matcher is now case-insensitive but nobody has re-read a `running_windows` frame on a Mac to confirm the row carries the icon |
+| Window row → deck match | unit-tested; **unverified on hardware** ([#140](https://github.com/jonocodes/deckd/issues/140)) | was broken (`Firefox` row never matched the `firefox` token; `icon: null` seen live 2026-08-06); matcher is now case-insensitive but nobody has re-read a `running_windows` frame on a Mac to confirm the row carries the icon |
 | Raise window | machine-verified | raised Firefox, confirmed focus moved, restored |
 | Pointer / drag | machine-verified | exact deltas read back off the cursor; drag lock produced 1 `mousedown`, 5 held moves, 1 `mouseup` in a browser echo page |
 | Click (left / right) | machine-verified | `click` / `contextmenu` fired at the exact injected coordinates (#141) |
@@ -121,12 +121,12 @@ so KDE could honestly re-advertise them.
     / `declined`), but a live enqueue's ultimate success isn't observable.
   - Per-window identity maps `resourceClass` → `wm_class` and `desktopFileName`
     → `sandboxed_app_id` (KWin's desktop-file id is the closest analogue to the
-    GNOME extension's `Meta.App` id), so the layout matcher has both an X11-class
+    GNOME extension's `Meta.App` id), so the deck matcher has both an X11-class
     and a desktop-file token to compare, matching GNOME behaviour. Wayland-native
     windows report the full reverse-DNS id as their class (`org.kde.konsole`,
-    `org.telegram.desktop`); `Layout.matches_identity` matches a bare layout
+    `org.telegram.desktop`); `Deck.matches_identity` matches a bare deck
     token (`konsole`) against the last dotted segment, so a `match: [konsole]`
-    layout covers KDE's class and GNOME's `get_wm_class` alike. The running-
+    deck covers KDE's class and GNOME's `get_wm_class` alike. The running-
     windows label humanizer drops a trailing `.desktop`/`.app` packaging
     segment before taking the last dotted segment (`org.telegram.desktop` →
     `Telegram`, not `Desktop`).
@@ -156,12 +156,12 @@ so KDE could honestly re-advertise them.
   actually runs (`/diag`, or drive `raise_window` / `pad` over its
   WebSocket), never from a fresh shell in some other app's tree.
 
-  **Enumerated rows don't resolve to layouts.** `CGWindowList` reports the
-  owner name (`Firefox`, `Slack`); layout `match` tokens are lowercase
+  **Enumerated rows don't resolve to decks.** `CGWindowList` reports the
+  owner name (`Firefox`, `Slack`); deck `match` tokens are lowercase
   process names (`firefox`) because the *focus* path gets its identity from
-  osascript, which reports the process name. `Layout.matches_identity` is an
+  osascript, which reports the process name. `Deck.matches_identity` is an
   exact `in` comparison, so a row never matches — it falls back to the app
-  name with no icon and no `display_name`, while the same app's layout
+  name with no icon and no `display_name`, while the same app's deck
   switches correctly on focus. Fixing it means either case-insensitive
   identity matching or normalising the owner name in the backend; both change
   cross-platform matching semantics, so it's a decision, not a cleanup.

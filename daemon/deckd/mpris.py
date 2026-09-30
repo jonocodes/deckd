@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict
 
-from .layouts import NowPlayingEmptyState
+from .decks import NowPlayingEmptyState
 from .media import MediaState, _art_token
 from .mpris_art import is_supported_art_url
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from dbus_fast import BusType
     from dbus_fast.aio import MessageBus
 
-    from .layouts import LayoutStore
+    from .decks import DeckStore
 
 log = logging.getLogger("deckd.mpris")
 
@@ -34,7 +34,7 @@ _COMMANDS: dict[str, str] = {
 
 # MPRIS protocol constants. Documented in the upstream MPRIS spec
 # (https://specifications.freedesktop.org/mpris-spec/latest/) and
-# stated explicitly here so the layout / protocol / client surface
+# stated explicitly here so the deck / protocol / client surface
 # and the backend can't drift apart on a typo.
 MPRIS_BUS_PREFIX = "org.mpris.MediaPlayer2"
 MPRIS_OBJECT_PATH = "/org/mpris/MediaPlayer2"
@@ -48,7 +48,7 @@ PROPERTIES_CHANGED = "PropertiesChanged"
 # The MPRIS multiplexer (`playerctld`) accepts every other player's
 # commands and re-dispatches them. Listing it next to the real players
 # creates a duplicate row the user has no way to remove; we skip it.
-# The filter is a constant set so layouts / docs / tests can reference
+# The filter is a constant set so decks / docs / tests can reference
 # the same list rather than hard-coding the strings.
 EXCLUDED_PLAYER_SUFFIXES = frozenset({"playerctld"})
 
@@ -153,14 +153,14 @@ class NowPlaying(BaseModel):
 
     Lists the MPRIS rows the daemon's :class:`MprisBackend` reports, with
     each row showing its player identity and prev / play-pause / next
-    controls. Lives here (not in :mod:`layouts`) because it's the MPRIS
+    controls. Lives here (not in :mod:`decks`) because it's the MPRIS
     feature's own schema, not a VLC-media cousin — keeping the new model
-    next to its backend seam avoids re-coupling the layout module to a
+    next to its backend seam avoids re-coupling the deck module to a
     second media source.
 
     Fields:
 
-    - ``id``: the widget id (used as the layout-internal id and surfaced
+    - ``id``: the widget id (used as the deck-internal id and surfaced
       to the client so it can correlate per-row updates).
     - ``size``: the standard reflow extent, identical to every other widget
       kind (ADR-0010) — a ``[w, h]`` span or ``"full"``. Optional; a
@@ -168,13 +168,13 @@ class NowPlaying(BaseModel):
       the flow.
     - ``empty_state``: whether the cell still renders a placeholder row
       when no MPRIS player is discovered. ``show`` (default) keeps the
-      chrome's icon reachable; ``hide`` collapses the cell so a layout
+      chrome's icon reachable; ``hide`` collapses the cell so a deck
       that relies on the surface can drop the cell entirely.
 
     Row order is whatever :meth:`MprisBackend.row_ids` returns — by
     convention the order the session bus's ``ListNames`` reply reports
     them, matching GNOME Shell's quick-settings media widget. No
-    per-layout knob (issue #58).
+    per-deck knob (issue #58).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -453,8 +453,8 @@ class DbusMprisBackend(MprisBackend):
 
     The class is constructed empty; :meth:`start` does the connect /
     enumerate / subscribe work, and :meth:`stop` tears it down. A
-    no-layouts-use-it factory :func:`connect_mpris_backend` returns
-    ``None`` so a daemon whose layouts don't include ``nowplaying``
+    no-decks-use-it factory :func:`connect_mpris_backend` returns
+    ``None`` so a daemon whose decks don't include ``nowplaying``
     doesn't even open the bus.
 
     The bus surface is plugged through ``bus_factory`` so tests can
@@ -1188,24 +1188,24 @@ def _apply_properties_changed(
 
 
 def connect_mpris_backend(
-    layouts: "LayoutStore",
+    decks: "DeckStore",
     bus_factory: "Callable[[BusType], MessageBus]",
 ) -> DbusMprisBackend | None:
-    """Connect a real :class:`DbusMprisBackend` if any layout uses it.
+    """Connect a real :class:`DbusMprisBackend` if any deck uses it.
 
     Users who don't enable the ``nowplaying`` widget shouldn't pay
     the cost of opening the session bus; this factory checks every
-    loaded layout for the widget kind and returns ``None`` when none
+    loaded deck for the widget kind and returns ``None`` when none
     are present. Callers wire the result into the same
     ``Server(mpris_backend=...)`` slot as ``FakeMprisBackend``.
 
-    The check is layout-only (not focus-driven): a user with the
-    nowplaying layout in their config pays the cost once on startup
+    The check is deck-only (not focus-driven): a user with the
+    nowplaying deck in their config pays the cost once on startup
     and re-uses the same backend on every focus change. The backend's
-    idle-while-no-active-nowplaying-layout behaviour is owned by
+    idle-while-no-active-nowplaying-deck behaviour is owned by
     the server's pump gating (``_has_nowplaying``), not this factory.
     """
-    for layout in layouts.layouts:
-        if any(getattr(w, "kind", None) == "nowplaying" for w in layout.widgets):
+    for deck in decks.decks:
+        if any(getattr(w, "kind", None) == "nowplaying" for w in deck.widgets):
             return DbusMprisBackend(bus_factory=bus_factory)
     return None

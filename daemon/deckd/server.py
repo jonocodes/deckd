@@ -21,16 +21,16 @@ from pydantic import ValidationError
 from . import protocol as p
 from .actions import ActionContext, MacroOutcome, execute as run_action
 from .input import ScrollController, parse_key_combo, text_to_combos
-from .layouts import (
-    Layout,
-    LayoutStore,
+from .decks import (
+    Deck,
+    DeckStore,
     icon_for_window,
     label_for_window,
-    load_layout,
-    load_layouts,
-    reconcile_and_write_layout,
-    resolve_layout,
-    slugify_layout_id,
+    load_deck,
+    load_decks,
+    reconcile_and_write_deck,
+    resolve_deck,
+    slugify_deck_id,
 )
 from .media import MediaManager, MediaState, effective_art_token
 from .mpris import ChromeMediaState, DbusMprisBackend, MprisBackend, connect_mpris_backend
@@ -42,7 +42,7 @@ from .diagnostics import (
     MprisEvents,
     RecentActions,
     build_diag_snapshot,
-    build_layouts_snapshot,
+    build_decks_snapshot,
     build_mpris_players_snapshot,
 )
 from .events import (
@@ -60,7 +60,7 @@ if TYPE_CHECKING:
 
     from .bind import ResolvedBind
     from .input import KeySink
-    from .layouts import Action, Macro, Widget
+    from .decks import Action, Macro, Widget
     from .platform import AppInfo, PlatformBackend, SensorManager, SensorReading, SessionState, WindowInfo
 
 from . import PASSWORD_HEADER
@@ -116,7 +116,7 @@ def _validation_failed(exc: ValidationError) -> web.Response:
 def _derivation_failed(loc: list[str | int], msg: str) -> web.Response:
     """``400`` for a non-Pydantic derivation failure, in the same sanitized shape.
 
-    ``POST /layouts`` can fail ``match[0]``-to-filename derivation in ways
+    ``POST /decks`` can fail ``match[0]``-to-filename derivation in ways
     Pydantic doesn't catch (empty ``match``; a token that slugifies to the
     empty string). #88 requires the create endpoint to mirror ``PUT``'s
     structured ``400``, so these ride the same ``{ok, error, details}``
@@ -372,13 +372,13 @@ class Session:
     def __init__(self, ws: web.WebSocketResponse, server: "Server") -> None:
         self.ws = ws
         self.server = server
-        # Demo pin (``?layout=<name>`` in the client URL): when set to a loaded
-        # layout id, this session always renders that layout and ignores
+        # Demo pin (``?deck=<name>`` in the client URL): when set to a loaded
+        # deck id, this session always renders that deck and ignores
         # focus-driven changes. None = normal focus-following behaviour.
-        self.pinned_layout_id: str | None = None
-        # Chrome view pin (issue #50): when set to a loaded layout id, this
-        # session always renders that view's layout (regardless of host
-        # focus) and the ``LayoutMessage`` carries ``view=<name>``. Set by
+        self.pinned_deck_id: str | None = None
+        # Chrome view pin (issue #50): when set to a loaded deck id, this
+        # session always renders that view's deck (regardless of host
+        # focus) and the ``DeckMessage`` carries ``view=<name>``. Set by
         # the client's ``select_view`` message; cleared by ``clear_view``.
         # Per-session because the chrome icon's affordance is per-client.
         self.view: str | None = None
@@ -443,56 +443,56 @@ class Session:
             pass
 
     async def push_current(self) -> None:
-        layout = self.server.current_layout
+        deck = self.server.current_deck
         app_id = self.server.current_app_id
         error = self.server.current_error
-        # Pinned demo session: render the named layout regardless of host focus.
-        # Re-resolved from the store each push, so a layout-file edit + reload
-        # refreshes the pinned view; if the layout was removed on reload, fall
-        # back to the focus-driven layout above.
-        pin = self.pinned_layout_id
-        if pin is not None and pin in self.server.layouts:
-            layout = self.server.layouts[pin]
+        # Pinned demo session: render the named deck regardless of host focus.
+        # Re-resolved from the store each push, so a deck-file edit + reload
+        # refreshes the pinned view; if the deck was removed on reload, fall
+        # back to the focus-driven deck above.
+        pin = self.pinned_deck_id
+        if pin is not None and pin in self.server.decks:
+            deck = self.server.decks[pin]
             app_id = pin
             error = None
-        # Chrome view pin (issue #50): render the selected view's layout
+        # Chrome view pin (issue #50): render the selected view's deck
         # regardless of host focus, with ``view`` set so the client knows to
         # stay on this chrome view. The view id is the synthetic token the
         # client sends in ``select_view``; for the shipping ``mpris.yaml``
         # the id and the first ``match`` token are the same string
-        # (``"mpris"``), so the lookup is ``layouts[view]``. If the view
-        # id no longer resolves (a reload removed the layout file), keep
-        # rendering the focused-app layout and surface
+        # (``"mpris"``), so the lookup is ``decks[view]``. If the view
+        # id no longer resolves (a reload removed the deck file), keep
+        # rendering the focused-app deck and surface
         # ``error: "view not found"`` so the chrome can show the failure
         # without dropping the user out of their normal chrome.
         view_id: str | None = None
         view_error: str | None = None
         if self.view is not None:
-            if self.view in self.server.layouts:
-                layout = self.server.layouts[self.view]
+            if self.view in self.server.decks:
+                deck = self.server.decks[self.view]
                 app_id = self.view
                 error = None
                 view_id = self.view
             else:
                 view_id = self.view
                 view_error = "view not found"
-        # Chrome app badge fields are relayed from the active layout even in
+        # Chrome app badge fields are relayed from the active deck even in
         # the error path: the bottom chrome remains the chrome, and a branded
         # badge is more useful than a bare match token while the user fixes
         # on-disk YAML. ``app`` still carries the match token so the chrome
         # can fall back to it when ``display_name`` is None.
-        icon = p.Icon.model_validate(layout.icon.model_dump()) if layout.icon else None
-        # Web-app badge: this layout is a *web app* only when the focused app is
-        # a browser AND the layout claimed it by window title. Computed against
-        # the layout actually being sent, so a pinned chrome view (e.g. mpris)
+        icon = p.Icon.model_validate(deck.icon.model_dump()) if deck.icon else None
+        # Web-app badge: this deck is a *web app* only when the focused app is
+        # a browser AND the deck claimed it by window title. Computed against
+        # the deck actually being sent, so a pinned chrome view (e.g. mpris)
         # or demo pin — which has no ``title:`` token — stays false.
         focus_app = self.server.current_app
         web_app = bool(
             focus_app is not None
             and focus_app.is_browser
-            and layout.matches_title(focus_app)
+            and deck.matches_title(focus_app)
         )
-        # Focused-app identity for the editor's new-layout creation flow (#104).
+        # Focused-app identity for the editor's new-deck creation flow (#104).
         # Populated from the daemon's last-known focus; None before the first
         # focus event. The editor uses this to prefill match tokens in the
         # detect-and-offer prompt and the browser-vs-site branch.
@@ -505,25 +505,25 @@ class Session:
                 is_browser=focus_app.is_browser,
             )
         # Issue #123 / stage 1: ``is_default`` rides on the wire so the
-        # client can append ``(program)`` to the layout name on a genuine
+        # client can append ``(program)`` to the deck name on a genuine
         # focus-driven default fallback. Forced false whenever this
-        # session is serving a pinned layout/view — a pin means
+        # session is serving a pinned deck/view — a pin means
         # "frozen, don't report what's underneath" even if the pinned
-        # layout happens to be the default.
+        # deck happens to be the default.
         is_default = (
             self.server._current_is_default and pin is None and view_id is None
         )
         if error is not None:
             # Bad on-disk config: send widgets=[] plus the error text so the
             # client swaps the grid for a diagnostic message.
-            msg = p.LayoutMessage(
-                type="layout",
+            msg = p.DeckMessage(
+                type="deck",
                 app=app_id,
                 view=view_id,
-                overflow=layout.overflow,
-                jogstrip_enabled=layout.jogstrip,
-                display_name=layout.display_name,
-                theme=layout.theme,
+                overflow=deck.overflow,
+                jogstrip_enabled=deck.jogstrip,
+                display_name=deck.display_name,
+                theme=deck.theme,
                 icon=icon,
                 web_app=web_app,
                 focused_app=focused_app,
@@ -532,15 +532,15 @@ class Session:
                 error=error,
             )
         else:
-            widgets = [w.model_dump() for w in layout.widgets]
-            msg = p.LayoutMessage(
-                type="layout",
+            widgets = [w.model_dump() for w in deck.widgets]
+            msg = p.DeckMessage(
+                type="deck",
                 app=app_id,
                 view=view_id,
-                overflow=layout.overflow,
-                jogstrip_enabled=layout.jogstrip,
-                display_name=layout.display_name,
-                theme=layout.theme,
+                overflow=deck.overflow,
+                jogstrip_enabled=deck.jogstrip,
+                display_name=deck.display_name,
+                theme=deck.theme,
                 icon=icon,
                 web_app=web_app,
                 focused_app=focused_app,
@@ -549,7 +549,7 @@ class Session:
                 # View-resolution errors ride alongside the focused-app
                 # widgets so the chrome stays usable while the user sees
                 # the failure (``view not found``). Distinct from a
-                # ``layout error`` (bad YAML) which replaces the grid.
+                # ``deck error`` (bad YAML) which replaces the grid.
                 error=view_error,
             )
         await self.send(msg)
@@ -559,7 +559,7 @@ class Server:
     def __init__(
         self,
         *,
-        layouts_dir: Path,
+        decks_dir: Path,
         host: str | None = None,
         port: int = 8765,
         bind: Sequence[str] | None = None,
@@ -575,7 +575,7 @@ class Server:
         mpris_backend: MprisBackend | None = None,
         mpris_art_resolver: "Callable[[str | None], Awaitable[tuple[str, bytes] | None]] | None" = None,
     ) -> None:
-        self.layouts_dir = layouts_dir
+        self.decks_dir = decks_dir
         self.overlay_dir = overlay_dir
         # ``None``/empty disables auth entirely (every connection is treated
         # as authorized). When set, every client must present it.
@@ -621,22 +621,22 @@ class Server:
         self._focus_platform: str | None = None
         self._setup_routes()
         self._sessions: set[Session] = set()
-        self.layouts: LayoutStore = load_layouts(layouts_dir, overlay_dir)
+        self.decks: DeckStore = load_decks(decks_dir, overlay_dir)
         self._current_app_id: str = DEFAULT_APP_ID
-        self._current_layout: Layout = self.layouts.default()
+        self._current_deck: Deck = self.decks.default()
         # Issue #123 / stage 1: True while the focus-driven resolution
-        # is parked on the default layout. ``Session.push_current``
+        # is parked on the default deck. ``Session.push_current``
         # reads this to decide whether to set ``is_default`` on the
-        # ``LayoutMessage`` — forced false for pinned views there.
+        # ``DeckMessage`` — forced false for pinned views there.
         self._current_is_default: bool = True
         self.mpris = mpris_backend
-        # Set when a layout-configured MPRIS backend fails to reach a
+        # Set when a deck-configured MPRIS backend fails to reach a
         # session bus (macOS, or a Linux session without one). Distinct
-        # from "no mediabrowser layout, so no backend was ever built" —
+        # from "no mediabrowser deck, so no backend was ever built" —
         # that's an unconfigured feature, not an unsupported host.
         self._mpris_unsupported = False
         # Issue #52: when no mpris backend was injected, auto-build
-        # one iff a loaded layout uses ``nowplaying``. Keeps the
+        # one iff a loaded deck uses ``nowplaying``. Keeps the
         # cost of opening the session bus off the path of users who
         # don't enable the feature. The explicit injection
         # (``mpris_backend=...``) is always honoured, so
@@ -644,7 +644,7 @@ class Server:
         # :class:`DbusMprisBackend` tests bypass this path.
         self._dbus_bus_factory = dbus_bus_factory
         if mpris_backend is None and dbus_bus_factory is not None:
-            default = connect_mpris_backend(self.layouts, dbus_bus_factory)
+            default = connect_mpris_backend(self.decks, dbus_bus_factory)
             if default is not None:
                 self.mpris = default
         # Issue #47: wire the chrome-media passive indicator listener
@@ -711,7 +711,7 @@ class Server:
                 self.dbus_bus_factory = _timing_factory
         self.focus_backend = focus_backend
         self._focus_task: asyncio.Task[None] | None = None
-        self._layouts_task: asyncio.Task[None] | None = None
+        self._decks_task: asyncio.Task[None] | None = None
         self._sensor_task: asyncio.Task[None] | None = None
         self._media_task: asyncio.Task[None] | None = None
         self._windows_task: asyncio.Task[None] | None = None
@@ -737,13 +737,13 @@ class Server:
         # the snapshot the watcher is about to compute, so the snapshot
         # replay rides through ``push_running_windows_snapshot`` below.
         self._last_running_windows: list["WindowInfo"] | None = None
-        # Sensor subscriptions for the active layout. Re-derived whenever
-        # the active layout changes (focus change or hot reload) so the
+        # Sensor subscriptions for the active deck. Re-derived whenever
+        # the active deck changes (focus change or hot reload) so the
         # daemon only polls sensors the current view is actually using.
         # ``None`` means "use the platform default"; explicit ``None``
         # tests can pass a fake manager. ``_subscribed_sources`` is the
         # set we currently hold refcounts on, used to keep
-        # subscribe/unsubscribe balanced across layout changes.
+        # subscribe/unsubscribe balanced across deck changes.
         self.sensors: "SensorManager | None" = sensor_manager
         self._subscribed_sources: set[str] = set()
         self.media = media_manager
@@ -754,11 +754,11 @@ class Server:
             1 if (key_sink is not None and hasattr(key_sink, "_device")) else 0
         )
 
-    # -- layout state --------------------------------------------------------
+    # -- deck state --------------------------------------------------------
 
     @property
-    def current_layout(self) -> Layout:
-        return self._current_layout
+    def current_deck(self) -> Deck:
+        return self._current_deck
 
     @property
     def current_app_id(self) -> str:
@@ -773,47 +773,47 @@ class Server:
     def current_error(self) -> str | None:
         return self._current_error
 
-    def reload_layouts(self) -> None:
-        """Re-read every layout YAML in ``layouts_dir`` (and overlay_dir).
+    def reload_decks(self) -> None:
+        """Re-read every deck YAML in ``decks_dir`` (and overlay_dir).
 
         On success: rebuild the store, keep the current app_id if it still
         resolves, else fall back to default, and clear any prior error.
 
         On failure (bad YAML, schema violation): keep the previous store and
-        current layout intact, but record the error on ``current_error`` so
+        current deck intact, but record the error on ``current_error`` so
         the next push tells the client to render an error state instead of
         the grid. Callers should not have to catch anything.
         """
-        self.metrics.layout_reload_total += 1
+        self.metrics.deck_reload_total += 1
         try:
-            new_store = load_layouts(self.layouts_dir, self.overlay_dir)
+            new_store = load_decks(self.decks_dir, self.overlay_dir)
         except SystemExit as exc:
             self._current_error = str(exc)
-            self.metrics.layout_error_total += 1
-            log.error("layout reload failed (keeping last-good): %s", exc)
+            self.metrics.deck_error_total += 1
+            log.error("deck reload failed (keeping last-good): %s", exc)
             return
-        self.layouts = new_store
+        self.decks = new_store
         try:
-            new_layout = self.layouts[self._current_app_id]
+            new_deck = self.decks[self._current_app_id]
         except KeyError:
             self._current_app_id = DEFAULT_APP_ID
-            new_layout = self.layouts.default()
-        self._current_layout = new_layout
-        # Issue #123 / stage 1: a reload can shift the resolved layout
+            new_deck = self.decks.default()
+        self._current_deck = new_deck
+        # Issue #123 / stage 1: a reload can shift the resolved deck
         # between default and identity-matched. Re-derive the flag from
         # the resolved object identity so the wire stays truthful.
-        self._current_is_default = new_layout is self.layouts.default()
+        self._current_is_default = new_deck is self.decks.default()
         self._current_error = None
-        self.metrics.layout_reload_ok_total += 1
-        # A layout reload can change which meter sources the active
-        # layout uses (a meter added in the new YAML, an old one
+        self.metrics.deck_reload_ok_total += 1
+        # A deck reload can change which meter sources the active
+        # deck uses (a meter added in the new YAML, an old one
         # removed). Reconcile subscriptions so the manager polls only
         # what's now in use.
         self._sync_sensor_subscriptions()
         self._sync_media_subscriptions()
         log.info(
-            "reloaded layouts from %s%s",
-            self.layouts_dir,
+            "reloaded decks from %s%s",
+            self.decks_dir,
             f" + {self.overlay_dir}" if self.overlay_dir else "",
         )
         # Issue #73: emit a diagnostic event so subscribers see the
@@ -822,10 +822,10 @@ class Server:
         asyncio.create_task(
             self.events.emit(
                 DiagnosticEvent(
-                    name="layout_reload",
+                    name="deck_reload",
                     ts=time.time(),
                     data={
-                        "dir": str(self.layouts_dir),
+                        "dir": str(self.decks_dir),
                         "overlay_dir": str(self.overlay_dir)
                         if self.overlay_dir
                         else None,
@@ -838,7 +838,7 @@ class Server:
         )
 
     async def _push_to_all(self) -> None:
-        """Push the current layout to every live session.
+        """Push the current deck to every live session.
 
         Stale-connection failures are silently dropped; the session is
         already in the process of being torn down.
@@ -850,7 +850,7 @@ class Server:
                 pass
 
     async def reload_and_push(self) -> None:
-        self.reload_layouts()
+        self.reload_decks()
         await self._push_to_all()
 
     # -- focus watcher -------------------------------------------------------
@@ -877,25 +877,25 @@ class Server:
         if self._is_deckd_window(app):
             self._deckd_window_focused = True
             self.metrics.focus_deckd_window_guard_total += 1
-            log.debug("holding layout; deckd client window focused (%s)", app)
+            log.debug("holding deck; deckd client window focused (%s)", app)
             return
         self._deckd_window_focused = False
-        # A genuine (non-deckd) focus change re-resolves the layout, so a
-        # `deckctl layout` override never sticks past the next real switch.
-        new_layout = resolve_layout(self.layouts, app)
-        new_app_id = new_layout.id
-        if new_app_id == self._current_app_id and new_layout is self._current_layout:
+        # A genuine (non-deckd) focus change re-resolves the deck, so a
+        # `deckctl deck` override never sticks past the next real switch.
+        new_deck = resolve_deck(self.decks, app)
+        new_app_id = new_deck.id
+        if new_app_id == self._current_app_id and new_deck is self._current_deck:
             return
         self.metrics.focus_events_total += 1
-        log.info("focus -> %s (layout=%s)", app, new_app_id)
+        log.info("focus -> %s (deck=%s)", app, new_app_id)
         self._current_app_id = new_app_id
-        self._current_layout = new_layout
+        self._current_deck = new_deck
         # Issue #123 / stage 1: True iff the focus-driven resolution
-        # parked on the default layout. Identity / title matches leave
+        # parked on the default deck. Identity / title matches leave
         # it false so the client suppresses the ``(program)`` suffix.
-        self._current_is_default = new_layout is self.layouts.default()
-        # Different layouts reference different meter sources (e.g.
-        # switching from a desktop to a terminal layout that monitors
+        self._current_is_default = new_deck is self.decks.default()
+        # Different decks reference different meter sources (e.g.
+        # switching from a desktop to a terminal deck that monitors
         # something else). Resubscribe so the manager's polling tracks
         # the active view.
         self._sync_sensor_subscriptions()
@@ -903,7 +903,7 @@ class Server:
         await self._push_to_all()
         # Issue #73: emit a diagnostic event so subscribers see the
         # focus change. The data is intentionally redacted to the
-        # match tokens the layout resolver consumes (``app_id`` /
+        # match tokens the deck resolver consumes (``app_id`` /
         # ``wm_class``); ``title`` and ``pid`` ride along but no
         # passwords / typed input.
         asyncio.create_task(
@@ -916,7 +916,7 @@ class Server:
                         "wm_class": app.wm_class,
                         "title": app.title,
                         "pid": app.pid,
-                        "new_layout_id": new_app_id,
+                        "new_deck_id": new_app_id,
                     },
                     correlation_id=current_correlation_id(),
                 )
@@ -927,7 +927,7 @@ class Server:
         """Long-running task: react to focus changes from the backend.
 
         Reads the initial focus before entering the loop so the daemon
-        starts with the correct layout instead of ``default``. Errors
+        starts with the correct deck instead of ``default``. Errors
         from the backend on any single iteration are logged but do not
         stop the watcher.
 
@@ -937,7 +937,7 @@ class Server:
         (``org.deckd.Focus``) is up before the script's initial
         ``push(workspace.activeWindow)`` arrives. A start failure
         surfaces as ``FocusBackendUnavailable`` and we keep the daemon
-        alive on the default layout rather than crashing.
+        alive on the default deck rather than crashing.
         """
         if self.focus_backend is None:
             return
@@ -1056,15 +1056,15 @@ class Server:
 
         Per-push label derivation (issue #120, decision 5): every
         window's identity runs through :func:`label_for_window` so a
-        layout reload takes effect on the next push with no
+        deck reload takes effect on the next push with no
         invalidation logic. ``icon_for_window`` carries the matched
-        layout's icon when present, ``null`` on the default-fallback
+        deck's icon when present, ``null`` on the default-fallback
         path (decision 6 — honest absence, not a generic glyph).
         """
         entries: list[p.WindowListEntry] = []
         for win in snapshot:
-            label = label_for_window(self.layouts, win)
-            icon = icon_for_window(self.layouts, win)
+            label = label_for_window(self.decks, win)
+            icon = icon_for_window(self.decks, win)
             entries.append(
                 p.WindowListEntry(
                     window_id=win.window_id,
@@ -1221,7 +1221,7 @@ class Server:
         self.recent_actions.add(
             ActionRecord(
                 ts=time.time(),
-                layout_id=self._current_app_id,
+                deck_id=self._current_app_id,
                 widget_id=str(what)[:64],
                 primitive=primitive,
                 outcome="lock_dropped",
@@ -1263,91 +1263,91 @@ class Server:
         )
         return self._session_state_task
 
-    async def run_layouts_watcher(self) -> None:
-        """Long-running task: reload layouts when a YAML file in the layouts
+    async def run_decks_watcher(self) -> None:
+        """Long-running task: reload decks when a YAML file in the decks
         directory (or its platform overlay) is created, edited, or removed.
 
-        Layouts are user configuration, not just a dev-only artifact —
+        Decks are user configuration, not just a dev-only artifact —
         watching them is on by default so a user can iterate on their YAML
         while the daemon is running. Bad edits do not crash the daemon
-        (``reload_layouts`` traps parse errors and surfaces them via
+        (``reload_decks`` traps parse errors and surfaces them via
         ``current_error``).
         """
         try:
             from watchfiles import awatch
         except ImportError:
-            log.warning("watchfiles not installed; layouts hot-reload disabled")
+            log.warning("watchfiles not installed; decks hot-reload disabled")
             return
-        watch_paths = [self.layouts_dir]
+        watch_paths = [self.decks_dir]
         if self.overlay_dir is not None and self.overlay_dir.is_dir():
             watch_paths.append(self.overlay_dir)
         yaml_suffixes = {".yaml", ".yml"}
         async for changes in awatch(*watch_paths):
             if not any(Path(p).suffix in yaml_suffixes for _, p in changes):
                 continue
-            log.info("layouts dir changed -> reload")
+            log.info("decks dir changed -> reload")
             try:
                 await self.reload_and_push()
             except Exception as exc:
-                # reload_layouts already traps parse errors; anything reaching
+                # reload_decks already traps parse errors; anything reaching
                 # here is a bug we want to see but not kill the watcher for.
                 log.exception("unexpected reload failure: %s", exc)
 
-    def start_layouts_watcher(self) -> asyncio.Task[None] | None:
-        if self._layouts_task is not None:
+    def start_decks_watcher(self) -> asyncio.Task[None] | None:
+        if self._decks_task is not None:
             return None
-        self._layouts_task = asyncio.create_task(self.run_layouts_watcher())
-        return self._layouts_task
+        self._decks_task = asyncio.create_task(self.run_decks_watcher())
+        return self._decks_task
 
     # -- sensor pump ---------------------------------------------------------
     #
     # The :class:`SensorManager` polls sources on its own task and keeps
     # the latest reading in ``_last[name]``. The server's only job is to
     # notice when a reading changes and push a ``widget_update`` frame
-    # to every connected session whose active layout has a meter bound
+    # to every connected session whose active deck has a meter bound
     # to that source. Polling frequency is bounded by the source's
     # ``interval_s``; the pump itself runs at 100ms so a 1s source
     # produces up to one push per second, and we don't notice a
     # millisecond late.
 
     def _meters_for_source(self, source: str) -> list[Widget]:
-        """Return every widget in the active layout that displays ``source``.
+        """Return every widget in the active deck that displays ``source``.
 
         Covers both single-value ``meter`` widgets (``w.source == source``)
         and multi-value ``stats`` widgets (``source`` appears in their
         ``metrics``). Used by the pump to know which widget ``id`` to send
-        in the push. Order matches the layout's declaration order so the
+        in the push. Order matches the deck's declaration order so the
         wire is deterministic for tests.
         """
         return [
             w
-            for w in self._current_layout.widgets
+            for w in self._current_deck.widgets
             if _widget_uses_source(w, source)
         ]
 
     def _active_sources(self) -> set[str]:
-        """Names of every sensor referenced by a meter in the active layout.
+        """Names of every sensor referenced by a meter in the active deck.
 
         Excludes unknown source names (no such source registered with
-        the manager) so a typo in a layout YAML doesn't crash the
+        the manager) so a typo in a deck YAML doesn't crash the
         pump — the meter just stays stale. The exclusion is best-effort
         at this layer; the manager's ``is_available`` check is the
         authoritative gate.
         """
         sources: set[str] = set()
         manager = self.sensors
-        for w in self._current_layout.widgets:
+        for w in self._current_deck.widgets:
             for name in _widget_sources(w):
                 if manager is None or manager.has(name):
                     sources.add(name)
         return sources
 
     def _sync_sensor_subscriptions(self) -> None:
-        """Reconcile :class:`SensorManager` subscriptions with the active layout.
+        """Reconcile :class:`SensorManager` subscriptions with the active deck.
 
         Idempotent: calling it back-to-back is a no-op. Drops
         subscriptions to sources no longer referenced; adds new ones.
-        Layouts with no meter widgets clear all subscriptions so the
+        Decks with no meter widgets clear all subscriptions so the
         daemon idles its polling.
         """
         manager = self.sensors
@@ -1371,7 +1371,7 @@ class Server:
         A meter bound to an unknown source simply never produces a
         push — the client renders no value at all. This is intentional:
         the alternative (one push per pump tick with the error
-        surfaced) would spam a layout YAML typo across the WebSocket
+        surfaced) would spam a deck YAML typo across the WebSocket
         forever. The :meth:`_active_sources` filter is the gate that
         keeps unknown sources out of the subscription set in the first
         place.
@@ -1383,7 +1383,7 @@ class Server:
         last_pushed: dict[tuple[str, str], tuple[float, bool, str]] = {}
         try:
             while True:
-                # Snapshot subscriptions so a layout change that drops a
+                # Snapshot subscriptions so a deck change that drops a
                 # source mid-iteration doesn't reach into a stale entry.
                 for name in list(self._subscribed_sources):
                     reading = manager.latest(name)
@@ -1452,20 +1452,20 @@ class Server:
         return sent > 0
 
     def _media_widgets(self) -> list[Widget]:
-        return [w for w in self._current_layout.widgets if w.kind == "media"]
+        return [w for w in self._current_deck.widgets if w.kind == "media"]
 
     def _has_nowplaying(self) -> bool:
-        # Gate on *any* loaded layout, not the focus-driven current one:
+        # Gate on *any* loaded deck, not the focus-driven current one:
         # the ``nowplaying`` widget lives in the ``mpris`` chrome view,
         # which a client pins per-session and which is never the focused
-        # app's layout. Checking ``_current_layout`` (e.g. the ``vlc``
-        # layout while VLC is focused) would starve the pump so the
+        # app's deck. Checking ``_current_deck`` (e.g. the ``vlc``
+        # deck while VLC is focused) would starve the pump so the
         # now-playing surface stays empty even though a client has it
         # open. Mirrors the ``connect_mpris_backend`` discovery gate.
         return any(
             w.kind == "nowplaying"
-            for layout in self.layouts.layouts
-            for w in layout.widgets
+            for deck in self.decks.decks
+            for w in deck.widgets
         )
 
     def _sync_media_subscriptions(self) -> None:
@@ -1705,10 +1705,10 @@ class Server:
         if self.sensors is None or self._sensor_task is not None:
             return None
         # Make sure the manager is subscribed to whatever the active
-        # layout uses before the pump task starts polling. ``__init__``
+        # deck uses before the pump task starts polling. ``__init__``
         # deliberately doesn't subscribe (no event loop yet), and
-        # ``reload_layouts`` / ``_on_focus`` keep the set in sync as
-        # the layout changes; this call bridges the gap on first start
+        # ``reload_decks`` / ``_on_focus`` keep the set in sync as
+        # the deck changes; this call bridges the gap on first start
         # so the very first ``widget_update`` push isn't delayed by a
         # missing subscription.
         self._sync_sensor_subscriptions()
@@ -1803,23 +1803,23 @@ class Server:
         return data
 
     def _pin_session(self, session: "Session", data: dict) -> bool:
-        """Apply the ``?layout=<name>`` demo pin from a hello frame. Returns
+        """Apply the ``?deck=<name>`` demo pin from a hello frame. Returns
         True if the session's pin changed (so the caller re-pushes). An unknown
         or absent name is a no-op — the session keeps following focus. The name
         is resolved leniently (id / display_name / any match token,
         case-insensitively) so friendly names like ``tilix`` work even when the
-        layout id is a reverse-DNS token like ``com.gexperts.Tilix``."""
-        name = data.get("layout")
+        deck id is a reverse-DNS token like ``com.gexperts.Tilix``."""
+        name = data.get("deck")
         if not isinstance(name, str) or not name:
             return False
-        layout_id = self.layouts.resolve_id(name)
-        if layout_id is None:
-            log.warning("ignoring unknown demo pin layout: %s", name)
+        deck_id = self.decks.resolve_id(name)
+        if deck_id is None:
+            log.warning("ignoring unknown demo pin deck: %s", name)
             return False
-        if session.pinned_layout_id == layout_id:
+        if session.pinned_deck_id == deck_id:
             return False
-        session.pinned_layout_id = layout_id
-        log.info("session pinned to layout %s (demo, requested %r)", layout_id, name)
+        session.pinned_deck_id = deck_id
+        log.info("session pinned to deck %s (demo, requested %r)", deck_id, name)
         return True
 
     # -- routes / lifecycle --------------------------------------------------
@@ -1833,21 +1833,21 @@ class Server:
         # snapshot from the server's live state on every request, so
         # there is no stale-cache failure mode.
         self.app.router.add_get("/diag", self._diag)
-        self.app.router.add_get("/layouts", self._layouts_list)
+        self.app.router.add_get("/decks", self._decks_list)
         self.app.router.add_get("/actions/recent", self._actions_recent)
         self.app.router.add_get("/metrics", self._metrics)
         self.app.router.add_post("/reload", self._reload)
-        self.app.router.add_post("/layout/{layout_id}", self._set_layout)
-        # Layout write API (issues #84 / #99). Save and create sit on the
-        # same authed aiohttp control surface as ``/reload`` / ``_set_layout``
-        # plural ``/layouts`` pairs with the read-only ``GET /layouts`` and
+        self.app.router.add_post("/deck/{deck_id}", self._set_deck)
+        # Deck write API (issues #84 / #99). Save and create sit on the
+        # same authed aiohttp control surface as ``/reload`` / ``_set_deck``
+        # plural ``/decks`` pairs with the read-only ``GET /decks`` and
         # distances the write path from the runtime-override
-        # ``POST /layout/{id}`` (singular). PUT = idempotent full-snapshot
+        # ``POST /deck/{id}`` (singular). PUT = idempotent full-snapshot
         # replace of an existing file; POST = create-on-first-save deriving
         # id/filename from slugified ``match[0]``. Validation, sanitized
         # structured errors, and the canonical re-read echo are shared.
-        self.app.router.add_put("/layouts/{layout_id}", self._put_layout)
-        self.app.router.add_post("/layouts", self._post_layout)
+        self.app.router.add_put("/decks/{deck_id}", self._put_deck)
+        self.app.router.add_post("/decks", self._post_deck)
         # Album-art proxy. Deliberately unauthenticated (art is low-value and
         # an <img> tag can't carry the password header): the daemon fetches
         # the current item's art from VLC's own HTTP interface and streams it
@@ -1875,7 +1875,7 @@ class Server:
         # The one endpoint left open when auth is on: the web client's
         # Settings panel fetches /health for host-identity diagnostics
         # (often before the user has entered the password), and unlike
-        # /reload and /layout it neither mutates state nor injects input.
+        # /reload and /deck it neither mutates state nor injects input.
         # The only exposure is hostname/OS/desktop/session-count plus
         # the bind surface (issue #66) so a phone pairing in via the
         # same machine can read the URL it should hit.
@@ -1926,9 +1926,9 @@ class Server:
 
     async def _diag(self, req: web.Request) -> web.Response:
         # Issue #70: read-only snapshot of every subsystem that
-        # affects a button press or layout switch. Mirrors ``/health``'s
+        # affects a button press or deck switch. Mirrors ``/health``'s
         # open-auth stance (no secret leak — host identity, focus, input
-        # sink, layouts, sessions, tasks, MPRIS). The dict is built
+        # sink, decks, sessions, tasks, MPRIS). The dict is built
         # fresh on every request; intentionally no caching, so a user
         # watching with ``watch -n1 curl`` sees live values.
         self.metrics.sessions_active = len(self._sessions)
@@ -2005,12 +2005,12 @@ class Server:
             return [(b.host, self.port) for b, _ in resolved]
         return [(self.host, self._bound_port(req))]
 
-    async def _layouts_list(self, req: web.Request) -> web.Response:
+    async def _decks_list(self, req: web.Request) -> web.Response:
         # Authenticated editors need full widget data (including action/macro
         # bodies). Unauthenticated callers (diagnostics page) get the safe
         # summary: no shell/dbus/key strings.
         full = self._http_authorized(req)
-        body = build_layouts_snapshot(self.layouts, full=full)
+        body = build_decks_snapshot(self.decks, full=full)
         return web.json_response(body, headers={"Access-Control-Allow-Origin": "*"})
 
     async def _actions_recent(self, req: web.Request) -> web.Response:
@@ -2174,33 +2174,33 @@ class Server:
             body["error"] = self._current_error
         return web.json_response(body, status=200 if self._current_error is None else 400)
 
-    async def _set_layout(self, req: web.Request) -> web.Response:
+    async def _set_deck(self, req: web.Request) -> web.Response:
         if not self._http_authorized(req):
             return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
-        layout_id = req.match_info["layout_id"]
+        deck_id = req.match_info["deck_id"]
         try:
-            layout = self.layouts[layout_id]
+            deck = self.decks[deck_id]
         except KeyError:
             return web.json_response(
-                {"ok": False, "error": f"unknown layout: {layout_id}"}, status=404
+                {"ok": False, "error": f"unknown deck: {deck_id}"}, status=404
             )
-        await self._apply_layout_override(layout_id, layout)
+        await self._apply_deck_override(deck_id, deck)
         return web.json_response(
-            {"ok": True, "app": layout_id, "sessions": len(self._sessions)}
+            {"ok": True, "app": deck_id, "sessions": len(self._sessions)}
         )
 
-    # -- layout write API (issues #84 / #99) --------------------------------
+    # -- deck write API (issues #84 / #99) --------------------------------
 
-    async def _read_and_validate_layout(
+    async def _read_and_validate_deck(
         self, req: web.Request
-    ) -> tuple[dict, Layout] | web.Response:
+    ) -> tuple[dict, Deck] | web.Response:
         """Shared ``PUT``/``POST`` preamble: auth, JSON parse, schema validate.
 
-        Returns the parsed snapshot and the validated :class:`Layout` on
+        Returns the parsed snapshot and the validated :class:`Deck` on
         success, or a ready-to-send ``401``/``400`` response. Centralising
         the auth gate, the JSON-body requirement, and the sanitized
         validation-error path keeps the never-leak-payloads rule in one
-        place both endpoints share. The validated ``Layout`` is returned
+        place both endpoints share. The validated ``Deck`` is returned
         alongside even though the reconcile writes the raw snapshot —
         callers that want coerced/defaults use it; the write path keeps
         the raw dict for full-snapshot omitted-field semantics (issue #85).
@@ -2216,71 +2216,71 @@ class Server:
         if not isinstance(snapshot, dict):
             return _derivation_failed([], "request body must be a JSON object")
         try:
-            layout = Layout.model_validate(snapshot)
+            deck = Deck.model_validate(snapshot)
         except ValidationError as exc:
             return _validation_failed(exc)
-        return snapshot, layout
+        return snapshot, deck
 
-    async def _put_layout(self, req: web.Request) -> web.Response:
-        """``PUT /layouts/{id}`` — idempotent full-snapshot save (issue #84).
+    async def _put_deck(self, req: web.Request) -> web.Response:
+        """``PUT /decks/{id}`` — idempotent full-snapshot save (issue #84).
 
         The URL ``{id}`` is authoritative and must equal the body's
         ``match[0]``; a ``match[0]`` change is a rename (create-shaped) and
         is rejected with ``409``. The body is validated as a full
-        :class:`Layout` (so the #85 duplicate-widget-id validator and every
+        :class:`Deck` (so the #85 duplicate-widget-id validator and every
         per-widget invariant run), reconciled onto a fresh on-disk re-read
         per #85 (comments ride along, widgets matched by ``id``), and
         written atomically. The response echoes the canonical re-read; the
         ``watchfiles`` watcher independently refreshes the live deck.
         """
-        layout_id = req.match_info["layout_id"]
-        path = self.layouts.source_path(layout_id)
+        deck_id = req.match_info["deck_id"]
+        path = self.decks.source_path(deck_id)
         if path is None:
             return web.json_response(
-                {"ok": False, "error": f"unknown layout: {layout_id}"}, status=404
+                {"ok": False, "error": f"unknown deck: {deck_id}"}, status=404
             )
-        parsed = await self._read_and_validate_layout(req)
+        parsed = await self._read_and_validate_deck(req)
         if isinstance(parsed, web.Response):
             return parsed
-        snapshot, _layout = parsed
+        snapshot, _deck = parsed
         match = snapshot.get("match") or []
-        if not match or match[0] != layout_id:
+        if not match or match[0] != deck_id:
             return web.json_response(
-                {"ok": False, "error": "match[0] must equal the layout id in the URL; use the create endpoint to rename"},
+                {"ok": False, "error": "match[0] must equal the deck id in the URL; use the create endpoint to rename"},
                 status=409,
             )
         return self._write_and_echo(path, snapshot)
 
-    async def _post_layout(self, req: web.Request) -> web.Response:
-        """``POST /layouts`` — create-on-first-save (issue #99).
+    async def _post_deck(self, req: web.Request) -> web.Response:
+        """``POST /decks`` — create-on-first-save (issue #99).
 
         Derives id/filename from slugified ``match[0]``; ``409`` if the id
         (or a slugified filename) already exists. Validation and the
-        canonical re-read echo mirror :meth:`_put_layout`; the brand-new
+        canonical re-read echo mirror :meth:`_put_deck`; the brand-new
         file has no comments to preserve so the reconcile writes the
         snapshot fresh. Derivation failures (empty ``match``, an
         unsigilable token) return the same sanitized structured ``400`` as
         Pydantic validation failures so the editor sees one 400 shape.
         """
-        parsed = await self._read_and_validate_layout(req)
+        parsed = await self._read_and_validate_deck(req)
         if isinstance(parsed, web.Response):
             return parsed
-        snapshot, _layout = parsed
+        snapshot, _deck = parsed
         match = snapshot.get("match") or []
         if not match:
-            return _derivation_failed(["match"], "match must be non-empty to derive a layout id")
+            return _derivation_failed(["match"], "match must be non-empty to derive a deck id")
         try:
-            stem = slugify_layout_id(match[0])
+            stem = slugify_deck_id(match[0])
         except ValueError as exc:
             return _derivation_failed(["match", 0], str(exc))
-        new_path = self.layouts_dir / f"{stem}.yaml"
-        # The canonical id equals match[0] verbatim (load_layout assigns it
+        new_path = self.decks_dir / f"{stem}.yaml"
+        # The canonical id equals match[0] verbatim (load_deck assigns it
         # on re-read); collision-check both the in-memory store and the
         # target file so a differently-cased match token can't shadow an
         # existing file via the slugified filename.
-        if match[0] in self.layouts or new_path.exists():
+        if match[0] in self.decks or new_path.exists():
             return web.json_response(
-                {"ok": False, "error": f"layout already exists: {match[0]}"}, status=409
+                {"ok": False, "error": f"deck already exists: {match[0]}"}, status=409
             )
         return self._write_and_echo(new_path, snapshot)
 
@@ -2293,46 +2293,46 @@ class Server:
         ``watchfiles`` watcher owns the live-deck reload.
         """
         try:
-            reconcile_and_write_layout(path, snapshot)
-            canonical = load_layout(path)
+            reconcile_and_write_deck(path, snapshot)
+            canonical = load_deck(path)
         except SystemExit as exc:
-            log.error("layout write/re-read failed for %s: %s", path, exc)
+            log.error("deck write/re-read failed for %s: %s", path, exc)
             return web.json_response(
-                {"ok": False, "error": f"layout write failed: {exc}"}, status=500
+                {"ok": False, "error": f"deck write failed: {exc}"}, status=500
             )
         except OSError as exc:
-            log.error("layout write failed for %s: %s", path, exc)
+            log.error("deck write failed for %s: %s", path, exc)
             return web.json_response(
-                {"ok": False, "error": f"layout write failed: {exc}"}, status=500
+                {"ok": False, "error": f"deck write failed: {exc}"}, status=500
             )
-        log.info("layout saved -> %s", path)
+        log.info("deck saved -> %s", path)
         return web.json_response(
-            {"ok": True, "layout": canonical.model_dump()}
+            {"ok": True, "deck": canonical.model_dump()}
         )
 
-    async def _apply_layout_override(self, layout_id: str, layout: Layout) -> None:
-        """Force every connected client to ``layout`` (addressed by ``layout_id``).
+    async def _apply_deck_override(self, deck_id: str, deck: Deck) -> None:
+        """Force every connected client to ``deck`` (addressed by ``deck_id``).
 
         Bypasses focus detection entirely. The override is not sticky: the
-        next genuine (non-deckd-window) focus change re-resolves the layout
+        next genuine (non-deckd-window) focus change re-resolves the deck
         and switches as normal.
         """
-        self._current_app_id = layout_id
-        self._current_layout = layout
+        self._current_app_id = deck_id
+        self._current_deck = deck
         # Issue #123 / stage 1: an override is not focus-driven, so the
         # ``is_default`` wire flag is always false here — even if the
-        # override target happens to be the default layout. The next
+        # override target happens to be the default deck. The next
         # genuine focus event in ``_on_focus`` restores the flag to the
         # true resolution state.
         self._current_is_default = False
-        log.info("layout override -> %s", layout_id)
+        log.info("deck override -> %s", deck_id)
         await self._push_to_all()
 
     async def _ws_handler(self, req: web.Request) -> web.WebSocketResponse:
         ws = web.WebSocketResponse(heartbeat=30)
         await ws.prepare(req)
         # Clients must authenticate before we add the session or leak any
-        # layout. The authenticating ``hello`` frame is consumed here;
+        # deck. The authenticating ``hello`` frame is consumed here;
         # subsequent frames flow through the normal dispatch loop.
         session = Session(ws, self)
         # Issue #73: bind a correlation id for the lifetime of this
@@ -2412,7 +2412,7 @@ class Server:
             # no-op; the chrome view's empty state is the signal.
             await self.push_running_windows_snapshot(session)
             # Issue #160: replay the session-state snapshot so a phone
-            # joining mid-lock isn't stuck showing a stale layout. An
+            # joining mid-lock isn't stuck showing a stale deck. An
             # unobserving backend answers all-false — the honest
             # "no session-state surface here".
             await self.push_session_state_snapshot(session)
@@ -2649,7 +2649,7 @@ class Server:
         self.recent_actions.add(
             ActionRecord(
                 ts=time.time(),
-                layout_id=self._current_app_id,
+                deck_id=self._current_app_id,
                 widget_id=str(what)[:64],
                 primitive="press",
                 outcome="guard_dropped",
@@ -2684,7 +2684,7 @@ class Server:
             self.recent_actions.add(
                 ActionRecord(
                     ts=time.time(),
-                    layout_id=self._current_app_id,
+                    deck_id=self._current_app_id,
                     widget_id=press.id,
                     primitive="press",
                     outcome="no_widget",
@@ -2694,8 +2694,8 @@ class Server:
             )
             return
         ctx = ActionContext(
-            send_layout=session.push_current,
-            get_current_layout=lambda: self._current_layout,
+            send_deck=session.push_current,
+            get_current_deck=lambda: self._current_deck,
             current_app=session.app_id,
             key_sink=self.key_sink,
             dbus_bus_factory=self.dbus_bus_factory,
@@ -2859,7 +2859,7 @@ class Server:
         self.recent_actions.add(
             ActionRecord(
                 ts=time.time(),
-                layout_id=self._current_app_id,
+                deck_id=self._current_app_id,
                 widget_id=pending.widget_id,
                 primitive=pending.primitive,
                 outcome=outcome,
@@ -2886,7 +2886,7 @@ class Server:
                     data={
                         "outcome": outcome,
                         "widget_id": pending.widget_id,
-                        "layout_id": self._current_app_id,
+                        "deck_id": self._current_app_id,
                         "confirm_id": pending.confirm_id,
                     },
                     correlation_id=current_correlation_id(),
@@ -2918,7 +2918,7 @@ class Server:
         self.recent_actions.add(
             ActionRecord(
                 ts=time.time(),
-                layout_id=self._current_app_id,
+                deck_id=self._current_app_id,
                 widget_id=widget.id,
                 primitive=primitive,
                 outcome="ok",
@@ -2928,7 +2928,7 @@ class Server:
         )
         action_event_data: dict[str, object] = {
             "widget_id": widget.id,
-            "layout_id": self._current_app_id,
+            "deck_id": self._current_app_id,
             "primitive": primitive,
         }
         if confirm_id is not None:
@@ -2949,7 +2949,7 @@ class Server:
             self.recent_actions.add(
                 ActionRecord(
                     ts=time.time(),
-                    layout_id=self._current_app_id,
+                    deck_id=self._current_app_id,
                     widget_id=widget.id,
                     primitive=primitive,
                     outcome=outcome.outcome,
@@ -2969,7 +2969,7 @@ class Server:
                 await session.send(result_msg)
 
     def _find_widget(self, widget_id: str) -> Widget | None:
-        for w in self._current_layout.widgets:
+        for w in self._current_deck.widgets:
             if w.id == widget_id:
                 return w
         return None
@@ -3044,26 +3044,26 @@ class Server:
         # Open the MPRIS session bus before the pump task wakes up,
         # so the first iteration's ``row_ids()`` sees live state
         # instead of an empty set. Failure is logged, not raised —
-        # the daemon keeps running on a non-MPRIS layout.
+        # the daemon keeps running on a non-MPRIS deck.
         if isinstance(self.mpris, DbusMprisBackend):
             try:
                 await self.mpris.start()
             except Exception as exc:
                 log.warning("MPRIS backend start failed: %s", exc)
                 self.mpris = None
-                # A layout asked for the surface and the host can't
+                # A deck asked for the surface and the host can't
                 # provide it — that's structural, not "nothing is
                 # playing", and the client is told so explicitly
                 # (see push_chrome_media_snapshot).
                 self._mpris_unsupported = True
-        self.start_layouts_watcher()
+        self.start_decks_watcher()
         self.start_sensor_pump()
         self.start_media_pump()
         while True:
             await asyncio.sleep(3600)
 
     async def stop(self) -> None:
-        for task in (self._focus_task, self._windows_task, self._session_state_task, self._layouts_task, self._sensor_task, self._media_task):
+        for task in (self._focus_task, self._windows_task, self._session_state_task, self._decks_task, self._sensor_task, self._media_task):
             if task is not None:
                 task.cancel()
                 try:

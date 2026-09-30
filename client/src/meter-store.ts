@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ServerWidgetUpdate } from "./protocol";
 
 /** Latest reading for one widget id, or ``null`` if no reading has arrived
- * yet (or the widget was just hidden by a layout change). Unit lives on
+ * yet (or the widget was just hidden by a deck change). Unit lives on
  * the reading because it's the sensor's, not the widget's, and different
  * sources could (in principle) bind to the same widget id over time. */
 export type MeterReading = {
@@ -111,7 +111,7 @@ export function useMeterStore(activeSources: ReadonlySet<string>) {
       try {
         // Persist the most recent reading so a page reload doesn't
         // flash a blank meter until the next push lands. The full set
-        // is small (a handful of sources per layout), so a single
+        // is small (a handful of sources per deck), so a single
         // JSON blob per source keeps writes cheap and survives quota
         // pressure better than one key per push.
         window.localStorage.setItem(
@@ -146,7 +146,7 @@ export function useMeterStore(activeSources: ReadonlySet<string>) {
     return () => window.clearInterval(id);
   }, []);
 
-  // Filter the live map down to just the sources the active layout
+  // Filter the live map down to just the sources the active deck
   // references. Done as a render-time memo (not an effect) so React
   // schedules a single render when both the readings map and the
   // active-source set change; an effect-based reap would render once

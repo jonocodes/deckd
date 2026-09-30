@@ -19,10 +19,10 @@ from .platform import AppInfo, WindowInfo
 # :class:`deckd.mpris.NowPlaying` imports the same name so the
 # dedicated schema can't drift. ``ordering`` was removed in issue #58:
 # rows now reflect the session bus's ``ListNames`` order (matching GNOME
-# Shell) with no per-layout knob.
+# Shell) with no per-deck knob.
 NowPlayingEmptyState = Literal["show", "hide"]
 
-log = logging.getLogger("deckd.layouts")
+log = logging.getLogger("deckd.decks")
 
 
 class Icon(BaseModel):
@@ -100,18 +100,18 @@ class Widget(BaseModel):
     size: list[int] | Literal["full"] | None = None
     # Optional CSS colour string applied as the button's background. Any
     # value the browser accepts is fine ("#1e3a8a", "rebeccapurple",
-    # "hsl(...)"). Client trust: layouts are user-owned config, not user
+    # "hsl(...)"). Client trust: decks are user-owned config, not user
     # input, so no sanitisation is needed.
     color: str | None = None
     action: "Action | None" = None
     macro: "Macro | None" = None
     # ``meter`` widgets bind to a daemon-side :class:`SensorSource` by
     # name (e.g. ``cpu_percent``). The daemon pushes ``WidgetUpdateMessage``
-    # frames for every meter widget in the active layout whose source
+    # frames for every meter widget in the active deck whose source
     # has live readings. ``min`` / ``max`` define the bar's visible
     # range; values outside the range clamp at the ends so a runaway
     # sensor paints the bar at full red rather than overflowing.
-    # ``min``/``max`` default to a CPU-friendly 0..100 %; layouts with
+    # ``min``/``max`` default to a CPU-friendly 0..100 %; decks with
     # non-thermal sensors should override.
     source: str | None = None
     min: float | None = None
@@ -120,7 +120,7 @@ class Widget(BaseModel):
     # a compact, bar-less list of "label: value" rows. Each metric names a
     # source the same way a ``meter`` names its single ``source``; the
     # daemon subscribes to every referenced source while a stats widget is
-    # in the active layout, exactly as it does for meters.
+    # in the active deck, exactly as it does for meters.
     metrics: list[MetricSpec] | None = None
     controls: list[MediaControl] | None = None
     media_http: MediaHttp | None = None
@@ -137,7 +137,7 @@ class Widget(BaseModel):
     # :class:`deckd.mpris.NowPlaying`: whether the cell still renders
     # an empty placeholder when no player is discovered (``empty_state``).
     # Row order follows the session bus's ``ListNames`` reply — no
-    # per-layout knob (issue #58). Mirrors the existing media-only-field
+    # per-deck knob (issue #58). Mirrors the existing media-only-field
     # rule: only valid when ``kind == "nowplaying"``.
     empty_state: NowPlayingEmptyState | None = None
     # Confirmation opt-in (issues #69 / #108). When ``True`` the daemon
@@ -353,7 +353,7 @@ class Action(BaseModel):
         return v
 
 
-class Layout(BaseModel):
+class Deck(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = ""
@@ -362,9 +362,9 @@ class Layout(BaseModel):
     # What happens when the deck exceeds what the viewport holds at the
     # client's minimum button size (ADR-0011). ``clip`` (the default) trims
     # trailing widgets so the survivors keep that size; ``shrink-to-fit`` keeps
-    # every widget by letting cells fall below the floor. The layout supplies
+    # every widget by letting cells fall below the floor. The deck supplies
     # the default and the client may override it per device, so this is the one
-    # sizing knob that is both a layout and a device concern.
+    # sizing knob that is both a deck and a device concern.
     overflow: Literal["clip", "shrink-to-fit"] = "clip"
     jogstrip: bool = True
     # Chrome app-identity presentation relayed opaquely to the client
@@ -380,8 +380,8 @@ class Layout(BaseModel):
     icon: Icon | None = None
 
     @model_validator(mode="after")
-    def _validate_unique_widget_ids(self) -> "Layout":
-        """#85 layout-level duplicate widget-id validator.
+    def _validate_unique_widget_ids(self) -> "Deck":
+        """#85 deck-level duplicate widget-id validator.
 
         Widget ids are how the WS ``widget_update`` pump and the editor's
         reconcile address a widget, so two widgets sharing an id is a
@@ -398,19 +398,19 @@ class Layout(BaseModel):
         return self
 
     def matches(self, app: AppInfo) -> bool:
-        """True if this layout's ``match`` list covers the given app.
+        """True if this deck's ``match`` list covers the given app.
 
         A match is satisfied when any of the focused app's identifiers
-        (``app_id``, ``wm_class``) is in the layout's ``match`` list. The
+        (``app_id``, ``wm_class``) is in the deck's ``match`` list. The
         special token ``default`` is *not* considered a real match — it is
-        only the fallback. Layouts whose ``match`` list is empty never
+        only the fallback. Decks whose ``match`` list is empty never
         match by app identity.
 
         Web-app prototype (Tier 1): a token of the form ``title:PATTERN`` is
         a case-insensitive glob matched against the focused window's title.
         Because desktop focus backends can only see a browser's window title
         (never the active tab's URL — that needs a browser extension), this
-        lets a layout claim a *site* heuristically, e.g.
+        lets a deck claim a *site* heuristically, e.g.
         ``match: ["title:*YouTube*"]``. It is best-effort: it breaks whenever
         a site changes how it formats ``<title>``.
         """
@@ -433,11 +433,11 @@ class Layout(BaseModel):
         The comparison is case-insensitive (#140). A backend's enumeration
         identity can differ in case from its focus identity — macOS reports
         ``kCGWindowOwnerName`` as ``Firefox`` while the focus path and the
-        layout tokens are the lowercase process name ``firefox`` — and an
+        deck tokens are the lowercase process name ``firefox`` — and an
         exact membership test dropped those windows to the default fallback
         (bare app name, no glyph) even though focus-driven switching matched
         fine. Casefolding both sides fixes every backend at once. The cost
-        is that two layouts whose tokens differ only in case now collide;
+        is that two decks whose tokens differ only in case now collide;
         that has never been a supported distinction (ids slugify to
         lowercase, and ``resolve_id`` already matches case-insensitively).
 
@@ -464,114 +464,114 @@ class Layout(BaseModel):
         return False
 
 
-def load_layout(path: Path) -> Layout:
+def load_deck(path: Path) -> Deck:
     data = yaml.safe_load(path.read_text())
     try:
-        layout = Layout.model_validate(data)
+        deck = Deck.model_validate(data)
     except ValidationError as exc:
-        raise SystemExit(f"invalid layout YAML at {path}:\n{exc}") from exc
-    if layout.match:
-        layout.id = layout.match[0]
-    return layout
+        raise SystemExit(f"invalid deck YAML at {path}:\n{exc}") from exc
+    if deck.match:
+        deck.id = deck.match[0]
+    return deck
 
 
 # ---------------------------------------------------------------------------
-# Multi-layout directory loader
+# Multi-deck directory loader
 # ---------------------------------------------------------------------------
 
 
-DEFAULT_LAYOUT_ID = "default"
+DEFAULT_DECK_ID = "default"
 
 
-class LayoutStore:
-    """In-memory collection of all layouts the daemon knows about.
+class DeckStore:
+    """In-memory collection of all decks the daemon knows about.
 
-    Layouts are addressable by their primary match token (the first entry
-    of ``match``). Layouts with an empty match list (no real app claim)
+    Decks are addressable by their primary match token (the first entry
+    of ``match``). Decks with an empty match list (no real app claim)
     are still loaded but only the default fallback is addressable.
     """
 
     def __init__(
         self,
-        layouts: list[Layout],
+        decks: list[Deck],
         *,
         source_paths: dict[str, Path] | None = None,
     ) -> None:
-        self._layouts = list(layouts)
-        # Per-layout on-disk source file, keyed by the layout's id
+        self._decks = list(decks)
+        # Per-deck on-disk source file, keyed by the deck's id
         # (= ``match[0]``). The repo decouples filename from id (e.g.
         # ``tilix.yaml`` holds id ``com.gexperts.Tilix``), so the write API
-        # (PUT /layouts/{id}, POST /layouts) resolves a rewrite target by id
+        # (PUT /decks/{id}, POST /decks) resolves a rewrite target by id
         # rather than by re-deriving ``<id>.yaml``. A loaded-but-synthetic
         # store (tests) leaves this empty and the write endpoints treat a
         # missing path as a 404.
         self._source_paths: dict[str, Path] = dict(source_paths) if source_paths else {}
 
     @property
-    def layouts(self) -> list[Layout]:
-        return list(self._layouts)
+    def decks(self) -> list[Deck]:
+        return list(self._decks)
 
-    def source_path(self, layout_id: str) -> Path | None:
-        """The on-disk YAML file a layout was loaded from, or ``None``."""
-        return self._source_paths.get(layout_id)
+    def source_path(self, deck_id: str) -> Path | None:
+        """The on-disk YAML file a deck was loaded from, or ``None``."""
+        return self._source_paths.get(deck_id)
 
-    def __contains__(self, layout_id: str) -> bool:
-        return any(l.id == layout_id for l in self._layouts)
+    def __contains__(self, deck_id: str) -> bool:
+        return any(deck.id == deck_id for deck in self._decks)
 
-    def __getitem__(self, layout_id: str) -> Layout:
-        for layout in self._layouts:
-            if layout.id == layout_id:
-                return layout
-        raise KeyError(layout_id)
+    def __getitem__(self, deck_id: str) -> Deck:
+        for deck in self._decks:
+            if deck.id == deck_id:
+                return deck
+        raise KeyError(deck_id)
 
     def resolve_id(self, name: str) -> str | None:
-        """Map a human-supplied name to a canonical layout id, or None.
+        """Map a human-supplied name to a canonical deck id, or None.
 
-        Used by the ``?layout=<name>`` demo pin, where the obvious thing to
+        Used by the ``?deck=<name>`` demo pin, where the obvious thing to
         type is a friendly name rather than the primary match token that
         happens to be the id. Tries an exact id match first, then a
-        case-insensitive match against each layout's id, its ``display_name``,
-        and any of its match tokens — so ``tilix`` resolves the layout whose
+        case-insensitive match against each deck's id, its ``display_name``,
+        and any of its match tokens — so ``tilix`` resolves the deck whose
         id is ``com.gexperts.Tilix`` (display_name ``Tilix``).
         """
-        for layout in self._layouts:
-            if layout.id == name:
-                return layout.id
+        for deck in self._decks:
+            if deck.id == name:
+                return deck.id
         lowered = name.casefold()
-        for layout in self._layouts:
-            candidates = (layout.id, layout.display_name, *layout.match)
+        for deck in self._decks:
+            candidates = (deck.id, deck.display_name, *deck.match)
             if any(c and c.casefold() == lowered for c in candidates):
-                return layout.id
+                return deck.id
         return None
 
-    def default(self) -> Layout:
-        for layout in self._layouts:
-            if "default" in layout.match:
-                return layout
+    def default(self) -> Deck:
+        for deck in self._decks:
+            if "default" in deck.match:
+                return deck
         raise KeyError(
-            "no default layout loaded (expected a layout with match: [default])"
+            "no default deck loaded (expected a deck with match: [default])"
         )
 
 
-def resolve_layout(store: LayoutStore, app: AppInfo) -> Layout:
-    """Pick the layout for the given focused app.
+def resolve_deck(store: DeckStore, app: AppInfo) -> Deck:
+    """Pick the deck for the given focused app.
 
     A site (``title:``) match is more specific than a plain app-identity
-    match, so it wins even if a generic browser layout also claims the app
+    match, so it wins even if a generic browser deck also claims the app
     and is loaded first. Within each tier it is first-match-wins by load
-    order. If nothing matches, the ``default`` layout is returned.
+    order. If nothing matches, the ``default`` deck is returned.
     """
-    for layout in store.layouts:
-        if layout.matches_title(app):
-            return layout
-    for layout in store.layouts:
-        if layout.matches_identity(app):
-            return layout
+    for deck in store.decks:
+        if deck.matches_title(app):
+            return deck
+    for deck in store.decks:
+        if deck.matches_identity(app):
+            return deck
     return store.default()
 
 
 def _window_to_app(win: WindowInfo) -> AppInfo:
-    """Build an :class:`AppInfo` for one :class:`WindowInfo` so the layout
+    """Build an :class:`AppInfo` for one :class:`WindowInfo` so the deck
     matcher can compare the window's three identity keys against the
     match tokens.
 
@@ -609,14 +609,14 @@ def _humanize_identity(identity: str) -> str:
     return " ".join(word if word.isupper() else word.capitalize() for word in name.split())
 
 
-def label_for_window(store: LayoutStore, win: WindowInfo) -> str:
+def label_for_window(store: DeckStore, win: WindowInfo) -> str:
     """Compute a single row label for one enumerated window (issues
     #119 / #120 / #126).
 
-    Mirrors :func:`resolve_layout`'s site-before-identity ordering: a
-    ``title:`` match wins even if a generic browser layout also claims
-    the window's identity. Match → matched layout's ``display_name``
-    (falls back to ``id`` so a layout without an explicit display name
+    Mirrors :func:`resolve_deck`'s site-before-identity ordering: a
+    ``title:`` match wins even if a generic browser deck also claims
+    the window's identity. Match → matched deck's ``display_name``
+    (falls back to ``id`` so a deck without an explicit display name
     still renders something meaningful). No match → ``app_name`` when
     supplied, then a humanized identity fallback: ``wm_class``, then
     ``gtk_application_id``, then
@@ -624,26 +624,26 @@ def label_for_window(store: LayoutStore, win: WindowInfo) -> str:
     the matcher compares against ``match`` tokens (#117 / #118), with
     ``title`` as the last-resort visible string.
 
-    A reload that drops the matched layout naturally re-derives a
+    A reload that drops the matched deck naturally re-derives a
     fallback label on the next push — no invalidation logic needed
-    because :func:`resolve_layout` walks ``store.layouts`` fresh every
+    because :func:`resolve_deck` walks ``store.decks`` fresh every
     call (issue #120 decision 5: "label per push, no cache"). The
-    helper is pure; the matcher is O(n_layouts × n_tokens) per call
+    helper is pure; the matcher is O(n_decks × n_tokens) per call
     and the daemon runs it once per push — adding it to the list tick
     doesn't change the per-tick cost meaningfully.
     """
-    layout = resolve_layout(store, _window_to_app(win))
-    if layout is not store.default():
-        return layout.display_name or _humanize_identity(layout.id) or "unknown"
+    deck = resolve_deck(store, _window_to_app(win))
+    if deck is not store.default():
+        return deck.display_name or _humanize_identity(deck.id) or "unknown"
     identity = win.wm_class or win.gtk_application_id or win.sandboxed_app_id
     return win.app_name or (_humanize_identity(identity) if identity else None) or win.title or "unknown"
 
 
-def icon_for_window(store: LayoutStore, win: WindowInfo) -> "Icon | None":
+def icon_for_window(store: DeckStore, win: WindowInfo) -> "Icon | None":
     """Compute the per-row ``icon`` for one enumerated window (issue #126).
 
-    Returns the matched layout's icon when the window resolves to a
-    layout (a Firefox window on a ``firefox.yaml`` layout with
+    Returns the matched deck's icon when the window resolves to a
+    deck (a Firefox window on a ``firefox.yaml`` deck with
     ``icon: simple-icons firefox`` → row icon is the Simple Icons
     Firefox glyph). Returns ``None`` on the default-fallback path —
     the absence is *honest*, not decorative: a default-fallback row
@@ -653,23 +653,23 @@ def icon_for_window(store: LayoutStore, win: WindowInfo) -> "Icon | None":
     (the list is per-window precisely so they're not — #120 decision
     6).
     """
-    layout = resolve_layout(store, _window_to_app(win))
-    if layout is store.default():
+    deck = resolve_deck(store, _window_to_app(win))
+    if deck is store.default():
         return None
-    return layout.icon
+    return deck.icon
 
 
-def load_layouts(
-    layouts_dir: Path, overlay_dir: Path | None = None
-) -> LayoutStore:
-    """Load every ``*.yaml`` / ``*.yml`` file in ``layouts_dir`` plus an
+def load_decks(
+    decks_dir: Path, overlay_dir: Path | None = None
+) -> DeckStore:
+    """Load every ``*.yaml`` / ``*.yml`` file in ``decks_dir`` plus an
     optional platform overlay.
 
     The overlay is loaded first; same-id base entries are then dropped.
-    Effect: if the overlay defines a layout with the same id as a base
-    layout (typically because both name their file ``<id>.yaml``), the
-    overlay wins. The overlay can also add layouts for apps the base
-    doesn't cover. A missing ``layouts_dir`` is fatal; a missing overlay
+    Effect: if the overlay defines a deck with the same id as a base
+    deck (typically because both name their file ``<id>.yaml``), the
+    overlay wins. The overlay can also add decks for apps the base
+    doesn't cover. A missing ``decks_dir`` is fatal; a missing overlay
     is fine (no overlay is the most common case).
 
     Resolution semantics stay first-match-wins within the combined list,
@@ -677,62 +677,62 @@ def load_layouts(
     that match the same focused-app identity -- which is the intuitive
     "platform overrides shared" semantic.
     """
-    if not layouts_dir.is_dir():
-        raise SystemExit(f"layouts directory not found: {layouts_dir}")
+    if not decks_dir.is_dir():
+        raise SystemExit(f"decks directory not found: {decks_dir}")
 
-    layouts: list[Layout] = []
+    decks: list[Deck] = []
     source_paths: dict[str, Path] = {}
 
-    def _record(layout: Layout, path: Path) -> None:
-        layouts.append(layout)
-        if layout.id:
+    def _record(deck: Deck, path: Path) -> None:
+        decks.append(deck)
+        if deck.id:
             # Last load wins: the overlay re-records an id it shadows later
             # via the drop path below, so the path always reflects the live
             # file the store actually used.
-            source_paths[layout.id] = path
+            source_paths[deck.id] = path
 
     if overlay_dir is not None and overlay_dir.is_dir():
         for path in sorted(overlay_dir.glob("*.y*ml")):
             if path.suffix not in {".yaml", ".yml"}:
                 continue
             try:
-                layout = load_layout(path)
+                deck = load_deck(path)
             except SystemExit as exc:
                 raise SystemExit(f"{exc}") from None
-            _record(layout, path)
+            _record(deck, path)
 
-    overlay_ids = {l.id for l in layouts if l.id}
-    for path in sorted(layouts_dir.glob("*.y*ml")):
+    overlay_ids = {deck.id for deck in decks if deck.id}
+    for path in sorted(decks_dir.glob("*.y*ml")):
         if path.suffix not in {".yaml", ".yml"}:
             continue
         try:
-            layout = load_layout(path)
+            deck = load_deck(path)
         except SystemExit as exc:
             raise SystemExit(f"{exc}") from None
-        if layout.id and layout.id in overlay_ids:
-            log.info("layout %r overridden by overlay %s", layout.id, path)
+        if deck.id and deck.id in overlay_ids:
+            log.info("deck %r overridden by overlay %s", deck.id, path)
             continue
-        _record(layout, path)
+        _record(deck, path)
 
-    return LayoutStore(layouts, source_paths=source_paths)
+    return DeckStore(decks, source_paths=source_paths)
 
 
 # ---------------------------------------------------------------------------
-# Layout write API (issues #99 / #84 / #85)
+# Deck write API (issues #99 / #84 / #85)
 # ---------------------------------------------------------------------------
 #
-# These helpers sit below the HTTP write endpoints (``PUT /layouts/{id}`` save
-# and ``POST /layouts`` create). They own three concerns the endpoints share:
+# These helpers sit below the HTTP write endpoints (``PUT /decks/{id}`` save
+# and ``POST /decks`` create). They own three concerns the endpoints share:
 #
-# * turning a layout's primary ``match`` token into a filesystem-safe filename
-#   stem (``slugify_layout_id``);
+# * turning a deck's primary ``match`` token into a filesystem-safe filename
+#   stem (``slugify_deck_id``);
 # * comment-preserving reconcile of a client-supplied full snapshot onto a
 #   fresh on-disk YAML re-read, widgets matched by ``id`` and maps recursed,
-#   other sequences replaced atomically (``reconcile_and_write_layout``);
+#   other sequences replaced atomically (``reconcile_and_write_deck``);
 # * the atomic temp-write + ``os.replace`` that lets the ``watchfiles`` watcher
 #   pick up the edit as a single event.
 #
-# The daemon never interprets comments; it only carries them along so a layout
+# The daemon never interprets comments; it only carries them along so a deck
 # the user hand-authored keeps its prose when the editor saves a one-field
 # change. ``ruamel.yaml`` is the round-trip surface; Pydantic validates the
 # snapshot before it reaches here so the data is already schema-conformant.
@@ -742,8 +742,8 @@ _SLUG_NON_SAFE = re.compile(r"[^a-z0-9._-]+")
 _SLUG_DASH_RUN = re.compile(r"-{2,}")
 
 
-def slugify_layout_id(match_token: str) -> str:
-    """Filesystem-safe filename stem for a layout derived from ``match[0]``.
+def slugify_deck_id(match_token: str) -> str:
+    """Filesystem-safe filename stem for a deck derived from ``match[0]``.
 
     Lowercases, replaces every run of characters that aren't ``[a-z0-9._-]``
     with a single ``-``, collapses repeated dashes, and strips leading /
@@ -769,7 +769,7 @@ def _yaml_round_trip() -> Any:
 
     ``sequence=2, offset=2`` indents block sequences two spaces under their
     mapping key (``match:\n  - firefox``) and the item content two more
-    (``    kind: button``), matching every shipping layout. ruamel's default
+    (``    kind: button``), matching every shipping deck. ruamel's default
     is flush-left sequences (``match:\n- firefox``), which is valid YAML but
     inconsistent with the convention the editor writes into — so a freshly
     created file reads identically to a hand-authored one.
@@ -807,7 +807,7 @@ def _to_commented(value: Any) -> Any:
     return value
 
 
-# Top-level Layout fields that are maps (recurse) vs. sequences-of-widgets
+# Top-level Deck fields that are maps (recurse) vs. sequences-of-widgets
 # (matched by ``id``) vs. everything else (scalar or atomic-sequence).
 _WIDGET_ID_KEY = "id"
 
@@ -842,7 +842,7 @@ def _reconcile_map(existing: Any, snapshot: dict) -> Any:
         # attaches comments to a key's node; reassigning the value (even to
         # an equal one) can drop a leading comment attached to that key and
         # is unnecessary work. The common editor save edits one widget and
-        # leaves the rest of the layout byte-identical, so this keeps an
+        # leaves the rest of the deck byte-identical, so this keeps an
         # unchanged widget's comments and key order intact (issue #85).
         if key == "widgets":
             if existing is None or _widgets_changed(existing, snap_value):
@@ -923,14 +923,14 @@ def _reconcile_widgets(existing: Any, snapshot_widgets: list[dict]) -> Any:
     return out
 
 
-def reconcile_and_write_layout(path: Path, snapshot: dict) -> None:
+def reconcile_and_write_deck(path: Path, snapshot: dict) -> None:
     """Reconcile ``snapshot`` onto a fresh disk re-read and write atomically.
 
-    ``snapshot`` is the post-:class:`Layout`-validation JSON dict from the
-    client (a full-layout snapshot). The layout's ``id`` field is dropped
+    ``snapshot`` is the post-:class:`Deck`-validation JSON dict from the
+    client (a full-deck snapshot). The deck's ``id`` field is dropped
     before writing — on disk the canonical id is always ``match[0]`` (see
-    :func:`load_layout`), never a stored ``id:`` key, so the shipping
-    layouts (which omit it) and editor-written layouts round-trip
+    :func:`load_deck`), never a stored ``id:`` key, so the shipping
+    decks (which omit it) and editor-written decks round-trip
     identically.
 
     On a missing file the snapshot is written fresh. On an existing file the
@@ -973,8 +973,8 @@ def _snapshot_for_disk(snapshot: dict) -> dict:
     """Strip the derived ``id`` field so the file's id is always ``match[0]``.
 
     The editor echoes whatever it parsed, including ``id``; the on-disk
-    convention (every shipping layout) omits ``id:`` and lets
-    :func:`load_layout` derive it from ``match[0]``. Dropping it keeps the
+    convention (every shipping deck) omits ``id:`` and lets
+    :func:`load_deck` derive it from ``match[0]``. Dropping it keeps the
     canonical re-read, the watcher's reload, and a hand-authored file
     indistinguishable.
     """

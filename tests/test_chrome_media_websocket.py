@@ -44,7 +44,7 @@ async def _boot_chrome_media_websocket(
     """Stand up a real daemon + WebSocket fronted by ``bus``.
 
     Mirrors :func:`test_mpris_websocket._boot_mpris_websocket` so the
-    chrome-media and per-row tests share the same plumbing: a layout
+    chrome-media and per-row tests share the same plumbing: a deck
     with one ``nowplaying`` widget (so the daemon wires a real
     :class:`DbusMprisBackend`), booted on a random port, with the
     server's pump started. Returns the ``TestServer``, the ``Server``,
@@ -60,7 +60,7 @@ widgets:
 """
     )
     server, *_ = make_test_server(
-        layouts_dir=tmp_path,
+        decks_dir=tmp_path,
         mpris_backend=DbusMprisBackend(bus_factory=lambda _bt: bus),
     )
     test_server = TestServer(server.app, host="127.0.0.1")
@@ -76,7 +76,7 @@ async def test_chrome_media_snapshot_says_unsupported_when_backend_cannot_start(
 ) -> None:
     """A host with no session bus gets ``supported=False``, not silence.
 
-    macOS is the live case: a layout declares ``nowplaying``, so the
+    macOS is the live case: a deck declares ``nowplaying``, so the
     daemon builds a ``DbusMprisBackend``, and ``start()`` then fails
     because there is no session bus to reach. Dropping the frame
     entirely would leave the client unable to distinguish "unsupported
@@ -93,9 +93,9 @@ widgets:
     size: [4, 2]
 """
     )
-    server, *_ = make_test_server(layouts_dir=tmp_path)
+    server, *_ = make_test_server(decks_dir=tmp_path)
     # Stand in for the post-``start()`` state on a bus-less host: the
-    # backend was configured by the layout, then torn down when the
+    # backend was configured by the deck, then torn down when the
     # connect failed (see Server.start).
     server.mpris = None
     server._mpris_unsupported = True
@@ -119,7 +119,7 @@ widgets:
 async def test_chrome_media_snapshot_stays_silent_when_feature_unconfigured(
     tmp_path: Path,
 ) -> None:
-    """No ``nowplaying`` layout means no backend was ever built —
+    """No ``nowplaying`` deck means no backend was ever built —
     an unconfigured feature, not an unsupported host. The daemon sends
     nothing, exactly as before, so the client keeps its default
     ("Nothing playing") rather than claiming the platform can't do
@@ -134,7 +134,7 @@ widgets:
     action: {key: a}
 """
     )
-    server, *_ = make_test_server(layouts_dir=tmp_path)
+    server, *_ = make_test_server(decks_dir=tmp_path)
     assert server.mpris is None
     test_server = TestServer(server.app, host="127.0.0.1")
     await test_server.start_server()
@@ -148,7 +148,7 @@ widgets:
 
 
 async def _drain_initial(ws) -> None:
-    """Drain the layout + per-row media_state frames + chrome-media
+    """Drain the deck + per-row media_state frames + chrome-media
     snapshot a fresh client gets.
 
     The pump pushes ``media_state`` for every owned row on connect
@@ -158,7 +158,7 @@ async def _drain_initial(ws) -> None:
     chrome_media frames when the underlying MPRIS events change, so
     the test's signal-emit / recv sequence lands on the right frame.
     """
-    assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "layout"
+    assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "deck"
     # Drain per-row media_state frames. Tests register vlc in their
     # own setup so the snapshot has one row.
     while True:
@@ -353,20 +353,20 @@ async def test_chrome_media_emits_when_no_nowplaying_widget_mounted(
     tmp_path: Path,
 ) -> None:
     """The indicator is global chrome — a user with a ``nowplaying``
-    layout loaded (so the backend is alive) but currently focused on
-    some other app's layout (no ``nowplaying`` widget in the
-    *current* layout) must still see ``chrome_media`` frames
+    deck loaded (so the backend is alive) but currently focused on
+    some other app's deck (no ``nowplaying`` widget in the
+    *current* deck) must still see ``chrome_media`` frames
     (acceptance criterion 4: "the daemon emits a ``chrome_media``
     frame regardless of whether any ``nowplaying`` widget is
     mounted"). The real-world shape: a user who has the
-    ``layouts/mpris.yaml`` shipped but spends most of their time in
+    ``decks/mpris.yaml`` shipped but spends most of their time in
     Firefox / a terminal / etc."""
     bus = FakeDbusBus()
     bus.set_player_properties(
         "org.mpris.MediaPlayer2.vlc", {"PlaybackStatus": "Playing"}
     )
-    # Layouts: a default with no browser widget + the mpris view
-    # layout that brings the backend alive on ``connect_mpris_backend``.
+    # Decks: a default with no browser widget + the mpris view
+    # deck that brings the backend alive on ``connect_mpris_backend``.
     (tmp_path / "default.yaml").write_text(
         """
 match: [default]
@@ -386,7 +386,7 @@ widgets:
 """
     )
     server, *_ = make_test_server(
-        layouts_dir=tmp_path,
+        decks_dir=tmp_path,
         mpris_backend=DbusMprisBackend(bus_factory=lambda _bt: bus),
     )
     test_server = TestServer(server.app, host="127.0.0.1")
@@ -396,7 +396,7 @@ widgets:
     server.start_media_pump()
     try:
         async with websockets.connect(f"ws://127.0.0.1:{test_server.port}/ws") as ws:
-            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "layout"
+            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "deck"
             # Drain the per-row media_state + chrome-media snapshot
             # frames. ``vlc`` is in the bus's seed set so the
             # snapshot replay pushes a ``media_state`` for it; the
@@ -415,7 +415,7 @@ widgets:
             }
 
             # A fresh registration transition still pushes a frame
-            # even though the focused-app layout has no
+            # even though the focused-app deck has no
             # ``nowplaying`` widget — the indicator is global chrome.
             # The reducer's rule is "registered AND confirmed Playing":
             # spotify's cache hasn't been populated yet, so it

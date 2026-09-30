@@ -1,6 +1,6 @@
 import type { Story } from "@ladle/react";
 import { ButtonGrid } from "./ButtonGrid";
-import { DEMO_LAYOUTS } from "./demo";
+import { DEMO_DECKS } from "./demo";
 import {
   CELL_SIZE_MIN,
   CELL_SIZE_MAX,
@@ -26,12 +26,12 @@ const controls = {
 function Device({
   w,
   h,
-  layout = "firefox",
+  deck = "firefox",
   cellSize,
 }: {
   w: number;
   h: number;
-  layout?: keyof typeof DEMO_LAYOUTS;
+  deck?: keyof typeof DEMO_DECKS;
 } & Controls) {
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", gap: 8 }}>
@@ -46,7 +46,7 @@ function Device({
         }}
       >
         <ButtonGrid
-          widgets={DEMO_LAYOUTS[layout].widgets}
+          widgets={DEMO_DECKS[deck].widgets}
           onPress={noop}
           onJog={noop}
           onJogEnd={noop}

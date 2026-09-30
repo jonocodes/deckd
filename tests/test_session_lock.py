@@ -16,7 +16,7 @@ from deckd.platform import (
     UnimplementedCapability,
 )
 
-from conftest import LAYOUTS_DIR, make_test_server
+from conftest import DECKS_DIR, make_test_server
 
 
 # ---------------------------------------------------------------------------
@@ -140,7 +140,7 @@ def test_base_backend_does_not_advertise_session_flags() -> None:
 
 @asynccontextmanager
 async def _boot_server(locked_backend=True, **kwargs):
-    server, _, _, _ = make_test_server(layouts_dir=LAYOUTS_DIR, **kwargs)
+    server, _, _, _ = make_test_server(decks_dir=DECKS_DIR, **kwargs)
     # A session-state-capable backend so the connect snapshot is live
     # (mirrors GNOME in production; a caps-less fake produces NO state
     # frame at all — see `test_no_capability_no_state_frame`).
@@ -158,32 +158,32 @@ async def _boot_server(locked_backend=True, **kwargs):
 
 @asynccontextmanager
 async def _connect(port: int):
-    """Open a no-auth WS and yield (ws, layout, state) — the first three pushes."""
+    """Open a no-auth WS and yield (ws, deck, state) — the first three pushes."""
     import websockets as _ws
 
     async with _ws.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-        layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        deck = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
         state = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-        yield ws, layout, state
+        yield ws, deck, state
 
 
 @asynccontextmanager
 async def _ws_session(srv):
-    """Open a WS against the ``srv`` fixture; yield (ws, initial layout)."""
+    """Open a WS against the ``srv`` fixture; yield (ws, initial deck)."""
     import websockets as _ws
 
     async with _ws.connect(srv.ws_url) as ws:
-        layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-        yield ws, layout
+        deck = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        yield ws, deck
 
 
 async def test_state_snapshot_on_connect() -> None:
     """A phone connecting *during* a lock gets the state immediately."""
     async with _boot_server() as (server, port):
         server._session_locked = True
-        async with _connect(port) as (_, layout, state):
+        async with _connect(port) as (_, deck, state):
             pass
-        assert layout["type"] == "layout"
+        assert deck["type"] == "deck"
         assert state == {"type": "state", "locked": True, "blanked": False}
 
 
@@ -197,7 +197,7 @@ async def test_no_capability_no_state_frame() -> None:
         import websockets as _ws
 
         async with _ws.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            deck = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
             try:
                 frame = json.loads(await asyncio.wait_for(ws.recv(), timeout=0.25))
             except TimeoutError:

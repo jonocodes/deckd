@@ -1,12 +1,12 @@
-# Stable fixture layout for the daemon's WebSocket/HTTP behaviour tests.
+# Stable fixture deck for the daemon's WebSocket/HTTP behaviour tests.
 #
 # These tests assert on specific widget ids and action shapes, so they must
-# NOT depend on the shipping ``layouts/default.yaml`` (a user-editable file
+# NOT depend on the shipping ``decks/default.yaml`` (a user-editable file
 # that legitimately drifts). Keep the widget ids and actions below in sync
-# with the assertions in tests/test_server.py, not with the real layout.
+# with the assertions in tests/test_server.py, not with the real deck.
 #
 # Intentionally omits ``display_name`` / ``theme`` / ``icon`` so the app-badge
-# fields serialise as null (test_layout_message_app_badge_null_when_omitted),
+# fields serialise as null (test_deck_message_app_badge_null_when_omitted),
 # and omits ``jogstrip`` so it defaults to true.
 match:
   - default

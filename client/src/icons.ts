@@ -3,7 +3,7 @@
 Bundle strategy: Lucide (UI glyphs, on most buttons) is bundled whole so
 it renders synchronously. Simple Icons (brand logos, ~3450 icons, only
 occasionally used) is loaded lazily as a single on-demand chunk the first
-time a layout references one — so its weight is never paid unless a brand
+time a deck references one — so its weight is never paid unless a brand
 logo is actually used. Loaded by both ``Icon.tsx`` (resolve one icon at a
 time) and ``IconPicker.tsx`` (enumerate all of them for the grid).
 

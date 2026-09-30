@@ -18,7 +18,7 @@ import pytest
 import websockets
 from aiohttp.test_utils import TestServer
 
-from conftest import LAYOUTS_DIR, make_test_server
+from conftest import DECKS_DIR, make_test_server
 
 PASSWORD = "s3cret-shared-password"
 
@@ -26,7 +26,7 @@ PASSWORD = "s3cret-shared-password"
 @asynccontextmanager
 async def _serve(*, password: str | None) -> AsyncIterator[tuple[int, object]]:
     server, _scroll, _key, _dbus = make_test_server(
-        layouts_dir=LAYOUTS_DIR, password=password
+        decks_dir=DECKS_DIR, password=password
     )
     ts = TestServer(server.app, host="127.0.0.1")
     await ts.start_server()
@@ -78,9 +78,9 @@ async def test_ws_with_correct_password_accepted() -> None:
             await ws.send(
                 json.dumps({"type": "hello", "client": "web", "password": PASSWORD})
             )
-            layout = await _recv(ws)
-            assert layout["type"] == "layout"
-            assert len(layout["widgets"]) > 0
+            deck = await _recv(ws)
+            assert deck["type"] == "deck"
+            assert len(deck["widgets"]) > 0
 
 
 async def test_ws_no_auth_configured_needs_no_password() -> None:
@@ -88,12 +88,12 @@ async def test_ws_no_auth_configured_needs_no_password() -> None:
     async with _serve(password=None) as (port, _):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             await ws.send(json.dumps({"type": "hello", "client": "web"}))
-            layout = await _recv(ws)
-            assert layout["type"] == "layout"
+            deck = await _recv(ws)
+            assert deck["type"] == "deck"
 
 
 async def test_ws_demo_pin_applies_on_authenticated_hello() -> None:
-    """The auth path consumes the hello, so the ``?layout=`` demo pin is applied
+    """The auth path consumes the hello, so the ``?deck=`` demo pin is applied
     from it before the initial push — the first frame is already the pin."""
     async with _serve(password=PASSWORD) as (port, _):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
@@ -103,13 +103,13 @@ async def test_ws_demo_pin_applies_on_authenticated_hello() -> None:
                         "type": "hello",
                         "client": "web",
                         "password": PASSWORD,
-                        "layout": "firefox",
+                        "deck": "firefox",
                     }
                 )
             )
-            layout = await _recv(ws)
-            assert layout["app"] == "firefox"
-            assert "back" in [w["id"] for w in layout["widgets"]]
+            deck = await _recv(ws)
+            assert deck["app"] == "firefox"
+            assert "back" in [w["id"] for w in deck["widgets"]]
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ async def test_http_without_password_is_401() -> None:
         async with aiohttp.ClientSession() as http:
             async with http.post(f"http://127.0.0.1:{port}/reload") as r:
                 assert r.status == 401
-            async with http.post(f"http://127.0.0.1:{port}/layout/firefox") as r:
+            async with http.post(f"http://127.0.0.1:{port}/deck/firefox") as r:
                 assert r.status == 401
 
 
@@ -141,7 +141,7 @@ async def test_http_with_correct_password_ok() -> None:
             async with http.post(f"http://127.0.0.1:{port}/reload", headers=headers) as r:
                 assert r.status == 200
             async with http.post(
-                f"http://127.0.0.1:{port}/layout/firefox", headers=headers
+                f"http://127.0.0.1:{port}/deck/firefox", headers=headers
             ) as r:
                 assert r.status == 200
 
@@ -180,7 +180,7 @@ async def test_password_value_never_logged_after_startup(caplog) -> None:
                 await ws.send(
                     json.dumps({"type": "hello", "client": "web", "password": PASSWORD})
                 )
-                await _recv(ws)  # layout
+                await _recv(ws)  # deck
             async with aiohttp.ClientSession() as http:
                 async with http.post(
                     f"http://127.0.0.1:{port}/reload",

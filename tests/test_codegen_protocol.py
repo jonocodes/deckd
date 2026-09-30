@@ -59,7 +59,7 @@ def test_emits_server_message_union() -> None:
     out = _run_codegen()
     assert "export type ServerMessage =" in out
     for kind in (
-        "LayoutMessage",
+        "DeckMessage",
         "StateMessage",
         "BrightnessMessage",
         "WidgetUpdateMessage",
@@ -102,8 +102,8 @@ def test_each_message_kind_carries_discriminator() -> None:
     """Every message has a ``type: Literal[...]`` field. The TS shape
     uses a literal union so the discriminant survives."""
     out = _run_codegen()
-    # Pick one example we know carries "layout" as its discriminant.
-    assert 'type: "layout"' in out
+    # Pick one example we know carries "deck" as its discriminant.
+    assert 'type: "deck"' in out
     assert 'type: "press"' in out
     assert 'type: "hello"' in out
 
@@ -112,7 +112,7 @@ def test_literal_constraints_translate() -> None:
     """``Literal["clip", "shrink-to-fit"]`` must round-trip as the
     same literal union in TS — not a bare ``string``."""
     out = _run_codegen()
-    # LayoutMessage.overflow
+    # DeckMessage.overflow
     assert '"clip"' in out
     assert '"shrink-to-fit"' in out
 
@@ -120,7 +120,7 @@ def test_literal_constraints_translate() -> None:
 def test_optional_fields_become_nullable() -> None:
     """A Python ``field: str | None = None`` becomes TS ``field?: string | null``."""
     out = _run_codegen()
-    # PressMessage.id is required; LayoutMessage.view is optional.
+    # PressMessage.id is required; DeckMessage.view is optional.
     # Both should appear in their respective interface blocks.
     assert "view?:" in out or "view: string | null" in out
     assert "theme?:" in out or "theme: string | null" in out
@@ -182,7 +182,7 @@ def test_generated_output_is_parseable_typescript() -> None:
         pytest.skip("client toolchain not installed; run `npm ci` in client/")
 
     out = _run_codegen()
-    shim = "type Icon = unknown;\n"  # stub for the layouts-layer Icon
+    shim = "type Icon = unknown;\n"  # stub for the decks-layer Icon
     with tempfile.TemporaryDirectory() as tmpdir:
         # Run from a directory with no tsconfig.json in it. With files named
         # on the commandline tsc ignores the config anyway, and from 5.9 on it

@@ -90,7 +90,7 @@ export function ConfirmModal({
   // The widget's display name (label → id fallback) — the daemon
   // doesn't send command text on the wire, so the prompt body is
   // generated entirely from the widget record the client already
-  // holds from the last ``ServerLayout``.
+  // holds from the last ``ServerDeck``.
   const displayName = widget.label ?? widget.id;
 
   return (

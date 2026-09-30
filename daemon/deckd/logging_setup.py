@@ -6,7 +6,7 @@ a JSON formatter when ``format="json"`` is requested. The JSON shape is
 stable and self-describing::
 
     {"ts": 1234567890.123, "level": "INFO", "logger": "deckd.server",
-     "msg": "focus -> firefox (layout=firefox)"}
+     "msg": "focus -> firefox (deck=firefox)"}
 
 Existing ``log.info("foo %s", bar)`` call sites are unchanged; the
 JSON formatter records the rendered message but does not capture the

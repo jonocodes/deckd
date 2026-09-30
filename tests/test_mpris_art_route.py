@@ -24,11 +24,11 @@ from aiohttp.test_utils import TestClient, TestServer
 sys.path.insert(0, str(Path(__file__).parent.parent / "daemon"))
 
 from deckd.input import ScrollController
-from deckd.layouts import Layout, Widget
+from deckd.decks import Deck, Widget
 from deckd.mpris import FakeMprisBackend
 from deckd.server import Server
 
-from conftest import FakeScrollSink, LAYOUTS_DIR
+from conftest import FakeScrollSink, DECKS_DIR
 
 
 @dataclass
@@ -46,8 +46,8 @@ class _MprisArtFixture:
     resolver: dict[str, tuple[str, bytes]]
 
 
-def _nowplaying_layout() -> Layout:
-    return Layout(
+def _nowplaying_deck() -> Deck:
+    return Deck(
         id="mpris",
         widgets=[Widget(id="browser", kind="nowplaying", size=[4, 2])],
     )
@@ -89,14 +89,14 @@ async def mpris_art_client() -> AsyncIterator[_MprisArtFixture]:
         return resolver_table.get(url)
 
     server = Server(
-        layouts_dir=LAYOUTS_DIR,
+        decks_dir=DECKS_DIR,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(FakeScrollSink()),
         mpris_backend=backend,
         mpris_art_resolver=_resolver,
     )
-    server._current_layout = _nowplaying_layout()
+    server._current_deck = _nowplaying_deck()
     client = TestClient(TestServer(server.app))
     await client.start_server()
     try:

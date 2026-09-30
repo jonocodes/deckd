@@ -44,7 +44,7 @@ export default defineConfig({
       "/health": daemonUpstream,
       "/reload": daemonUpstream,
       "/media": daemonUpstream,
-      "/layouts": daemonUpstream,
+      "/decks": daemonUpstream,
       "/diag": daemonUpstream,
       "/actions": daemonUpstream,
       // The MPRIS album-art proxy mirrors ``/media/<id>/art``'s
@@ -61,7 +61,7 @@ export default defineConfig({
     // Two vendor chunks are intentionally large (ADR-0006): ``lucide`` is
     // the whole UI-glyph set, bundled eagerly (~198 KB gzipped); and
     // ``simple-icons`` is the whole brand-logo set (~2.1 MB gzipped) split
-    // into its own *lazy* chunk that is only fetched the first time a layout
+    // into its own *lazy* chunk that is only fetched the first time a deck
     // references a brand logo. Name them so the build output is legible, and
     // lift the size warning above them so it stays meaningful signal rather
     // than a permanent false alarm.

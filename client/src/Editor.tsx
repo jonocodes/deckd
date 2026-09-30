@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronDown, Plus, Save, X } from "lucide-react";
-import type { FocusedAppInfo, ServerLayout, Widget, Icon } from "./protocol";
+import type { FocusedAppInfo, ServerDeck, Widget, Icon } from "./protocol";
 import { EDITOR_VIEW_ID } from "./protocol";
 import type { OverflowMode } from "./reflow";
 import { EditorCanvas } from "./EditorCanvas";
@@ -19,7 +19,7 @@ function mintWidgetId(kind: PaletteKind, existing: Widget[]): string {
   return `${kind}-${n}`;
 }
 
-type LayoutEntry = {
+type DeckEntry = {
   id: string;
   match: string[];
   display_name?: string | null;
@@ -30,9 +30,9 @@ type LayoutEntry = {
   overflow?: string | null;
 };
 
-type LayoutListResponse = {
+type DeckListResponse = {
   ok: boolean;
-  layouts: LayoutEntry[];
+  decks: DeckEntry[];
 };
 
 function resolveBaseUrl(): string {
@@ -61,12 +61,12 @@ function getAuthHeaders(): Record<string, string> {
 }
 
 interface EditorProps {
-  layout: ServerLayout | null;
+  deck: ServerDeck | null;
   send: (msg: { type: "select_view"; view: string } | { type: "clear_view" }) => void;
   onExit: () => void;
-  /** When provided, the editor skips the GET /layouts fetch and uses
+  /** When provided, the editor skips the GET /decks fetch and uses
    * these entries instead — used by the demo fixture. */
-  mockLayouts?: LayoutEntry[];
+  mockDecks?: DeckEntry[];
 }
 
 type CreationFormKind = "detect" | "browser" | "manual";
@@ -81,7 +81,7 @@ interface CreationFormState {
   label: string;
 }
 
-const NEW_LAYOUT_SENTINEL = "__new__";
+const NEW_DECK_SENTINEL = "__new__";
 
 /** Derive a display name from a match token: title-prefix tokens get the
  * window title part; plain identity tokens are used as-is. */
@@ -115,7 +115,7 @@ function buildCreationForm(
       kind: "browser",
       match: browserName,
       displayName: browserDisplay,
-      label: `No layout for ${browserDisplay} yet — create one?`,
+      label: `No deck for ${browserDisplay} yet — create one?`,
       altMatch: titleToken,
       altDisplayName: titleDisplay,
     };
@@ -125,18 +125,18 @@ function buildCreationForm(
     kind: "detect",
     match: identity,
     displayName: identity,
-    label: `No layout for ${identity} yet — create one?`,
+    label: `No deck for ${identity} yet — create one?`,
   };
 }
 
-export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: EditorProps) {
+export function Editor({ deck: activeDeck, send, onExit, mockDecks }: EditorProps) {
   const initialSelectedId =
-    (activeLayout && activeLayout.app !== EDITOR_VIEW_ID)
-      ? activeLayout.app
-      : (mockLayouts ? (mockLayouts.find((l) => l.id !== EDITOR_VIEW_ID)?.id ?? mockLayouts[0]?.id ?? null) : null);
-  const [layouts, setLayouts] = useState<LayoutEntry[]>(mockLayouts ?? []);
+    (activeDeck && activeDeck.app !== EDITOR_VIEW_ID)
+      ? activeDeck.app
+      : (mockDecks ? (mockDecks.find((entry) => entry.id !== EDITOR_VIEW_ID)?.id ?? mockDecks[0]?.id ?? null) : null);
+  const [decks, setDecks] = useState<DeckEntry[]>(mockDecks ?? []);
   // ``initialSelectedId``'s ternary resolves to ``string | null | undefined``
-  // (the ``mockLayouts?.find(...)?.id`` branch is ``undefined`` when no
+  // (the ``mockDecks?.find(...)?.id`` branch is ``undefined`` when no
   // match exists); normalise to ``string | null`` so useState's setter
   // typechecks against the React setter contract.
   const [selectedId, setSelectedId] = useState<string | null>(initialSelectedId ?? null);
@@ -144,71 +144,71 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string>("");
 
-  // Editable widget state: derived from the active layout on mount / selection.
+  // Editable widget state: derived from the active deck on mount / selection.
   const [editWidgets, setEditWidgets] = useState<Widget[]>([]);
   const [editOverflow, setEditOverflow] = useState<OverflowMode>("shrink-to-fit");
   const initialisedRef = useRef(false);
   const pickerSkipRef = useRef(false);
   const dirtyRef = useRef(false);
 
-  // Editable layout-level presentation fields.
+  // Editable deck-level presentation fields.
   const [editDisplayName, setEditDisplayName] = useState<string>("");
   const [editTheme, setEditTheme] = useState<string>("");
   const [editIcon, setEditIcon] = useState<Icon | null>(null);
   const [editJogstrip, setEditJogstrip] = useState<boolean>(true);
   const [editMatch, setEditMatch] = useState<string[]>([]);
 
-  // Widget selection: index into editWidgets, or null for layout-level.
+  // Widget selection: index into editWidgets, or null for deck-level.
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
-  // New-layout creation state (#104).
+  // New-deck creation state (#104).
   const [draft, setDraft] = useState<{ match: string[]; displayName: string }>({ match: [], displayName: "" });
 
-  // Detect-and-offer: when the editor opens and the resolved layout is
+  // Detect-and-offer: when the editor opens and the resolved deck is
   // "default" (no real match), pre-seed the creation form from props.
   // Lazy initializer so it runs exactly once during the first render,
   // before the widget-initialization effect fires.
   const [creationForm, setCreationForm] = useState<CreationFormState | null>(() => {
-    if (!activeLayout) return null;
-    if (activeLayout.app !== "default") return null;
-    return buildCreationForm(activeLayout.focused_app ?? null);
+    if (!activeDeck) return null;
+    if (activeDeck.app !== "default") return null;
+    return buildCreationForm(activeDeck.focused_app ?? null);
   });
   const [creationMatchInput, setCreationMatchInput] = useState(() => creationForm?.match ?? "");
   const [creationDisplayNameInput, setCreationDisplayNameInput] = useState(() => creationForm?.displayName ?? "");
 
-  const isNewLayout = selectedId === NEW_LAYOUT_SENTINEL;
+  const isNewDeck = selectedId === NEW_DECK_SENTINEL;
 
-  // Initialise editable state from the active layout when it first arrives
+  // Initialise editable state from the active deck when it first arrives
   // and no creation prompt is showing.
   useEffect(() => {
     if (initialisedRef.current) return;
     if (creationForm) return;
-    if (!activeLayout || !activeLayout.widgets) return;
-    if (activeLayout.app === EDITOR_VIEW_ID) return;
+    if (!activeDeck || !activeDeck.widgets) return;
+    if (activeDeck.app === EDITOR_VIEW_ID) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setEditWidgets(deepCloneWidgets(activeLayout.widgets));
-    setEditOverflow((activeLayout.overflow as OverflowMode) ?? "shrink-to-fit");
-    setEditDisplayName(activeLayout.display_name ?? "");
-    setEditTheme(activeLayout.theme ?? "");
-    setEditIcon(activeLayout.icon ?? null);
-    setEditJogstrip(activeLayout.jogstrip_enabled ?? true);
-    setEditMatch([activeLayout.app ?? "default"]);
+    setEditWidgets(deepCloneWidgets(activeDeck.widgets));
+    setEditOverflow((activeDeck.overflow as OverflowMode) ?? "shrink-to-fit");
+    setEditDisplayName(activeDeck.display_name ?? "");
+    setEditTheme(activeDeck.theme ?? "");
+    setEditIcon(activeDeck.icon ?? null);
+    setEditJogstrip(activeDeck.jogstrip_enabled ?? true);
+    setEditMatch([activeDeck.app ?? "default"]);
     initialisedRef.current = true;
     pickerSkipRef.current = true;
-  }, [activeLayout, creationForm]);
+  }, [activeDeck, creationForm]);
 
-  // Re-init when the user switches layouts via the picker.
-  // The first fire is skipped when activeLayout already supplied data
+  // Re-init when the user switches decks via the picker.
+  // The first fire is skipped when activeDeck already supplied data
   // (first effect set pickerSkipRef = true). Subsequent fires when the
-  // user picks a different layout are handled normally.
+  // user picks a different deck are handled normally.
   useEffect(() => {
     if (creationForm) return;
-    if (!selectedId || isNewLayout) return;
+    if (!selectedId || isNewDeck) return;
     if (pickerSkipRef.current) {
       pickerSkipRef.current = false;
       return;
     }
-    const picked = layouts.find((l) => l.id === selectedId);
+    const picked = decks.find((entry) => entry.id === selectedId);
     if (!picked) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setEditWidgets(deepCloneWidgets(picked.widgets));
@@ -222,33 +222,33 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setSaveStatus("idle");
     setSaveError("");
     dirtyRef.current = false;
-  }, [selectedId, layouts, isNewLayout, creationForm]);
+  }, [selectedId, decks, isNewDeck, creationForm]);
 
   useEffect(() => {
-    if (mockLayouts) return;
+    if (mockDecks) return;
     const base = resolveBaseUrl();
     let cancelled = false;
-    fetch(`${base}/layouts`, { headers: getAuthHeaders() })
+    fetch(`${base}/decks`, { headers: getAuthHeaders() })
       .then((r) => r.json())
-      .then((data: LayoutListResponse) => {
-        if (!cancelled && data.ok && Array.isArray(data.layouts)) {
-          setLayouts(data.layouts);
-          if (!selectedId && data.layouts.length > 0) {
-            const firstReal = data.layouts.find((l) => l.id !== EDITOR_VIEW_ID) ?? data.layouts[0];
+      .then((data: DeckListResponse) => {
+        if (!cancelled && data.ok && Array.isArray(data.decks)) {
+          setDecks(data.decks);
+          if (!selectedId && data.decks.length > 0) {
+            const firstReal = data.decks.find((entry) => entry.id !== EDITOR_VIEW_ID) ?? data.decks[0];
             setSelectedId(firstReal.id);
           }
         }
       })
       .catch((err) => {
-        if (!cancelled) console.error("failed to fetch layouts", err);
+        if (!cancelled) console.error("failed to fetch decks", err);
       });
     return () => { cancelled = true; };
     // selectedId is intentionally excluded from deps: we only want the
     // initial auto-select on first fetch, not on every user pick change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mockLayouts]);
+  }, [mockDecks]);
 
-  const selectedLayout = layouts.find((l) => l.id === selectedId) ?? null;
+  const selectedDeck = decks.find((entry) => entry.id === selectedId) ?? null;
 
   const handlePick = useCallback((id: string) => {
     setSelectedId(id);
@@ -258,12 +258,12 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
   }, []);
 
   const handleSave = useCallback(async () => {
-    if (isNewLayout) {
+    if (isNewDeck) {
       if (!draft.match.length) return;
       setSaveStatus("saving");
       try {
         const base = resolveBaseUrl();
-        const res = await fetch(`${base}/layouts`, {
+        const res = await fetch(`${base}/decks`, {
           method: "POST",
           headers: { "Content-Type": "application/json", ...getAuthHeaders() },
           body: JSON.stringify({
@@ -274,21 +274,21 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
           }),
         });
         if (res.ok) {
-          const data = (await res.json()) as { ok: boolean; layout?: { id: string; match: string[]; display_name?: string | null; widgets: Widget[]; overflow?: string | null } };
-          if (data.ok && data.layout) {
+          const data = (await res.json()) as { ok: boolean; deck?: { id: string; match: string[]; display_name?: string | null; widgets: Widget[]; overflow?: string | null } };
+          if (data.ok && data.deck) {
             dirtyRef.current = false;
             setSaveStatus("saved");
-            setLayouts((prev) => {
-              const entry: LayoutEntry = {
-                id: data.layout!.id,
-                match: data.layout!.match,
-                display_name: data.layout!.display_name,
-                widgets: data.layout!.widgets,
-                overflow: data.layout!.overflow,
+            setDecks((prev) => {
+              const entry: DeckEntry = {
+                id: data.deck!.id,
+                match: data.deck!.match,
+                display_name: data.deck!.display_name,
+                widgets: data.deck!.widgets,
+                overflow: data.deck!.overflow,
               };
               return [...prev, entry];
             });
-            setSelectedId(data.layout.id);
+            setSelectedId(data.deck.id);
             setDraft({ match: [], displayName: "" });
             setTimeout(() => setSaveStatus("idle"), 2000);
           } else {
@@ -327,7 +327,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
       else body.icon = null;
       body.jogstrip = editJogstrip;
       const res = await fetch(
-        `${base}/layouts/${encodeURIComponent(selectedId)}`,
+        `${base}/decks/${encodeURIComponent(selectedId)}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/json", ...getAuthHeaders() },
@@ -350,11 +350,11 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
       setSaveError(String(e));
       setSaveStatus("error");
     }
-  }, [isNewLayout, selectedId, draft, editWidgets, editOverflow, editDisplayName, editTheme, editIcon, editJogstrip, editMatch]);
+  }, [isNewDeck, selectedId, draft, editWidgets, editOverflow, editDisplayName, editTheme, editIcon, editJogstrip, editMatch]);
 
   const handleExit = useCallback(() => {
-    if (isNewLayout) {
-      if (!window.confirm("Abandon this new layout? Nothing is saved yet.")) {
+    if (isNewDeck) {
+      if (!window.confirm("Abandon this new deck? Nothing is saved yet.")) {
         return;
       }
       send({ type: "clear_view" });
@@ -366,24 +366,24 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     }
     send({ type: "clear_view" });
     onExit();
-  }, [send, onExit, isNewLayout]);
+  }, [send, onExit, isNewDeck]);
 
-  // Open the manual "new layout" creation form from the picker.
-  const handleNewLayoutClick = useCallback(() => {
+  // Open the manual "new deck" creation form from the picker.
+  const handleNewDeckClick = useCallback(() => {
     setPickerOpen(false);
     setCreationForm({
       kind: "manual",
       match: "",
       displayName: "",
-      label: "New layout",
+      label: "New deck",
     });
     setCreationMatchInput("");
     setCreationDisplayNameInput("");
   }, []);
 
-  // Confirm creation: enter new-layout editing mode with the entered tokens.
-  // Reset the layout-level edit state so the properties panel doesn't show
-  // stale values from a previously-loaded layout (#88: a brand-new layout
+  // Confirm creation: enter new-deck editing mode with the entered tokens.
+  // Reset the deck-level edit state so the properties panel doesn't show
+  // stale values from a previously-loaded deck (#88: a brand-new deck
   // has no theme/icon/jogstrip override — the panel must reflect that),
   // and prefill the display_name to match the draft (#88 "prefilled
   // display_name").
@@ -392,7 +392,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     if (!match) return;
     const displayName = creationDisplayNameInput.trim() || match;
     setDraft({ match: [match], displayName });
-    setSelectedId(NEW_LAYOUT_SENTINEL);
+    setSelectedId(NEW_DECK_SENTINEL);
     setEditWidgets([]);
     setEditOverflow("shrink-to-fit");
     setEditDisplayName(displayName);
@@ -426,7 +426,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
     setSaveStatus("idle");
   }, []);
 
-  const handleLayoutFieldChange = useCallback((field: string, value: unknown) => {
+  const handleDeckFieldChange = useCallback((field: string, value: unknown) => {
     dirtyRef.current = true;
     setSaveStatus("idle");
     switch (field) {
@@ -485,36 +485,36 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
 
   // The label shown in the picker trigger.
   const pickerLabel = useMemo(() => {
-    if (isNewLayout) {
-      return draft.displayName || draft.match[0] || "New layout";
+    if (isNewDeck) {
+      return draft.displayName || draft.match[0] || "New deck";
     }
-    if (selectedLayout) {
-      return selectedLayout.display_name?.trim() || selectedLayout.id;
+    if (selectedDeck) {
+      return selectedDeck.display_name?.trim() || selectedDeck.id;
     }
-    return "Select layout";
-  }, [isNewLayout, selectedLayout, draft]);
+    return "Select deck";
+  }, [isNewDeck, selectedDeck, draft]);
 
   // The metadata row data for the canvas header.
   const canvasMeta = useMemo(() => {
-    if (isNewLayout) {
+    if (isNewDeck) {
       return {
-        app: draft.displayName || draft.match[0] || "New layout",
+        app: draft.displayName || draft.match[0] || "New deck",
         match: `match: ${draft.match.join(", ") || "(none)"}`,
       };
     }
-    if (selectedLayout) {
+    if (selectedDeck) {
       return {
-        app: selectedLayout.display_name?.trim() || selectedLayout.id,
-        match: `match: ${selectedLayout.match.join(", ")}`,
+        app: selectedDeck.display_name?.trim() || selectedDeck.id,
+        match: `match: ${selectedDeck.match.join(", ")}`,
       };
     }
     return null;
-  }, [isNewLayout, selectedLayout, draft]);
+  }, [isNewDeck, selectedDeck, draft]);
 
-  const canSave = isNewLayout ? draft.match.length > 0 : !!selectedId;
+  const canSave = isNewDeck ? draft.match.length > 0 : !!selectedId;
 
   return (
-    <div className="editor" role="region" aria-label="layout editor">
+    <div className="editor" role="region" aria-label="deck editor">
       <header className="editor-header">
         <div className="editor-header-left">
           <button
@@ -525,14 +525,14 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
             <X size={18} />
           </button>
           <h2 className="editor-title">
-            {isNewLayout ? "New layout" : "Edit layout"}
+            {isNewDeck ? "New deck" : "Edit deck"}
           </h2>
         </div>
         <div className="editor-header-right">
           <div className="editor-picker">
             <button
               className="editor-picker-trigger"
-              aria-label="select layout to edit"
+              aria-label="select deck to edit"
               aria-haspopup="listbox"
               aria-expanded={pickerOpen}
               onClick={() => setPickerOpen((v) => !v)}
@@ -542,29 +542,29 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
             </button>
             {pickerOpen && (
               <ul className="editor-picker-list" role="listbox">
-                {layouts.map((l) => (
+                {decks.map((entry) => (
                   <li
-                    key={l.id}
+                    key={entry.id}
                     role="option"
-                    aria-selected={l.id === selectedId}
-                    className={`editor-picker-option${l.id === selectedId ? " editor-picker-option-active" : ""}${l.id === EDITOR_VIEW_ID ? " editor-picker-option-view" : ""}`}
-                    onClick={() => handlePick(l.id)}
+                    aria-selected={entry.id === selectedId}
+                    className={`editor-picker-option${entry.id === selectedId ? " editor-picker-option-active" : ""}${entry.id === EDITOR_VIEW_ID ? " editor-picker-option-view" : ""}`}
+                    onClick={() => handlePick(entry.id)}
                   >
-                    <span>{l.display_name?.trim() || l.id}</span>
-                    {l.id === EDITOR_VIEW_ID ? (
+                    <span>{entry.display_name?.trim() || entry.id}</span>
+                    {entry.id === EDITOR_VIEW_ID ? (
                       <span className="editor-picker-tag">chrome view</span>
                     ) : null}
-                    {l.id === selectedId ? <Check size={14} /> : null}
+                    {entry.id === selectedId ? <Check size={14} /> : null}
                   </li>
                 ))}
                 <li className="editor-picker-separator" role="separator" />
                 <li
                   role="option"
                   className="editor-picker-option editor-picker-option-new"
-                  onClick={handleNewLayoutClick}
+                  onClick={handleNewDeckClick}
                 >
                   <Plus size={14} />
-                  <span>New layout</span>
+                  <span>New deck</span>
                 </li>
               </ul>
             )}
@@ -573,7 +573,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
         <div className="editor-save-group">
           <button
             className="editor-save-btn"
-            aria-label="save layout"
+            aria-label="save deck"
             disabled={saveStatus === "saving" || !canSave}
             onClick={handleSave}
           >
@@ -598,7 +598,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
           <h3 className="editor-pane-title">Palette</h3>
           <EditorPalette
             onAdd={handleAddWidget}
-            disabled={!!creationForm || (!selectedLayout && !isNewLayout)}
+            disabled={!!creationForm || (!selectedDeck && !isNewDeck)}
           />
         </aside>
         <section className="editor-pane editor-canvas" aria-label="live grid canvas">
@@ -612,7 +612,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
               onConfirm={handleCreateConfirm}
               onCancel={handleCreationCancel}
             />
-          ) : selectedLayout || isNewLayout ? (
+          ) : selectedDeck || isNewDeck ? (
             <>
               {canvasMeta && (
                 <div className="editor-canvas-meta">
@@ -634,13 +634,13 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
               />
             </>
           ) : (
-            <p className="editor-pane-placeholder">No layout selected</p>
+            <p className="editor-pane-placeholder">No deck selected</p>
           )}
         </section>
         <aside className="editor-pane editor-properties" role="complementary" aria-label="properties panel">
           <PropertiesPanel
             widget={selectedIndex != null ? editWidgets[selectedIndex] ?? null : null}
-            layoutFields={{
+            deckFields={{
               display_name: editDisplayName || null,
               theme: editTheme || null,
               icon: editIcon,
@@ -650,7 +650,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
             onWidgetChange={(w) => {
               if (selectedIndex != null) handleWidgetChange(selectedIndex, w);
             }}
-            onLayoutFieldChange={handleLayoutFieldChange}
+            onDeckFieldChange={handleDeckFieldChange}
             onDeleteWidget={
               selectedIndex != null
                 ? () => handleDeleteWidget(selectedIndex)
@@ -664,7 +664,7 @@ export function Editor({ layout: activeLayout, send, onExit, mockLayouts }: Edit
 }
 
 /** The inline creation form shown in the canvas area for detect-and-offer
- * and manual new-layout entry. */
+ * and manual new-deck entry. */
 function CreationFormView({
   form,
   matchInput,
@@ -729,7 +729,7 @@ function CreationFormView({
               onDisplayNameChange(form.altDisplayName!);
             }}
           >
-            Layout for {form.altDisplayName}
+            Deck for {form.altDisplayName}
             <code className="editor-creation-alt-code">{form.altMatch}</code>
           </button>
         </div>
@@ -740,7 +740,7 @@ function CreationFormView({
           onClick={onConfirm}
           disabled={!canConfirm}
         >
-          Create layout
+          Create deck
         </button>
         <button
           className="editor-creation-btn editor-creation-btn-cancel"

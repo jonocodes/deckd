@@ -5,7 +5,7 @@ from pydantic import ValidationError
 
 from deckd.protocol import (
     ClientMessage,
-    LayoutMessage,
+    DeckMessage,
     MediaCommandMessage,
     RaiseWindowMessage,
     RunningWindowsMessage,
@@ -31,13 +31,13 @@ def test_value_media_commands_round_trip(command: str) -> None:
     assert MediaCommandMessage.model_validate_json(message.model_dump_json()) == message
 
 
-def test_layout_view_defaults_to_none_and_round_trips() -> None:
-    normal = LayoutMessage(type="layout", widgets=[])
-    chrome = LayoutMessage(type="layout", widgets=[], view="media")
+def test_deck_view_defaults_to_none_and_round_trips() -> None:
+    normal = DeckMessage(type="deck", widgets=[])
+    chrome = DeckMessage(type="deck", widgets=[], view="media")
 
     assert normal.view is None
-    assert LayoutMessage.model_validate_json(normal.model_dump_json()).view is None
-    assert LayoutMessage.model_validate_json(chrome.model_dump_json()).view == "media"
+    assert DeckMessage.model_validate_json(normal.model_dump_json()).view is None
+    assert DeckMessage.model_validate_json(chrome.model_dump_json()).view == "media"
 
 
 def test_media_command_rejects_value_for_value_less_commands() -> None:
@@ -62,7 +62,7 @@ def test_media_command_rejects_missing_value_for_value_commands() -> None:
 def test_running_windows_round_trips_with_icon_and_null_icon() -> None:
     """Both icon-bearing rows and default-fallback rows (icon=None,
     decision 6 — honest absence, not decorative) round-trip through
-    JSON unchanged. Same wire-shape rule as ``LayoutMessage.icon``.
+    JSON unchanged. Same wire-shape rule as ``DeckMessage.icon``.
     """
     entries = [
         WindowListEntry(
@@ -104,7 +104,7 @@ def test_running_windows_rejects_empty_label() -> None:
 
 
 def test_running_windows_rejects_unknown_fields() -> None:
-    """Forward-compatibility rule (mirrors ``LayoutMessage.extra='forbid'``):
+    """Forward-compatibility rule (mirrors ``DeckMessage.extra='forbid'``):
     a future field the daemon doesn't know about surfaces as a validation
     error so an older daemon doesn't silently drop structured data."""
     with pytest.raises(ValidationError):

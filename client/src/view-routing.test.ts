@@ -3,7 +3,7 @@ import { pathForView, viewFromPath } from "./view-routing";
 
 describe("view routing", () => {
   it.each([
-    ["/", "layout"],
+    ["/", "deck"],
     ["/trackpad", "trackpad"],
     ["/settings", "settings"],
     ["/now-playing", "nowplaying"],
@@ -15,7 +15,7 @@ describe("view routing", () => {
     expect(pathForView(view)).toBe(path);
   });
 
-  it("falls back unknown paths to the layout", () => {
-    expect(viewFromPath("/not-a-page")).toBe("layout");
+  it("falls back unknown paths to the deck", () => {
+    expect(viewFromPath("/not-a-page")).toBe("deck");
   });
 });

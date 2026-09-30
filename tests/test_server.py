@@ -19,10 +19,10 @@ SIDE_EFFECT_WAIT = 0.05
 
 @asynccontextmanager
 async def ws_connected(srv: ServerHandle) -> AsyncIterator[tuple[websockets.WebSocketClientProtocol, dict]]:
-    """Open a WS connection and yield (ws, initial_layout_message)."""
+    """Open a WS connection and yield (ws, initial_deck_message)."""
     async with websockets.connect(srv.ws_url) as ws:
-        layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-        yield ws, layout
+        deck = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+        yield ws, deck
 
 
 # ---------------------------------------------------------------------------
@@ -45,17 +45,17 @@ async def test_health(srv: ServerHandle) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Layout push on connect
+# Deck push on connect
 # ---------------------------------------------------------------------------
 
 
-async def test_layout_push_on_connect(srv: ServerHandle) -> None:
-    async with ws_connected(srv) as (_, layout):
+async def test_deck_push_on_connect(srv: ServerHandle) -> None:
+    async with ws_connected(srv) as (_, deck):
         pass
 
-    assert layout["type"] == "layout"
-    assert isinstance(layout["widgets"], list)
-    assert len(layout["widgets"]) > 0
+    assert deck["type"] == "deck"
+    assert isinstance(deck["widgets"], list)
+    assert len(deck["widgets"]) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -106,13 +106,13 @@ widgets:
 """
     )
 
-    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
+    server, _scroll, _key, _dbus = make_test_server(decks_dir=tmp_path)
     ts = TestServer(server.app, host="127.0.0.1")
     await ts.start_server()
     port = ts.port or 0
     try:
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            await asyncio.wait_for(ws.recv(), timeout=2)  # initial layout
+            await asyncio.wait_for(ws.recv(), timeout=2)  # initial deck
             await ws.send(json.dumps({"type": "press", "id": "open-terminal"}))
             await asyncio.sleep(SIDE_EFFECT_WAIT)
     finally:
@@ -146,11 +146,11 @@ async def test_jog_emits_scroll(srv: ServerHandle) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Layout reload
+# Deck reload
 # ---------------------------------------------------------------------------
 
 
-async def test_reload_pushes_layout(srv: ServerHandle) -> None:
+async def test_reload_pushes_deck(srv: ServerHandle) -> None:
     async with ws_connected(srv) as (ws, _):
         async with aiohttp.ClientSession() as http:
             async with http.post(f"{srv.http_url}/reload") as r:
@@ -159,7 +159,7 @@ async def test_reload_pushes_layout(srv: ServerHandle) -> None:
         pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
 
     assert result["ok"] is True
-    assert pushed["type"] == "layout"
+    assert pushed["type"] == "deck"
 
 
 # ---------------------------------------------------------------------------
@@ -249,35 +249,35 @@ async def test_press_text_simulate_emits_key_combos(srv: ServerHandle) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Layout override endpoint (T5/issue #11): POST /layout/<name> force-switches
-# all connected clients to a named layout regardless of focus.
+# Deck override endpoint (T5/issue #11): POST /deck/<name> force-switches
+# all connected clients to a named deck regardless of focus.
 # ---------------------------------------------------------------------------
 
 
-async def test_layout_override_switches_clients_to_named_layout(
+async def test_deck_override_switches_clients_to_named_deck(
     srv: ServerHandle,
 ) -> None:
     async with ws_connected(srv) as (ws, initial):
         assert initial["app"] == "default"
 
         async with aiohttp.ClientSession() as http:
-            async with http.post(f"{srv.http_url}/layout/firefox") as r:
+            async with http.post(f"{srv.http_url}/deck/firefox") as r:
                 result = await r.json()
 
         pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
 
     assert result["ok"] is True
-    assert pushed["type"] == "layout"
+    assert pushed["type"] == "deck"
     assert pushed["app"] == "firefox"
     ids = [w["id"] for w in pushed["widgets"]]
     assert "back" in ids
     assert srv.server.current_app_id == "firefox"
 
 
-async def test_layout_override_to_default(srv: ServerHandle) -> None:
+async def test_deck_override_to_default(srv: ServerHandle) -> None:
     async with ws_connected(srv) as (ws, _):
         async with aiohttp.ClientSession() as http:
-            async with http.post(f"{srv.http_url}/layout/default") as r:
+            async with http.post(f"{srv.http_url}/deck/default") as r:
                 result = await r.json()
 
         pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
@@ -287,9 +287,9 @@ async def test_layout_override_to_default(srv: ServerHandle) -> None:
     assert srv.server.current_app_id == "default"
 
 
-async def test_layout_override_unknown_name_returns_error(srv: ServerHandle) -> None:
+async def test_deck_override_unknown_name_returns_error(srv: ServerHandle) -> None:
     async with aiohttp.ClientSession() as http:
-        async with http.post(f"{srv.http_url}/layout/nonexistent") as r:
+        async with http.post(f"{srv.http_url}/deck/nonexistent") as r:
             assert r.status == 404
             body = await r.json()
 
@@ -298,21 +298,21 @@ async def test_layout_override_unknown_name_returns_error(srv: ServerHandle) -> 
 
 
 # ---------------------------------------------------------------------------
-# Demo pin (``?layout=<name>``): the client carries the name in its ``hello``
-# frame and the daemon pins THAT session to the named layout, regardless of
+# Demo pin (``?deck=<name>``): the client carries the name in its ``hello``
+# frame and the daemon pins THAT session to the named deck, regardless of
 # host focus, without affecting other clients. Backend-driven sibling of the
 # backend-free ``?demo=`` fixture path.
 # ---------------------------------------------------------------------------
 
 
-async def test_demo_pin_switches_session_to_named_layout(srv: ServerHandle) -> None:
+async def test_demo_pin_switches_session_to_named_deck(srv: ServerHandle) -> None:
     async with websockets.connect(srv.ws_url) as ws:
         initial = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
         assert initial["app"] == "default"
         # No-auth path: the hello arrives after the initial push, so the daemon
-        # re-pushes the pinned layout.
+        # re-pushes the pinned deck.
         await ws.send(
-            json.dumps({"type": "hello", "client": "web", "layout": "firefox"})
+            json.dumps({"type": "hello", "client": "web", "deck": "firefox"})
         )
         pinned = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
 
@@ -322,19 +322,19 @@ async def test_demo_pin_switches_session_to_named_layout(srv: ServerHandle) -> N
     assert srv.server.current_app_id == "default"
 
 
-async def test_demo_pin_survives_layout_broadcast(srv: ServerHandle) -> None:
+async def test_demo_pin_survives_deck_broadcast(srv: ServerHandle) -> None:
     """A global override (or focus change) must not move a pinned session."""
     async with websockets.connect(srv.ws_url) as ws:
         await asyncio.wait_for(ws.recv(), timeout=2)  # initial default
         await ws.send(
-            json.dumps({"type": "hello", "client": "web", "layout": "firefox"})
+            json.dumps({"type": "hello", "client": "web", "deck": "firefox"})
         )
         assert json.loads(await asyncio.wait_for(ws.recv(), timeout=2))["app"] == "firefox"
 
         # Broadcast a switch to default; the pinned client re-resolves to its
-        # own layout instead of following.
+        # own deck instead of following.
         async with aiohttp.ClientSession() as http:
-            async with http.post(f"{srv.http_url}/layout/default") as r:
+            async with http.post(f"{srv.http_url}/deck/default") as r:
                 assert (await r.json())["ok"] is True
 
         pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
@@ -345,12 +345,12 @@ async def test_demo_pin_survives_layout_broadcast(srv: ServerHandle) -> None:
 async def test_demo_pin_resolves_friendly_name_case_insensitively(
     srv: ServerHandle,
 ) -> None:
-    """``?layout=`` need not be the exact id — a case-insensitive display_name
+    """``?deck=`` need not be the exact id — a case-insensitive display_name
     or match token resolves too (so ``tilix`` works, not just its id)."""
     async with websockets.connect(srv.ws_url) as ws:
         await asyncio.wait_for(ws.recv(), timeout=2)  # initial default
         await ws.send(
-            json.dumps({"type": "hello", "client": "web", "layout": "Firefox"})
+            json.dumps({"type": "hello", "client": "web", "deck": "Firefox"})
         )
         pinned = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
 
@@ -362,38 +362,38 @@ async def test_demo_pin_unknown_name_is_ignored(srv: ServerHandle) -> None:
     async with websockets.connect(srv.ws_url) as ws:
         await asyncio.wait_for(ws.recv(), timeout=2)  # initial default
         await ws.send(
-            json.dumps({"type": "hello", "client": "web", "layout": "nonexistent"})
+            json.dumps({"type": "hello", "client": "web", "deck": "nonexistent"})
         )
         # No re-push for an unknown pin. A subsequent broadcast is followed,
         # proving the session was never pinned.
         async with aiohttp.ClientSession() as http:
-            await http.post(f"{srv.http_url}/layout/firefox")
+            await http.post(f"{srv.http_url}/deck/firefox")
         pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
 
     assert pushed["app"] == "firefox"
 
 
 # ---------------------------------------------------------------------------
-# Persistent jogstrip flag in LayoutMessage (T6/issue #12)
+# Persistent jogstrip flag in DeckMessage (T6/issue #12)
 #
-# The daemon adds ``jogstrip_enabled`` to every LayoutMessage: True by
-# default, False when the active layout's YAML declares ``jogstrip: false``.
+# The daemon adds ``jogstrip_enabled`` to every DeckMessage: True by
+# default, False when the active deck's YAML declares ``jogstrip: false``.
 # The client chrome uses this to hide the always-on right-side strip.
 # ---------------------------------------------------------------------------
 
 
-async def test_layout_message_defaults_jogstrip_enabled_true(
+async def test_deck_message_defaults_jogstrip_enabled_true(
     srv: ServerHandle,
 ) -> None:
-    """Repo default layout omits ``jogstrip``; the message must carry True."""
-    async with ws_connected(srv) as (_, layout):
-        assert layout["jogstrip_enabled"] is True
+    """Repo default deck omits ``jogstrip``; the message must carry True."""
+    async with ws_connected(srv) as (_, deck):
+        assert deck["jogstrip_enabled"] is True
 
 
-async def test_layout_message_carries_jogstrip_enabled_false_when_suppressed(
+async def test_deck_message_carries_jogstrip_enabled_false_when_suppressed(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """A layout with ``jogstrip: false`` pushes ``jogstrip_enabled: False``."""
+    """A deck with ``jogstrip: false`` pushes ``jogstrip_enabled: False``."""
     import deckd.actions as actions_mod
     from aiohttp.test_utils import TestServer
     from conftest import make_test_server
@@ -425,40 +425,40 @@ widgets:
 """
     )
 
-    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
+    server, _scroll, _key, _dbus = make_test_server(decks_dir=tmp_path)
     test_server = TestServer(server.app, host="127.0.0.1")
     await test_server.start_server()
     port = test_server.port or 0
     try:
-        # Force-switch to the chrome-suppressed layout.
+        # Force-switch to the chrome-suppressed deck.
         async with aiohttp.ClientSession() as http:
-            async with http.post(f"http://127.0.0.1:{port}/layout/nochrome") as r:
+            async with http.post(f"http://127.0.0.1:{port}/deck/nochrome") as r:
                 assert r.status == 200
 
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            deck = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
     finally:
         await test_server.close()
         await server.scroll.close()
 
-    assert layout["type"] == "layout"
-    assert layout["app"] == "nochrome"
-    assert layout["jogstrip_enabled"] is False
+    assert deck["type"] == "deck"
+    assert deck["app"] == "nochrome"
+    assert deck["jogstrip_enabled"] is False
 
 
 # ---------------------------------------------------------------------------
 # Chrome app badge (issue #41 / ADR-0007)
 #
-# A layout's optional ``display_name`` / ``theme`` / ``icon`` top-level
-# attributes are relayed verbatim on every ``LayoutMessage`` so the
+# A deck's optional ``display_name`` / ``theme`` / ``icon`` top-level
+# attributes are relayed verbatim on every ``DeckMessage`` so the
 # client can render a branded app badge in the always-on bottom chrome.
-# The daemon never interprets them; when the active layout omits them
+# The daemon never interprets them; when the active deck omits them
 # the fields are ``null`` (JSON ``null``, not absent) so the client has
 # a stable shape to destructure.
 # ---------------------------------------------------------------------------
 
 
-async def test_layout_message_relays_app_badge_when_set(
+async def test_deck_message_relays_app_badge_when_set(
     monkeypatch, tmp_path: Path
 ) -> None:
     """``display_name`` / ``theme`` / ``icon`` round-trip onto the wire."""
@@ -495,21 +495,21 @@ widgets:
 """
     )
 
-    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
+    server, _scroll, _key, _dbus = make_test_server(decks_dir=tmp_path)
     test_server = TestServer(server.app, host="127.0.0.1")
     await test_server.start_server()
     port = test_server.port or 0
     try:
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
             initial = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-            # The default layout carries no chrome presentation -> all ``None``.
+            # The default deck carries no chrome presentation -> all ``None``.
             assert initial["app"] == "default"
             assert initial["display_name"] is None
             assert initial["theme"] is None
             assert initial["icon"] is None
 
             async with aiohttp.ClientSession() as http:
-                async with http.post(f"http://127.0.0.1:{port}/layout/firefox") as r:
+                async with http.post(f"http://127.0.0.1:{port}/deck/firefox") as r:
                     assert r.status == 200
 
             pushed = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
@@ -522,21 +522,21 @@ widgets:
         await server.scroll.close()
 
 
-async def test_layout_message_app_badge_null_when_omitted(
+async def test_deck_message_app_badge_null_when_omitted(
     srv: ServerHandle,
 ) -> None:
-    """Repo default layout omits the chrome fields; the message carries
+    """Repo default deck omits the chrome fields; the message carries
     explicit ``null`` for each so the client has a stable shape."""
-    async with ws_connected(srv) as (_, layout):
-        assert "display_name" in layout and layout["display_name"] is None
-        assert "theme" in layout and layout["theme"] is None
-        assert "icon" in layout and layout["icon"] is None
+    async with ws_connected(srv) as (_, deck):
+        assert "display_name" in deck and deck["display_name"] is None
+        assert "theme" in deck and deck["theme"] is None
+        assert "icon" in deck and deck["icon"] is None
 
 
-async def test_layout_message_carries_jogstrip_enabled_true_when_explicit(
+async def test_deck_message_carries_jogstrip_enabled_true_when_explicit(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """A layout that explicitly sets ``jogstrip: true`` also reports True."""
+    """A deck that explicitly sets ``jogstrip: true`` also reports True."""
     import deckd.actions as actions_mod
     from aiohttp.test_utils import TestServer
     from conftest import make_test_server
@@ -558,18 +558,18 @@ widgets:
 """
     )
 
-    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
+    server, _scroll, _key, _dbus = make_test_server(decks_dir=tmp_path)
     test_server = TestServer(server.app, host="127.0.0.1")
     await test_server.start_server()
     port = test_server.port or 0
     try:
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            deck = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
     finally:
         await test_server.close()
         await server.scroll.close()
 
-    assert layout["jogstrip_enabled"] is True
+    assert deck["jogstrip_enabled"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -703,11 +703,11 @@ async def test_key_message_emits_named_key(srv: ServerHandle) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Layouts hot-reload: watcher + error-tolerant reload.
+# Decks hot-reload: watcher + error-tolerant reload.
 #
-# Layouts are user configuration, so the daemon watches ``layouts/*.y[a]ml``
-# and reloads on change. A parse/schema error keeps the last-good layouts
-# live but pushes a ``LayoutMessage`` with ``error`` set so the client can
+# Decks are user configuration, so the daemon watches ``decks/*.y[a]ml``
+# and reloads on change. A parse/schema error keeps the last-good decks
+# live but pushes a ``DeckMessage`` with ``error`` set so the client can
 # render a diagnostic in place of the widget grid.
 # ---------------------------------------------------------------------------
 
@@ -744,7 +744,7 @@ widgets:
 
 @asynccontextmanager
 async def _serve(monkeypatch, tmp_path: Path) -> AsyncIterator[tuple[int, "Server"]]:
-    """Boot a server against ``tmp_path`` with the layout watcher running."""
+    """Boot a server against ``tmp_path`` with the deck watcher running."""
     import deckd.actions as actions_mod
     from aiohttp.test_utils import TestServer
     from conftest import make_test_server
@@ -754,8 +754,8 @@ async def _serve(monkeypatch, tmp_path: Path) -> AsyncIterator[tuple[int, "Serve
 
     monkeypatch.setattr(actions_mod, "_run_shell", _fake_shell)
 
-    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
-    server.start_layouts_watcher()
+    server, _scroll, _key, _dbus = make_test_server(decks_dir=tmp_path)
+    server.start_decks_watcher()
     ts = TestServer(server.app, host="127.0.0.1")
     await ts.start_server()
     try:
@@ -765,7 +765,7 @@ async def _serve(monkeypatch, tmp_path: Path) -> AsyncIterator[tuple[int, "Serve
         await ts.close()
 
 
-async def _next_layout(ws, timeout: float = 3.0) -> dict:
+async def _next_deck(ws, timeout: float = 3.0) -> dict:
     return json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
 
 
@@ -777,7 +777,7 @@ async def test_reload_with_bad_yaml_keeps_daemon_alive_and_pushes_error(
 
     async with _serve(monkeypatch, tmp_path) as (port, _server):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            initial = await _next_layout(ws)
+            initial = await _next_deck(ws)
             assert initial["widgets"][0]["id"] == "home"
             assert initial.get("error") in (None, "")
 
@@ -791,8 +791,8 @@ async def test_reload_with_bad_yaml_keeps_daemon_alive_and_pushes_error(
                     assert body["ok"] is False
                     assert "error" in body
 
-            pushed = await _next_layout(ws)
-            assert pushed["type"] == "layout"
+            pushed = await _next_deck(ws)
+            assert pushed["type"] == "deck"
             assert pushed["error"]
             assert pushed["widgets"] == []
 
@@ -805,13 +805,13 @@ async def test_reload_after_fixing_yaml_clears_error(
 
     async with _serve(monkeypatch, tmp_path) as (port, _server):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            await _next_layout(ws)  # initial
+            await _next_deck(ws)  # initial
 
             (tmp_path / "default.yaml").write_text(INVALID_YAML)
             async with aiohttp.ClientSession() as http:
                 async with http.post(f"http://127.0.0.1:{port}/reload") as r:
                     assert r.status == 400
-            broken = await _next_layout(ws)
+            broken = await _next_deck(ws)
             assert broken["error"]
 
             (tmp_path / "default.yaml").write_text(VALID_DEFAULT_V2)
@@ -819,32 +819,32 @@ async def test_reload_after_fixing_yaml_clears_error(
                 async with http.post(f"http://127.0.0.1:{port}/reload") as r:
                     assert r.status == 200
 
-            fixed = await _next_layout(ws)
+            fixed = await _next_deck(ws)
             assert fixed.get("error") in (None, "")
             assert fixed["widgets"][0]["id"] == "home-v2"
 
 
-async def test_layouts_watcher_reloads_on_yaml_edit(
+async def test_decks_watcher_reloads_on_yaml_edit(
     monkeypatch, tmp_path: Path
 ) -> None:
-    """Editing a YAML file in the layouts dir triggers an auto-push."""
+    """Editing a YAML file in the decks dir triggers an auto-push."""
     (tmp_path / "default.yaml").write_text(VALID_DEFAULT)
 
     async with _serve(monkeypatch, tmp_path) as (port, _server):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            initial = await _next_layout(ws)
+            initial = await _next_deck(ws)
             assert initial["widgets"][0]["id"] == "home"
 
             (tmp_path / "default.yaml").write_text(VALID_DEFAULT_V2)
 
             # The watcher polls; give it real time to react before failing.
-            pushed = await _next_layout(ws, timeout=5.0)
-            assert pushed["type"] == "layout"
+            pushed = await _next_deck(ws, timeout=5.0)
+            assert pushed["type"] == "deck"
             assert pushed.get("error") in (None, "")
             assert pushed["widgets"][0]["id"] == "home-v2"
 
 
-async def test_layouts_watcher_bad_edit_pushes_error_not_crash(
+async def test_decks_watcher_bad_edit_pushes_error_not_crash(
     monkeypatch, tmp_path: Path
 ) -> None:
     """A broken save on disk pushes the error state; daemon keeps serving."""
@@ -852,16 +852,16 @@ async def test_layouts_watcher_bad_edit_pushes_error_not_crash(
 
     async with _serve(monkeypatch, tmp_path) as (port, _server):
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            await _next_layout(ws)  # initial
+            await _next_deck(ws)  # initial
 
             (tmp_path / "default.yaml").write_text(INVALID_YAML)
-            pushed = await _next_layout(ws, timeout=5.0)
+            pushed = await _next_deck(ws, timeout=5.0)
             assert pushed["error"]
             assert pushed["widgets"] == []
 
             # Fixing the file drives the client back to a good grid.
             (tmp_path / "default.yaml").write_text(VALID_DEFAULT_V2)
-            recovered = await _next_layout(ws, timeout=5.0)
+            recovered = await _next_deck(ws, timeout=5.0)
             assert recovered.get("error") in (None, "")
             assert recovered["widgets"][0]["id"] == "home-v2"
 
@@ -892,7 +892,7 @@ async def test_start_raises_port_in_use_not_raw_oserror(tmp_path: Path) -> None:
     busy_port = blocker.getsockname()[1]
 
     try:
-        server, *_ = make_test_server(layouts_dir=tmp_path)
+        server, *_ = make_test_server(decks_dir=tmp_path)
         # Issue #66: the daemon's bind surface is now a list of
         # ``_bind_specs``; reset it so the test binds exactly one
         # address (matching the blocker) and triggers the collision.

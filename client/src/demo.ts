@@ -1,13 +1,13 @@
-import type { MediaState, ServerLayout } from "./protocol";
+import type { MediaState, ServerDeck } from "./protocol";
 
 /** Backend-free demo fixtures. Activated with a ``?demo=<name>`` URL param
- * (e.g. ``/?demo=firefox``): the app renders the fixture layout and skips the
+ * (e.g. ``/?demo=firefox``): the app renders the fixture deck and skips the
  * WebSocket entirely, so the client can be viewed / screenshotted / iterated
  * on without a running daemon. Dev-only affordance; adds no runtime cost when
  * the param is absent. */
 
-const FIREFOX: ServerLayout = {
-  type: "layout",
+const FIREFOX: ServerDeck = {
+  type: "deck",
   app: "Firefox (demo)",
   display_name: "Firefox",
   theme: "#ff7139",
@@ -26,9 +26,9 @@ const FIREFOX: ServerLayout = {
 };
 
 // A web-app fixture (title-matched site in a browser): the daemon would set
-// ``web_app: true`` so the badge shows a globe. Mirrors layouts/youtube.yaml.
-const YOUTUBE: ServerLayout = {
-  type: "layout",
+// ``web_app: true`` so the badge shows a globe. Mirrors decks/youtube.yaml.
+const YOUTUBE: ServerDeck = {
+  type: "deck",
   app: "YouTube (demo)",
   display_name: "YouTube",
   theme: "#ff0000",
@@ -45,8 +45,8 @@ const YOUTUBE: ServerLayout = {
   ],
 };
 
-const DEFAULT: ServerLayout = {
-  type: "layout",
+const DEFAULT: ServerDeck = {
+  type: "deck",
   app: "default (demo)",
   jogstrip_enabled: true,
   widgets: [
@@ -60,8 +60,8 @@ const DEFAULT: ServerLayout = {
 // Exercises both renderers and edge cases in one view: Lucide glyphs, a
 // per-button colour, brand logos via the lazily-loaded Simple Icons set, and
 // an intentionally-unknown icon to show the missing-placeholder.
-const SHOWCASE: ServerLayout = {
-  type: "layout",
+const SHOWCASE: ServerDeck = {
+  type: "deck",
   app: "showcase (demo)",
   display_name: "Showcase",
   // A non-brand theme colour so the chrome badge reads themed even without
@@ -85,10 +85,10 @@ const SHOWCASE: ServerLayout = {
 // push for a real CPU%/MEM% source — a couple of realistic values so
 // the bar's color-graded fill renders across the spectrum. Wired via
 // the meter store's localStorage hydration on mount, so opening
-// ``/?demo=meter`` lands in a "fresh layout, pre-populated values"
+// ``/?demo=meter`` lands in a "fresh deck, pre-populated values"
 // state without needing the daemon at all.
-const METER: ServerLayout = {
-  type: "layout",
+const METER: ServerDeck = {
+  type: "deck",
   app: "meter (demo)",
   display_name: "Meter demo",
   theme: "#1d4ed8",
@@ -137,7 +137,7 @@ const METER: ServerLayout = {
 // These are written into localStorage by the app on first mount when
 // the meter demo is selected, and cleared when the user navigates
 // away to a non-meter demo. Keeping the seeds in the same file as the
-// fixture means a designer iterating on the meter layout doesn't have
+// fixture means a designer iterating on the meter deck doesn't have
 // to remember to update two places.
 export const METER_DEMO_SEEDS: Record<string, { value: number; unit: string }> = {
   cpu_percent: { value: 58, unit: "%" },
@@ -145,11 +145,11 @@ export const METER_DEMO_SEEDS: Record<string, { value: number; unit: string }> =
 };
 
 // Backend-free VLC media demo. A single full-width media cell, matching the
-// shipping ``layouts/vlc.yaml`` footprint, so ``/?demo=vlc`` shows the player
+// shipping ``decks/vlc.yaml`` footprint, so ``/?demo=vlc`` shows the player
 // card in the real app chrome. Its playback state is seeded from
 // MEDIA_DEMO_STATES below (App pushes it into the media store on mount).
-const VLC: ServerLayout = {
-  type: "layout",
+const VLC: ServerDeck = {
+  type: "deck",
   app: "VLC (demo)",
   display_name: "VLC",
   theme: "#ff8c00",
@@ -167,7 +167,7 @@ const VLC: ServerLayout = {
 };
 
 /** Seed readings for the VLC demo, keyed by widget id via ``id``. App pushes
- * these into the media store on mount when a demo layout is active, so the
+ * these into the media store on mount when a demo deck is active, so the
  * card renders populated (art, metadata, live seek/volume) without a daemon. */
 export const MEDIA_DEMO_STATES: MediaState[] = [
   {
@@ -188,7 +188,7 @@ export const MEDIA_DEMO_STATES: MediaState[] = [
 ];
 
 // Backend-free MPRIS now-playing demo (issue #53). A single
-// ``nowplaying`` widget, matching the shipping ``layouts/mpris.yaml``
+// ``nowplaying`` widget, matching the shipping ``decks/mpris.yaml``
 // footprint, so ``/?demo=mpris`` opens the chrome view with seeded
 // MPRIS rows already in the media store — the same surface a real
 // daemon would render after the first ``media_state`` push. Three
@@ -197,8 +197,8 @@ export const MEDIA_DEMO_STATES: MediaState[] = [
 // Row order is the media-store insertion order — issue #58 dropped
 // the per-widget ``ordering`` knob and the client no longer re-sorts
 // by playback state.
-const MPRIS: ServerLayout = {
-  type: "layout",
+const MPRIS: ServerDeck = {
+  type: "deck",
   app: "Media (demo)",
   display_name: "Media",
   theme: "#22c55e",
@@ -278,8 +278,8 @@ export const MPRIS_DEMO_STATES: MediaState[] = [
 // a simple two-step sequence and a longer one with a delay. The client
 // renders these the same as any other button (the daemon executes the
 // steps), so ``/?demo=macro`` lets you see how they look in the grid.
-const MACRO: ServerLayout = {
-  type: "layout",
+const MACRO: ServerDeck = {
+  type: "deck",
   app: "macro (demo)",
   display_name: "Macro",
   theme: "#a855f7",
@@ -333,7 +333,7 @@ const MACRO: ServerLayout = {
   ],
 };
 
-const DEMOS: Record<string, ServerLayout> = {
+const DEMOS: Record<string, ServerDeck> = {
   firefox: FIREFOX,
   youtube: YOUTUBE,
   default: DEFAULT,
@@ -344,14 +344,14 @@ const DEMOS: Record<string, ServerLayout> = {
   macro: MACRO,
 };
 
-type DemoView = "layout" | "trackpad" | "settings" | "nowplaying" | "editor";
+type DemoView = "deck" | "trackpad" | "settings" | "nowplaying" | "editor";
 
 // Demo names that open a chrome *view* (settings / trackpad) rather than a
-// bare layout. They render over a base fixture so the socket stays disabled
+// bare deck. They render over a base fixture so the socket stays disabled
 // and the app chrome (badge, status) has real context behind the panel.
 // ``mpris`` opens the now-playing view with the MPRIS fixture as the
 // base, so the per-row cell renders with seeded rows on first paint —
-// the layout file the real daemon would push.
+// the deck file the real daemon would push.
 const DEMO_VIEWS: Record<string, DemoView> = {
   settings: "settings",
   trackpad: "trackpad",
@@ -359,24 +359,24 @@ const DEMO_VIEWS: Record<string, DemoView> = {
   editor: "editor",
 };
 const VIEW_DEMO_BASE = VLC;
-const VIEW_DEMO_BASE_FOR: Record<string, ServerLayout> = {
+const VIEW_DEMO_BASE_FOR: Record<string, ServerDeck> = {
   mpris: MPRIS,
   editor: FIREFOX,
 };
 
 /** The demo fixtures, keyed by name — for the gallery and Ladle stories. */
-export const DEMO_LAYOUTS = DEMOS;
+export const DEMO_DECKS = DEMOS;
 
 /** Names of the available demo pages, for the demo gallery selector — the
- * layout fixtures plus the settings / trackpad / editor view demos. */
+ * deck fixtures plus the settings / trackpad / editor view demos. */
 export const DEMO_NAMES = [...new Set([...Object.keys(DEMOS), ...Object.keys(DEMO_VIEWS)])];
 
-/** Returns the demo layout named by the ``?demo=`` URL param, or ``null``
+/** Returns the demo deck named by the ``?demo=`` URL param, or ``null``
  * when the param is absent/unknown (normal daemon-backed operation). A view
  * demo (``settings`` / ``trackpad``) renders over a shared base fixture;
  * ``mpris`` opens the now-playing view with the MPRIS fixture as the
  * base so the per-row cell has a backing widget. */
-export function getDemoLayout(): ServerLayout | null {
+export function getDemoDeck(): ServerDeck | null {
   if (typeof window === "undefined") return null;
   const name = new URLSearchParams(window.location.search).get("demo");
   if (!name) return null;
@@ -387,17 +387,17 @@ export function getDemoLayout(): ServerLayout | null {
 }
 
 /** The initial chrome view for the current ``?demo=`` param — ``settings`` or
- * ``trackpad`` for the view demos, otherwise ``layout``. */
+ * ``trackpad`` for the view demos, otherwise ``deck``. */
 export function getDemoView(): DemoView {
-  if (typeof window === "undefined") return "layout";
+  if (typeof window === "undefined") return "deck";
   const name = new URLSearchParams(window.location.search).get("demo");
-  return (name && DEMO_VIEWS[name]) || "layout";
+  return (name && DEMO_VIEWS[name]) || "deck";
 }
 
-/** Mock layout list for the editor demo — the same shape as GET /layouts
- * returns. Passed to the Editor component when in demo mode so the layout
+/** Mock deck list for the editor demo — the same shape as GET /decks
+ * returns. Passed to the Editor component when in demo mode so the deck
  * picker renders with sample entries. */
-export const EDITOR_DEMO_LAYOUTS = [
+export const EDITOR_DEMO_DECKS = [
   {
     id: "firefox",
     match: ["firefox", "Firefox", "firefox-esr"],
@@ -424,7 +424,7 @@ export const EDITOR_DEMO_LAYOUTS = [
   {
     id: "editor",
     match: ["editor"],
-    display_name: "Layout Editor",
+    display_name: "Deck Editor",
     widgets: [],
   },
 ];

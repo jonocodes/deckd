@@ -21,7 +21,7 @@ from deckd.diagnostics import (
     MprisEvents,
     RecentActions,
     build_diag_snapshot,
-    build_layouts_snapshot,
+    build_decks_snapshot,
     build_mpris_players_snapshot,
 )
 from deckd.logging_setup import JsonFormatter, setup_logging
@@ -44,8 +44,8 @@ def test_metrics_render_minimal() -> None:
     assert "# TYPE deckd_sessions_active gauge" in out
     assert "deckd_sessions_active 0" in out
     # Counters that haven't fired are still rendered (zero value).
-    assert "deckd_layout_reload_total{status=\"ok\"} 0" in out
-    assert "deckd_layout_reload_total{status=\"error\"} 0" in out
+    assert "deckd_deck_reload_total{status=\"ok\"} 0" in out
+    assert "deckd_deck_reload_total{status=\"error\"} 0" in out
 
 
 def test_metrics_record_action_increments_counters() -> None:
@@ -105,7 +105,7 @@ def test_recent_actions_ring_overflow_drops_oldest() -> None:
         buf.add(
             ActionRecord(
                 ts=float(i),
-                layout_id="default",
+                deck_id="default",
                 widget_id=f"w{i}",
                 primitive="shell",
                 outcome="ok",
@@ -124,7 +124,7 @@ def test_recent_actions_ring_overflow_drops_oldest() -> None:
 def test_action_record_to_wire_redacts_command_text() -> None:
     rec = ActionRecord(
         ts=0.0,
-        layout_id="default",
+        deck_id="default",
         widget_id="open-url",
         primitive="shell",
         outcome="ok",
@@ -132,7 +132,7 @@ def test_action_record_to_wire_redacts_command_text() -> None:
         error="boom",
     )
     wire = rec.to_wire()
-    assert set(wire.keys()) == {"ts", "layout_id", "widget_id", "primitive", "outcome"}
+    assert set(wire.keys()) == {"ts", "deck_id", "widget_id", "primitive", "outcome"}
     assert "command_text" not in wire
     assert "error" not in wire
 
@@ -152,11 +152,11 @@ def test_mpris_events_ring_overflow() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_build_layouts_snapshot_hides_action_bodies() -> None:
-    """``/layouts`` widgets report ``has_action`` but never the action payload."""
-    from deckd.layouts import Action, Layout, Widget
+def test_build_decks_snapshot_hides_action_bodies() -> None:
+    """``/decks`` widgets report ``has_action`` but never the action payload."""
+    from deckd.decks import Action, Deck, Widget
 
-    layout = Layout(
+    deck = Deck(
         id="test",
         match=["test"],
         widgets=[
@@ -174,15 +174,15 @@ def test_build_layouts_snapshot_hides_action_bodies() -> None:
     )
 
     class _Store:
-        def __init__(self, layouts: list[Layout]) -> None:
-            self._layouts = layouts
+        def __init__(self, decks: list[Deck]) -> None:
+            self._decks = decks
 
         @property
-        def layouts(self) -> list[Layout]:
-            return list(self._layouts)
+        def decks(self) -> list[Deck]:
+            return list(self._decks)
 
-    snap = build_layouts_snapshot(_Store([layout]))
-    widgets = snap["layouts"][0]["widgets"]
+    snap = build_decks_snapshot(_Store([deck]))
+    widgets = snap["decks"][0]["widgets"]
     assert widgets[0]["id"] == "button-1"
     assert widgets[0]["has_action"] is True
     # Crucially no "action" / "shell" / "dbus" / "key" field.
@@ -191,16 +191,16 @@ def test_build_layouts_snapshot_hides_action_bodies() -> None:
     assert widgets[1]["kind_specific"]["source"] == "cpu_percent"
 
 
-def test_build_layouts_snapshot_omits_unset_widget_fields() -> None:
+def test_build_decks_snapshot_omits_unset_widget_fields() -> None:
     """The widget summary uses ``exclude_defaults=True`` so optional fields
     the author never set (``label``, ``icon``, ``color``, ``size``,
     ``source``, ``min``, ``max``, ``metrics``) are not materialised. This
     is what makes the editor's opaque pass-through round-trip truly
     faithful — a bare button or a labelled button both round-trip
     cleanly without editor-save noise (#103 done-when)."""
-    from deckd.layouts import Action, Layout, Widget
+    from deckd.decks import Action, Deck, Widget
 
-    layout = Layout(
+    deck = Deck(
         id="test",
         match=["test"],
         widgets=[
@@ -222,15 +222,15 @@ def test_build_layouts_snapshot_omits_unset_widget_fields() -> None:
     )
 
     class _Store:
-        def __init__(self, layouts: list[Layout]) -> None:
-            self._layouts = layouts
+        def __init__(self, decks: list[Deck]) -> None:
+            self._decks = decks
 
         @property
-        def layouts(self) -> list[Layout]:
-            return list(self._layouts)
+        def decks(self) -> list[Deck]:
+            return list(self._decks)
 
-    snap = build_layouts_snapshot(_Store([layout]), full=True)
-    widgets = {w["id"]: w for w in snap["layouts"][0]["widgets"]}
+    snap = build_decks_snapshot(_Store([deck]), full=True)
+    widgets = {w["id"]: w for w in snap["decks"][0]["widgets"]}
 
     # Bare button: no optional fields at all.
     assert widgets["bare"] == {
@@ -259,16 +259,16 @@ def test_build_layouts_snapshot_omits_unset_widget_fields() -> None:
     assert stats["metrics"] == [{"source": "cpu_percent", "label": "CPU"}]
 
 
-def test_build_layouts_snapshot_full_omits_unset_action_defaults() -> None:
+def test_build_decks_snapshot_full_omits_unset_action_defaults() -> None:
     """Full dump uses ``model_dump(exclude_unset=True)`` so an authored
     action like ``shell: xdg-open ...`` echoes only ``shell`` — not the
     ``Action`` model's ``restore_clipboard`` / ``restore_clipboard_delay_ms``
     defaults. Otherwise every editor save materialises defaults into the
     human-owned YAML, violating #85 round-trip fidelity (#103 done-when:
     unrendered fields survive a save untouched)."""
-    from deckd.layouts import Action, Layout, Widget
+    from deckd.decks import Action, Deck, Widget
 
-    layout = Layout(
+    deck = Deck(
         id="test",
         match=["test"],
         widgets=[
@@ -281,27 +281,27 @@ def test_build_layouts_snapshot_full_omits_unset_action_defaults() -> None:
     )
 
     class _Store:
-        def __init__(self, layouts: list[Layout]) -> None:
-            self._layouts = layouts
+        def __init__(self, decks: list[Deck]) -> None:
+            self._decks = decks
 
         @property
-        def layouts(self) -> list[Layout]:
-            return list(self._layouts)
+        def decks(self) -> list[Deck]:
+            return list(self._decks)
 
-    snap = build_layouts_snapshot(_Store([layout]), full=True)
-    action = snap["layouts"][0]["widgets"][0]["action"]
+    snap = build_decks_snapshot(_Store([deck]), full=True)
+    action = snap["decks"][0]["widgets"][0]["action"]
     assert action == {"shell": "xdg-open https://secret.example"}
     assert "restore_clipboard" not in action
     assert "restore_clipboard_delay_ms" not in action
     assert "key" not in action  # None + unset, excluded
 
 
-def test_build_layouts_snapshot_full_omits_unset_macro_default() -> None:
+def test_build_decks_snapshot_full_omits_unset_macro_default() -> None:
     """A macro authored with only ``steps`` echoes only ``steps`` — the
     ``continue_on_error: false`` default is not materialised."""
-    from deckd.layouts import Layout, Macro, MacroStep, Widget
+    from deckd.decks import Deck, Macro, MacroStep, Widget
 
-    layout = Layout(
+    deck = Deck(
         id="test",
         match=["test"],
         widgets=[
@@ -314,25 +314,25 @@ def test_build_layouts_snapshot_full_omits_unset_macro_default() -> None:
     )
 
     class _Store:
-        def __init__(self, layouts: list[Layout]) -> None:
-            self._layouts = layouts
+        def __init__(self, decks: list[Deck]) -> None:
+            self._decks = decks
 
         @property
-        def layouts(self) -> list[Layout]:
-            return list(self._layouts)
+        def decks(self) -> list[Deck]:
+            return list(self._decks)
 
-    snap = build_layouts_snapshot(_Store([layout]), full=True)
-    macro = snap["layouts"][0]["widgets"][0]["macro"]
+    snap = build_decks_snapshot(_Store([deck]), full=True)
+    macro = snap["decks"][0]["widgets"][0]["macro"]
     assert macro == {"steps": [{"type": "key", "value": "ctrl+a"}]}
     assert "continue_on_error" not in macro
 
 
-def test_build_layouts_snapshot_full_preserves_authored_default() -> None:
+def test_build_decks_snapshot_full_preserves_authored_default() -> None:
     """When the author DID set a default-valued field, ``exclude_unset``
     keeps it — the round-trip preserves intentional configuration."""
-    from deckd.layouts import Action, Layout, Widget
+    from deckd.decks import Action, Deck, Widget
 
-    layout = Layout(
+    deck = Deck(
         id="test",
         match=["test"],
         widgets=[
@@ -345,15 +345,15 @@ def test_build_layouts_snapshot_full_preserves_authored_default() -> None:
     )
 
     class _Store:
-        def __init__(self, layouts: list[Layout]) -> None:
-            self._layouts = layouts
+        def __init__(self, decks: list[Deck]) -> None:
+            self._decks = decks
 
         @property
-        def layouts(self) -> list[Layout]:
-            return list(self._layouts)
+        def decks(self) -> list[Deck]:
+            return list(self._decks)
 
-    snap = build_layouts_snapshot(_Store([layout]), full=True)
-    action = snap["layouts"][0]["widgets"][0]["action"]
+    snap = build_decks_snapshot(_Store([deck]), full=True)
+    action = snap["decks"][0]["widgets"][0]["action"]
     assert action["restore_clipboard"] is False
 
 
@@ -414,16 +414,16 @@ def test_build_diag_snapshot_omits_secrets(monkeypatch: pytest.MonkeyPatch) -> N
     class _FakeServer:
         host = "127.0.0.1"
         port = 8765
-        layouts_dir = type("P", (), {"__str__": lambda self: "/layouts"})()
+        decks_dir = type("P", (), {"__str__": lambda self: "/decks"})()
         overlay_dir = None
         password = "topsecret"
-        layouts = type(
+        decks = type(
             "S",
             (),
-            {"layouts": []},
+            {"decks": []},
         )()
         _current_app_id = "default"
-        _current_layout = type("L", (), {"id": "default"})()
+        _current_deck = type("L", (), {"id": "default"})()
         _current_error = None
         _sessions: set = set()
         _subscribed_sources: set = set()
@@ -436,7 +436,7 @@ def test_build_diag_snapshot_omits_secrets(monkeypatch: pytest.MonkeyPatch) -> N
         )()
         mpris = None
         _focus_task = None
-        _layouts_task = None
+        _decks_task = None
         _sensor_task = None
         _media_task = None
         _focus_platform = None

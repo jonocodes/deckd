@@ -2,28 +2,28 @@
 
 let
   # ---------------------------------------------------------------------
-  # seed-layouts: copies bundled defaults into a writable layouts dir
+  # seed-decks: copies bundled defaults into a writable decks dir
   # without ever clobbering a file the user may have edited.
   # ---------------------------------------------------------------------
-  seedLayouts = pkgs.callPackage ../seed-layouts.nix { };
+  seedDecks = pkgs.callPackage ../seed-decks.nix { };
 
   seedFixture = pkgs.runCommand "deckd-seed-fixture" { } ''
     mkdir -p $out/src/nested
     echo 'default: {}' > $out/src/default.yaml
     echo 'firefox: {}' > $out/src/firefox.yaml
-    echo 'not a layout' > $out/src/README.md
+    echo 'not a deck' > $out/src/README.md
     echo 'nested: {}' > $out/src/nested/ignored.yaml
   '';
 
-  seedTest = pkgs.runCommand "deckd-seed-layouts-test" {
-    nativeBuildInputs = [ seedLayouts ];
+  seedTest = pkgs.runCommand "deckd-seed-decks-test" {
+    nativeBuildInputs = [ seedDecks ];
   } ''
     set -euo pipefail
     cp -r ${seedFixture}/src src
     mkdir dest
 
     # First run copies every top-level YAML, ignoring other files/dirs.
-    deckd-seed-layouts src dest
+    deckd-seed-decks src dest
     test -f dest/default.yaml
     test -f dest/firefox.yaml
     test ! -e dest/README.md
@@ -31,17 +31,17 @@ let
 
     # A user-edited file is never overwritten.
     echo 'edited: true' > dest/firefox.yaml
-    deckd-seed-layouts src dest
+    deckd-seed-decks src dest
     grep -q 'edited: true' dest/firefox.yaml
 
     # Re-running changes nothing (idempotent).
     before="$(find dest -type f -print0 | sort -z | xargs -0 sha256sum)"
-    deckd-seed-layouts src dest
+    deckd-seed-decks src dest
     after="$(find dest -type f -print0 | sort -z | xargs -0 sha256sum)"
     test "$before" = "$after"
 
     # A missing source directory is a no-op, not a failure.
-    deckd-seed-layouts missing-dir dest
+    deckd-seed-decks missing-dir dest
 
     touch $out
   '';
@@ -100,6 +100,6 @@ let
 
 in
 {
-  seed-layouts = seedTest;
+  seed-decks = seedTest;
   install-kwin = kwinTest;
 }

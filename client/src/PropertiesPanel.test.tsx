@@ -62,98 +62,98 @@ const baseUnsupported: Widget = {
   label: "VLC",
 };
 
-const layoutFields = {
-  display_name: "My Layout",
+const deckFields = {
+  display_name: "My Deck",
   theme: "#ff7139",
-  icon: { source: "lucide", name: "layout" } as const,
+  icon: { source: "lucide", name: "deck" } as const,
   jogstrip: true,
   overflow: "shrink-to-fit" as const,
 };
 
-describe("PropertiesPanel — layout-level fields", () => {
+describe("PropertiesPanel — deck-level fields", () => {
   afterEach(cleanup);
 
-  it("renders layout fields when no widget is selected", () => {
+  it("renders deck fields when no widget is selected", () => {
     const onWidgetChange = vi.fn();
-    const onLayoutChange = vi.fn();
+    const onDeckChange = vi.fn();
     render(
       <PropertiesPanel
         widget={null}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onWidgetChange}
-        onLayoutFieldChange={onLayoutChange}
+        onDeckFieldChange={onDeckChange}
       />,
     );
-    expect(screen.getByText("Layout")).toBeTruthy();
+    expect(screen.getByText("Deck")).toBeTruthy();
     expect(screen.getByText("Display name")).toBeTruthy();
     expect(screen.getByText("Theme")).toBeTruthy();
     expect(screen.getByText("Jogstrip")).toBeTruthy();
     expect(screen.getByText("Overflow")).toBeTruthy();
   });
 
-  it("fires onLayoutFieldChange for display_name", () => {
+  it("fires onDeckFieldChange for display_name", () => {
     const onWidgetChange = vi.fn();
-    const onLayoutChange = vi.fn();
+    const onDeckChange = vi.fn();
     render(
       <PropertiesPanel
         widget={null}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onWidgetChange}
-        onLayoutFieldChange={onLayoutChange}
+        onDeckFieldChange={onDeckChange}
       />,
     );
-    const input = screen.getByDisplayValue("My Layout");
+    const input = screen.getByDisplayValue("My Deck");
     fireEvent.change(input, { target: { value: "New Name" } });
-    expect(onLayoutChange).toHaveBeenCalledWith("display_name", "New Name");
+    expect(onDeckChange).toHaveBeenCalledWith("display_name", "New Name");
   });
 
-  it("fires onLayoutFieldChange for theme", () => {
+  it("fires onDeckFieldChange for theme", () => {
     const onWidgetChange = vi.fn();
-    const onLayoutChange = vi.fn();
+    const onDeckChange = vi.fn();
     render(
       <PropertiesPanel
         widget={null}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onWidgetChange}
-        onLayoutFieldChange={onLayoutChange}
+        onDeckFieldChange={onDeckChange}
       />,
     );
     const input = screen.getByDisplayValue("#ff7139");
     fireEvent.change(input, { target: { value: "#ff0000" } });
-    expect(onLayoutChange).toHaveBeenCalledWith("theme", "#ff0000");
+    expect(onDeckChange).toHaveBeenCalledWith("theme", "#ff0000");
   });
 
   it("toggles jogstrip checkbox", () => {
     const onWidgetChange = vi.fn();
-    const onLayoutChange = vi.fn();
+    const onDeckChange = vi.fn();
     render(
       <PropertiesPanel
         widget={null}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onWidgetChange}
-        onLayoutFieldChange={onLayoutChange}
+        onDeckFieldChange={onDeckChange}
       />,
     );
     const checkbox = screen.getByRole("checkbox");
     expect((checkbox as HTMLInputElement).checked).toBe(true);
     fireEvent.click(checkbox);
-    expect(onLayoutChange).toHaveBeenCalledWith("jogstrip", false);
+    expect(onDeckChange).toHaveBeenCalledWith("jogstrip", false);
   });
 
   it("changes overflow select", () => {
     const onWidgetChange = vi.fn();
-    const onLayoutChange = vi.fn();
+    const onDeckChange = vi.fn();
     render(
       <PropertiesPanel
         widget={null}
-        layoutFields={{ overflow: "shrink-to-fit" }}
+        deckFields={{ overflow: "shrink-to-fit" }}
         onWidgetChange={onWidgetChange}
-        onLayoutFieldChange={onLayoutChange}
+        onDeckFieldChange={onDeckChange}
       />,
     );
     const combobox = screen.getByRole("combobox");
     fireEvent.change(combobox, { target: { value: "clip" } });
-    expect(onLayoutChange).toHaveBeenCalledWith("overflow", "clip");
+    expect(onDeckChange).toHaveBeenCalledWith("overflow", "clip");
   });
 });
 
@@ -165,9 +165,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     expect(screen.getByText("Button")).toBeTruthy();
@@ -184,9 +184,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const idInput = screen.getByDisplayValue("btn-1");
@@ -199,9 +199,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const labelInput = screen.getByDisplayValue("Click me");
@@ -214,9 +214,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const labelInput = screen.getByDisplayValue("Click me");
@@ -231,9 +231,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const colorInput = screen.getByLabelText("color value") as HTMLInputElement;
@@ -247,9 +247,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const swatch = screen.getByLabelText(/color swatch/i);
@@ -269,9 +269,9 @@ describe("PropertiesPanel — button widget", () => {
       render(
         <PropertiesPanel
           widget={widget}
-          layoutFields={layoutFields}
+          deckFields={deckFields}
           onWidgetChange={onChange}
-          onLayoutFieldChange={vi.fn()}
+          onDeckFieldChange={vi.fn()}
         />,
       );
       expect(screen.queryByLabelText(/color swatch/i)).toBeFalsy();
@@ -283,9 +283,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const swatch = screen.getByLabelText(/color swatch/i);
@@ -298,9 +298,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByLabelText(/use preset #3fb950/i));
@@ -313,9 +313,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={widget}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const text = screen.getByLabelText("color value") as HTMLInputElement;
@@ -335,9 +335,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={{ ...baseButton, color: stored }}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={vi.fn()}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const swatch = screen.getByLabelText(/color swatch/i) as HTMLInputElement;
@@ -356,9 +356,9 @@ describe("PropertiesPanel — button widget", () => {
       render(
         <PropertiesPanel
           widget={{ ...baseButton, color }}
-          layoutFields={layoutFields}
+          deckFields={deckFields}
           onWidgetChange={vi.fn()}
-          onLayoutFieldChange={vi.fn()}
+          onDeckFieldChange={vi.fn()}
         />,
       );
       expect(screen.queryByLabelText(/color swatch/i)).toBeFalsy();
@@ -374,9 +374,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={{ id: "b", kind: "button" }}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const swatch = screen.getByLabelText(/color swatch/i) as HTMLInputElement;
@@ -393,9 +393,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={{ id: "m", kind: "meter", color: "#1e3a8a" }}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     fireEvent.change(screen.getByLabelText("color value"), { target: { value: "" } });
@@ -407,9 +407,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const colorInput = screen.getByLabelText("color value") as HTMLInputElement;
@@ -424,9 +424,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={widget}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     expect(screen.queryByLabelText(/color swatch/i)).toBeFalsy();
@@ -437,9 +437,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const wInput = screen.getByDisplayValue("2");
@@ -452,9 +452,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
         onDeleteWidget={vi.fn()}
       />,
     );
@@ -467,9 +467,9 @@ describe("PropertiesPanel — button widget", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
         onDeleteWidget={onDelete}
       />,
     );
@@ -486,9 +486,9 @@ describe("PropertiesPanel — meter widget", () => {
     render(
       <PropertiesPanel
         widget={baseMeter}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     expect(screen.getAllByText("Meter").length).toBeGreaterThanOrEqual(1);
@@ -503,9 +503,9 @@ describe("PropertiesPanel — meter widget", () => {
     render(
       <PropertiesPanel
         widget={baseMeter}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const sourceInput = screen.getByDisplayValue("cpu_percent");
@@ -518,9 +518,9 @@ describe("PropertiesPanel — meter widget", () => {
     render(
       <PropertiesPanel
         widget={baseMeter}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const minInput = screen.getByDisplayValue("0");
@@ -537,9 +537,9 @@ describe("PropertiesPanel — stats widget", () => {
     render(
       <PropertiesPanel
         widget={baseStats}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     expect(screen.getByText("Stats")).toBeTruthy();
@@ -553,9 +553,9 @@ describe("PropertiesPanel — stats widget", () => {
     render(
       <PropertiesPanel
         widget={baseStats}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const addButtons = screen.getAllByText("Add");
@@ -576,9 +576,9 @@ describe("PropertiesPanel — stats widget", () => {
     render(
       <PropertiesPanel
         widget={baseStats}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const removeButtons = screen.getAllByLabelText(/^remove metric/);
@@ -598,9 +598,9 @@ describe("PropertiesPanel — blank widget", () => {
     render(
       <PropertiesPanel
         widget={baseBlank}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     expect(screen.getByText("Blank")).toBeTruthy();
@@ -620,9 +620,9 @@ describe("PropertiesPanel — unsupported widget", () => {
     render(
       <PropertiesPanel
         widget={baseUnsupported}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     expect(screen.getByText("Reorder / delete only")).toBeTruthy();
@@ -643,9 +643,9 @@ describe("PropertiesPanel — opaque pass-through", () => {
     render(
       <PropertiesPanel
         widget={widgetWithPassThrough}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const labelInput = screen.getByDisplayValue("Click me");
@@ -660,9 +660,9 @@ describe("PropertiesPanel — opaque pass-through", () => {
     render(
       <PropertiesPanel
         widget={baseButton}
-        layoutFields={layoutFields}
+        deckFields={deckFields}
         onWidgetChange={onChange}
-        onLayoutFieldChange={vi.fn()}
+        onDeckFieldChange={vi.fn()}
       />,
     );
     const changeBtn = screen.getByLabelText("change icon");

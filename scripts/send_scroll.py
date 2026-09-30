@@ -20,7 +20,7 @@ import websockets
 
 async def send_scroll(url: str, *, delta: int, frames: int, delay: float, velocity: int) -> None:
     async with websockets.connect(url, open_timeout=2, close_timeout=2) as ws:
-        await ws.recv()  # initial layout push
+        await ws.recv()  # initial deck push
         for _ in range(frames):
             await ws.send(json.dumps({"type": "jog", "id": "scroll-strip", "delta": delta}))
             await asyncio.sleep(delay)

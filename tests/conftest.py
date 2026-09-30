@@ -28,11 +28,11 @@ from deckd.input import ScrollController
 from deckd.platform import AppInfo
 from deckd.server import Server
 
-# Stable fixture layouts for the server behaviour tests. Deliberately NOT the
-# shipping ``layouts/`` dir — that's a user-editable file whose widget ids and
+# Stable fixture decks for the server behaviour tests. Deliberately NOT the
+# shipping ``decks/`` dir — that's a user-editable file whose widget ids and
 # app-badge fields drift, which would (and did) break tests that assert on
-# specific widgets. A separate smoke test loads the real layouts.
-LAYOUTS_DIR = Path(__file__).parent / "fixtures" / "layouts"
+# specific widgets. A separate smoke test loads the real decks.
+DECKS_DIR = Path(__file__).parent / "fixtures" / "decks"
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +252,7 @@ async def srv(monkeypatch) -> AsyncIterator[ServerHandle]:
     dbus_factory = FakeDbusBusFactory()
 
     server = Server(
-        layouts_dir=LAYOUTS_DIR,
+        decks_dir=DECKS_DIR,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(scroll_sink),
@@ -286,7 +286,7 @@ async def srv(monkeypatch) -> AsyncIterator[ServerHandle]:
 
 def make_test_server(
     *,
-    layouts_dir: Path,
+    decks_dir: Path,
     focus_backend=None,
     password: str | None = None,
     media_manager=None,
@@ -303,7 +303,7 @@ def make_test_server(
     key_sink = FakePointerSink()
     dbus_factory = FakeDbusBusFactory()
     server = Server(
-        layouts_dir=layouts_dir,
+        decks_dir=decks_dir,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(scroll_sink),

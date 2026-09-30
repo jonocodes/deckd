@@ -5,7 +5,7 @@ Canonical operational reference — daemon flags, `deckctl` commands, environmen
 ## Daemon (`deckd`)
 
 ```
-deckd [--bind ADDR] [--port PORT] [--layouts-dir PATH] [--no-overlay]
+deckd [--bind ADDR] [--port PORT] [--decks-dir PATH] [--no-overlay]
       [--no-focus] [--allow-while-locked] [--client-dist PATH]
       [--password-file PATH] [--no-auth]
       [--scroll-momentum-friction F] [--scroll-momentum-cutoff C]
@@ -18,9 +18,9 @@ deckd [--bind ADDR] [--port PORT] [--layouts-dir PATH] [--no-overlay]
 |------|---------|-------------|
 | `--bind ADDR` | `127.0.0.1` + `::1` | Repeatable. Literal IP or `iface:<name>`. `0.0.0.0` opens to the LAN. |
 | `--port PORT` | `8765` | `0` asks the kernel for an ephemeral port. |
-| `--layouts-dir PATH` | (required) | Directory of per-app YAML layouts. |
-| `--no-overlay` | off | Skip platform overlay (`layouts.linux/`, `layouts.macos/`). |
-| `--no-focus` | off | Disable the focus watcher; serve only the default layout. |
+| `--decks-dir PATH` | (required) | Directory of per-app YAML decks. |
+| `--no-overlay` | off | Skip platform overlay (`decks.linux/`, `decks.macos/`). |
+| `--no-focus` | off | Disable the focus watcher; serve only the default deck. |
 | `--allow-while-locked` | off | Keep presses / key / type / trackpad / raise working while the desktop session is locked (issue #160). Default: a locked session refuses those surfaces — the client shows the lock takeover, `shell:`+ friends get a `screen_locked` error, and the refusal is recorded as a `lock_dropped` outcome. |
 | `--client-dist PATH` | none | Serve a built client at `/`. |
 | `--password-file PATH` | `$XDG_CONFIG_HOME/deckd/password` | Shared password file. Generated on first start if absent. |
@@ -37,7 +37,7 @@ deckd [--bind ADDR] [--port PORT] [--layouts-dir PATH] [--no-overlay]
 deckd-dev [--port PORT] [-- <forwarded deckd args>]
 ```
 
-Restarts the daemon in-process when any `daemon/**/*.py` file changes. Layout YAML hot-reload is built into the daemon itself; this supervisor is only needed when editing Python.
+Restarts the daemon in-process when any `daemon/**/*.py` file changes. Deck YAML hot-reload is built into the daemon itself; this supervisor is only needed when editing Python.
 
 ## Control CLI (`deckctl`)
 
@@ -58,11 +58,11 @@ deckctl [--host HOST] [--port PORT] [--password PASSWORD] <command>
 | Command | Auth? | Description |
 |---------|-------|-------------|
 | `deckctl status` | no | Hit `/health` — sessions, app, bind surface, pairing URL. |
-| `deckctl diag` | no | Hit `/diag` — full diagnostic snapshot (focus, input, layouts, sessions, MPRIS). |
+| `deckctl diag` | no | Hit `/diag` — full diagnostic snapshot (focus, input, decks, sessions, MPRIS). |
 | `deckctl metrics` | no | Hit `/metrics` — Prometheus text-format counters. |
-| `deckctl layouts` | no | Hit `/layouts` — loaded layout enumeration with safe widget summaries. |
-| `deckctl reload` | yes | Hit `/reload` — reload all layouts on disk and push to clients. |
-| `deckctl layout <id>` | yes | Hit `/layout/<id>` — force-switch all clients to the named layout. |
+| `deckctl decks` | no | Hit `/decks` — loaded deck enumeration with safe widget summaries. |
+| `deckctl reload` | yes | Hit `/reload` — reload all decks on disk and push to clients. |
+| `deckctl deck <id>` | yes | Hit `/deck/<id>` — force-switch all clients to the named deck. |
 
 ## Environment variables
 
@@ -72,7 +72,7 @@ deckctl [--host HOST] [--port PORT] [--password PASSWORD] <command>
 |----------|---------|---------|
 | `TERMINAL` | `actions.py` | Override auto-detected terminal emulator. |
 | `DECKD_PASSWORD` | (user supply) | Typical name for passing the password to `deckctl`. Not read by the daemon itself. |
-| `VLC_HTTP_PASSWORD` | (user supply) | Named in layout `password_ref` for VLC HTTP auth. |
+| `VLC_HTTP_PASSWORD` | (user supply) | Named in deck `password_ref` for VLC HTTP auth. |
 | `XDG_CONFIG_HOME` | `auth.py` | Base for the default password-file path (`$XDG_CONFIG_HOME/deckd/password`). |
 | `XDG_CURRENT_DESKTOP` | `platform.py`, `diagnostics.py` | Desktop-env identification for focus-backend selection and `/health`. |
 | `XDG_SESSION_TYPE` | `platform.py` | Wayland vs X11 detection. |
@@ -92,7 +92,7 @@ Read by the Justfile, and written per-worktree into a gitignored `./.env` by `ju
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `DECKD_PORT` | `8765` | Daemon port for every `dev-*` / `run-*` recipe, `deckctl` in `status` / `diag` / `layouts` / `metrics`, and the pair `just kill` frees. |
+| `DECKD_PORT` | `8765` | Daemon port for every `dev-*` / `run-*` recipe, `deckctl` in `status` / `diag` / `decks` / `metrics`, and the pair `just kill` frees. |
 | `VITE_PORT` | `5173` | Vite dev-server port. When overridden, `--strictPort` is dropped so Vite can fall through. |
 | `DECKD_E2E_PORT` | `8975` | Playwright fixture daemon, so two worktrees can run `just test-all` at once. |
 | `DECKD_SMOKE_PORT` | `18765` | In-process `just smoke` server, so two worktrees can smoke-test at once. |
@@ -103,8 +103,8 @@ The daemon uses a single shared password for all clients:
 
 - **File:** `~/.config/deckd/password` (mode `0640`). First start generates a random 32-char password and logs it once at WARN.
 - **WebSocket:** Client sends `{"type": "hello", "password": "..."}` in the first frame. Invalid/auth-missing frames get `{"type": "error", "reason": "unauthorized"}` followed by a close (code `4401`).
-- **HTTP:** Control endpoints (`/reload`, `/layout/<id>`, `PUT /layouts/<id>`, `POST /layouts`, `/mpris/<row>/command`) require `X-Deckd-Password` header.
-- **Bypass:** `--no-auth` disables all checks. `/health`, `/diag`, `/metrics`, `GET /layouts`, and the art proxies are always open (read-only, no secret leak).
+- **HTTP:** Control endpoints (`/reload`, `/deck/<id>`, `PUT /decks/<id>`, `POST /decks`, `/mpris/<row>/command`) require `X-Deckd-Password` header.
+- **Bypass:** `--no-auth` disables all checks. `/health`, `/diag`, `/metrics`, `GET /decks`, and the art proxies are always open (read-only, no secret leak).
 - **Rotation:** Edit the password file and restart the daemon.
 
 See [the guide's Client auth section](GUIDE.md#client-auth) for the full flow.
@@ -116,16 +116,16 @@ All are read-only and unauthenticated unless noted.
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Host identity (`hostname`, `os`, `desktop`), sessions, current app, bind surface (`bind`, `addresses`, `url`). Used by `deckctl status` and the client Settings panel. |
-| `GET /diag` | Full snapshot: focus watcher status, input sink, layout store, sessions, tasks, MPRIS state (if active). Machine-readable for AI-assisted debugging. |
-| `GET /metrics` | Prometheus text-format scrape target. Counters: `deckd_actions_total{primitive,outcome}`, `deckd_dbus_calls*`, `deckd_layout_reloads*`, `deckd_ws_sessions_active`, `deckd_mpris_*`, etc. |
-| `GET /layouts` | Enumeration of every loaded layout with safe widget summaries (id, kind, label, grid, `has_action`; no raw shell/dbus/url/text command bodies). |
+| `GET /diag` | Full snapshot: focus watcher status, input sink, deck store, sessions, tasks, MPRIS state (if active). Machine-readable for AI-assisted debugging. |
+| `GET /metrics` | Prometheus text-format scrape target. Counters: `deckd_actions_total{primitive,outcome}`, `deckd_dbus_calls*`, `deckd_deck_reloads*`, `deckd_ws_sessions_active`, `deckd_mpris_*`, etc. |
+| `GET /decks` | Enumeration of every loaded deck with safe widget summaries (id, kind, label, grid, `has_action`; no raw shell/dbus/url/text command bodies). |
 | `GET /actions/recent?limit=N` | Bounded ring buffer of recent action attempts (id, outcome, timestamp; no command text). Default 64. |
 | `GET /mpris/players` | Redacted MPRIS player snapshot. |
 | `GET /mpris/events/recent?limit=N` | Bounded ring buffer of MPRIS subsystem events. Default 64. |
-| `POST /reload` | **Auth.** Reload all layouts on disk, push to clients. |
-| `POST /layout/<id>` | **Auth.** Force-switch all clients to the named layout (runtime override, not sticky; singular `/layout` to distinguish from the write API below). |
-| `PUT /layouts/<id>` | **Auth.** Idempotent full-snapshot save of an existing layout (issue #84). URL `<id>` must equal `match[0]`; `409` on a `match[0]` change (rename). `400` sanitized structured Pydantic errors (`loc`/`msg`/`type` only); `404` unknown id. `200` echoes the canonical re-read (`{ok, layout}`); atomic temp-write + `os.replace`, natural `watchfiles` reload. |
-| `POST /layouts` | **Auth.** Create-on-first-save (issue #99). Body = a full layout snapshot; id/filename derived from slugified `match[0]`; `409` if the id (or slugified filename) already exists; `400` on validation failure / empty `match`; `200` echoes the canonical re-read. |
+| `POST /reload` | **Auth.** Reload all decks on disk, push to clients. |
+| `POST /deck/<id>` | **Auth.** Force-switch all clients to the named deck (runtime override, not sticky; singular `/deck` to distinguish from the write API below). |
+| `PUT /decks/<id>` | **Auth.** Idempotent full-snapshot save of an existing deck (issue #84). URL `<id>` must equal `match[0]`; `409` on a `match[0]` change (rename). `400` sanitized structured Pydantic errors (`loc`/`msg`/`type` only); `404` unknown id. `200` echoes the canonical re-read (`{ok, deck}`); atomic temp-write + `os.replace`, natural `watchfiles` reload. |
+| `POST /decks` | **Auth.** Create-on-first-save (issue #99). Body = a full deck snapshot; id/filename derived from slugified `match[0]`; `409` if the id (or slugified filename) already exists; `400` on validation failure / empty `match`; `200` echoes the canonical re-read. |
 | `POST /mpris/<row>/command` | **Auth.** Dispatch a play-pause/next/previous command to the named MPRIS row. |
 | `GET /media/<widget_id>/art` | Proxy VLC album art. |
 | `GET /mpris/<row_id>/art` | Proxy MPRIS album art. |
@@ -142,8 +142,8 @@ deckctl diag
 # Any action failures? MPRIS issues?
 curl -s localhost:8765/metrics | grep -E 'deckd_(actions_total|mpris_)'
 
-# What layouts are currently loaded?
-deckctl layouts
+# What decks are currently loaded?
+deckctl decks
 
 # What was the last thing pressed?
 curl -s localhost:8765/actions/recent | jq
@@ -171,7 +171,7 @@ Primary development operations. Run `just` (no args) to list all available recip
 | `just smoke` | End-to-end smoke test (boots daemon in-process, fires every action primitive). |
 | `just status` | Run `deckctl status`. |
 | `just diag` | Run `deckctl diag`. |
-| `just layouts` | Run `deckctl layouts`. |
+| `just decks` | Run `deckctl decks`. |
 | `just metrics` | Run `deckctl metrics`. |
 | `just watch-focus` | Print active-app changes in real time. |
 | `just install-focus-extension` | Install the GNOME Shell focus extension. |
@@ -185,27 +185,27 @@ Primary development operations. Run `just` (no args) to list all available recip
 
 ### Working today
 
-- Automatic per-app layouts driven by focus detection (GNOME Shell extension, KWin script, X11 `xdotool`).
+- Automatic per-app decks driven by focus detection (GNOME Shell extension, KWin script, X11 `xdotool`).
 - Button widgets with `shell:`, `terminal:`, `key:`, `dbus:`, `url:`, and `text:` action primitives.
 - Macros — chain multiple steps (`key`, `shell`, `dbus`, `delay`, `url`, `text`) with optional `continue_on_error`.
 - Client chrome: app badge, connection indicator, manual-control toggle, media icon, settings.
-- Scroll strip (persistent right-side jogstrip with release momentum, per-layout disable).
+- Scroll strip (persistent right-side jogstrip with release momentum, per-deck disable).
 - Manual control mode: combined trackpad + keyboard passthrough (IME → evdev).
 - Now playing (chrome view with per-player transport, album art proxy, passive playback indicator).
 - VLC media widget (HTTP-backed live state, album art proxy).
 - Live `meter` / `stats` widgets (`cpu_percent`, `mem_percent` sensors).
-- Layout hot-reload (watches `layouts/` directory; bad YAML surfaces as diagnostic on client).
-- Platform overlay (`layouts.macos/`, `layouts.linux/`).
+- Deck hot-reload (watches `decks/` directory; bad YAML surfaces as diagnostic on client).
+- Platform overlay (`decks.macos/`, `decks.linux/`).
 - Bind-scope control (`--bind 127.0.0.1`, `--bind iface:wlan0`, `--bind 0.0.0.0`).
 - Token-based auth (`--no-auth` to disable).
-- Diagnostic surface (`/diag`, `/metrics`, `/layouts`, `/actions/recent`, `/mpris/*`).
+- Diagnostic surface (`/diag`, `/metrics`, `/decks`, `/actions/recent`, `/mpris/*`).
 - Reconnecting WebSocket client with exponential backoff.
 
 ### Limitations
 
 - Keystroke injection is **US-layout only** (`input.py` maps ASCII + shift-symbols to evdev keycodes). Non-US keyboard layouts will produce wrong characters.
 - macOS has no equivalent media integration — the now-playing surface and chrome indicator are Linux-only.
-- The `nowplaying` widget requires a per-layout YAML file; there is no auto-discovery without it.
+- The `nowplaying` widget requires a per-deck YAML file; there is no auto-discovery without it.
 - `deckctl` does not read the daemon's password file — supply `--password` or `$DECKD_PASSWORD` explicitly.
 - `sudo` is required for the Tailscale TLS cert provisioning (`just dev`).
 - Build output is static files only; there is no SSR or server-side rendering.
@@ -217,19 +217,19 @@ Primary development operations. Run `just` (no args) to list all available recip
 | #15 | Screensaver/suspend sync via `StateMessage` D-Bus |
 | #38 | Multiple simultaneous clients with different resolutions |
 | #25 | Multi-backend chooser (user-managed paired-daemon list) |
-| #22 | GUI layout editor (exploration spike) |
+| #22 | GUI deck editor (exploration spike) |
 | #20 | Raise/switch to already-running app from the controller |
 | #27 | Make `dbus-fast` optional (no-op on macOS) |
 | #26 | macOS power sync (screensaver/sleep) |
 | #32 | Windows platform backend |
 | #69 | Confirmation prompt before dangerous actions and macros |
-| #67 | Long-press and double-tap gestures on layout widgets |
+| #67 | Long-press and double-tap gestures on deck widgets |
 | #64 | Reconnect, locked, and error feedback |
 | #61 | Touch target sizing and spacing for chrome and widgets |
 
 See [GitHub Issues](https://github.com/jonocodes/deckd/issues) for the full, current list.
 
-## Layout wire protocol
+## Deck wire protocol
 
 For the full wire shape, the authoritative source is `daemon/deckd/protocol.py` — its Pydantic models define every field, type, and constraint. The TypeScript mirror is generated by `scripts/codegen_protocol_ts.py` into `client/src/protocol.generated.ts` (drift guard: `tests/test_protocol_ts_drift.py` + `just check-protocol`, #76); `client/src/protocol.ts` re-exports it and adds the schema-layer types (`Widget`, `Icon`) imported by the rest of the client. The daemon never interprets action bodies.
 
@@ -240,7 +240,7 @@ For the full wire shape, the authoritative source is `daemon/deckd/protocol.py` 
 | [ONBOARDING.md](ONBOARDING.md) | Repository map, mandatory read order, dev modes. |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | System diagram and module index. |
 | [CONTEXT.md](../CONTEXT.md) | Domain lexicon (ubiquitous language). |
-| [GUIDE.md](GUIDE.md) | Install, per-platform setup, layout/configuration walkthrough, client features, dev loop. |
+| [GUIDE.md](GUIDE.md) | Install, per-platform setup, deck/configuration walkthrough, client features, dev loop. |
 | [README.md](../README.md) | User-facing showcase: pitch, screenshots, status, comparison. |
 | [docs/adr/](adr/) | Architectural decision records (ADR-0001 through ADR-0009+). |
 | [docs/SPIKES.md](SPIKES.md) | Spike proposals and outcomes. |

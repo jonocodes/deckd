@@ -12,10 +12,10 @@ from aiohttp.test_utils import TestClient, TestServer
 sys.path.insert(0, str(Path(__file__).parent.parent / "daemon"))
 
 from deckd.input import ScrollController
-from deckd.layouts import Layout, MediaHttp, Widget
+from deckd.decks import Deck, MediaHttp, Widget
 from deckd.server import Server
 
-from conftest import FakeScrollSink, LAYOUTS_DIR
+from conftest import FakeScrollSink, DECKS_DIR
 
 
 class _FakeMedia:
@@ -30,8 +30,8 @@ class _FakeMedia:
         return self._art
 
 
-def _media_layout() -> Layout:
-    return Layout(
+def _media_deck() -> Deck:
+    return Deck(
         id="vlc",
         widgets=[
             Widget(
@@ -48,13 +48,13 @@ def _media_layout() -> Layout:
 @pytest_asyncio.fixture
 async def art_client(request) -> AsyncIterator[TestClient]:
     server = Server(
-        layouts_dir=LAYOUTS_DIR,
+        decks_dir=DECKS_DIR,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(FakeScrollSink()),
         media_manager=request.param,
     )
-    server._current_layout = _media_layout()
+    server._current_deck = _media_deck()
     client = TestClient(TestServer(server.app))
     await client.start_server()
     yield client

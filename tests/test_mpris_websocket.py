@@ -40,13 +40,13 @@ widgets:
             "spotify": MediaState(available=True, stale=False, playing=False, title="Spotify"),
         }
     )
-    server, *_ = make_test_server(layouts_dir=tmp_path, mpris_backend=backend)
+    server, *_ = make_test_server(decks_dir=tmp_path, mpris_backend=backend)
     test_server = TestServer(server.app, host="127.0.0.1")
     await test_server.start_server()
     server.start_media_pump()
     try:
         async with websockets.connect(f"ws://127.0.0.1:{test_server.port}/ws") as ws:
-            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "layout"
+            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "deck"
             received = [
                 json.loads(await asyncio.wait_for(ws.recv(), 2)) for _ in range(2)
             ]
@@ -71,12 +71,12 @@ async def test_mpris_rows_flow_when_browser_is_a_non_current_view(
     tmp_path: Path,
 ) -> None:
     """The pump must broadcast MPRIS rows even when the ``nowplaying``
-    widget lives only in a chrome-view layout that is *not* the focused
-    app's current layout — the real-world shape, where a client pins the
+    widget lives only in a chrome-view deck that is *not* the focused
+    app's current deck — the real-world shape, where a client pins the
     ``mpris`` view while some other app (e.g. VLC) is focused. Regression:
-    gating on ``_current_layout`` starved the pump and left the browser
+    gating on ``_current_deck`` starved the pump and left the browser
     empty against a live daemon even though players were discovered."""
-    # Current/default layout has no nowplaying widget...
+    # Current/default deck has no nowplaying widget...
     (tmp_path / "default.yaml").write_text(
         """
 match: [default]
@@ -86,7 +86,7 @@ widgets:
     size: [4, 2]
 """
     )
-    # ...the browser lives only in the separate mpris view layout.
+    # ...the browser lives only in the separate mpris view deck.
     (tmp_path / "mpris.yaml").write_text(
         """
 match: [mpris]
@@ -99,13 +99,13 @@ widgets:
     backend = FakeMprisBackend(
         {"vlc": MediaState(available=True, stale=False, playing=True, title="VLC")}
     )
-    server, *_ = make_test_server(layouts_dir=tmp_path, mpris_backend=backend)
+    server, *_ = make_test_server(decks_dir=tmp_path, mpris_backend=backend)
     test_server = TestServer(server.app, host="127.0.0.1")
     await test_server.start_server()
     server.start_media_pump()
     try:
         async with websockets.connect(f"ws://127.0.0.1:{test_server.port}/ws") as ws:
-            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "layout"
+            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "deck"
             state = json.loads(await asyncio.wait_for(ws.recv(), 2))
             assert state["id"] == "mpris.vlc"
     finally:
@@ -133,7 +133,7 @@ widgets:
     backend = FakeMprisBackend(
         {"vlc": MediaState(available=True, stale=False, playing=True, title="VLC")}
     )
-    server, *_ = make_test_server(layouts_dir=tmp_path, mpris_backend=backend)
+    server, *_ = make_test_server(decks_dir=tmp_path, mpris_backend=backend)
     test_server = TestServer(server.app, host="127.0.0.1")
     await test_server.start_server()
     server.start_media_pump()
@@ -142,14 +142,14 @@ widgets:
         # First client drains the pump's initial broadcast, populating the
         # pump's global ``last`` cache so it won't re-broadcast on change.
         async with websockets.connect(url) as first:
-            assert json.loads(await asyncio.wait_for(first.recv(), 2))["type"] == "layout"
+            assert json.loads(await asyncio.wait_for(first.recv(), 2))["type"] == "deck"
             assert json.loads(await asyncio.wait_for(first.recv(), 2))["id"] == "mpris.vlc"
             # Let the pump run another cycle so ``last`` is definitely set.
             await asyncio.sleep(1.1)
             # Second client connects late — must still see the player via the
             # connect-time snapshot, not wait for a (never-coming) change.
             async with websockets.connect(url) as second:
-                assert json.loads(await asyncio.wait_for(second.recv(), 2))["type"] == "layout"
+                assert json.loads(await asyncio.wait_for(second.recv(), 2))["type"] == "deck"
                 snap = json.loads(await asyncio.wait_for(second.recv(), 2))
                 assert snap["type"] == "media_state"
                 assert snap["id"] == "mpris.vlc"
@@ -164,11 +164,11 @@ async def _boot_mpris_websocket(
 ) -> tuple[TestServer, "Server", FakeDbusBus]:
     """Stand up a real daemon + WebSocket fronted by ``bus``.
 
-    Used by the round-trip tests below to share the layout, bus
+    Used by the round-trip tests below to share the deck, bus
     factory, server boot, and teardown plumbing. Returns the
     ``TestServer`` (so the caller can connect), the ``Server`` (so it
     can drive the pump), and the ``bus`` (so the test can read
-    recorded calls after the fact). The layout declares a single
+    recorded calls after the fact). The deck declares a single
     ``nowplaying`` widget so the server wires a real
     :class:`DbusMprisBackend`.
     """
@@ -182,7 +182,7 @@ widgets:
 """
     )
     server, *_ = make_test_server(
-        layouts_dir=tmp_path,
+        decks_dir=tmp_path,
         mpris_backend=DbusMprisBackend(bus_factory=lambda _bt: bus),
     )
     test_server = TestServer(server.app, host="127.0.0.1")
@@ -214,7 +214,7 @@ async def test_dbus_mpris_round_trips_across_websocket(tmp_path: Path) -> None:
     test_server, server, bus = await _boot_mpris_websocket(tmp_path, bus)
     try:
         async with websockets.connect(f"ws://127.0.0.1:{test_server.port}/ws") as ws:
-            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "layout"
+            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "deck"
             received = [
                 json.loads(await asyncio.wait_for(ws.recv(), 2)) for _ in range(2)
             ]
@@ -268,7 +268,7 @@ async def test_all_three_browser_commands_round_trip_through_dbus(tmp_path: Path
     test_server, server, bus = await _boot_mpris_websocket(tmp_path, bus)
     try:
         async with websockets.connect(f"ws://127.0.0.1:{test_server.port}/ws") as ws:
-            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "layout"
+            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "deck"
             # Drain the initial media_state for vlc so the pump's cache
             # is warm before we start sending commands.
             await asyncio.wait_for(ws.recv(), 2)

@@ -18,7 +18,7 @@ The client sends `jog_end` with release velocity; the daemon owns the decay loop
 
 [0003-persistent-chrome.md](0003-persistent-chrome.md)
 
-Client has fixed chrome always visible: right-side full-height jogstrip (suppressible per-layout) and bottom strip with app badge + controls. Per-app layouts render in the remaining space.
+Client has fixed chrome always visible: right-side full-height jogstrip (suppressible per-deck) and bottom strip with app badge + controls. Per-app decks render in the remaining space.
 
 _Amended by: [0006](0006-widget-visual-styling.md), [0007](0007-chrome-app-identity-badge.md), [0008](0008-chrome-view-carveout.md)_
 
@@ -26,7 +26,7 @@ _Amended by: [0006](0006-widget-visual-styling.md), [0007](0007-chrome-app-ident
 
 [0004-orientation-scaling.md](0004-orientation-scaling.md)
 
-Layouts authored in landscape. Portrait transposes every widget's grid diagonally `[x,y,w,h] -> [y,x,h,w]`. Same buttons, same arrangement, cells sized for the surface.
+Decks authored in landscape. Portrait transposes every widget's grid diagonally `[x,y,w,h] -> [y,x,h,w]`. Same buttons, same arrangement, cells sized for the surface.
 
 _Superseded by: [0010](0010-grid-reflow.md) — there is no fixed grid shape to author against_
 
@@ -34,7 +34,7 @@ _Superseded by: [0010](0010-grid-reflow.md) — there is no fixed grid shape to 
 
 [0005-dynamic-widget-state-future.md](0005-dynamic-widget-state-future.md)
 
-Protocol is stateless per widget now. Planned: delta updates to widget properties (label, icon, value) without replacing whole layout. Primary driver: MPRIS live state.
+Protocol is stateless per widget now. Planned: delta updates to widget properties (label, icon, value) without replacing whole deck. Primary driver: MPRIS live state.
 
 ## 0006 — Widget visual styling: opaque presentation relay + bundled icon sets
 
@@ -48,15 +48,15 @@ _Amends: [0003](0003-persistent-chrome.md) — presentation is a second class of
 
 [0007-chrome-app-identity-badge.md](0007-chrome-app-identity-badge.md)
 
-Bottom chrome's app badge carries `display_name`, `theme` (CSS colour), and `icon` from the layout YAML. Daemon relays verbatim; no `.desktop` file or web resolution.
+Bottom chrome's app badge carries `display_name`, `theme` (CSS colour), and `icon` from the deck YAML. Daemon relays verbatim; no `.desktop` file or web resolution.
 
-_Extends: [0006](0006-widget-visual-styling.md) — presentation-relay seam reaches per-layout now, not just per-widget_
+_Extends: [0006](0006-widget-visual-styling.md) — presentation-relay seam reaches per-deck now, not just per-widget_
 
 ## 0008 — Chrome view carve-out: client-requested daemon-rendered chrome surfaces
 
 [0008-chrome-view-carveout.md](0008-chrome-view-carveout.md)
 
-A client can pin its session to a specific layout via `select_view`. Daemon pushes a `view`-tagged `LayoutMessage`. Created for MPRIS now-playing; general mechanism for future chrome views.
+A client can pin its session to a specific deck via `select_view`. Daemon pushes a `view`-tagged `DeckMessage`. Created for MPRIS now-playing; general mechanism for future chrome views.
 
 _Amends: [0003](0003-persistent-chrome.md) — chrome knowledge now includes payload-per-view content delivered by the daemon_
 
@@ -70,7 +70,7 @@ Replace `--host` with repeatable `--bind` supporting literal IPs and `iface:<nam
 
 [0010-grid-reflow.md](0010-grid-reflow.md)
 
-Widgets become an ordered list that reflows to the viewport; `grid: [x,y,w,h]` coordinates and the portrait transpose are deleted. Cell size is a client-side device preference, never authored in layout YAML.
+Widgets become an ordered list that reflows to the viewport; `grid: [x,y,w,h]` coordinates and the portrait transpose are deleted. Cell size is a client-side device preference, never authored in deck YAML.
 
 _Supersedes: [0004](0004-orientation-scaling.md) — authored coordinates + diagonal transpose_
 _Superseded by: [0011](0011-reflow.md) — the sizing geometry, the band, and the overflow default_

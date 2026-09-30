@@ -7,7 +7,7 @@ import { Settings } from "./Settings";
  * the rest get inert defaults. */
 function renderSettings(overrides: Partial<Parameters<typeof Settings>[0]> = {}) {
   const base = {
-    layout: null,
+    deck: null,
     status: "open" as const,
     scrollScale: 1,
     scrollInvert: false,
@@ -25,7 +25,7 @@ function renderSettings(overrides: Partial<Parameters<typeof Settings>[0]> = {})
     onMaxCellChange: () => {},
     overflow: null,
     onOverflowChange: () => {},
-    layoutOverflow: "clip" as const,
+    deckOverflow: "clip" as const,
     jogWidth: 1,
     onJogWidthChange: () => {},
     bottomScale: 1,

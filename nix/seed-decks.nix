@@ -1,6 +1,6 @@
 { writeShellApplication, coreutils }:
 writeShellApplication {
-  name = "deckd-seed-layouts";
+  name = "deckd-seed-decks";
   runtimeInputs = [ coreutils ];
-  text = builtins.readFile ./seed-layouts.sh;
+  text = builtins.readFile ./seed-decks.sh;
 }

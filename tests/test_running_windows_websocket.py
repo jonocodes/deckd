@@ -60,14 +60,14 @@ class FakeWindowsBackend(FakeFocusBackend):
 
 
 async def _drain_initial(ws) -> None:
-    """Drain the layout frame a fresh client gets.
+    """Drain the deck frame a fresh client gets.
 
     The chrome windows list's snapshot lives on the running-windows
-    watcher (separate from the layout pump), so the warm-up sequence
-    is just ``layout`` then ``running_windows``. Subsequent test frames
+    watcher (separate from the deck pump), so the warm-up sequence
+    is just ``deck`` then ``running_windows``. Subsequent test frames
     land on a clean WebSocket.
     """
-    assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "layout"
+    assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "deck"
 
 
 async def _next_running_windows(ws) -> dict:
@@ -102,7 +102,7 @@ widgets:
     kind: blank
 """
     )
-    server, *_ = make_test_server(layouts_dir=tmp_path, focus_backend=backend)
+    server, *_ = make_test_server(decks_dir=tmp_path, focus_backend=backend)
     test_server = TestServer(server.app, host="127.0.0.1")
     await test_server.start_server()
     server.start_focus_watcher()
@@ -115,9 +115,9 @@ async def test_running_windows_emits_on_snapshot_change(tmp_path: Path) -> None:
     over the WebSocket. Verifies the watcher → broadcast wiring.
 
     The two-window snapshot exercises the per-push label derivation:
-    ``firefox`` resolves to the Firefox layout (matched), ``xterm``
+    ``firefox`` resolves to the Firefox deck (matched), ``xterm``
     falls through to the default (raw ``wm_class``). The matched
-    layout's icon rides on row 0; row 1's icon is ``null``
+    deck's icon rides on row 0; row 1's icon is ``null``
     (decision 6)."""
     backend = FakeWindowsBackend()
     test_server, server = await _boot_running_windows_server(tmp_path, backend)
@@ -233,8 +233,8 @@ async def test_running_windows_snapshot_replay_to_late_session(
         await asyncio.sleep(0.05)
 
         async with websockets.connect(f"ws://127.0.0.1:{test_server.port}/ws") as ws:
-            # After the layout frame, the snapshot replay fires.
-            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "layout"
+            # After the deck frame, the snapshot replay fires.
+            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "deck"
             frame = json.loads(await asyncio.wait_for(ws.recv(), 2))
             assert frame == {
                 "type": "running_windows",

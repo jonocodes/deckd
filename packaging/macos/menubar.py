@@ -21,11 +21,11 @@ from deckd.macos_app import (
     app_support_dir,
     client_dist,
     default_log_file,
-    layouts_src,
+    decks_src,
     menubar_icon_paths,
     overlay_src,
     resource_root,
-    seed_layouts,
+    seed_decks,
 )
 
 log = logging.getLogger("deckd.menubar")
@@ -64,14 +64,14 @@ def _menubar_image():
 
 
 def _prepare() -> tuple[Path, Path, Path]:
-    """Seed writable data, returning (layouts_dir, client_dist, log_file)."""
+    """Seed writable data, returning (decks_dir, client_dist, log_file)."""
     root = resource_root()
-    layouts_dir = app_support_dir() / "layouts"
-    if seed_layouts(layouts_src(root), layouts_dir, overlay=overlay_src(root)):
-        log.info("seeded bundled layouts into %s", layouts_dir)
+    decks_dir = app_support_dir() / "decks"
+    if seed_decks(decks_src(root), decks_dir, overlay=overlay_src(root)):
+        log.info("seeded bundled decks into %s", decks_dir)
     log_file = default_log_file()
     log_file.parent.mkdir(parents=True, exist_ok=True)
-    return layouts_dir, client_dist(root), log_file
+    return decks_dir, client_dist(root), log_file
 
 
 def main() -> None:
@@ -97,14 +97,14 @@ def main() -> None:
 
     from deckd.__main__ import parse_args
 
-    layouts_dir, web, log_file = _prepare()
+    decks_dir, web, log_file = _prepare()
 
     class MenuTarget(NSObject):
-        def initWithLayouts_lan_(self, layouts, lan):
+        def initWithDecks_lan_(self, decks, lan):
             self = objc.super(MenuTarget, self).init()
             if self is None:
                 return None
-            self._layouts_dir = layouts
+            self._decks_dir = decks
             self._lan = lan
             self._runner = None
             self._start_runner()
@@ -113,7 +113,7 @@ def main() -> None:
         def _start_runner(self):
             bind = ["0.0.0.0"] if self._lan else None
             argv = app_argv(
-                layouts_dir=self._layouts_dir,
+                decks_dir=self._decks_dir,
                 client_dist=web,
                 bind=bind,
                 log_file=log_file,
@@ -124,9 +124,9 @@ def main() -> None:
         def openSurface_(self, _sender):
             webbrowser.open(_surface_url())
 
-        def openLayouts_(self, _sender):
+        def openDecks_(self, _sender):
             NSWorkspace.sharedWorkspace().openURL_(
-                NSURL.fileURLWithPath_(str(self._layouts_dir))
+                NSURL.fileURLWithPath_(str(self._decks_dir))
             )
 
         def restartServer_(self, _sender):
@@ -154,7 +154,7 @@ def main() -> None:
     # in Info.plist so the Dock icon never appears even for a moment).
     app.setActivationPolicy_(1)
 
-    target = MenuTarget.alloc().initWithLayouts_lan_(layouts_dir, False)
+    target = MenuTarget.alloc().initWithDecks_lan_(decks_dir, False)
 
     status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(
         NSVariableStatusItemLength
@@ -178,7 +178,7 @@ def main() -> None:
 
     menu = NSMenu.alloc().init()
     add_item(menu, target, "Open deckd surface", "openSurface:")
-    add_item(menu, target, "Open layouts folder", "openLayouts:")
+    add_item(menu, target, "Open decks folder", "openDecks:")
     add_item(menu, target, "Restart server", "restartServer:")
     add_item(menu, target, "Allow LAN access", "toggleLan:")
     menu.addItem_(NSMenuItem.separatorItem())

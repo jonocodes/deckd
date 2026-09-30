@@ -10,7 +10,7 @@
 let
   cfg = config.services.deckd;
 
-  seedLayouts = pkgs.callPackage ../seed-layouts.nix { };
+  seedDecks = pkgs.callPackage ../seed-decks.nix { };
 
   # Quote each argument so paths with spaces survive systemd's parsing.
   execStart = lib.concatStringsSep " " (
@@ -22,8 +22,8 @@ let
     ++ [
       "--port"
       (toString cfg.port)
-      "--layouts-dir"
-      (lib.escapeShellArg (toString cfg.layoutsDir))
+      "--decks-dir"
+      (lib.escapeShellArg (toString cfg.decksDir))
     ]
     ++ lib.optionals (cfg.passwordFile != null) [
       "--password-file"
@@ -61,23 +61,23 @@ in
       description = "Listen port for the daemon.";
     };
 
-    layoutsDir = lib.mkOption {
+    decksDir = lib.mkOption {
       type = lib.types.path;
-      default = "${config.xdg.configHome}/deckd/layouts";
-      defaultText = lib.literalExpression ''"''${config.xdg.configHome}/deckd/layouts"'';
+      default = "${config.xdg.configHome}/deckd/decks";
+      defaultText = lib.literalExpression ''"''${config.xdg.configHome}/deckd/decks"'';
       description = ''
-        Writable directory of layout YAML. Seed defaults are copied in
-        on activation (see {option}`seedLayouts`), and the GUI editor
+        Writable directory of deck YAML. Seed defaults are copied in
+        on activation (see {option}`seedDecks`), and the GUI editor
         saves here.
       '';
     };
 
-    seedLayouts = lib.mkOption {
+    seedDecks = lib.mkOption {
       type = lib.types.bool;
       default = true;
       description = ''
-        Copy the package's bundled layouts into
-        {option}`layoutsDir` when they are missing. Existing files are
+        Copy the package's bundled decks into
+        {option}`decksDir` when they are missing. Existing files are
         never overwritten, so edits always win. Disable when the
         directory is managed elsewhere (for example checked in to a
         dotfiles repo).
@@ -126,9 +126,9 @@ in
       Install.WantedBy = [ "graphical-session.target" ];
     };
 
-    home.activation.deckdSeedLayouts = lib.mkIf cfg.seedLayouts (
+    home.activation.deckdSeedDecks = lib.mkIf cfg.seedDecks (
       lib.hm.dag.entryAfter [ "writeBoundary" ] ''
-        run ${lib.getExe seedLayouts} ${lib.escapeShellArg "${cfg.package}/share/deckd/layouts"} ${lib.escapeShellArg (toString cfg.layoutsDir)}
+        run ${lib.getExe seedDecks} ${lib.escapeShellArg "${cfg.package}/share/deckd/decks"} ${lib.escapeShellArg (toString cfg.decksDir)}
       ''
     );
   };

@@ -13,7 +13,7 @@ Owner context: solo project, planning-first workflow. Spikes come first because 
 **Goal:** prove the *feel* of synthetic scroll injection on GNOME/Wayland *before* building any widget system. Per INCEPTION.md §3 and §3.1.
 
 ### Scope
-- Single hardcoded jogstrip widget in a bare HTML page (no React, no Vite, no layout system).
+- Single hardcoded jogstrip widget in a bare HTML page (no React, no Vite, no deck system).
 - WebSocket client to a minimal daemon that emits `REL_WHEEL_HI_RES` via python-evdev.
 - Finger-travel → delta mapping; client-throttled to `requestAnimationFrame`; daemon logs emitted values.
 - Udev rule + `input` group membership so the daemon runs unprivileged.
@@ -26,7 +26,7 @@ Owner context: solo project, planning-first workflow. Spikes come first because 
 
 ### Progress
 - **2026-07-15** — Spike #1 kickoff:
-  - Added browser `jogstrip` rendering for the hardcoded `Scroll` strip in `layouts/default.yaml`.
+  - Added browser `jogstrip` rendering for the hardcoded `Scroll` strip in `decks/default.yaml`.
   - Added `jog` / `jog_end` dispatch in the daemon.
   - Added daemon-side scroll sink abstraction: uinput via `python-evdev` when available, log-only fallback otherwise.
   - Added daemon-side flick momentum from release velocity.
@@ -62,7 +62,7 @@ Owner context: solo project, planning-first workflow. Spikes come first because 
 ### Scope
 - Tiny GNOME Shell extension over session D-Bus.
 - `PlatformBackend.watch_active_app() -> AsyncIterator[AppInfo]` over the GNOME/Wayland split (`echo $XDG_SESSION_TYPE`).
-- Daemon side: stub that prints focused `app_id` / `WM_CLASS` changes to stdout. No layout switching yet — just prove we can see focus changes.
+- Daemon side: stub that prints focused `app_id` / `WM_CLASS` changes to stdout. No deck switching yet — just prove we can see focus changes.
 - X11 promotion (#29): `X11FocusBackend` failure paths now raise `FocusBackendUnavailable` with install hints; covered by `tests/test_platform.py`.
 
 ### Definition of done
@@ -116,7 +116,7 @@ The recommendation landed as shipped. `daemon/deckd/platform.py` now holds `KdeF
 
 KWin script hardened under `packaging/kwin-script/deckd-focus/contents/code/main.js` (try/catch around `callDBus`, alignment comments, lifecycle notes); `metadata.json` already declares `KPackageStructure: KWin/Script` + `X-Plasma-API: javascript`.
 
-Tests cover the cache, the `dbus_fast` interface shape, the backend's start/stop/poll paths against a `FakeKdeBus` (no real session bus touched), and `default_backend()`'s KDE-Wayland / KDE-X11 / KDE-non-Wayland / multi-element-`XDG_CURRENT_DESKTOP` / case-insensitive dispatch matrix (`tests/test_platform_kde.py`). A `test_focus.py` end-to-end test pins the run_focus_watcher start-failure path (the daemon survives on the default layout when the KDE backend can't own `org.deckd.Focus`).
+Tests cover the cache, the `dbus_fast` interface shape, the backend's start/stop/poll paths against a `FakeKdeBus` (no real session bus touched), and `default_backend()`'s KDE-Wayland / KDE-X11 / KDE-non-Wayland / multi-element-`XDG_CURRENT_DESKTOP` / case-insensitive dispatch matrix (`tests/test_platform_kde.py`). A `test_focus.py` end-to-end test pins the run_focus_watcher start-failure path (the daemon survives on the default deck when the KDE backend can't own `org.deckd.Focus`).
 
 ### Spike open questions -> #31 resolutions
 

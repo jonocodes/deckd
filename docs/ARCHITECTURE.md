@@ -20,7 +20,7 @@ graph TB
     subgraph "Deckd Daemon (Python)"
         HTTP["HTTP Server<br/>aiohttp"]
         WS["WebSocket Server<br/>aiohttp"]
-        LAYOUTS["Layout Store<br/>layouts.py"]
+        DECKS["Deck Store<br/>decks.py"]
         WATCHER["File Watcher<br/>watchfiles (YAML hot-reload)"]
         EVENTS["Event Stream<br/>events.py"]
         SENSORS["Sensor Polling<br/>platform.py (psutil)"]
@@ -46,29 +46,29 @@ graph TB
     end
 
     subgraph "Config"
-        YAML["YAML Layouts<br/>layouts/*.yaml<br/>layouts.macos/*.yaml"]
+        YAML["YAML Decks<br/>decks/*.yaml<br/>decks.macos/*.yaml"]
     end
 
     BROWSER <-->|"WebSocket<br/>(JSON)<br/>protocol.py"| WS
-    BROWSER -->|"GET /health /diag /layouts /metrics"| HTTP
+    BROWSER -->|"GET /health /diag /decks /metrics"| HTTP
     BROWSER -->|"GET /media/art /mpris/art"| HTTP
 
-    WS <-->|"LayoutMessage<br/>WidgetUpdateMessage<br/>MediaStateMessage<br/>ChromeMediaMessage<br/>EventMessage"| BROWSER
+    WS <-->|"DeckMessage<br/>WidgetUpdateMessage<br/>MediaStateMessage<br/>ChromeMediaMessage<br/>EventMessage"| BROWSER
     WS <-->|"Hello, press, jog, pad, type, key,<br/>media_command, select_view, clear_view"| BROWSER
 
-    WS -->|"focus-driven layout selection"| LAYOUTS
+    WS -->|"focus-driven deck selection"| DECKS
     WS -->|"sensor subscriptions"| SENSORS
     WS -->|"diagnostic event push"| EVENTS
 
-    YAML -->|"read on startup + hot-reload"| LAYOUTS
-    WATCHER -->|"watchfiles → reload"| LAYOUTS
+    YAML -->|"read on startup + hot-reload"| DECKS
+    WATCHER -->|"watchfiles → reload"| DECKS
 
     ACTIONS -->|"inject_key (KEY_*)<br/>inject_scroll (REL_WHEEL_HI_RES)<br/>inject_pointer (REL_X/Y)<br/>click (BTN_LEFT/RIGHT)"| UINPUT
 
     ACTIONS -->|"subprocess.run"| SHELL
     ACTIONS -->|"dbus-send / dbus-fast call"| DBUS_SESSION
 
-    LAYOUTS -->|"resolve_layout(app)"| WS
+    DECKS -->|"resolve_deck(app)"| WS
 
     DBUS_SESSION -->|"Player registration<br/>PlaybackStatus<br/>Metadata"| MPRIS
     MPRIS -->|"MPRIS polling<br/>(mpris.py)"| WS
@@ -79,14 +79,14 @@ graph TB
     DBUS_SESSION -->|"focus watch<br/>(platform.py)"| WS
 
     SENSORS -->|"cpu_percent<br/>mem_percent<br/>etc."| WS
-    EVENTS -->|"focus change, layout reload,<br/>action attempt, MPRIS transitions"| WS
+    EVENTS -->|"focus change, deck reload,<br/>action attempt, MPRIS transitions"| WS
 ```
 
 ## Key flows
 
-1. **Layout push**: Client connects via WebSocket → daemon resolves focused app → pushes `LayoutMessage` with widget grid, app badge, chrome settings. When focus changes (platform backend detects new `AppInfo`), daemon pushes a new `LayoutMessage`.
+1. **Deck push**: Client connects via WebSocket → daemon resolves focused app → pushes `DeckMessage` with widget grid, app badge, chrome settings. When focus changes (platform backend detects new `AppInfo`), daemon pushes a new `DeckMessage`.
 
-2. **Button press**: Client sends `press {id}` → daemon looks up widget by id in active layout → dispatches action (key, shell, dbus, terminal) via `actions.py`.
+2. **Button press**: Client sends `press {id}` → daemon looks up widget by id in active deck → dispatches action (key, shell, dbus, terminal) via `actions.py`.
 
 3. **Scroll strip**: Client sends `jog {id, delta}` on drag → daemon emits `REL_WHEEL_HI_RES` via `/dev/uinput`. On release, client sends `jog_end {id, velocity}` → daemon runs momentum decay loop.
 
@@ -96,17 +96,17 @@ graph TB
 
 6. **VLC media**: Daemon polls VLC's HTTP API (subpath of `/media/...`) → pushes `MediaStateMessage` with VLC-specific state. Art is proxied through `/media/{id}/art`.
 
-7. **Live meters/stats**: Daemon polls `SensorSource` instances (e.g. `cpu_percent` via psutil) → pushes `WidgetUpdateMessage` to sessions that have meter/stats widgets in their active layout.
+7. **Live meters/stats**: Daemon polls `SensorSource` instances (e.g. `cpu_percent` via psutil) → pushes `WidgetUpdateMessage` to sessions that have meter/stats widgets in their active deck.
 
-8. **Hot-reload**: `watchfiles` monitors the layouts directory → on any `.yaml` write, re-loads all layouts, resolves current focus → pushes new `LayoutMessage` to every connected session. Invalid YAML pushes `LayoutMessage` with `error` set (last-good layouts stay live).
+8. **Hot-reload**: `watchfiles` monitors the decks directory → on any `.yaml` write, re-loads all decks, resolves current focus → pushes new `DeckMessage` to every connected session. Invalid YAML pushes `DeckMessage` with `error` set (last-good decks stay live).
 
-9. **Diagnostic events**: Client sends `enable_events` → daemon pushes `EventMessage` frames for focus changes, layout reloads, action outcomes, auth events, and MPRIS transitions. Event stream is per-session and opt-in.
+9. **Diagnostic events**: Client sends `enable_events` → daemon pushes `EventMessage` frames for focus changes, deck reloads, action outcomes, auth events, and MPRIS transitions. Event stream is per-session and opt-in.
 
 ## Documentation index
 
 | What | Where | Description |
 |---|---|---|
-| **Domain vocabulary** | [CONTEXT.md](../CONTEXT.md) | Ubiquitous language; defines Layout, Widget, Chrome, Action, AppInfo, Match, Bind, etc. |
+| **Domain vocabulary** | [CONTEXT.md](../CONTEXT.md) | Ubiquitous language; defines Deck, Widget, Chrome, Action, AppInfo, Match, Bind, etc. |
 | **Operational reference** | [REFERENCE.md](REFERENCE.md) | Canonical CLI flags, env vars, diagnostic endpoints, project status. |
 | **ADR index** | [adr/README.md](adr/README.md) | All architecture decisions with summaries and amend/supersede relationships. |
 | **Spike tracker** | [SPIKES.md](SPIKES.md) | Spike progress and implementation plan (de-risking work). |
@@ -116,15 +116,15 @@ graph TB
 | **Onboarding** | [ONBOARDING.md](ONBOARDING.md) | Repository map, read order, protocol locations, development modes, verification ladder. |
 | **Wire protocol (Python)** | [daemon/deckd/protocol.py](../daemon/deckd/protocol.py) | Executable contract: all `ServerMessage` and `ClientMessage` types. |
 | **Wire protocol (TypeScript)** | [client/src/protocol.ts](../client/src/protocol.ts) | TypeScript mirror of the wire protocol. |
-| **Layout schema** | [daemon/deckd/layouts.py](../daemon/deckd/layouts.py) | Pydantic models for Layout, Widget, Action, Icon, MediaHttp. |
+| **Deck schema** | [daemon/deckd/decks.py](../daemon/deckd/decks.py) | Pydantic models for Deck, Widget, Action, Icon, MediaHttp. |
 | **HTTP/WS routes** | [daemon/deckd/server.py](../daemon/deckd/server.py) | All HTTP endpoints and WebSocket dispatch. |
 | **Platform backend** | [daemon/deckd/platform.py](../daemon/deckd/platform.py) | `PlatformBackend` Protocol: focus watching, input injection, sensor sources. |
-| **Daemon CLI** | [daemon/deckd/__main__.py](../daemon/deckd/__main__.py) | Argparse: --layouts-dir, --client-dist, --bind, --no-auth, --verbose. |
-| **deckctl CLI** | [daemon/deckd/cli.py](../daemon/deckd/cli.py) | status, reload, layout, metrics subcommands. |
+| **Daemon CLI** | [daemon/deckd/__main__.py](../daemon/deckd/__main__.py) | Argparse: --decks-dir, --client-dist, --bind, --no-auth, --verbose. |
+| **deckctl CLI** | [daemon/deckd/cli.py](../daemon/deckd/cli.py) | status, reload, deck, metrics subcommands. |
 | **Build/test commands** | [Justfile](../Justfile) | All common commands: setup, dev, test, build, smoke. |
 | **Testing strategy** | [TESTING.md](TESTING.md) | Testing layers, what each fakes, and the planned desktop-integration tier. |
 | **Platform parity** | [PLATFORM-PARITY.md](PLATFORM-PARITY.md) | What works on GNOME / KDE / X11 / macOS — capability matrix and per-backend notes. |
-| **User & setup guide** | [GUIDE.md](GUIDE.md) | Install, per-platform setup, layout/configuration walkthrough, client features, dev loop. |
+| **User & setup guide** | [GUIDE.md](GUIDE.md) | Install, per-platform setup, deck/configuration walkthrough, client features, dev loop. |
 | **README** | [README.md](../README.md) | Human-facing showcase: pitch, screenshots, status, comparison. |
 
 ## Code owns behavior
@@ -134,7 +134,7 @@ Prose documentation describes intent, vocabulary, and decisions. It does not dup
 - **Endpoint paths and parameters** — see `daemon/deckd/server.py` for routes.
 - **Flag names and defaults** — see `daemon/deckd/__main__.py` for argparse definitions; the running daemon is self-documenting via `--help`.
 - **Wire message shapes** — see `daemon/deckd/protocol.py` for the executable Pydantic models (`ServerMessage`, `ClientMessage`, and all their variants).
-- **Layout field validation** — see `daemon/deckd/layouts.py` for the Pydantic models (`Layout`, `Widget`, `Action`). Valid YAML is whatever passes `Layout.model_validate()`.
+- **Deck field validation** — see `daemon/deckd/decks.py` for the Pydantic models (`Deck`, `Widget`, `Action`). Valid YAML is whatever passes `Deck.model_validate()`.
 - **Action dispatch behavior** — see `daemon/deckd/actions.py`. Available primitives are `key`, `shell`, `dbus`, `terminal`, `url`, and `text`.
 
 When in doubt, read the code. Tests (`tests/`) are the next best source — they exercise the public interfaces at the agreed seams.

@@ -24,7 +24,7 @@ Bottom to top, fast to slow. Full commands live in the
 > real keystrokes and move the real cursor on the developer's desktop. And
 > macOS always has a working focus backend, so the daemon followed the
 > developer's actual frontmost app and the editor specs opened on the wrong
-> layout. `DECKD_FAKE_INPUT=1` and `--no-focus` make the suite
+> deck. `DECKD_FAKE_INPUT=1` and `--no-focus` make the suite
 > platform-independent on both counts.
 
 **The pattern to notice:** everything is verified right up to the OS boundary,

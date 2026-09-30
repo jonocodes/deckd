@@ -1,7 +1,7 @@
 """Tests for ``Server._is_deckd_window`` exact-match behaviour.
 
 The function decides whether a focus event represents the deckd client
-browser gaining focus -- when true, the server holds the current layout
+browser gaining focus -- when true, the server holds the current deck
 instead of switching away. Two checks:
   1. the daemon's own port appears in the window title
   2. the title is exactly "deckd" (the client's ``<title>``)
@@ -88,7 +88,7 @@ def test_exact_deckd_case_insensitive() -> None:
 def test_deckd_substring_does_not_hold() -> None:
     """Regression: a tab titled "deckd on GitHub" or "deckd-deckd/issues"
     must NOT hold -- the user is reading something else and the
-    previous substring match falsely froze the layout."""
+    previous substring match falsely froze the deck."""
     assert not _is_deckd(
         _Stub(port=8765), _app(title="deckd on GitHub")
     )

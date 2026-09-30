@@ -7,14 +7,14 @@ import shutil
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Awaitable, Callable, Literal
 
-from .layouts import Action, Macro, MacroStep, Widget
+from .decks import Action, Macro, MacroStep, Widget
 
 if TYPE_CHECKING:
     from dbus_fast import BusType as BusTypeT
     from dbus_fast.aio import MessageBus
 
     from .input import KeySink
-    from .layouts import Layout
+    from .decks import Deck
 
 log = logging.getLogger("deckd.actions")
 
@@ -36,7 +36,7 @@ async def run_terminal(target: bool = True) -> None:
     """Open the auto-detected terminal emulator.
 
     Only ``terminal: true`` is meaningful; a specific program should be
-    launched with a ``shell:`` action instead (the layout schema rejects a
+    launched with a ``shell:`` action instead (the deck schema rejects a
     string ``terminal`` value at load time). ``target`` is anything other
     than ``True`` is a no-op.
     """
@@ -53,8 +53,8 @@ async def run_terminal(target: bool = True) -> None:
 class ActionContext:
     """Per-connection helpers the dispatcher needs."""
 
-    send_layout: "Callable[[], Awaitable[None]]"
-    get_current_layout: "Callable[[], Layout]"
+    send_deck: "Callable[[], Awaitable[None]]"
+    get_current_deck: "Callable[[], Deck]"
     current_app: str
     key_sink: "KeySink | None" = None
     dbus_bus_factory: "Callable[[BusTypeT], MessageBus] | None" = None
@@ -670,7 +670,7 @@ async def _step_url(step: MacroStep, _ctx: ActionContext) -> None:
 
 @_register("text")
 async def _step_text(step: MacroStep, ctx: ActionContext) -> None:
-    from .layouts import Action
+    from .decks import Action
     a = Action(text=step.value, text_mode=None, restore_clipboard=True,
                restore_clipboard_delay_ms=1000)
     await _dispatch_text(a, ctx)

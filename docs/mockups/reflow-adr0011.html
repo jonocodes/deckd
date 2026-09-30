@@ -154,20 +154,20 @@
         <td class="dev">This browser, this device.</td></tr>
     <tr><td><b>no room</b> (shrink / hide)</td>
         <td><code>localStorage</code> &mdash; <code>deckd.overflow</code> <span class="soon">(proposed)</span><br>
-            default from <code>overflow:</code> in the layout <code>*.yaml</code></td>
-        <td class="dev">This browser, this device &mdash; overriding the layout&rsquo;s default.
-            <b>Today it is layout-only</b>, with no device override.</td></tr>
+            default from <code>overflow:</code> in the deck <code>*.yaml</code></td>
+        <td class="dev">This browser, this device &mdash; overriding the deck&rsquo;s default.
+            <b>Today it is deck-only</b>, with no device override.</td></tr>
   </table>
   <p class="hint">
     Everything the client owns is per-device by design (ADR-0006): the same daemon
     driving a phone and a laptop gives each its own button size, and a device that
-    clears its browser storage falls back to the compiled-in defaults. Layout YAML
+    clears its browser storage falls back to the compiled-in defaults. Deck YAML
     carries no pixel sizes at all. Read order for client settings is
     <code>URL query param &gt; localStorage &gt; built-in default</code>.
   </p>
   <p class="hint warnbox">
     <b>Settled.</b> &ldquo;When there isn&rsquo;t room&rdquo; becomes a <b>device setting</b>,
-    with the layout&rsquo;s <code>overflow:</code> field surviving as the default it starts from.
+    with the deck&rsquo;s <code>overflow:</code> field surviving as the default it starts from.
     Both halves of the decision &mdash; the <code>min cell</code> that creates the shortage and the
     policy that resolves it &mdash; now live in the same place.
     <b>Default is &ldquo;hide extras&rdquo;</b>, because under &ldquo;shrink buttons&rdquo; the
@@ -303,7 +303,7 @@ const CASES = [
 // the visible count is always N, so capacity — and therefore "min cell" — has
 // no effect at all; defaulting to it would ship an inert slider. Clip is a
 // no-op whenever the deck already fits, so the two differ only on oversized
-// decks. NOTE: this flips today's app default (daemon layouts.py and
+// decks. NOTE: this flips today's app default (daemon decks.py and
 // ButtonGrid both ship shrink-to-fit), so the ADR needs a migration note.
 const opts = { minCell: 100, maxCell: 240, bottomScale: 1, jogWidth: 1, overflow: 'clip' };
 

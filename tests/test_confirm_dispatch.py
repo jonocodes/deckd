@@ -40,7 +40,7 @@ from conftest import (
 CONFIRM_TIMEOUT_S = 0.5  # shorten the test backstop
 
 
-CONFIRM_LAYOUT = """
+CONFIRM_DECK = """
 match:
   - default
 widgets:
@@ -61,8 +61,8 @@ widgets:
 """
 
 
-async def _boot(monkeypatch, tmp_path: Path, *, layouts_yaml: str = CONFIRM_LAYOUT):
-    """Boot a server with a confirm-enabled layout and a fake shell."""
+async def _boot(monkeypatch, tmp_path: Path, *, decks_yaml: str = CONFIRM_DECK):
+    """Boot a server with a confirm-enabled deck and a fake shell."""
     import deckd.actions as actions_mod
 
     called: list[tuple[str, str]] = []
@@ -78,8 +78,8 @@ async def _boot(monkeypatch, tmp_path: Path, *, layouts_yaml: str = CONFIRM_LAYO
     # Shorten the confirm timeout so tests don't sleep 30s.
     monkeypatch.setattr("deckd.server.CONFIRM_TIMEOUT_S", CONFIRM_TIMEOUT_S)
 
-    (tmp_path / "default.yaml").write_text(layouts_yaml)
-    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
+    (tmp_path / "default.yaml").write_text(decks_yaml)
+    server, _scroll, _key, _dbus = make_test_server(decks_dir=tmp_path)
     ts = TestServer(server.app, host="127.0.0.1")
     await ts.start_server()
     return ts, server, called
@@ -112,12 +112,12 @@ def _confirm_request_for(msg: dict, widget_id: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
-async def test_layout_push_carries_confirm_flag(monkeypatch, tmp_path: Path) -> None:
+async def test_deck_push_carries_confirm_flag(monkeypatch, tmp_path: Path) -> None:
     ts, _server, _called = await _boot(monkeypatch, tmp_path)
     try:
         async with websockets.connect(f"ws://127.0.0.1:{ts.port}/ws") as ws:
-            layout = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-            widgets = {w["id"]: w for w in layout["widgets"]}
+            deck = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
+            widgets = {w["id"]: w for w in deck["widgets"]}
             assert widgets["rm-all"]["confirm"] is True
             assert widgets["multi-shot"]["confirm"] is True
     finally:
@@ -135,7 +135,7 @@ async def test_confirm_press_withholds_and_sends_request(monkeypatch, tmp_path: 
     ts, server, called = await _boot(monkeypatch, tmp_path)
     try:
         async with websockets.connect(f"ws://127.0.0.1:{ts.port}/ws") as ws:
-            await asyncio.wait_for(ws.recv(), timeout=2)  # initial layout
+            await asyncio.wait_for(ws.recv(), timeout=2)  # initial deck
             await ws.send(json.dumps({"type": "press", "id": "rm-all"}))
             req = await _read_until(ws, lambda m: bool(_confirm_request_for(m, "rm-all")))
             assert req["type"] == "confirm_request"
@@ -494,7 +494,7 @@ widgets:
     action:
       shell: "echo hi"
 """)
-    server, _scroll, _key, _dbus = make_test_server(layouts_dir=tmp_path)
+    server, _scroll, _key, _dbus = make_test_server(decks_dir=tmp_path)
     ts = TestServer(server.app, host="127.0.0.1")
     await ts.start_server()
     try:

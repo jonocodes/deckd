@@ -1,15 +1,15 @@
-# Seed a writable layouts directory from the package's bundled defaults.
+# Seed a writable decks directory from the package's bundled defaults.
 #
-# Usage: deckd-seed-layouts SRC_DIR DEST_DIR
+# Usage: deckd-seed-decks SRC_DIR DEST_DIR
 #
 # Copies each top-level *.yaml from SRC_DIR into DEST_DIR, but never
-# overwrites a file that already exists there: a user's edited layouts
+# overwrites a file that already exists there: a user's edited decks
 # always win, and repeated activations converge. A missing SRC_DIR is a
 # no-op, so a stripped package can't fail an activation.
 set -euo pipefail
 
-src=${1:?usage: deckd-seed-layouts SRC_DIR DEST_DIR}
-dest=${2:?usage: deckd-seed-layouts SRC_DIR DEST_DIR}
+src=${1:?usage: deckd-seed-decks SRC_DIR DEST_DIR}
+dest=${2:?usage: deckd-seed-decks SRC_DIR DEST_DIR}
 
 [ -d "$src" ] || exit 0
 

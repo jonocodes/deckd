@@ -8,7 +8,7 @@ Build on macOS (a .app needs Apple tooling):
 
 Output: ``dist/deckd.app`` (ad-hoc signed by PyInstaller; not notarized).
 The menu-bar entry point is ``packaging/macos/menubar.py``; the client build
-and layouts are copied in as data under ``Contents/Frameworks`` (where
+and decks are copied in as data under ``Contents/Frameworks`` (where
 ``sys._MEIPASS`` points at runtime).
 """
 import os
@@ -41,14 +41,14 @@ if not Path(icon).is_file():
 
 datas = [
     (str(ROOT / "client/dist"), "web"),
-    (str(ROOT / "layouts"), "layouts"),
+    (str(ROOT / "decks"), "decks"),
     # Menu-bar status-item template (monochrome, light/dark aware). Placed at
     # the bundle root so ``resource_root() / "deckd-menubar.png"`` resolves.
     (str(ROOT / "packaging/macos/deckd-menubar.png"), "."),
     (str(ROOT / "packaging/macos/deckd-menubar@2x.png"), "."),
 ]
-if (ROOT / "layouts.macos").is_dir():
-    datas.append((str(ROOT / "layouts.macos"), "layouts.macos"))
+if (ROOT / "decks.macos").is_dir():
+    datas.append((str(ROOT / "decks.macos"), "decks.macos"))
 
 a = Analysis(
     [str(ROOT / "packaging/macos/menubar.py")],
