@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard } from "lucide-react";
 
 import { Trackpad } from "./Trackpad";
@@ -26,12 +26,14 @@ const KEYDOWN_COMBOS: Record<string, string> = {
 };
 
 const STRIP_KEYS: Array<{ combo: string; label: string }> = [
-  { combo: "esc", label: "esc" },
-  { combo: "tab", label: "tab" },
+  // Arrows first so the 4-column strip lays them out together on the top
+  // row, then the command keys (with Ctrl + IME filling the bottom row).
   { combo: "left", label: "←" },
   { combo: "up", label: "↑" },
   { combo: "down", label: "↓" },
   { combo: "right", label: "→" },
+  { combo: "esc", label: "esc" },
+  { combo: "tab", label: "tab" },
 ];
 
 export function ManualControl({
@@ -46,6 +48,46 @@ export function ManualControl({
   const prevValue = useRef("");
   const composing = useRef(false);
   const [imeOpen, setImeOpen] = useState(false);
+  // Sticky one-shot Ctrl: arm it, then the next named key or typed
+  // character is sent as a `ctrl+<key>` combo and the modifier clears.
+  // A ref mirrors the state so the `beforeinput` listener (registered
+  // once per `sendKey`) reads the live value without re-subscribing.
+  const [ctrlArmed, setCtrlArmed] = useState(false);
+  const ctrlArmedRef = useRef(false);
+  ctrlArmedRef.current = ctrlArmed;
+
+  const consumeCtrl = useCallback(() => {
+    if (!ctrlArmedRef.current) return false;
+    ctrlArmedRef.current = false;
+    setCtrlArmed(false);
+    return true;
+  }, []);
+
+  /** Emit a named key combo, prefixing `ctrl+` when the sticky Ctrl is
+   * armed (and disarming it). */
+  const sendKey = useCallback(
+    (combo: string) => {
+      if (consumeCtrl()) onKey(`ctrl+${combo}`);
+      else onKey(combo);
+    },
+    [consumeCtrl, onKey],
+  );
+
+  /** Emit typed text. With Ctrl armed, the first character rides as a
+   * `ctrl+<char>` combo (so Ctrl+C works from the IME/keydown path) and
+   * any remainder is typed normally. */
+  const sendType = useCallback(
+    (text: string) => {
+      if (text.length > 0 && consumeCtrl()) {
+        onKey(`ctrl+${text[0]}`);
+        const rest = text.slice(1);
+        if (rest) onType(rest);
+      } else {
+        onType(text);
+      }
+    },
+    [consumeCtrl, onKey, onType],
+  );
 
   useEffect(() => {
     const el = inputRef.current;
@@ -55,15 +97,15 @@ export function ManualControl({
       const inputType = ie.inputType;
       if (inputType === "insertParagraph" || inputType === "insertLineBreak") {
         ev.preventDefault();
-        onKey("enter");
+        sendKey("enter");
       } else if (inputType === "deleteContentBackward") {
         ev.preventDefault();
-        onKey("backspace");
+        sendKey("backspace");
       }
     };
     el.addEventListener("beforeinput", onBeforeInput);
     return () => el.removeEventListener("beforeinput", onBeforeInput);
-  }, [onKey]);
+  }, [sendKey]);
 
   const sendDelta = (next: string) => {
     const prev = prevValue.current;
@@ -71,9 +113,9 @@ export function ManualControl({
     prevValue.current = next;
     let i = 0;
     while (i < prev.length && i < next.length && prev[i] === next[i]) i++;
-    for (let n = prev.length - i; n > 0; n--) onKey("backspace");
+    for (let n = prev.length - i; n > 0; n--) sendKey("backspace");
     const inserted = next.slice(i);
-    if (inserted) onType(inserted);
+    if (inserted) sendType(inserted);
   };
 
   const toggleIme = () => {
@@ -98,13 +140,25 @@ export function ManualControl({
             aria-label={combo}
             onPointerDown={(e) => {
               e.preventDefault();
-              onKey(combo);
+              sendKey(combo);
             }}
-            onKeyDown={onActivate(() => onKey(combo))}
+            onKeyDown={onActivate(() => sendKey(combo))}
           >
             {label}
           </button>
         ))}
+        <button
+          className={`chrome-btn kbd-strip-btn kbd-strip-ctrl${ctrlArmed ? " kbd-strip-ctrl-armed" : ""}`}
+          aria-label="ctrl"
+          aria-pressed={ctrlArmed}
+          onPointerDown={(e) => {
+            e.preventDefault();
+            setCtrlArmed((v) => !v);
+          }}
+          onKeyDown={onActivate(() => setCtrlArmed((v) => !v))}
+        >
+          ctrl
+        </button>
         <button
           className={`chrome-btn kbd-strip-btn kbd-strip-ime${imeOpen ? " kbd-strip-ime-open" : ""}`}
           aria-label="keyboard"
@@ -142,10 +196,10 @@ export function ManualControl({
             const combo = KEYDOWN_COMBOS[e.key];
             if (combo) {
               e.preventDefault();
-              onKey(combo);
+              sendKey(combo);
             } else if (e.key.length === 1 && !e.ctrlKey && !e.altKey && !e.metaKey) {
               e.preventDefault();
-              onType(e.key);
+              sendType(e.key);
             }
           }}
           onInput={(e) => {

@@ -289,7 +289,7 @@ Manual control covers the long tail decks don't: URL bars, chat boxes, ad-hoc co
 | Tap-and-a-half (tap, then touch again within 400ms and drag) | Left button held during the drag; release on finger lift          |
 
 
-The right-side jogstrip stays available for scrolling while you're pointing.
+The helper strip is a 4×2 keypad — the four arrows on the top row, and `esc` / `tab` / a sticky `ctrl` / the IME toggle on the bottom — with every key at the 44px touch minimum. The right-side jogstrip stays available for scrolling while you're pointing. Tap `ctrl` to arm it (it highlights); the next key or typed character is then sent as a `ctrl+…` combo and the modifier clears — tap it again to cancel.
 
 **Keyboard passthrough** is opt-in: the IME is closed when you enter manual control. Tap the keyboard-icon button on the strip to raise the phone's soft keyboard; tap it again to dismiss. While the IME is open, the hidden input behind the trackpad captures glyphs and forwards them to the daemon via the `type` / `key` wire messages — the same path deck `key` actions use. The trackpad surface still captures pointer events; you can type and move the cursor in the same session without switching modes.
 
@@ -391,6 +391,8 @@ sleep 2 && .venv/bin/python -u scripts/send_scroll.py --velocity 1200
 ### Accessibility
 
 The client is usable end-to-end without a mouse (issues [#60](https://github.com/jonocodes/deckd/issues/60) and [#62](https://github.com/jonocodes/deckd/issues/62)).
+
+**Touch targets** — every interactive control has a hit area of at least 44×44 CSS pixels, with at least 8px between adjacent controls in the bottom chrome and on the manual-control key strip (issue [#61](https://github.com/jonocodes/deckd/issues/61)). This floor holds even when the visible glyph is smaller or the Bottom-bar size is dialled down; the settings sliders, toggles, media transport, and now-playing transport carry the same minimum. The optional Larger-controls preference raises it to 48px.
 
 **Keyboard navigation** — `Tab` walks every interactive element in DOM/logical order: the bottom-chrome buttons (manual control / now playing / settings), the deck's widgets, the in-grid jogstrip, the settings sliders and toggles. `Shift+Tab` walks back. The focused element has a high-contrast cyan focus ring (a double-box-shadow; meets WCAG 2.1 SC 1.4.11 contrast); the ring is `focus-visible`-only, so a mouse click doesn't surface it.
 

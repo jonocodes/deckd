@@ -43,7 +43,7 @@ test.describe("manual control (issue #23 merge) — full pipeline against a logg
     await enterManualControl(page);
     await expect(page.locator(".trackpad")).toHaveCount(1);
     await expect(page.locator(".kbd-input")).toHaveCount(1);
-    await expect(page.locator(".kbd-strip-btn")).toHaveCount(7);
+    await expect(page.locator(".kbd-strip-btn")).toHaveCount(8);
     // IME is opt-in: the input does NOT auto-focus.
     await expect(page.locator(".kbd-input")).not.toBeFocused();
   });
