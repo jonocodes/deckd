@@ -12,6 +12,9 @@
 #   pkexec ./install-system-integration.sh ./deckd-<version>-x86_64.AppImage
 #   sudo   ./install-system-integration.sh ./deckd-<version>-x86_64.AppImage
 #
+# On NixOS, pkexec's sanitised PATH has no system profile: use `sudo`, or
+# `pkexec /run/current-system/sw/bin/bash ./install-system-integration.sh ...`.
+#
 # The udev rule carries TAG+="uaccess", so the *active* session user gets an
 # ACL on /dev/uinput and the autostart case needs no relogin. `--add-group`
 # additionally adds the user to the `input` group for linger/headless setups
