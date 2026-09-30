@@ -86,6 +86,17 @@ async def test_gnome_locked(fake_gdbus) -> None:
     assert state.blanked is True
 
 
+async def test_login_locked_hint_parses_real_variant_form(fake_gdbus) -> None:
+    """``login1``'s ``LockedHint`` is a GVariant of type ``v``, and gdbus
+    prints it as ``(<true>,)`` — angle brackets and all. The parser must
+    strip them or every lock tick raises SyntaxError and nothing is ever
+    pushed (regression: issue #160, found reproducing #64)."""
+    fake_gdbus.scripted = {"GetActive": "(<true>,)", "LockedHint": "(<true>,)"}
+    state = await fake_gdbus._session_state_once()
+    assert state.locked is True
+    assert state.blanked is True
+
+
 async def test_gnome_login1_failure_degrades_to_unlocked(fake_gdbus) -> None:
     """login1 unreachable → the lock half stays false, never an error."""
     fake_gdbus.scripted = {"GetActive": "(false,)"}

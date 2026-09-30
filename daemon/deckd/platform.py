@@ -1366,8 +1366,19 @@ def _parse_single_bool_tuple(value: str) -> bool:
     ``ast.literal_eval`` can't parse, so normalise to Python's
     capitalised literals first — same one-arg-tuple discipline as
     :func:`_parse_single_string_tuple`.
+
+    A *variant*-typed property comes wrapped in angle brackets:
+    ``login1``'s ``LockedHint`` is type ``v``, so gdbus prints
+    ``(<false>,)``. Strip those too, or the whole lock tick aborts on a
+    ``SyntaxError`` and no lock state is ever pushed.
     """
-    normalised = value.replace("true", "True").replace("false", "False")
+    normalised = (
+        value.strip()
+        .replace("true", "True")
+        .replace("false", "False")
+        .replace("<", "")
+        .replace(">", "")
+    )
     parsed = ast.literal_eval(normalised)
     if not isinstance(parsed, tuple) or len(parsed) != 1 or not isinstance(parsed[0], bool):
         raise RuntimeError(f"unexpected gdbus response: {value}")
