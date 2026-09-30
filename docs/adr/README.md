@@ -82,3 +82,9 @@ _Superseded by: [0011](0011-reflow.md) — the sizing geometry, the band, and th
 Sizing picks the row count that makes cells largest, using both axes, so no tuned constants remain. Rows fill to the column count with the remainder in the bottom row; the grid block centres on both axes with rows washed left. `minCell` / `maxCell` gain distinct jobs, and overflow becomes a device setting defaulting to `clip`.
 
 _Supersedes: [0010](0010-grid-reflow.md) — keeps the ordered-list model, replaces the geometry_
+
+## 0012 — Linux distribution: AppImage primary, Flatpak/Snap rejected
+
+[0012-linux-distribution-appimage.md](0012-linux-distribution-appimage.md)
+
+AppImage is the primary Linux artifact (unsandboxed, distro-agnostic); the root-only uinput step is a first-run `pkexec`/`sudo` helper shared by all channels. Flatpak/Snap are rejected — a sandbox cannot write the udev rule, see `/dev/uinput`, reach the session bus unfiltered, or install the compositor plugin. deb/rpm remain a later thin wrap of the same relocatable tree.
