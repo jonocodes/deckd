@@ -37,6 +37,7 @@ from deckd.mpris import (
     FakeMprisBackend,
     MPRIS_BUS_PREFIX,
     MPRIS_OBJECT_PATH,
+    MprisCommandError,
     PLAYER_INTERFACE,
     PROPERTIES_INTERFACE,
     ROOT_INTERFACE,
@@ -418,14 +419,43 @@ async def test_send_command_unknown_command_is_a_noop() -> None:
 
 
 @pytest.mark.asyncio
-async def test_send_command_unknown_row_is_a_noop() -> None:
+async def test_send_command_unknown_row_raises_for_feedback() -> None:
+    """A row that vanished is reported, not silently dropped (issue #64)."""
     bus = FakeDbusBus()
     backend = DbusMprisBackend()
     backend._bus = bus
     backend._owned_names = {"vlc"}
 
-    await backend.send_command("nonexistent", "next")
+    with pytest.raises(MprisCommandError) as excinfo:
+        await backend.send_command("nonexistent", "next")
+    assert excinfo.value.row_id == "nonexistent"
+    assert excinfo.value.retryable is True
     assert bus.calls == []
+
+
+@pytest.mark.asyncio
+async def test_send_command_bus_error_raises_and_still_reports_diagnostic() -> None:
+    """A rejected D-Bus call raises for feedback (issue #64) while keeping
+    the diagnostic event the ring buffer already relied on."""
+    bus = FakeDbusBus()
+    bus.player_methods = lambda _dest, _member: False  # ERROR reply
+    backend = DbusMprisBackend()
+    backend._bus = bus
+    backend._owned_names = {"vlc"}
+    seen: list[tuple[str, str | None, dict[str, Any]]] = []
+    backend.set_diagnostic_listener(lambda kind, row, data: seen.append((kind, row, data)))
+
+    with pytest.raises(MprisCommandError):
+        await backend.send_command("vlc", "next")
+    assert [kind for kind, _, _ in seen] == ["dbus_error"]
+
+
+@pytest.mark.asyncio
+async def test_identity_returns_cached_mpris_identity() -> None:
+    backend = DbusMprisBackend()
+    backend._identities["vlc"] = "VLC media player"
+    assert backend.identity("vlc") == "VLC media player"
+    assert backend.identity("gone") is None
 
 
 # ---------------------------------------------------------------------------

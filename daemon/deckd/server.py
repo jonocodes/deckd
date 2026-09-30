@@ -23,6 +23,7 @@ from .actions import ActionContext, MacroOutcome, execute as run_action
 from .input import ScrollController, parse_key_combo, text_to_combos
 from .decks import (
     Deck,
+    DeckLoadError,
     DeckStore,
     icon_for_window,
     label_for_window,
@@ -33,7 +34,13 @@ from .decks import (
     slugify_deck_id,
 )
 from .media import MediaManager, MediaState, effective_art_token
-from .mpris import ChromeMediaState, DbusMprisBackend, MprisBackend, connect_mpris_backend
+from .mpris import (
+    ChromeMediaState,
+    DbusMprisBackend,
+    MprisBackend,
+    MprisCommandError,
+    connect_mpris_backend,
+)
 from .mpris_art import resolve_mpris_art_async
 from .diagnostics import (
     ActionRecord,
@@ -446,6 +453,12 @@ class Session:
         deck = self.server.current_deck
         app_id = self.server.current_app_id
         error = self.server.current_error
+        # Structured companions to the global deck error (issue #64). They
+        # stay ``None`` unless the *global* on-disk deck error is what we
+        # end up sending — a pin, a resolved chrome view, or a view-not-found
+        # error carries no deck/widget identity of its own.
+        error_deck = self.server.current_error_deck
+        error_widget = self.server.current_error_widget
         # Pinned demo session: render the named deck regardless of host focus.
         # Re-resolved from the store each push, so a deck-file edit + reload
         # refreshes the pinned view; if the deck was removed on reload, fall
@@ -455,6 +468,8 @@ class Session:
             deck = self.server.decks[pin]
             app_id = pin
             error = None
+            error_deck = None
+            error_widget = None
         # Chrome view pin (issue #50): render the selected view's deck
         # regardless of host focus, with ``view`` set so the client knows to
         # stay on this chrome view. The view id is the synthetic token the
@@ -472,10 +487,14 @@ class Session:
                 deck = self.server.decks[self.view]
                 app_id = self.view
                 error = None
+                error_deck = None
+                error_widget = None
                 view_id = self.view
             else:
                 view_id = self.view
                 view_error = "view not found"
+                error_deck = None
+                error_widget = None
         # Chrome app badge fields are relayed from the active deck even in
         # the error path: the bottom chrome remains the chrome, and a branded
         # badge is more useful than a bare match token while the user fixes
@@ -530,6 +549,8 @@ class Session:
                 is_default=is_default,
                 widgets=[],
                 error=error,
+                error_deck=error_deck,
+                error_widget=error_widget,
             )
         else:
             widgets = [w.model_dump() for w in deck.widgets]
@@ -728,6 +749,12 @@ class Server:
         # the shield (e.g. fully scripted kiosks).
         self._allow_while_locked = allow_while_locked
         self._current_error: str | None = None
+        # Structured companions to ``_current_error`` (issue #64): the
+        # best-effort human deck name and offending widget the error
+        # refers to, so the client can explain which deck/widget is
+        # broken without parsing the pydantic dump.
+        self._current_error_deck: str | None = None
+        self._current_error_widget: str | None = None
         self._deckd_window_focused = False
         # Stage 2 (#120 / #126): last pushed running-windows snapshot,
         # used to dedupe identical pushes (the daemon-side debounce that
@@ -773,6 +800,14 @@ class Server:
     def current_error(self) -> str | None:
         return self._current_error
 
+    @property
+    def current_error_deck(self) -> str | None:
+        return self._current_error_deck
+
+    @property
+    def current_error_widget(self) -> str | None:
+        return self._current_error_widget
+
     def reload_decks(self) -> None:
         """Re-read every deck YAML in ``decks_dir`` (and overlay_dir).
 
@@ -787,8 +822,22 @@ class Server:
         self.metrics.deck_reload_total += 1
         try:
             new_store = load_decks(self.decks_dir, self.overlay_dir)
+        except DeckLoadError as exc:
+            # Structured deck/widget identifiers (issue #64) ride the
+            # DeckMessage alongside the raw text so the client can name
+            # the broken deck and widget in plain language.
+            self._current_error = exc.message
+            self._current_error_deck = exc.deck
+            self._current_error_widget = exc.widget
+            self.metrics.deck_error_total += 1
+            log.error("deck reload failed (keeping last-good): %s", exc)
+            return
         except SystemExit as exc:
+            # A non-file failure (e.g. the decks directory vanished):
+            # no deck/widget to name.
             self._current_error = str(exc)
+            self._current_error_deck = None
+            self._current_error_widget = None
             self.metrics.deck_error_total += 1
             log.error("deck reload failed (keeping last-good): %s", exc)
             return
@@ -804,6 +853,8 @@ class Server:
         # the resolved object identity so the wire stays truthful.
         self._current_is_default = new_deck is self.decks.default()
         self._current_error = None
+        self._current_error_deck = None
+        self._current_error_widget = None
         self.metrics.deck_reload_ok_total += 1
         # A deck reload can change which meter sources the active
         # deck uses (a meter added in the new YAML, an old one
@@ -1207,6 +1258,34 @@ class Server:
         screen (issue #160).
         """
         return self._session_locked and not self._allow_while_locked
+
+    async def _send_media_error(
+        self,
+        session: Session,
+        *,
+        widget_id: str,
+        player: str,
+        message: str,
+        retryable: bool = True,
+    ) -> None:
+        """Report a failed media command to the requesting session (#64).
+
+        One place owns the wire shape so the MPRIS and VLC paths can't
+        drift; a send failure is swallowed like every other per-session
+        push (the connection is already going away).
+        """
+        try:
+            await session.send(
+                p.MediaErrorMessage(
+                    type="media_error",
+                    id=widget_id,
+                    player=player,
+                    message=message,
+                    retryable=retryable,
+                )
+            )
+        except (ConnectionResetError, RuntimeError, ConnectionError):
+            pass
 
     async def _refuse_locked(self, session: Session, what: str, primitive: str) -> None:
         """Record a lock-refused attempt and reply with an error frame.
@@ -2099,6 +2178,13 @@ class Server:
                 return web.json_response(
                     {"ok": True, "row_id": row_id, "command": payload.command}
                 )
+            except MprisCommandError as exc:
+                # Issue #64: a vanished row is a 404, a rejected method a
+                # 502 — both structured, rather than the old silent 200.
+                self.metrics.record_mpris_command(payload.command, ok=False)
+                log.warning("MPRIS command %s on %s failed: %s", payload.command, row_id, exc)
+                status = 404 if exc.message == "player disappeared" else 502
+                return web.json_response({"ok": False, "error": exc.message}, status=status)
             except Exception as exc:
                 self.metrics.record_mpris_command(payload.command, ok=False)
                 log.warning("MPRIS command %s on %s failed: %s", payload.command, row_id, exc)
@@ -2527,6 +2613,20 @@ class Server:
                         media_command.id.removeprefix("mpris."), media_command.command
                     )
                     self.metrics.record_mpris_command(media_command.command, ok=True)
+                except MprisCommandError as exc:
+                    # Issue #64: tell the *requesting* session which player
+                    # failed and whether a retry is worth offering. The row
+                    # may already be gone, so name it from the cached
+                    # Identity when we can, else fall back to the row id.
+                    self.metrics.record_mpris_command(media_command.command, ok=False)
+                    log.warning("MPRIS command %s failed: %s", media_command.command, exc)
+                    await self._send_media_error(
+                        session,
+                        widget_id=media_command.id,
+                        player=self.mpris.identity(exc.row_id) or exc.row_id,
+                        message=exc.message,
+                        retryable=exc.retryable,
+                    )
                 except Exception as exc:
                     self.metrics.record_mpris_command(media_command.command, ok=False)
                     log.warning("MPRIS command %s failed: %s", media_command.command, exc)
@@ -2547,7 +2647,15 @@ class Server:
             except Exception as exc:
                 # A failed/unsupported media command must not tear down the
                 # websocket session (which would reset the client UI).
+                # Issue #64: report it to the requesting session instead of
+                # leaving the tap silently dead.
                 log.warning("media command %s failed: %s", media_command.command, exc)
+                await self._send_media_error(
+                    session,
+                    widget_id=media_command.id,
+                    player=widget.label or widget.id,
+                    message="player rejected the command",
+                )
             return
         if msg_type == "select_view":
             select_view = p.SelectViewMessage.model_validate(data)

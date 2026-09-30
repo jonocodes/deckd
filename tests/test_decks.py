@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from deckd.decks import Deck, Widget, load_decks, resolve_deck
+from deckd.decks import Deck, DeckLoadError, Widget, load_decks, resolve_deck
 from deckd.platform import AppInfo
 
 
@@ -652,6 +652,86 @@ widgets:
     msg = str(exc.value)
     assert "terminal: true" in msg
     assert 'shell: "tilix"' in msg
+
+
+# ---------------------------------------------------------------------------
+# Structured load errors (issue #64)
+#
+# The raw pydantic dump is precise but machine-shaped. The client needs the
+# deck name and the offending widget in plain language so its error surface
+# can explain what broke instead of pasting a traceback.
+# ---------------------------------------------------------------------------
+
+
+def test_deck_load_error_names_deck_and_widget(tmp_path: Path) -> None:
+    """A widget field error surfaces the deck name and the widget id."""
+    body = """
+match:
+  - firefox
+widgets:
+  - id: back
+    kind: button
+    action:
+      key: "alt+Left"
+  - id: broken
+    kind: media
+    controls: [bogus-control]
+"""
+    _write(tmp_path, "firefox.yaml", body)
+    with pytest.raises(DeckLoadError) as exc:
+        load_decks(tmp_path)
+    err = exc.value
+    assert err.deck == "firefox"
+    assert err.widget == "broken"
+    assert "controls" in str(err)
+
+
+def test_deck_load_error_names_deck_from_display_name(tmp_path: Path) -> None:
+    """When the authored ``id`` is absent, the display name is used."""
+    body = """
+match:
+  - firefox
+display_name: Firefox
+widgets:
+  - id: broken
+    kind: button
+    action:
+      nope: true
+"""
+    _write(tmp_path, "firefox.yaml", body)
+    with pytest.raises(DeckLoadError) as exc:
+        load_decks(tmp_path)
+    assert exc.value.deck == "Firefox"
+    assert exc.value.widget == "broken"
+
+
+def test_deck_load_error_finds_duplicate_widget_id(tmp_path: Path) -> None:
+    """The model-level duplicate-id error has no ``loc``; the id still
+    comes out so the UI can name the culprit."""
+    body = """
+match:
+  - default
+widgets:
+  - id: back
+    kind: button
+  - id: back
+    kind: button
+"""
+    _write(tmp_path, "default.yaml", body)
+    with pytest.raises(DeckLoadError) as exc:
+        load_decks(tmp_path)
+    assert exc.value.widget == "back"
+
+
+def test_yaml_syntax_error_is_a_structured_load_error(tmp_path: Path) -> None:
+    """A malformed YAML document used to escape as a bare yaml error and
+    silently keep the last-good deck live (issue #64). It now surfaces as
+    a ``DeckLoadError`` so the client shows something."""
+    _write(tmp_path, "default.yaml", "match: [default\nwidgets: []\n")
+    with pytest.raises(DeckLoadError) as exc:
+        load_decks(tmp_path)
+    assert exc.value.deck == "default"
+    assert exc.value.widget is None
 
 
 # ---------------------------------------------------------------------------

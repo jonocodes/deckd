@@ -27,6 +27,7 @@ import type {
   MediaStateMessage,
   ChromeMediaMessage,
   ErrorMessage,
+  MediaErrorMessage,
   MacroResultMessage,
   ConfirmRequestMessage,
   RunningWindowsMessage,
@@ -58,6 +59,7 @@ export type {
   BrightnessMessage,
   WidgetUpdateMessage,
   MediaStateMessage,
+  MediaErrorMessage,
   ChromeMediaMessage,
   EventMessage,
   MacroResultMessage,
@@ -181,6 +183,11 @@ export interface ServerDeck {
   icon?: Icon | null;
   web_app?: boolean;
   error?: string | null;
+  /** Structured companions to ``error`` (issue #64): the human deck name
+   * and offending widget, when the daemon could identify them. Both are
+   * ``null``/absent for non-deck errors (e.g. a chrome view not found). */
+  error_deck?: string | null;
+  error_widget?: string | null;
   focused_app?: FocusedAppInfo | null;
   is_default?: boolean;
 }
@@ -189,6 +196,7 @@ export type ServerBrightness = BrightnessMessage;
 export type ServerWidgetUpdate = WidgetUpdateMessage;
 export type ServerChromeMedia = ChromeMediaMessage;
 export type ServerError = ErrorMessage;
+export type ServerMediaError = MediaErrorMessage;
 export type ServerMacroResult = MacroResultMessage;
 export type ServerConfirmRequest = ConfirmRequestMessage;
 // WindowListEntry carries an opaque ``icon`` field on the wire but the

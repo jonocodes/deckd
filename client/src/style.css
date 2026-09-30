@@ -97,6 +97,8 @@ button:focus-visible {
   padding: 10px;
   min-height: 0;
   min-width: 0;
+  /* Anchors the reconnect overlay (issue #64). */
+  position: relative;
 }
 
 .chrome-jogstrip {
@@ -754,6 +756,166 @@ button:focus-visible {
   max-width: 30ch;
 }
 
+.lock-takeover-cause {
+  color: #f0b429;
+  font-size: calc(13px * var(--label-scale, 1));
+  max-width: 34ch;
+}
+
+/* ---------------------------------------------------------------------------
+ * Reconnect / disconnected overlay (issue #64). Sits over the last-rendered
+ * surface, naming the attempt count and the last error, with a single
+ * Cancel/Retry control. The spinner is animation-only and stops under
+ * prefers-reduced-motion (both the OS query and the per-device class).
+ * ------------------------------------------------------------------------- */
+.conn-overlay {
+  position: absolute;
+  inset: 10px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, #0b0f14 72%, transparent);
+  backdrop-filter: blur(3px);
+  border-radius: 16px;
+}
+
+.conn-overlay-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 26px;
+  border-radius: 14px;
+  background: #11161b;
+  border: 1px solid #2a333d;
+  text-align: center;
+  max-width: 34ch;
+}
+
+.conn-overlay-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 3px solid #2a333d;
+  border-top-color: #7dd3fc;
+  animation: conn-spin 900ms linear infinite;
+}
+
+@keyframes conn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.conn-overlay-title {
+  font-size: calc(17px * var(--label-scale, 1));
+  font-weight: 700;
+  color: #e6ebf0;
+}
+
+.conn-overlay-sub {
+  font-size: calc(13px * var(--label-scale, 1));
+  color: #8a96a3;
+}
+
+.conn-overlay-btn {
+  margin-top: 2px;
+  padding: 8px 18px;
+  border-radius: 10px;
+  border: 1px solid #2a333d;
+  background: #1b222a;
+  color: #e6ebf0;
+  font-weight: 600;
+}
+
+.conn-overlay-btn:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .conn-overlay-spinner {
+    animation: none;
+  }
+  .conn-overlay-btn:active {
+    transform: none;
+  }
+  .media-error-toast {
+    animation: none;
+  }
+  .deck-error-return:active {
+    transform: none;
+  }
+}
+
+.a11y-reduce-motion .conn-overlay-spinner {
+  animation: none;
+}
+
+.a11y-reduce-motion .conn-overlay-btn:active {
+  transform: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * Media-command failure toast (issue #64). Non-blocking, above the bottom
+ * chrome, with Retry / Dismiss. Slide-in is disabled under reduced motion.
+ * ------------------------------------------------------------------------- */
+.media-error-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(64px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(92vw, 520px);
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #2a1b1b;
+  border: 1px solid #7f1d1d;
+  color: #fecaca;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  animation: media-toast-in 160ms ease-out;
+}
+
+@keyframes media-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+}
+
+.media-error-text {
+  font-size: calc(13px * var(--label-scale, 1));
+  line-height: 1.35;
+}
+
+.media-error-player {
+  font-weight: 700;
+  color: #fecaca;
+}
+
+.media-error-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.media-error-btn {
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid #7f1d1d;
+  background: #3a2222;
+  color: #fee2e2;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.a11y-reduce-motion .media-error-toast {
+  animation: none;
+}
+
 .lock-banner {
   display: flex;
   align-items: center;
@@ -1021,6 +1183,33 @@ button:focus-visible {
   white-space: pre-wrap;
   word-break: break-word;
   color: #fecaca;
+}
+
+.deck-error-summary {
+  font-size: clamp(13px, 2.2vw, 16px);
+  color: #fecaca;
+}
+
+.deck-error-summary strong {
+  color: #fff;
+}
+
+.deck-error-return {
+  align-self: flex-start;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid #7f1d1d;
+  background: #2a1b1b;
+  color: #fee2e2;
+  font-weight: 600;
+}
+
+.deck-error-return:active {
+  transform: scale(0.97);
+}
+
+.a11y-reduce-motion .deck-error-return:active {
+  transform: none;
 }
 
 /* ---------------------------------------------------------------------------

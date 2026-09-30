@@ -184,10 +184,34 @@ class NowPlaying(BaseModel):
     empty_state: NowPlayingEmptyState = "show"
 
 
+class MprisCommandError(Exception):
+    """A media command couldn't be delivered (issue #64).
+
+    Raised by :meth:`DbusMprisBackend.send_command` when the target row
+    vanished (the player quit between the last snapshot and the tap) or
+    the player's D-Bus method rejected the call. The server turns it into
+    a ``media_error`` frame for the requesting session. Unknown *commands*
+    stay silent no-ops — a client never legitimately sends one, and there
+    is nothing useful to retry.
+    """
+
+    def __init__(self, row_id: str, message: str, *, retryable: bool = True) -> None:
+        super().__init__(message)
+        self.row_id = row_id
+        self.message = message
+        self.retryable = retryable
+
+
 class MprisBackend(Protocol):
     """Backend seam for enumerating MPRIS rows and controlling them."""
 
     def row_ids(self) -> list[str]:
+        ...
+
+    def identity(self, row_id: str) -> str | None:
+        """The row's cached human-readable player name (MPRIS
+        ``Identity``), or ``None`` when unknown. Used to name the player
+        in a ``media_error`` frame (issue #64)."""
         ...
 
     async def read_state(self, row_id: str) -> MediaState | None:
@@ -345,6 +369,12 @@ class FakeMprisBackend(MprisBackend):
 
     def row_ids(self) -> list[str]:
         return list(self.states)
+
+    def identity(self, row_id: str) -> str | None:
+        """No live bus, so fall back to a seeded state's ``app_name``
+        (issue #64)."""
+        state = self.states.get(row_id)
+        return getattr(state, "app_name", None) if state is not None else None
 
     async def read_state(self, row_id: str) -> MediaState | None:
         state = self.states.get(row_id)
@@ -1017,22 +1047,32 @@ class DbusMprisBackend(MprisBackend):
         self._identities[row_id] = identity
         return identity
 
+    def identity(self, row_id: str) -> str | None:
+        """The row's cached MPRIS ``Identity`` (issue #64)."""
+        return self._identities.get(row_id)
+
     async def send_command(self, row_id: str, command: str) -> None:
         """Dispatch a browser command to the corresponding MPRIS method.
 
-        Unknown rows, unknown commands, and bus errors are all no-ops
-        the server's pump catches and logs — the wire side never sees
-        a failure, only a log line.
+        Unknown *commands* are no-ops (the wire literal makes one
+        impossible from a real client). A row that vanished before the
+        command arrived, or a player that rejected the method, raises
+        :class:`MprisCommandError` so the server can explain the failure
+        to the requesting session (issue #64).
+
+        Diagnostic event emission is unchanged: successful dispatches
+        still publish ``command``; failures publish ``dbus_error`` first.
         """
         if self._bus is None or row_id not in self._owned_names:
-            return
+            raise MprisCommandError(row_id, "player disappeared")
         method = _COMMANDS.get(command)
         if method is None:
             return
+        from dbus_fast import MessageType
         from dbus_fast.message import Message
 
         try:
-            await self._bus.call(
+            reply = await self._bus.call(
                 Message(
                     destination=f"{MPRIS_BUS_PREFIX}.{row_id}",
                     path=MPRIS_OBJECT_PATH,
@@ -1040,7 +1080,6 @@ class DbusMprisBackend(MprisBackend):
                     member=method,
                 )
             )
-            self._emit_diagnostic("command", row_id, {"command": command})
         except Exception as exc:
             log.warning(
                 "MPRIS %s.%s on %s failed: %s",
@@ -1054,6 +1093,19 @@ class DbusMprisBackend(MprisBackend):
                 row_id,
                 {"command": command, "error": repr(exc)},
             )
+            raise MprisCommandError(row_id, "player rejected the command") from exc
+        if getattr(reply, "message_type", None) == MessageType.ERROR:
+            # A rejected method comes back as an ERROR *reply* (dbus-fast
+            # returns it rather than raising), so checking the reply type
+            # is the only way to notice it.
+            log.warning("MPRIS %s.%s on %s was rejected", PLAYER_INTERFACE, method, row_id)
+            self._emit_diagnostic(
+                "dbus_error",
+                row_id,
+                {"command": command, "error": "method rejected"},
+            )
+            raise MprisCommandError(row_id, "player rejected the command")
+        self._emit_diagnostic("command", row_id, {"command": command})
 
 
 def _playback_to_playing(

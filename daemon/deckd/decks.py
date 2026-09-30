@@ -464,12 +464,101 @@ class Deck(BaseModel):
         return False
 
 
+class DeckLoadError(SystemExit):
+    """A deck file failed to load — YAML syntax or schema violation
+    (issue #64).
+
+    ``str(exc)`` stays the precise, machine-shaped message (the pydantic
+    dump, kept for logs and the wire's ``error`` field). ``deck`` and
+    ``widget`` are best-effort *human* identifiers so the client can say
+    which deck and which widget are affected without parsing the dump.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        deck: str | None = None,
+        widget: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.message = message
+        self.deck = deck
+        self.widget = widget
+
+
+def _identify_deck(data: Any, path: Path) -> str:
+    """Best-effort human deck name from the raw (unvalidated) YAML.
+
+    The file has already failed validation, so there's no ``Deck`` object
+    to read an id from. Prefer the authored ``id`` / ``display_name`` /
+    first ``match`` token, falling back to the filename stem (which is
+    how a broken deck is easiest to find on disk).
+    """
+    if isinstance(data, dict):
+        for key in ("id", "display_name"):
+            value = data.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        match = data.get("match")
+        if (
+            isinstance(match, list)
+            and match
+            and isinstance(match[0], str)
+            and match[0].strip()
+        ):
+            return match[0].strip()
+    return path.stem
+
+
+def _identify_widget(data: Any, errors: list[Any]) -> str | None:
+    """Best-effort offending-widget name from a pydantic error list.
+
+    A field error under ``widgets.<i>`` names the widget by its authored
+    ``id`` (or ``#<i>`` when even that is missing). A model-level error
+    (the duplicate-id validator) has no ``loc`` but embeds the id in its
+    message, so scan for that too.
+    """
+    for err in errors:
+        loc = err.get("loc") or ()
+        if len(loc) >= 2 and loc[0] == "widgets" and isinstance(loc[1], int):
+            widgets = data.get("widgets") if isinstance(data, dict) else None
+            if isinstance(widgets, list) and 0 <= loc[1] < len(widgets):
+                widget = widgets[loc[1]]
+                if (
+                    isinstance(widget, dict)
+                    and isinstance(widget.get("id"), str)
+                    and widget["id"]
+                ):
+                    return widget["id"]
+            return f"widget #{loc[1]}"
+    for err in errors:
+        msg = err.get("msg") or ""
+        found = re.search(r"duplicate widget id: ['\"]([^'\"]+)['\"]", msg)
+        if found:
+            return found.group(1)
+    return None
+
+
 def load_deck(path: Path) -> Deck:
-    data = yaml.safe_load(path.read_text())
+    try:
+        data = yaml.safe_load(path.read_text())
+    except yaml.YAMLError as exc:
+        # A syntax error never reaches pydantic and — before issue #64 —
+        # never set ``current_error`` either, so a malformed file left the
+        # last-good deck on screen with no indication anything was wrong.
+        raise DeckLoadError(
+            f"invalid deck YAML at {path}:\n{exc}",
+            deck=path.stem,
+        ) from exc
     try:
         deck = Deck.model_validate(data)
     except ValidationError as exc:
-        raise SystemExit(f"invalid deck YAML at {path}:\n{exc}") from exc
+        raise DeckLoadError(
+            f"invalid deck YAML at {path}:\n{exc}",
+            deck=_identify_deck(data, path),
+            widget=_identify_widget(data, exc.errors()),
+        ) from exc
     if deck.match:
         deck.id = deck.match[0]
     return deck
@@ -695,20 +784,17 @@ def load_decks(
         for path in sorted(overlay_dir.glob("*.y*ml")):
             if path.suffix not in {".yaml", ".yml"}:
                 continue
-            try:
-                deck = load_deck(path)
-            except SystemExit as exc:
-                raise SystemExit(f"{exc}") from None
+            # ``load_deck`` raises a ``DeckLoadError`` (a ``SystemExit``
+            # subclass) that already carries the structured deck/widget
+            # identity — let it propagate untouched.
+            deck = load_deck(path)
             _record(deck, path)
 
     overlay_ids = {deck.id for deck in decks if deck.id}
     for path in sorted(decks_dir.glob("*.y*ml")):
         if path.suffix not in {".yaml", ".yml"}:
             continue
-        try:
-            deck = load_deck(path)
-        except SystemExit as exc:
-            raise SystemExit(f"{exc}") from None
+        deck = load_deck(path)
         if deck.id and deck.id in overlay_ids:
             log.info("deck %r overridden by overlay %s", deck.id, path)
             continue

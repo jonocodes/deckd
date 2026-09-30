@@ -16,7 +16,7 @@
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ClientMessage, ServerChromeMedia, ServerDeck, ServerState } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerDeck, ServerMediaError, ServerState } from "./protocol";
 
 /** Replace the real socket hook with a controllable fake. The chrome
  * icon's job is to call ``send`` with the right message; the test
@@ -32,9 +32,16 @@ const onDeck = vi.fn<(m: ServerDeck) => void>();
  * gate / focus restoration flow can set ``mockStatus`` to drive
  * ``status`` through ``"unauthorized"`` → ``"open"`` transitions. */
 let mockStatus: "connecting" | "open" | "closed" | "unauthorized" = "open";
+let mockAttempt = 0;
+let mockLastError = "";
+let mockCancelled = false;
+let mockRetrying = false;
 const authenticate = vi.fn();
 const deauthenticate = vi.fn();
+const cancelReconnect = vi.fn();
+const retryNow = vi.fn();
 let sessionStateHandler: ((m: ServerState) => void) | null = null;
+let mediaErrorHandler: ((m: ServerMediaError) => void) | null = null;
 vi.mock("./socket", () => ({
   useDeckdSocket: (
     deckCb: (m: ServerDeck) => void,
@@ -44,11 +51,13 @@ vi.mock("./socket", () => ({
     _confirmRequestCb: unknown,
     _runningWindowsCb: unknown,
     sessionStateCb: ((m: ServerState) => void) | undefined,
+    mediaErrorCb: ((m: ServerMediaError) => void) | undefined,
     _options: unknown,
   ) => {
     onDeck.mockImplementation(deckCb);
     chromeMediaHandler = chromeMediaCb ?? null;
     sessionStateHandler = sessionStateCb ?? null;
+    mediaErrorHandler = mediaErrorCb ?? null;
     return {
       get status() {
         return mockStatus;
@@ -57,11 +66,36 @@ vi.mock("./socket", () => ({
       authenticate,
       deauthenticate,
       hasPassword: false,
+      get attempt() {
+        return mockAttempt;
+      },
+      get lastError() {
+        return mockLastError;
+      },
+      get cancelled() {
+        return mockCancelled;
+      },
+      get retrying() {
+        return mockRetrying;
+      },
+      cancelReconnect,
+      retryNow,
     };
   },
 }));
 
 import { App } from "./App";
+
+// Reconnect telemetry is module-level state shared by every describe block;
+// reset it before each test so a drop simulated in one test can't leak a
+// connection overlay into the next. Inner blocks still override as needed.
+beforeEach(() => {
+  mockStatus = "open";
+  mockAttempt = 0;
+  mockLastError = "";
+  mockCancelled = false;
+  mockRetrying = false;
+});
 
 describe("App — chrome media icon", () => {
   afterEach(cleanup);
@@ -1018,13 +1052,15 @@ describe("App — session lock takeover", () => {
     expect(screen.getByRole("button", { name: /open/i })).toBeTruthy();
     act(() => sessionStateHandler?.({ type: "state", locked: true, blanked: false }));
     expect(screen.getAllByText("Screen locked").length).toBeGreaterThan(0);
-    expect(screen.getByText(/Controls resume when you unlock/)).toBeTruthy();
+    // Issue #64: the takeover names the cause and that input is held.
+    expect(screen.getByText(/Screensaver or lock screen/)).toBeTruthy();
+    expect(screen.getByText(/Input is held until you unlock/)).toBeTruthy();
   });
 
   it("names the host in the lock copy", () => {
     render(<App />);
     act(() => sessionStateHandler?.({ type: "state", locked: true, blanked: false }));
-    expect(screen.getByText(/localhost/)).toBeTruthy();
+    expect(screen.getAllByText(/localhost/).length).toBeGreaterThan(0);
   });
 
   it("keeps the connection dot's 'live' status while locked", () => {
@@ -1142,5 +1178,178 @@ describe("App — fullscreen toggle", () => {
     // No stubs installed: fullscreenEnabled is undefined.
     fireEvent.pointerDown(screen.getByRole("button", { name: "fullscreen" }));
     expect(screen.getByRole("button", { name: "fullscreen" }).getAttribute("aria-pressed")).toBe("false");
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * Reconnect / disconnected overlay (issue #64): attempt count, last error,
+ * and a single Cancel/Retry affordance.
+ * --------------------------------------------------------------------- */
+
+describe("App — reconnect overlay", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    cancelReconnect.mockReset();
+    retryNow.mockReset();
+    mockStatus = "open";
+    mockAttempt = 0;
+    mockLastError = "";
+    mockCancelled = false;
+    mockRetrying = false;
+    window.history.replaceState(null, "", "/?demo=default");
+  });
+
+  it("hides itself when the socket is open", () => {
+    render(<App />);
+    expect(screen.queryByText(/Reconnecting/)).toBeNull();
+    expect(screen.queryByText("Disconnected")).toBeNull();
+  });
+
+  it("shows attempt count and last error while reconnecting", () => {
+    mockStatus = "connecting";
+    mockAttempt = 2;
+    mockLastError = "daemon not reachable";
+    render(<App />);
+    expect(screen.getByText("Reconnecting…")).toBeTruthy();
+    expect(screen.getByText(/Attempt 2 — daemon not reachable/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancel reconnecting" })).toBeTruthy();
+  });
+
+  it("cancels the retry loop", () => {
+    mockStatus = "connecting";
+    mockAttempt = 1;
+    mockRetrying = true;
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel reconnecting" }));
+    expect(cancelReconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers Retry once cancelled and re-arms the connection", () => {
+    mockStatus = "closed";
+    mockCancelled = true;
+    mockLastError = "connection lost (code 1006)";
+    render(<App />);
+    expect(screen.getByText("Disconnected")).toBeTruthy();
+    expect(screen.getByText("connection lost (code 1006)")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry connection" }));
+    expect(retryNow).toHaveBeenCalledTimes(1);
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * Deck load-error surface naming the deck and offender (issue #64).
+ * --------------------------------------------------------------------- */
+
+describe("App — deck error feedback", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    onDeck.mockReset();
+    mockStatus = "open";
+    window.history.replaceState(null, "", "/?demo=default");
+  });
+
+  it("names the deck and offending widget, and returns to the focused app", () => {
+    render(<App />);
+    act(() => {
+      onDeck({
+        type: "deck",
+        app: "default",
+        jogstrip_enabled: true,
+        widgets: [],
+        error: "1 validation error for Deck",
+        error_deck: "firefox",
+        error_widget: "back",
+      });
+    });
+    expect(screen.getByText(/Couldn't load the "firefox" deck/)).toBeTruthy();
+    expect(screen.getByText(/Widget "back" is invalid/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /return to focused app/i }));
+    expect(send).toHaveBeenCalledWith({ type: "clear_view" });
+  });
+
+  it("announces the deck error via the live region", () => {
+    render(<App />);
+    act(() => {
+      onDeck({
+        type: "deck",
+        app: "default",
+        jogstrip_enabled: true,
+        widgets: [],
+        error: "1 validation error for Deck",
+        error_deck: "firefox",
+      });
+    });
+    expect(screen.getByRole("status").textContent).toBe("Deck error: firefox");
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * Media-command failure toast (issue #64): names the player and offers
+ * Retry (re-sends the last command) / Dismiss.
+ * --------------------------------------------------------------------- */
+
+describe("App — media error toast", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    mediaErrorHandler = null;
+    mockStatus = "open";
+    window.history.replaceState(null, "", "/?demo=mpris");
+  });
+
+  it("surfaces a media_error frame naming the player", () => {
+    render(<App />);
+    act(() =>
+      mediaErrorHandler?.({
+        type: "media_error",
+        id: "mpris.vlc",
+        player: "VLC media player",
+        message: "player disappeared",
+        retryable: true,
+      }),
+    );
+    // The now-playing rows also name the player; the toast is the only
+    // element carrying the failure message.
+    expect(screen.getByText(/player disappeared/)).toBeTruthy();
+    expect(screen.getAllByText("VLC media player").length).toBeGreaterThan(0);
+  });
+
+  it("retries by re-sending the last command for that id", () => {
+    render(<App />);
+    // Issue a command through the real cell, so the App records it.
+    fireEvent.click(screen.getAllByLabelText("Next")[0]);
+    const sent = send.mock.calls[send.mock.calls.length - 1][0];
+    if (sent.type !== "media_command") throw new Error("expected media_command");
+
+    act(() =>
+      mediaErrorHandler?.({
+        type: "media_error",
+        id: sent.id,
+        player: "VLC media player",
+        message: "player rejected the command",
+        retryable: true,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(send.mock.calls[send.mock.calls.length - 1][0]).toEqual(sent);
+  });
+
+  it("dismisses without re-sending", () => {
+    render(<App />);
+    const before = send.mock.calls.length;
+    act(() =>
+      mediaErrorHandler?.({
+        type: "media_error",
+        id: "mpris.vlc",
+        player: "VLC media player",
+        message: "player disappeared",
+        retryable: true,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByText(/player disappeared/)).toBeNull();
+    expect(send.mock.calls.length).toBe(before);
   });
 });

@@ -67,12 +67,19 @@ export function usePlaygroundDaemon(
   }, []);
 
   // Report "open" so the chrome connection indicator reads "live", matching
-  // how demo mode presents a fixture as a live surface.
+  // how demo mode presents a fixture as a live surface. The reconnect
+  // telemetry (issue #64) is inert — the MockDaemon can't disconnect.
   return {
     status: "open" as const,
     send,
     authenticate: noop,
     deauthenticate: noop,
     hasPassword: false,
+    attempt: 0,
+    lastError: "",
+    cancelled: false,
+    retrying: false,
+    cancelReconnect: noop,
+    retryNow: noop,
   };
 }

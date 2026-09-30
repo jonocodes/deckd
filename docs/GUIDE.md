@@ -272,6 +272,17 @@ Every deck renders inside a persistent **chrome** shell that the daemon does not
 
 Widgets in a deck's `widgets:` list are an **ordered list** that reflows against the viewport width (ADR-0010). There are no grid coordinates. The client packs widgets left-to-right and wraps down, computing the column count from the available width against a client-side cell-size band. A widget may carry a `size: [w, h]` span (default `[1, 1]`) for non-uniform cells; the list order is the only positional input. Portrait just fits fewer columns — no transpose, no orientation conventions.
 
+### Feedback and recovery
+
+Every non-happy state explains itself in plain language rather than leaving a stale or dead surface:
+
+- **Reconnecting / disconnected** — when the socket drops, an overlay sits over the last-rendered deck naming the attempt count and the last error (e.g. *Attempt 3 — daemon not reachable*). While the client is retrying it offers **Cancel** to pause the auto-retry loop; once paused (or when the socket is closed) it offers **Retry** to reconnect immediately. The bottom-strip connection dot keeps showing live / reconnecting / disconnected alongside it.
+- **Screen locked / asleep** — the full-surface lock takeover names the cause (*Screensaver or lock screen active on ‹host›*) and states that input is held until you unlock. The soft "asleep" banner shown for a blank that hasn't locked says *suspend or display blank*, and a press wakes the machine.
+- **Deck errors** — a deck that fails to load (bad YAML or a schema violation) replaces the grid with the pydantic detail plus a plain-language line naming the deck and the offending widget (`Couldn't load the "firefox" deck. Widget "back" is invalid.`) and a **Return to focused app** button that clears a pinned chrome view. A chrome view that no longer resolves shows *That view isn't available on this daemon.* with the same button.
+- **Media errors** — a media command the daemon couldn't deliver (player gone, method rejected) surfaces a non-blocking toast naming the player (`VLC media player — player disappeared`) with **Retry** (re-sends the last command for that player) and **Dismiss**.
+
+Each of these is announced through the client's `aria-live` region, and every animation is suppressed under `prefers-reduced-motion: reduce` or the in-app *Reduce motion* setting.
+
 ### Manual control mode
 
 Tap the `manual control` button in the bottom chrome and the deck area is replaced by a single combined surface: a **trackpad** for cursor movement and a **keyboard passthrough** for typing into the currently-focused desktop app, both live at the same time. No mode switching. The trackpad handles pointing and clicking, and a small **strip at the top** of the surface hosts the few keys mobile IMEs can't produce (Esc, Tab, arrows) plus a keyboard-icon toggle that raises the phone's soft keyboard when you want to type. When the IME is open you can still drag on the trackpad area to move the cursor — the two coexist.
@@ -409,7 +420,7 @@ The client is usable end-to-end without a mouse (issues [#60](https://github.com
 
 **Focus restoration** — opening a chrome view (settings, trackpad, now playing) pushes focus into the first interactive element of that view; closing it (via `Escape` or the same button) hands focus back to the chrome button that opened it. The password gate also restores focus to the surface after a successful submit, so a keyboard user can Tab into the deck without clicking anywhere.
 
-**OS-level preferences** — the theme respects `prefers-contrast: more` (thicker focus ring, higher-contrast cell borders, white halo on the connection dot) and `prefers-reduced-motion: reduce` (the connection-state pulse and the media-icon playback dot stop animating; press feedback loses its scale-down but keeps the static brightness shift). Status (connection state, playback state) is conveyed by **icon + text + colour** so it doesn't depend on colour alone: the connection indicator has a visible "live" / "reconnecting" / "disconnected" / "locked" label, and the media icon carries a screen-reader-only "now playing" / "idle" string alongside the pulsing green dot.
+**OS-level preferences** — the theme respects `prefers-contrast: more` (thicker focus ring, higher-contrast cell borders, white halo on the connection dot) and `prefers-reduced-motion: reduce` (the connection-state pulse and the media-icon playback dot stop animating; press feedback loses its scale-down but keeps the static brightness shift). Status (connection state, playback state) is conveyed by **icon + text + colour** so it doesn't depend on colour alone: the connection indicator has a visible "live" / "reconnecting" / "disconnected" / "sign-in needed" label, and the media icon carries a screen-reader-only "now playing" / "idle" string alongside the pulsing green dot.
 
 **Typography** — labels scale with the browser zoom *and* the existing Text-size slider; cell sizes use `clamp(min, vw, max)` so they grow with the viewport. The Content-size and Bottom-bar sliders affect icon + chrome sizes without clipping adjacent content.
 

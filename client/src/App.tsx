@@ -39,6 +39,7 @@ import type {
   Icon as IconRef,
   ServerChromeMedia,
   ServerDeck,
+  ServerMediaError,
   ServerRunningWindows,
   ServerState,
   WindowListEntry,
@@ -48,7 +49,9 @@ import { isTypingTarget, onActivate } from "./a11y";
 import { Editor } from "./Editor";
 import { ReflowHelp } from "./ReflowHelp";
 import { ConfirmModal } from "./ConfirmModal";
-import type { Widget, ConfirmRequestMessage } from "./protocol";
+import { ConnectionOverlay } from "./ConnectionOverlay";
+import { MediaErrorToast } from "./MediaErrorToast";
+import type { Widget, ConfirmRequestMessage, MediaCommandMessage } from "./protocol";
 import { wireWindowsToServer } from "./protocol";
 import { pathForView, viewFromPath, type View } from "./view-routing";
 
@@ -203,6 +206,16 @@ export function App() {
   // presses enabled so the first tap wakes the machine.
   const [sessionState, setSessionState] = useState<ServerState | null>(null);
   const onSessionState = useCallback((m: ServerState) => setSessionState(m), []);
+  // Media-command failure feedback (issue #64). The daemon answers a
+  // failed media command with a ``media_error`` frame naming the player;
+  // we hold the most recent one and render a toast. The *command* itself
+  // isn't echoed back, so the client remembers the last command it sent
+  // per id (``lastMediaCommandRef``) to make Retry possible.
+  const [mediaError, setMediaError] = useState<ServerMediaError | null>(null);
+  const lastMediaCommandRef = useRef<
+    Record<string, { command: MediaCommandMessage["command"]; value?: number }>
+  >({});
+  const onMediaError = useCallback((m: ServerMediaError) => setMediaError(m), []);
   // Demo mode has no socket, so seed the media store once on mount with the
   // fixture readings — otherwise a media widget renders as "unavailable".
   const isDemo = demoDeck !== null;
@@ -240,6 +253,7 @@ export function App() {
     onConfirmRequest,
     onRunningWindows,
     onSessionState,
+    onMediaError,
     { enabled: !demoDeck && !isPlayground },
   );
   const playgroundSocket = usePlaygroundDaemon(
@@ -251,8 +265,19 @@ export function App() {
     onRunningWindows,
     { enabled: isPlayground },
   );
-  const { status, send, authenticate, deauthenticate, hasPassword } =
-    isPlayground ? playgroundSocket : realSocket;
+  const {
+    status,
+    send,
+    authenticate,
+    deauthenticate,
+    hasPassword,
+    attempt,
+    lastError,
+    cancelled,
+    retrying,
+    cancelReconnect,
+    retryNow,
+  } = isPlayground ? playgroundSocket : realSocket;
   // Derived two-state (issue #160). ``locked`` requires credentials —
   // full takeover of focus-targeting surfaces. ``blanked`` without
   // ``locked`` is the soft "asleep, press anything to wake" state.
@@ -336,7 +361,10 @@ export function App() {
   const padDrag = (state: "start" | "end") => send({ type: "pad_drag", id: TRACKPAD_ID, state });
   const typeText = (text: string) => send({ type: "type", text });
   const keyCombo = (combo: string) => send({ type: "key", combo });
-  const mediaCommand = (id: string, command: "volume" | "seek" | "rate", value: number) => send({ type: "media_command", id, command, value });
+  const mediaCommand = (id: string, command: "volume" | "seek" | "rate", value: number) => {
+    lastMediaCommandRef.current[id] = { command, value };
+    send({ type: "media_command", id, command, value });
+  };
   // Now-playing per-row transport (issue #54): the cell sends
   // three value-less commands — ``play-pause`` / ``next`` / ``previous``
   // — keyed by the row's ``mpris.<suffix>`` id. The server routes the
@@ -344,8 +372,25 @@ export function App() {
   // ``media_command`` family keeps going to the VLC path. This
   // callback is the only thing the cell needs to know about the
   // wire surface.
-  const nowPlayingCommand = (id: string, command: "play-pause" | "next" | "previous") =>
+  const nowPlayingCommand = (id: string, command: "play-pause" | "next" | "previous") => {
+    lastMediaCommandRef.current[id] = { command };
     send({ type: "media_command", id, command });
+  };
+  // Retry re-sends the last command issued for the failed id (issue #64).
+  // The toast is cleared first so the retry is visibly a fresh attempt; a
+  // second failure re-opens it with the daemon's latest message.
+  const retryMedia = useCallback(() => {
+    const failed = mediaError;
+    setMediaError(null);
+    if (!failed) return;
+    const last = lastMediaCommandRef.current[failed.id];
+    if (!last) return;
+    send(
+      last.value === undefined
+        ? { type: "media_command", id: failed.id, command: last.command }
+        : { type: "media_command", id: failed.id, command: last.command, value: last.value },
+    );
+  }, [mediaError, send]);
   // Chrome view toggle (issue #51): the media icon mirrors the existing
   // trackpad / settings buttons. When opened it sends ``select_view``
   // so the daemon pushes the mpris deck; when closed it sends
@@ -608,10 +653,21 @@ export function App() {
     if (prevDeck.current === deck) return;
     prevDeck.current = deck;
     if (!deck) return;
+    if (deck.error) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setLiveText(`Deck error: ${deck.error_deck || "unknown deck"}`);
+      return;
+    }
     const app = deck.display_name?.trim() || deck.app || "deckd";
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLiveText(`Deck: ${app}${programSuffix}`);
   }, [deck, programSuffix]);
+  // Announce a failed media command (issue #64) — same live region, so a
+  // screen reader hears the toast without a separate focus move.
+  useEffect(() => {
+    if (!mediaError) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLiveText(`Media error: ${mediaError.player || mediaError.id}`);
+  }, [mediaError]);
 
   // Chrome app-identity badge (ADR-0007): the daemon relays an
   // optional ``display_name`` / ``theme`` / ``icon`` per deck; the
@@ -675,6 +731,14 @@ export function App() {
   const lockBlockedView = view === "deck" || view === "trackpad";
   const renderLockTakeover = screenLocked && lockBlockedView;
   const renderBlankBanner = screenBlanked && !screenLocked && view === "deck";
+  // Reconnect / disconnected overlay (issue #64). Shown only once there's
+  // actual trouble — a drop, a recorded error, or an active retry loop — so
+  // the initial dial doesn't flash an overlay over the first paint. Demo and
+  // playground report an ``open`` socket with no retry, so they never show
+  // it; the lock takeover outranks it.
+  const reconnecting = !cancelled && (status === "connecting" || retrying);
+  const showConnectionOverlay =
+    !screenLocked && (retrying || status === "closed" || !!lastError);
 
   return (
     <>
@@ -697,12 +761,28 @@ export function App() {
           }
         >
           <h1 className="sr-only">{headingText}</h1>
+          {/* Reconnect / disconnected overlay (issue #64). Sits over the
+              last-rendered surface so a stale grid stays visible behind it
+              while naming the attempt count and last error. Never shown
+              while locked (the lock takeover owns the surface then). */}
+          {showConnectionOverlay && (
+            <ConnectionOverlay
+              reconnecting={reconnecting}
+              attempt={attempt}
+              lastError={lastError}
+              onCancel={cancelReconnect}
+              onRetry={retryNow}
+            />
+          )}
           {renderLockTakeover ? (
             <div className="lock-takeover" role="status" aria-live="polite">
               <LockIcon className="lock-takeover-glyph" size={42} aria-hidden />
               <span className="lock-takeover-title">Screen locked</span>
+              <span className="lock-takeover-cause">
+                {`Screensaver or lock screen active on ${HOSTNAME}`}
+              </span>
               <span className="lock-takeover-sub">
-                {`Controls resume when you unlock ${HOSTNAME}`}
+                {`Input is held until you unlock ${HOSTNAME}`}
               </span>
             </div>
           ) : (
@@ -710,7 +790,9 @@ export function App() {
               {renderBlankBanner && (
                 <div className="lock-banner" role="status" aria-live="polite">
                   <MoonIcon size={16} aria-hidden />
-                  <span>{`Screen asleep — press anything to wake ${HOSTNAME}`}</span>
+                  <span>
+                    {`Screen asleep — press anything to wake ${HOSTNAME} (suspend or display blank)`}
+                  </span>
                 </div>
               )}
               {view === "trackpad" ? (
@@ -848,7 +930,33 @@ export function App() {
           ) : deck?.error ? (
             <div className="deck-error" role="alert">
               <span className="deck-error-title">Deck error</span>
+              {(deck.error_deck || deck.error_widget) && (
+                <span className="deck-error-summary">
+                  {deck.error_deck
+                    ? `Couldn't load the "${deck.error_deck}" deck.`
+                    : "Couldn't load a deck."}
+                  {deck.error_widget
+                    ? ` Widget "${deck.error_widget}" is invalid.`
+                    : ""}
+                </span>
+              )}
+              {deck.error === "view not found" && (
+                <span className="deck-error-summary">
+                  That view isn&apos;t available on this daemon.
+                </span>
+              )}
               <pre className="deck-error-body">{deck.error}</pre>
+              <button
+                className="deck-error-return"
+                onClick={() => {
+                  // The error path can be reached while a chrome view is
+                  // pinned; clearing returns to the focused-app surface.
+                  navigate("deck");
+                  send({ type: "clear_view" });
+                }}
+              >
+                Return to focused app
+              </button>
             </div>
           ) : deck ? (
             <ButtonGrid
@@ -1026,6 +1134,17 @@ export function App() {
           widget={pendingWidget}
           onConfirm={onConfirm}
           onCancel={onCancel}
+        />
+      ) : null}
+      {/* Failed-media-command toast (issue #64). Non-blocking: the deck
+          stays usable and the toast names the player with Retry / Dismiss. */}
+      {mediaError ? (
+        <MediaErrorToast
+          player={mediaError.player || mediaError.id}
+          message={mediaError.message}
+          retryable={mediaError.retryable ?? true}
+          onRetry={retryMedia}
+          onDismiss={() => setMediaError(null)}
         />
       ) : null}
     </>

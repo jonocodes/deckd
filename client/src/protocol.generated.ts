@@ -78,13 +78,24 @@ export type DeckMessage = {
    */
   web_app?: boolean;
   /**
+   * Structured companions to ``error`` (issue #64): the human-readable
+   * deck name and the offending widget, when the daemon could identify
+   * them. The raw ``error`` text (a pydantic dump) is precise but
+   * machine-shaped; these let the client say *which deck* and *which
+   * widget* in plain language. Both are ``None`` for non-deck errors
+   * (e.g. a chrome-view not found) and when the location is unknown.
+   */
+  error?: string | null;
+
+  error_deck?: string | null;
+  /**
    * The currently focused app's identity, populated when the daemon has a
    * focus backend (never in headless mode). ``None`` before the first focus
    * event arrives. The editor's new-deck creation flow (#104) uses this to
    * prefill ``match`` tokens for the detect-and-offer prompt and the
    * browser-vs-site branch.
    */
-  error?: string | null;
+  error_widget?: string | null;
   /**
    * True only on a genuine focus-driven fallback to the default deck —
    * i.e. the resolution missed every loaded deck and ``store.default()``
@@ -212,6 +223,42 @@ export type ErrorMessage = {
   type: "error";
 
   reason: string;
+};
+
+/**
+ * Daemon -> client push: a media command the client issued failed
+ *     (issue #64).
+ *
+ *     The client's media surfaces (the VLC ``media`` widget and the
+ *     ``nowplaying`` rows) are fire-and-forget: a command to a player that
+ *     disappeared between the last snapshot and the tap, or one the player
+ *     rejected, previously vanished into a daemon log. This frame tells the
+ *     *requesting* session what happened so it can explain which player
+ *     was affected and offer a retry — it is not broadcast (the failure is
+ *     a consequence of one session's action).
+ *
+ *     ``id`` echoes the widget / row id the command targeted (the same id
+ *     the client sent), so the client can correlate and re-send. ``player``
+ *     is the human-readable player name (MPRIS ``Identity``, or the VLC
+ *     widget's label); the daemon falls back to the raw id when it can't
+ *     name the player, but the field stays nullable so an older server
+ *     leaves the client's own fallback reachable. ``retryable`` is ``True``
+ *     for every failure the daemon reports today (a vanished player or a
+ *     rejected call can both succeed on a retry) and defaults to ``True``;
+ *     it is reserved for a future failure a retry can't help.
+ *     
+ */
+export type MediaErrorMessage = {
+
+  type: "media_error";
+
+  id: string;
+
+  player?: string | null;
+
+  message: string;
+
+  retryable?: boolean;
 };
 
 /**
@@ -414,7 +461,7 @@ export type RunningWindowsMessage = {
   windows: WindowListEntry[];
 };
 
-export type ServerMessage = DeckMessage | StateMessage | BrightnessMessage | WidgetUpdateMessage | MediaStateMessage | ChromeMediaMessage | EventMessage | MacroResultMessage | ConfirmRequestMessage | RunningWindowsMessage | ErrorMessage;
+export type ServerMessage = DeckMessage | StateMessage | BrightnessMessage | WidgetUpdateMessage | MediaStateMessage | MediaErrorMessage | ChromeMediaMessage | EventMessage | MacroResultMessage | ConfirmRequestMessage | RunningWindowsMessage | ErrorMessage;
 
 export type HelloMessage = {
 
