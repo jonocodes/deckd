@@ -6,7 +6,7 @@
 #
 #   nixosModules.deckd   system prerequisites: uinput module, udev rule,
 #                        `input` group, optional firewall port.
-#   homeModules.deckd    the user service itself, plus layouts seeding and
+#   homeModules.deckd    the user service itself, plus decks seeding and
 #                        the password file. Desktop glue lives next to it:
 #                        homeModules.deckd-gnome, homeModules.deckd-kde.
 #

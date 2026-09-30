@@ -70,15 +70,15 @@ async def serve(
         await server.stop()
 
 
-def _overlay_dir_for(layouts_dir: Path) -> Path:
-    """Pick a per-platform overlay dir next to ``layouts_dir``.
+def _overlay_dir_for(decks_dir: Path) -> Path:
+    """Pick a per-platform overlay dir next to ``decks_dir``.
 
     Convention: ``<name>.linux`` or ``<name>.macos``. The path is
     always returned; whether it actually exists is the caller's
     concern (``Server`` treats a missing overlay as a no-op).
     """
     suffix = {"darwin": "macos"}.get(sys.platform, "linux")
-    return layouts_dir.parent / f"{layouts_dir.name}.{suffix}"
+    return decks_dir.parent / f"{decks_dir.name}.{suffix}"
 
 
 def _sink_failure_hint(exc: BaseException) -> str:
@@ -152,20 +152,20 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Listen port (issue #66). ``0`` asks the kernel to pick one.",
     )
     parser.add_argument(
-        "--layouts-dir",
+        "--decks-dir",
         type=Path,
-        default=Path("layouts"),
-        help="Directory of per-app YAML layouts (one file per app + default.yaml)",
+        default=Path("decks"),
+        help="Directory of per-app YAML decks (one file per app + default.yaml)",
     )
     parser.add_argument(
         "--no-overlay",
         action="store_true",
-        help="Skip the per-platform overlay (layouts.<platform>) even if present",
+        help="Skip the per-platform overlay (decks.<platform>) even if present",
     )
     parser.add_argument(
         "--no-focus",
         action="store_true",
-        help="Disable the focus watcher (serve only the default layout)",
+        help="Disable the focus watcher (serve only the default deck)",
     )
     parser.add_argument(
         "--allow-while-locked",
@@ -274,9 +274,9 @@ def build_server(args: argparse.Namespace) -> Server:
             sys.platform,
         )
 
-    overlay_dir = None if args.no_overlay else _overlay_dir_for(args.layouts_dir)
+    overlay_dir = None if args.no_overlay else _overlay_dir_for(args.decks_dir)
     if overlay_dir is not None and overlay_dir.is_dir():
-        logging.getLogger("deckd").info("loading layouts overlay from %s", overlay_dir)
+        logging.getLogger("deckd").info("loading decks overlay from %s", overlay_dir)
 
     if args.no_auth:
         password = None
@@ -333,7 +333,7 @@ def build_server(args: argparse.Namespace) -> Server:
         )
 
     server = Server(
-        layouts_dir=args.layouts_dir,
+        decks_dir=args.decks_dir,
         bind=args.bind if args.bind is not None else list(DEFAULT_BIND),
         port=args.port,
         scroll=ScrollController(
@@ -358,7 +358,7 @@ def build_server(args: argparse.Namespace) -> Server:
         async def spa(_req):
             # SPA fallback: serve the built index.html for any path
             # without a file extension that isn't a reserved route
-            # (``/ws``, ``/health``, ``/reload``, ``/layout/...``).
+            # (``/ws``, ``/health``, ``/reload``, ``/deck/...``).
             return web.Response(text=index_text, content_type="text/html")
 
         # Register the SPA routes BEFORE add_static so they win the
@@ -367,7 +367,7 @@ def build_server(args: argparse.Namespace) -> Server:
         # listing, breaking ``/?demo=meter``-style entry points.
         server.app.router.add_get("/", spa)
         server.app.router.add_get(
-            "/{path:^(?!ws$|health$|reload$|layout($|/)).+}", spa
+            "/{path:^(?!ws$|health$|reload$|deck($|/)).+}", spa
         )
         server.app.router.add_static("/", args.client_dist, show_index=False, append_version=False)
 

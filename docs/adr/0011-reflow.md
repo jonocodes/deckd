@@ -41,11 +41,11 @@ ADR-0010 described a min/max band but shipped a single `cellSize` target. The ba
 - **`minCell`** — *how many buttons you see.* Capacity is `cols × rows` of whole cells at this size. Under `clip` it is a promise the renderer keeps, not a hint.
 - **`maxCell`** — *how big they may get.* Stops a two-widget deck from becoming two enormous buttons on a large panel.
 
-Both remain client-side per-device preferences ([ADR-0006](0006-widget-visual-styling.md)) in `localStorage`. Layout YAML still carries no pixel sizes.
+Both remain client-side per-device preferences ([ADR-0006](0006-widget-visual-styling.md)) in `localStorage`. Deck YAML still carries no pixel sizes.
 
-### Overflow is a device setting with a layout-supplied default
+### Overflow is a device setting with a deck-supplied default
 
-ADR-0010 made overflow layout-only, as "layout-semantic rather than device-ergonomic". That no longer holds: `minCell` is a device preference that *creates* the shortage, so the policy resolving it must be reachable from the same place. The layout's `overflow` field now supplies the **default**, which the device may override (`deckd.overflow`; unset means follow the layout).
+ADR-0010 made overflow deck-only, as "deck-semantic rather than device-ergonomic". That no longer holds: `minCell` is a device preference that *creates* the shortage, so the policy resolving it must be reachable from the same place. The deck's `overflow` field now supplies the **default**, which the device may override (`deckd.overflow`; unset means follow the deck).
 
 **The default changes from `shrink-to-fit` to `clip`.** The reason is not aesthetic: under `shrink-to-fit` the visible count is always every widget, so capacity is never consulted and **`minCell` has no effect at all**. Defaulting to it would ship a preference that does nothing. Note the two modes are **identical whenever the deck already fits** — they diverge only on oversized decks.
 
@@ -53,10 +53,10 @@ ADR-0010 made overflow layout-only, as "layout-semantic rather than device-ergon
 
 ## Consequences
 
-- **Breaking default change.** `Layout.overflow` defaults to `clip` in the daemon, and `ButtonGrid`'s prop default matches. No layout YAML in the repo sets `overflow`, so every deck that currently overflows will start hiding trailing widgets instead of shrinking everything. Decks that fit are unaffected.
+- **Breaking default change.** `Deck.overflow` defaults to `clip` in the daemon, and `ButtonGrid`'s prop default matches. No deck YAML in the repo sets `overflow`, so every deck that currently overflows will start hiding trailing widgets instead of shrinking everything. Decks that fit are unaffected.
 - **A hidden widget is unreachable, with no affordance announcing it.** The hidden count is known at render time, so surfacing it is cheap and worth doing. Pagination — named in ADR-0010 as the successor to clip — dissolves the trade-off entirely and remains the real fix.
 - `client/src/reflow.ts` is rewritten: `capacityUnits` + a row-count search, returning `cols`, `rows`, `cellPx`, `visibleUnits`, `hiddenUnits`. Before the first measurement it reports everything visible at zero size — trimming is a decision that requires a measurement, and reporting nothing would blank the surface for a frame.
 - `settings-store.ts` replaces `useCellSize` with `useCellBand` (which keeps floor ≤ cap) and adds `useOverflowPreference`. Keys: `deckd.minCell`, `deckd.maxCell`, `deckd.overflow`.
-- Settings gains **Min button size**, **Max button size**, and **When there's no room** (Follow layout / Hide extras / Shrink buttons).
+- Settings gains **Min button size**, **Max button size**, and **When there's no room** (Follow deck / Hide extras / Shrink buttons).
 - The interactive model, with both orientations at true ratios, lives at `docs/mockups/reflow-adr0011.html`.
 - The user-facing explainer ships as `client/src/ReflowHelp.tsx`, mounted in-app at `/help` (linked from Settings) and standalone as `help.html`. It imports the real `reflow.ts`, so its diagrams are the product's own geometry rather than a second implementation. `fillRows` is exported from the module for the page's row breakdown — the same rule CSS grid auto-placement applies in `ButtonGrid`.

@@ -6,7 +6,7 @@ in
 {
   # Boot the packaged daemon on loopback and exercise the surfaces that only
   # exist after install: the wrapper's baked-in client dist and bundled
-  # layouts, plus a live aiohttp stack.
+  # decks, plus a live aiohttp stack.
   smoke = pkgs.runCommand "deckd-smoke-test"
     {
       nativeBuildInputs = [
@@ -37,9 +37,9 @@ in
       curl -fsS -o index.html "http://127.0.0.1:$port/"
       grep -q '<div id="root">' index.html
 
-      # The bundled layouts loaded, with `default` as the fallback.
-      curl -fsS -o layouts.json "http://127.0.0.1:$port/layouts"
-      jq -e '.ok == true and (.layouts | map(.id) | index("default") != null)' layouts.json >/dev/null
+      # The bundled decks loaded, with `default` as the fallback.
+      curl -fsS -o decks.json "http://127.0.0.1:$port/decks"
+      jq -e '.ok == true and (.decks | map(.id) | index("default") != null)' decks.json >/dev/null
 
       kill "$pid"
       wait "$pid" 2>/dev/null || true

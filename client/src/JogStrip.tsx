@@ -2,7 +2,7 @@ import { useRef } from "react";
 import type { CSSProperties, KeyboardEvent } from "react";
 import { ChevronsUpDown } from "lucide-react";
 
-/** Minimal shape a JogStrip needs. Layout widgets satisfy this via the full
+/** Minimal shape a JogStrip needs. Deck widgets satisfy this via the full
  * ``Widget`` type; the chrome strip supplies an ``id`` only, without the
  * bogus grid placement that a real grid widget requires. */
 export type JogHandle = {

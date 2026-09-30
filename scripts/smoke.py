@@ -2,10 +2,10 @@
 
 Run with: python smoke.py
 
-Uses a stable fixture layout (``scripts/smoke_fixtures/default.yaml``)
-rather than the shipping ``layouts/`` directory (#77) — so a layout
+Uses a stable fixture deck (``scripts/smoke_fixtures/default.yaml``)
+rather than the shipping ``decks/`` directory (#77) — so a deck
 edit can't break CI and the smoke harness has a deterministic widget
-set to press. Override the directory with ``--layouts-dir``.
+set to press. Override the directory with ``--decks-dir``.
 """
 from __future__ import annotations
 
@@ -63,10 +63,10 @@ PORT = int(os.environ.get("DECKD_SMOKE_PORT", "18765"))
 BASE = f"http://127.0.0.1:{PORT}"
 
 
-async def main(layouts_dir: Path) -> None:
-    print(f"starting server (layouts: {layouts_dir})...", flush=True)
+async def main(decks_dir: Path) -> None:
+    print(f"starting server (decks: {decks_dir})...", flush=True)
     server = Server(
-        layouts_dir=layouts_dir,
+        decks_dir=decks_dir,
         host="127.0.0.1",
         port=PORT,
         scroll=ScrollController(FakeScrollSink()),
@@ -122,13 +122,13 @@ async def main(layouts_dir: Path) -> None:
 
 if __name__ == "__main__":
     repo_root = Path(__file__).resolve().parent.parent
-    default_layouts = repo_root / "scripts" / "smoke_fixtures"
+    default_decks = repo_root / "scripts" / "smoke_fixtures"
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "--layouts-dir",
+        "--decks-dir",
         type=Path,
-        default=default_layouts,
-        help=f"Directory to load layouts from (default: {default_layouts}).",
+        default=default_decks,
+        help=f"Directory to load decks from (default: {default_decks}).",
     )
     args = parser.parse_args()
-    asyncio.run(main(args.layouts_dir))
+    asyncio.run(main(args.decks_dir))

@@ -20,7 +20,7 @@ from conftest import (
     FakeDbusBusFactory,
     FakePointerSink,
     FakeScrollSink,
-    LAYOUTS_DIR,
+    DECKS_DIR,
     ServerHandle,
 )
 from deckd.input import ScrollController
@@ -36,7 +36,7 @@ async def test_default_bind_is_localhost_only() -> None:
     """When ``bind`` is ``None`` the daemon defaults to both
     loopbacks (issue #66 AC #1)."""
     server = Server(
-        layouts_dir=LAYOUTS_DIR,
+        decks_dir=DECKS_DIR,
         bind=None,
         port=0,
         scroll=ScrollController(FakeScrollSink()),
@@ -53,7 +53,7 @@ async def test_host_kwarg_is_legacy_shortcut() -> None:
     existing test fixtures and the spike module don't break."""
     from conftest import make_test_server
 
-    server, *_ = make_test_server(layouts_dir=LAYOUTS_DIR)
+    server, *_ = make_test_server(decks_dir=DECKS_DIR)
     # The fixture uses host="127.0.0.1" — _bind_specs collapses
     # the legacy single-string into the same tuple shape.
     assert server._bind_specs == ("127.0.0.1",)
@@ -66,7 +66,7 @@ async def test_bind_explicit_list_takes_precedence() -> None:
     # The make_test_server helper doesn't expose bind, so build a
     # bare Server here for the explicit-list path.
     server = Server(
-        layouts_dir=LAYOUTS_DIR,
+        decks_dir=DECKS_DIR,
         host="10.0.0.99",  # would-be legacy address
         bind=["127.0.0.1", "::1"],
         port=0,
@@ -80,7 +80,7 @@ async def test_start_binds_all_addresses_on_same_port(tmp_path: Path) -> None:
     different ports for IPv4 and IPv6 and a phone couldn't pair.
     """
     server = Server(
-        layouts_dir=LAYOUTS_DIR,
+        decks_dir=DECKS_DIR,
         bind=["127.0.0.1", "::1"],
         port=0,
         scroll=ScrollController(FakeScrollSink()),
@@ -129,7 +129,7 @@ async def test_start_collapses_default_if_ipv6_unavailable(
 
     monkeypatch.setattr("deckd.bind.resolve_bind", fake_resolve)
     server = Server(
-        layouts_dir=LAYOUTS_DIR,
+        decks_dir=DECKS_DIR,
         bind=None,
         port=0,
         scroll=ScrollController(FakeScrollSink()),
@@ -164,7 +164,7 @@ async def test_start_port_in_use_with_multi_bind(tmp_path: Path) -> None:
     busy_port = blocker.getsockname()[1]
     try:
         server = Server(
-            layouts_dir=LAYOUTS_DIR,
+            decks_dir=DECKS_DIR,
             bind=["127.0.0.1", "::1"],
             port=busy_port,
             scroll=ScrollController(FakeScrollSink()),
@@ -192,7 +192,7 @@ async def test_health_reports_bind_and_pairing_url(
         "match:\n  - default\nwidgets: []\n"
     )
     server = Server(
-        layouts_dir=tmp_path,
+        decks_dir=tmp_path,
         bind=["127.0.0.1"],
         port=0,
         scroll=ScrollController(FakeScrollSink()),
@@ -227,7 +227,7 @@ async def test_health_brackets_ipv6_in_addresses(
         "match:\n  - default\nwidgets: []\n"
     )
     server = Server(
-        layouts_dir=tmp_path,
+        decks_dir=tmp_path,
         bind=["::1"],
         port=0,
         scroll=ScrollController(FakeScrollSink()),

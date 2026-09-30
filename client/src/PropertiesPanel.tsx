@@ -6,7 +6,7 @@ import type { ActionFields } from "./ActionEditor";
 import { Icon as IconGlyph } from "./Icon";
 import { IconPicker } from "./IconPicker";
 
-interface LayoutFields {
+interface DeckFields {
   display_name?: string | null;
   theme?: string | null;
   icon?: IconRef | null;
@@ -16,9 +16,9 @@ interface LayoutFields {
 
 type Props = {
   widget: Widget | null;
-  layoutFields: LayoutFields;
+  deckFields: DeckFields;
   onWidgetChange: (widget: Widget) => void;
-  onLayoutFieldChange: (field: string, value: unknown) => void;
+  onDeckFieldChange: (field: string, value: unknown) => void;
   onDeleteWidget?: () => void;
 };
 
@@ -38,28 +38,28 @@ function iconFromWidget(widget: Widget): IconRef | null | undefined {
   return widget.icon;
 }
 
-function iconFromLayout(lf: LayoutFields): IconRef | null | undefined {
+function iconFromDeck(lf: DeckFields): IconRef | null | undefined {
   return lf.icon;
 }
 
 export function PropertiesPanel({
   widget,
-  layoutFields,
+  deckFields,
   onWidgetChange,
-  onLayoutFieldChange,
+  onDeckFieldChange,
   onDeleteWidget,
 }: Props) {
   if (!widget) {
     return (
       <div className="prop-panel">
-        <h3 className="editor-pane-title">Layout</h3>
+        <h3 className="editor-pane-title">Deck</h3>
         <label className="prop-field">
           <span className="prop-field-label">Display name</span>
           <input
             className="prop-field-input"
             type="text"
-            value={layoutFields.display_name ?? ""}
-            onChange={(e) => onLayoutFieldChange("display_name", e.target.value || null)}
+            value={deckFields.display_name ?? ""}
+            onChange={(e) => onDeckFieldChange("display_name", e.target.value || null)}
             placeholder="(derived from match)"
           />
         </label>
@@ -68,20 +68,20 @@ export function PropertiesPanel({
           <input
             className="prop-field-input"
             type="text"
-            value={layoutFields.theme ?? ""}
-            onChange={(e) => onLayoutFieldChange("theme", e.target.value || null)}
+            value={deckFields.theme ?? ""}
+            onChange={(e) => onDeckFieldChange("theme", e.target.value || null)}
             placeholder="e.g. #ff7139 or hsl(...)"
           />
         </label>
         <IconField
-          icon={iconFromLayout(layoutFields)}
-          onChange={(icon) => onLayoutFieldChange("icon", icon)}
+          icon={iconFromDeck(deckFields)}
+          onChange={(icon) => onDeckFieldChange("icon", icon)}
         />
         <label className="prop-field prop-field-check">
           <input
             type="checkbox"
-            checked={layoutFields.jogstrip !== false}
-            onChange={(e) => onLayoutFieldChange("jogstrip", e.target.checked)}
+            checked={deckFields.jogstrip !== false}
+            onChange={(e) => onDeckFieldChange("jogstrip", e.target.checked)}
           />
           <span className="prop-field-label">Jogstrip</span>
         </label>
@@ -89,8 +89,8 @@ export function PropertiesPanel({
           <span className="prop-field-label">Overflow</span>
           <select
             className="prop-field-input"
-            value={layoutFields.overflow ?? "shrink-to-fit"}
-            onChange={(e) => onLayoutFieldChange("overflow", e.target.value)}
+            value={deckFields.overflow ?? "shrink-to-fit"}
+            onChange={(e) => onDeckFieldChange("overflow", e.target.value)}
           >
             <option value="shrink-to-fit">Shrink to fit</option>
             <option value="clip">Clip</option>

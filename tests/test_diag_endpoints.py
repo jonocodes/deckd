@@ -1,9 +1,9 @@
 """HTTP integration tests for the diagnostic endpoints (issue #70/71/72).
 
-Covers ``/diag``, ``/layouts``, ``/actions/recent``, ``/metrics``,
+Covers ``/diag``, ``/decks``, ``/actions/recent``, ``/metrics``,
 ``/mpris/players``, ``/mpris/events/recent``, and
 ``POST /mpris/{row}/command``. The fixture loads the stable
-``tests/fixtures/layouts/`` YAML so widget ids and action shapes stay
+``tests/fixtures/decks/`` YAML so widget ids and action shapes stay
 deterministic across runs.
 """
 from __future__ import annotations
@@ -46,7 +46,7 @@ async def test_diag_open_auth(srv: ServerHandle) -> None:
         "auth",
         "focus",
         "input",
-        "layouts",
+        "decks",
         "sessions",
         "tasks",
         # Issue #66
@@ -95,34 +95,34 @@ async def test_diag_redacts_password(srv: ServerHandle) -> None:
     srv.server.password = None
 
 
-async def test_diag_layouts_block_lists_loaded_layout_ids(srv: ServerHandle) -> None:
+async def test_diag_decks_block_lists_loaded_deck_ids(srv: ServerHandle) -> None:
     async with aiohttp.ClientSession() as http:
         async with http.get(f"{srv.http_url}/diag") as r:
             body = await r.json()
-    assert "default" in body["layouts"]["ids"]
-    assert "firefox" in body["layouts"]["ids"]
+    assert "default" in body["decks"]["ids"]
+    assert "firefox" in body["decks"]["ids"]
 
 
 # ---------------------------------------------------------------------------
-# /layouts
+# /decks
 # ---------------------------------------------------------------------------
 
 
-async def test_layouts_endpoint_hides_action_bodies(srv: ServerHandle) -> None:
-    """``/layouts`` is safe to expose without the password: widget summaries,
+async def test_decks_endpoint_hides_action_bodies(srv: ServerHandle) -> None:
+    """``/decks`` is safe to expose without the password: widget summaries,
     no shell/dbus strings. The editor's full dump (action/macro bodies) is
     gated on auth so the diagnostics page stays safe to open."""
     srv.server.password = "hunter2"
     async with aiohttp.ClientSession() as http:
-        async with http.get(f"{srv.http_url}/layouts") as r:
+        async with http.get(f"{srv.http_url}/decks") as r:
             body = await r.json()
     assert body["ok"] is True
-    ids = {l["id"] for l in body["layouts"]}
+    ids = {l["id"] for l in body["decks"]}
     assert "default" in ids
     # Find one widget that has an action and confirm only the
     # ``has_action`` boolean is reported, not the action body.
-    default_layout = next(l for l in body["layouts"] if l["id"] == "default")
-    pressed = [w for w in default_layout["widgets"] if w.get("has_action")]
+    default_deck = next(l for l in body["decks"] if l["id"] == "default")
+    pressed = [w for w in default_deck["widgets"] if w.get("has_action")]
     assert pressed, "expected at least one widget with an action"
     for widget in pressed:
         assert "action" not in widget
@@ -134,20 +134,20 @@ async def test_layouts_endpoint_hides_action_bodies(srv: ServerHandle) -> None:
     assert "ctrl+t" not in raw  # the key action value
 
 
-async def test_layouts_endpoint_includes_action_bodies_when_authenticated(
+async def test_decks_endpoint_includes_action_bodies_when_authenticated(
     srv: ServerHandle,
 ) -> None:
     """The editor's opaque pass-through (#89) needs the unrendered fields:
-    an authenticated ``GET /layouts`` includes action/macro bodies."""
+    an authenticated ``GET /decks`` includes action/macro bodies."""
     srv.server.password = "hunter2"
     async with aiohttp.ClientSession() as http:
         async with http.get(
-            f"{srv.http_url}/layouts", headers={PASSWORD_HEADER: "hunter2"}
+            f"{srv.http_url}/decks", headers={PASSWORD_HEADER: "hunter2"}
         ) as r:
             body = await r.json()
     assert body["ok"] is True
-    default_layout = next(l for l in body["layouts"] if l["id"] == "default")
-    with_action = [w for w in default_layout["widgets"] if w.get("action")]
+    default_deck = next(l for l in body["decks"] if l["id"] == "default")
+    with_action = [w for w in default_deck["widgets"] if w.get("action")]
     assert with_action, "expected at least one widget with an action body"
     raw = json.dumps(body)
     assert "xdg-open" in raw  # the shell action value is now visible
@@ -156,12 +156,12 @@ async def test_layouts_endpoint_includes_action_bodies_when_authenticated(
     assert "restore_clipboard_delay_ms" not in raw
 
 
-async def test_layouts_endpoint_includes_kind_specific_fields(srv: ServerHandle) -> None:
+async def test_decks_endpoint_includes_kind_specific_fields(srv: ServerHandle) -> None:
     async with aiohttp.ClientSession() as http:
-        async with http.get(f"{srv.http_url}/layouts") as r:
+        async with http.get(f"{srv.http_url}/decks") as r:
             body = await r.json()
-    default_layout = next(l for l in body["layouts"] if l["id"] == "default")
-    by_kind = {w["kind"]: w for w in default_layout["widgets"]}
+    default_deck = next(l for l in body["decks"] if l["id"] == "default")
+    by_kind = {w["kind"]: w for w in default_deck["widgets"]}
     assert by_kind["jogstrip"]["kind"] == "jogstrip"
 
 
@@ -175,7 +175,7 @@ async def test_actions_recent_records_a_press(srv: ServerHandle) -> None:
     import websockets
 
     async with websockets.connect(srv.ws_url) as ws:
-        await ws.recv()  # initial layout
+        await ws.recv()  # initial deck
         await ws.send(json.dumps({"type": "press", "id": "open-url"}))
         await asyncio.sleep(0.05)
 
@@ -186,7 +186,7 @@ async def test_actions_recent_records_a_press(srv: ServerHandle) -> None:
     assert body["events"], "expected at least one recent action"
     entry = body["events"][-1]
     assert entry["widget_id"] == "open-url"
-    assert entry["layout_id"] == "default"
+    assert entry["deck_id"] == "default"
     assert entry["primitive"] == "shell"
     assert entry["outcome"] == "ok"
     # Action's command text is never exposed on the wire.
@@ -218,7 +218,7 @@ async def test_metrics_renders_prometheus_text(srv: ServerHandle) -> None:
     assert "deckd_up 1" in text
     assert "deckd_sessions_active" in text
     # Counters always render even at zero
-    assert "deckd_layout_reload_total" in text
+    assert "deckd_deck_reload_total" in text
     assert "deckd_action_total" in text
     assert "deckd_mpris_command_total" in text
 
@@ -306,7 +306,7 @@ widgets:
     from deckd.input import ScrollController
 
     server = Server(
-        layouts_dir=tmp_path,
+        decks_dir=tmp_path,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(FakeScrollSink()),
@@ -343,7 +343,7 @@ async def test_mpris_command_dispatch_with_fake_backend(monkeypatch, tmp_path) -
     (tmp_path / "default.yaml").write_text("match: [default]\nwidgets: []\n")
 
     server = Server(
-        layouts_dir=tmp_path,
+        decks_dir=tmp_path,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(FakeScrollSink()),
@@ -377,7 +377,7 @@ async def test_mpris_command_rejects_unknown_command(tmp_path) -> None:
     fake = FakeMprisBackend(states={"vlc": None})
     (tmp_path / "default.yaml").write_text("match: [default]\nwidgets: []\n")
     server = Server(
-        layouts_dir=tmp_path,
+        decks_dir=tmp_path,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(FakeScrollSink()),
@@ -410,7 +410,7 @@ async def test_mpris_command_rejects_unknown_row(tmp_path) -> None:
     fake = FakeMprisBackend(states={"vlc": None})
     (tmp_path / "default.yaml").write_text("match: [default]\nwidgets: []\n")
     server = Server(
-        layouts_dir=tmp_path,
+        decks_dir=tmp_path,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(FakeScrollSink()),
@@ -444,7 +444,7 @@ async def test_mpris_command_respects_auth(monkeypatch, tmp_path) -> None:
     fake = FakeMprisBackend(states={"vlc": MediaState(available=True)})
     (tmp_path / "default.yaml").write_text("match: [default]\nwidgets: []\n")
     server = Server(
-        layouts_dir=tmp_path,
+        decks_dir=tmp_path,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(FakeScrollSink()),

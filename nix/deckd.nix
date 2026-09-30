@@ -79,18 +79,18 @@ python.pkgs.buildPythonApplication {
 
   postInstall = ''
     mkdir -p $out/share/deckd $out/lib/udev/rules.d
-    cp -r ${../layouts} $out/share/deckd/layouts
+    cp -r ${../decks} $out/share/deckd/decks
     cp -r ${client}/share/deckd/client $out/share/deckd/client
     install -m 0644 ${../packaging/udev/70-deckd-uinput.rules} \
       $out/lib/udev/rules.d/70-deckd-uinput.rules
 
-    # `nix run` out of the box: serve the bundled client and layouts.
+    # `nix run` out of the box: serve the bundled client and decks.
     # Operators override either with later flags (last one wins), and the
-    # modules pass a writable --layouts-dir for live editing.
+    # modules pass a writable --decks-dir for live editing.
     wrapProgram $out/bin/deckd \
       --prefix PATH : ${lib.makeBinPath [ glib xdotool ]} \
       --add-flags "--client-dist $out/share/deckd/client" \
-      --add-flags "--layouts-dir $out/share/deckd/layouts"
+      --add-flags "--decks-dir $out/share/deckd/decks"
   '';
 
   pythonImportsCheck = [ "deckd" ];

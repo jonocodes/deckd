@@ -13,7 +13,7 @@ app-specific behaviour and interprets no presentation value — it relays.
 
 ### Presentation is opaque config the daemon relays, never interprets
 
-Visual attributes are part of the user-owned layout config. The daemon
+Visual attributes are part of the user-owned deck config. The daemon
 validates their *shape* and passes them through unchanged; it never assigns
 meaning to a colour or resolves an icon. This keeps ADR-0003's real
 guarantee (no app-specific behaviour baked into the daemon) intact while
@@ -26,12 +26,12 @@ otherwise argue for keeping presentation client-only.
 ### `color` is a raw CSS colour, background only
 
 `color: "#1e3a8a"` sets the button background. Any string the browser
-accepts is valid; the daemon does not sanitise (layouts are user-owned
+accepts is valid; the daemon does not sanitise (decks are user-owned
 config, not untrusted input). It affects the background only — label and
 icon colour are a fixed light foreground, and the pressed state is derived
 (`filter: brightness()` on `:active`), so no second colour field is needed.
 
-Contrast is the layout author's responsibility. The client does **not**
+Contrast is the deck author's responsibility. The client does **not**
 auto-pick a legible foreground from background luminance — a bad colour
 choice is the author's to fix. Chosen for predictability over cleverness.
 
@@ -50,7 +50,7 @@ rather than silently degrading to text.
 
 The daemon validates only that `source` and `name` are non-empty strings.
 It does **not** know the set of valid sources — that registry belongs to the
-client. A layout naming a source the client doesn't bundle renders a visible
+client. A deck naming a source the client doesn't bundle renders a visible
 "unknown icon" placeholder, not a load-time error. This keeps new icon
 sources a client-only change.
 
@@ -62,7 +62,7 @@ The client bundles two complementary sets:
 - **Simple Icons** (`source: simple-icons`) — brand/app logos (Firefox, …).
 
 Both are monochrome and inherit the fixed foreground colour. Neither is
-subset to referenced icons, so adding an icon to a layout is a YAML edit with
+subset to referenced icons, so adding an icon to a deck is a YAML edit with
 no client rebuild — any name in either set resolves at runtime.
 
 **Loading is asymmetric, because the sets differ ~10× in weight.** Measured:
@@ -72,7 +72,7 @@ brand paths). So:
 - **Lucide is bundled into the main chunk** (renders synchronously — its
   glyphs are on most buttons, and 198 KB in the initial load is fine).
 - **Simple Icons is a lazy on-demand chunk**, imported the first time a
-  layout references a brand logo. Its 2.1 MB is never fetched unless a brand
+  deck references a brand logo. Its 2.1 MB is never fetched unless a brand
   icon is actually used, and is cached by the PWA service worker thereafter.
 
 (The earlier ~0.5 MB "bundle both whole" estimate was wrong — whole-bundling
@@ -87,7 +87,7 @@ packs.
 
 A clean seam for "where does a visual choice live":
 
-- **Per-widget** presentation (`color`, `icon`) is part of the *layout* —
+- **Per-widget** presentation (`color`, `icon`) is part of the *deck* —
   authored in YAML, relayed by the daemon.
 - **Global** look preferences (e.g. show-labels) are *device/client* choices
   — persisted in client Settings (`settings-store.ts`), never daemon config.
@@ -112,10 +112,10 @@ error for a `color` on a jogstrip).
 Extensible / user-defined control kinds (colour picker, jog wheel, …) are a
 separate future exploration (#35), out of scope here.
 
-### One fixed style — no light/dark, no per-layout theme
+### One fixed style — no light/dark, no per-deck theme
 
 There is no theme system. The client has a single dark look. No OS
-light/dark following, no `theme:` field, no per-layout accent overrides
+light/dark following, no `theme:` field, no per-deck accent overrides
 beyond per-button `color`. (Night Light theming is out of scope per #6.)
 
 ## Out of scope (deferred, deliberately)
@@ -139,5 +139,5 @@ These are known future work, designed *for* but not built now. The
   dispatching on `source`.
 - Adding or swapping an icon set is a client-only bundling change — the
   daemon and protocol are unaffected.
-- Illegible colour choices are possible and accepted; they are the layout
+- Illegible colour choices are possible and accepted; they are the deck
   author's to fix.

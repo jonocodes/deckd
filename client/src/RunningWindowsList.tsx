@@ -3,7 +3,7 @@
  * Renders one row per currently-open window, label + optional icon.
  * The list lives in its own chrome view (``WINDOWS_VIEW_ID``) — a new
  * tap target in the persistent chrome strip, parallel to the media
- * browser and layout editor views. Display only in v1: tapping a row
+ * browser and deck editor views. Display only in v1: tapping a row
  * does not yet raise the window; that's stage 3 (#122), wired as a
  * no-op placeholder here so the round-trip stays observable when the
  * daemon-side raise message lands.
@@ -19,7 +19,7 @@
  *     explicit "no running programs" message so the user knows the
  *     view is alive, not broken.
  *  3. ``windows`` is non-empty — one row per window. The label is the
- *     daemon-derived display string (matched layout's display_name,
+ *     daemon-derived display string (matched deck's display_name,
  *     else a raw identity fallback); the icon, when present, rides
  *     alongside the label as a 28px glyph. Default-fallback rows
  *     (icon=null on the wire) render a muted generic window glyph as a

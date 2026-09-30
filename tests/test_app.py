@@ -30,7 +30,7 @@ def test_resource_root_frozen(monkeypatch, tmp_path: Path) -> None:
     assert macos_app.resource_root() == tmp_path
 
 
-def test_menubar_icon_paths_frozen_layout(tmp_path: Path) -> None:
+def test_menubar_icon_paths_frozen_deck(tmp_path: Path) -> None:
     # Frozen: the spec drops the template PNGs at the bundle root.
     _write(tmp_path / "deckd-menubar.png", "")
     assert macos_app.menubar_icon_paths(tmp_path) == (
@@ -39,7 +39,7 @@ def test_menubar_icon_paths_frozen_layout(tmp_path: Path) -> None:
     )
 
 
-def test_menubar_icon_paths_source_layout(tmp_path: Path) -> None:
+def test_menubar_icon_paths_source_deck(tmp_path: Path) -> None:
     # Source checkout: the PNGs sit beside the spec in packaging/macos.
     _write(tmp_path / "packaging" / "macos" / "deckd-menubar.png", "")
     assert macos_app.menubar_icon_paths(tmp_path) == (
@@ -52,21 +52,21 @@ def test_menubar_icon_paths_absent(tmp_path: Path) -> None:
     assert macos_app.menubar_icon_paths(tmp_path) is None
 
 
-def test_seed_layouts_first_run_then_noop(tmp_path: Path) -> None:
+def test_seed_decks_first_run_then_noop(tmp_path: Path) -> None:
     src = tmp_path / "bundled"
     _write(src / "default.yaml", "id: default\n")
     overlay = tmp_path / "bundled.macos"
     _write(overlay / "firefox.yaml", "id: firefox\n")
-    dest = tmp_path / "support" / "layouts"
+    dest = tmp_path / "support" / "decks"
 
-    assert macos_app.seed_layouts(src, dest, overlay=overlay) is True
+    assert macos_app.seed_decks(src, dest, overlay=overlay) is True
     assert (dest / "default.yaml").read_text() == "id: default\n"
-    # The overlay lands beside the layouts dir, where the daemon looks.
-    assert (dest.parent / "layouts.macos" / "firefox.yaml").is_file()
+    # The overlay lands beside the decks dir, where the daemon looks.
+    assert (dest.parent / "decks.macos" / "firefox.yaml").is_file()
 
     # A user's edits survive the next run: an existing dir is never re-seeded.
     (dest / "default.yaml").write_text("id: default\nedited: true\n")
-    assert macos_app.seed_layouts(src, dest, overlay=overlay) is False
+    assert macos_app.seed_decks(src, dest, overlay=overlay) is False
     assert "edited" in (dest / "default.yaml").read_text()
 
 
@@ -105,17 +105,17 @@ def test_bundle_info_plist_has_no_empty_strings() -> None:
 
 def test_app_argv_defaults_to_localhost(tmp_path: Path) -> None:
     argv = macos_app.app_argv(
-        layouts_dir=tmp_path / "layouts", client_dist=tmp_path / "web"
+        decks_dir=tmp_path / "decks", client_dist=tmp_path / "web"
     )
     assert "--bind" not in argv
-    assert argv[argv.index("--layouts-dir") + 1] == str(tmp_path / "layouts")
+    assert argv[argv.index("--decks-dir") + 1] == str(tmp_path / "decks")
     assert argv[argv.index("--client-dist") + 1] == str(tmp_path / "web")
     assert argv[argv.index("--port") + 1] == str(macos_app.DEFAULT_PORT)
 
 
 def test_app_argv_lan_and_extras(tmp_path: Path) -> None:
     argv = macos_app.app_argv(
-        layouts_dir=tmp_path / "l",
+        decks_dir=tmp_path / "l",
         client_dist=tmp_path / "w",
         bind=["0.0.0.0"],
         password_file=tmp_path / "pw",

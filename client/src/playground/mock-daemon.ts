@@ -10,7 +10,7 @@
  * between them reuses the *production* affordance: the running-programs
  * chrome list. Tapping a row sends ``raise_window`` (as a real client does),
  * and the mock — like the daemon's focus watcher — resolves the newly
- * focused app and pushes its layout. Background apps keep ticking, so the
+ * focused app and pushes its deck. Background apps keep ticking, so the
  * music plays on (and the chrome media dot stays lit) while you're on
  * another deck.
  *
@@ -22,33 +22,33 @@ import type {
   Icon,
   MediaState,
   ServerChromeMedia,
-  ServerLayout,
+  ServerDeck,
   ServerRunningWindows,
   ServerWidgetUpdate,
 } from "../protocol";
 
 /** The frames a virtual app can push. A strict subset of ``ServerMessage``,
  * discriminated by ``type`` so the daemon can route each to its callback. */
-type AppFrame = ServerLayout | MediaState | ServerWidgetUpdate | ServerChromeMedia;
+type AppFrame = ServerDeck | MediaState | ServerWidgetUpdate | ServerChromeMedia;
 
 /** The callback surface the daemon emits into — the frames this Playground
  * produces, mapped onto ``useDeckdSocket``'s handlers. */
 export type DaemonEmit = {
-  onLayout: (m: ServerLayout) => void;
+  onDeck: (m: ServerDeck) => void;
   onMediaState: (m: MediaState) => void;
   onWidgetUpdate: (m: ServerWidgetUpdate) => void;
   onChromeMedia?: (m: ServerChromeMedia) => void;
   onRunningWindows?: (m: ServerRunningWindows) => void;
 };
 
-/** A running virtual app: it owns a layout, holds state, ticks on the clock,
+/** A running virtual app: it owns a deck, holds state, ticks on the clock,
  * and reacts to client messages by returning frames to emit. */
 interface VirtualApp {
   readonly id: string;
   readonly windowLabel: string;
   readonly icon: Icon | null;
   /** The deck this app shows when focused. */
-  layout(): ServerLayout;
+  deck(): ServerDeck;
   /** Frames to (re)establish this app's state — emitted at start and on focus. */
   initialFrames(): AppFrame[];
   /** Advance ``dt`` seconds; return any frames produced (deterministic). */
@@ -88,9 +88,9 @@ class MusicApp implements VirtualApp {
     return TRACKLIST[this.index];
   }
 
-  layout(): ServerLayout {
+  deck(): ServerDeck {
     return {
-      type: "layout",
+      type: "deck",
       app: "Music",
       display_name: "Music",
       theme: "#22c55e",
@@ -200,9 +200,9 @@ class LightsApp implements VirtualApp {
 
   private brightness = 60;
 
-  layout(): ServerLayout {
+  deck(): ServerDeck {
     return {
-      type: "layout",
+      type: "deck",
       app: "Lights",
       display_name: "Lights",
       theme: "#f59e0b",
@@ -248,9 +248,9 @@ class BrowserApp implements VirtualApp {
   readonly windowLabel = "Firefox";
   readonly icon: Icon = { source: "simple-icons", name: "firefox" };
 
-  layout(): ServerLayout {
+  deck(): ServerDeck {
     return {
-      type: "layout",
+      type: "deck",
       app: "Firefox",
       display_name: "Firefox",
       theme: "#ff7139",
@@ -283,7 +283,7 @@ class BrowserApp implements VirtualApp {
 const TICK_MS = 250;
 const TICK_DT = TICK_MS / 1000;
 
-/** The virtual backend. ``start`` pushes the focused app's layout + every
+/** The virtual backend. ``start`` pushes the focused app's deck + every
  * app's initial state and begins the clock; ``send`` accepts client messages
  * (presses, media commands, and ``raise_window`` app-switches); ``stop``
  * tears the clock down. */
@@ -310,7 +310,7 @@ export class MockDaemon {
   }
 
   start(): void {
-    this.emitFrame(this.current.layout());
+    this.emitFrame(this.current.deck());
     this.emitRunningWindows();
     // Seed every app's state, not just the focused one, so a background app
     // (the music player) is already live the moment you switch to it.
@@ -329,14 +329,14 @@ export class MockDaemon {
 
   send(msg: ClientMessage): void {
     // Tapping a running-programs row raises that window; the daemon reacts to
-    // the focus change by pushing the newly focused app's layout.
+    // the focus change by pushing the newly focused app's deck.
     if (msg.type === "raise_window") {
       this.focus(msg.window_id);
       return;
     }
-    // A view close (Escape / clear) re-pushes the focused-app layout.
+    // A view close (Escape / clear) re-pushes the focused-app deck.
     if (msg.type === "clear_view") {
-      this.emitFrame(this.current.layout());
+      this.emitFrame(this.current.deck());
       return;
     }
     // Chrome views (windows / nowplaying / editor) are client-local in the
@@ -349,7 +349,7 @@ export class MockDaemon {
   private focus(id: string): void {
     if (!this.apps.some((a) => a.id === id)) return;
     this.order = [id, ...this.order.filter((x) => x !== id)];
-    this.emitFrame(this.current.layout());
+    this.emitFrame(this.current.deck());
     this.current.initialFrames().forEach((f) => this.emitFrame(f));
     this.emitRunningWindows();
   }
@@ -364,8 +364,8 @@ export class MockDaemon {
 
   private emitFrame(frame: AppFrame): void {
     switch (frame.type) {
-      case "layout":
-        this.emit.onLayout(frame);
+      case "deck":
+        this.emit.onDeck(frame);
         break;
       case "media_state":
         this.emit.onMediaState(frame);

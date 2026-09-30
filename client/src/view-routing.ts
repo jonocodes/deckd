@@ -1,5 +1,5 @@
 export type View =
-  | "layout"
+  | "deck"
   | "trackpad"
   | "settings"
   | "nowplaying"
@@ -8,7 +8,7 @@ export type View =
   | "help";
 
 const PATH_BY_VIEW: Record<View, string> = {
-  layout: "/",
+  deck: "/",
   trackpad: "/trackpad",
   settings: "/settings",
   nowplaying: "/now-playing",
@@ -24,7 +24,7 @@ const VIEW_BY_PATH: Record<string, View> = Object.fromEntries(
 ) as Record<string, View>;
 
 export function viewFromPath(pathname: string): View {
-  return VIEW_BY_PATH[pathname] ?? "layout";
+  return VIEW_BY_PATH[pathname] ?? "deck";
 }
 
 export function pathForView(view: View): string {

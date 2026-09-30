@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from deckd.layouts import Widget
+from deckd.decks import Widget
 
 
 def test_confirm_defaults_to_false_on_button() -> None:

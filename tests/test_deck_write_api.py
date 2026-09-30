@@ -1,10 +1,10 @@
-"""HTTP write API tests for ``PUT /layouts/{id}`` (save) and ``POST /layouts``
+"""HTTP write API tests for ``PUT /decks/{id}`` (save) and ``POST /decks``
 (create) — issue #99, mirroring the #94 PUT contract.
 
 Black-box at the aiohttp boundary (seam S4): auth gate, structured sanitized
 ``400``s, ``404`` unknown id, ``409`` rename / collision, and the ``200``
 canonical re-read echo. A final test exercises the ``watchfiles`` watcher so
-an editor save round-trips into the live layout store.
+an editor save round-trips into the live deck store.
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ def _default_yaml() -> str:
 def _firefox_yaml() -> str:
     # The leading comment exercises comment preservation through a save.
     return (
-        "# firefox layout — browser nav\n"
+        "# firefox deck — browser nav\n"
         "match:\n  - firefox\n"
         "widgets:\n"
         "  - id: back\n    kind: button\n    label: Back\n"
@@ -53,7 +53,7 @@ async def _serve(tmp_path: Path, *, password: str | None = None):
     (tmp_path / "default.yaml").write_text(_default_yaml())
     (tmp_path / "firefox.yaml").write_text(_firefox_yaml())
     server, _scroll, _key, _dbus = make_test_server(
-        layouts_dir=tmp_path, password=password
+        decks_dir=tmp_path, password=password
     )
     ts = TestServer(server.app, host="127.0.0.1")
     await ts.start_server()
@@ -61,7 +61,7 @@ async def _serve(tmp_path: Path, *, password: str | None = None):
 
 
 # ---------------------------------------------------------------------------
-# PUT /layouts/{id} — save
+# PUT /decks/{id} — save
 # ---------------------------------------------------------------------------
 
 
@@ -71,23 +71,23 @@ async def test_put_save_canonical_re_read(tmp_path: Path) -> None:
     try:
         async with aiohttp.ClientSession() as http:
             async with http.put(
-                f"http://127.0.0.1:{port}/layouts/firefox",
+                f"http://127.0.0.1:{port}/decks/firefox",
                 json=_firefox_snapshot(label="Backward"),
             ) as r:
                 assert r.status == 200
                 body = await r.json()
         assert body["ok"] is True
-        assert body["layout"]["id"] == "firefox"
-        assert body["layout"]["match"] == ["firefox"]
-        assert body["layout"]["widgets"][0]["label"] == "Backward"
+        assert body["deck"]["id"] == "firefox"
+        assert body["deck"]["match"] == ["firefox"]
+        assert body["deck"]["widgets"][0]["label"] == "Backward"
 
         # Comment preserved through the reconcile-and-write round-trip.
         text = (tmp_path / "firefox.yaml").read_text()
-        assert "# firefox layout — browser nav" in text
+        assert "# firefox deck — browser nav" in text
         # The live store reloaded the edit (the watcher does this in
         # production; here we drive the same reload the watcher would).
-        server.reload_layouts()
-        assert server.layouts["firefox"].widgets[0].label == "Backward"
+        server.reload_decks()
+        assert server.decks["firefox"].widgets[0].label == "Backward"
     finally:
         await ts.close()
         await server.scroll.close()
@@ -99,7 +99,7 @@ async def test_put_save_404_unknown_id(tmp_path: Path) -> None:
     try:
         async with aiohttp.ClientSession() as http:
             async with http.put(
-                f"http://127.0.0.1:{port}/layouts/ghost",
+                f"http://127.0.0.1:{port}/decks/ghost",
                 json={"match": ["ghost"], "widgets": []},
             ) as r:
                 assert r.status == 404
@@ -117,7 +117,7 @@ async def test_put_save_409_when_match0_renames(tmp_path: Path) -> None:
     try:
         async with aiohttp.ClientSession() as http:
             async with http.put(
-                f"http://127.0.0.1:{port}/layouts/firefox",
+                f"http://127.0.0.1:{port}/decks/firefox",
                 json={"match": ["chrome"], "widgets": []},
             ) as r:
                 assert r.status == 409
@@ -135,7 +135,7 @@ async def test_put_save_400_sanitized_validation_errors(tmp_path: Path) -> None:
     try:
         async with aiohttp.ClientSession() as http:
             async with http.put(
-                f"http://127.0.0.1:{port}/layouts/firefox",
+                f"http://127.0.0.1:{port}/decks/firefox",
                 json={
                     "match": ["firefox"],
                     "widgets": [
@@ -165,7 +165,7 @@ async def test_put_save_400_rejects_unknown_field_sanitized(tmp_path: Path) -> N
     try:
         async with aiohttp.ClientSession() as http:
             async with http.put(
-                f"http://127.0.0.1:{port}/layouts/firefox",
+                f"http://127.0.0.1:{port}/decks/firefox",
                 json={"match": ["firefox"], "widgets": [], "bogus": 1},
             ) as r:
                 assert r.status == 400
@@ -185,7 +185,7 @@ async def test_put_save_401_when_auth_configured(tmp_path: Path) -> None:
     try:
         async with aiohttp.ClientSession() as http:
             async with http.put(
-                f"http://127.0.0.1:{port}/layouts/firefox",
+                f"http://127.0.0.1:{port}/decks/firefox",
                 json=_firefox_snapshot(),
             ) as r:
                 assert r.status == 401
@@ -200,7 +200,7 @@ async def test_put_save_200_with_auth_header(tmp_path: Path) -> None:
     try:
         async with aiohttp.ClientSession() as http:
             async with http.put(
-                f"http://127.0.0.1:{port}/layouts/firefox",
+                f"http://127.0.0.1:{port}/decks/firefox",
                 json=_firefox_snapshot(),
                 headers={"X-Deckd-Password": PASSWORD},
             ) as r:
@@ -213,7 +213,7 @@ async def test_put_save_200_with_auth_header(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# POST /layouts — create
+# POST /decks — create
 # ---------------------------------------------------------------------------
 
 
@@ -232,15 +232,15 @@ async def test_post_create_writes_new_file_canonical(tmp_path: Path) -> None:
     try:
         async with aiohttp.ClientSession() as http:
             async with http.post(
-                f"http://127.0.0.1:{port}/layouts", json=_slack_snapshot()
+                f"http://127.0.0.1:{port}/decks", json=_slack_snapshot()
             ) as r:
                 assert r.status == 200
                 body = await r.json()
         assert body["ok"] is True
         # Filename derived from slugified match[0] (Slack -> slack.yaml);
         # canonical id = match[0] verbatim.
-        assert body["layout"]["id"] == "Slack"
-        assert body["layout"]["match"] == ["Slack"]
+        assert body["deck"]["id"] == "Slack"
+        assert body["deck"]["match"] == ["Slack"]
         on_disk = (tmp_path / "slack.yaml").read_text()
         assert "match:" in on_disk
         assert "- Slack" in on_disk
@@ -257,7 +257,7 @@ async def test_post_create_409_on_existing_id(tmp_path: Path) -> None:
     try:
         async with aiohttp.ClientSession() as http:
             async with http.post(
-                f"http://127.0.0.1:{port}/layouts",
+                f"http://127.0.0.1:{port}/decks",
                 json=_firefox_snapshot(),
             ) as r:
                 assert r.status == 409
@@ -280,11 +280,11 @@ async def test_post_create_409_on_slug_collision_different_case(tmp_path: Path) 
     try:
         async with aiohttp.ClientSession() as http:
             async with http.post(
-                f"http://127.0.0.1:{port}/layouts", json=_slack_snapshot()
+                f"http://127.0.0.1:{port}/decks", json=_slack_snapshot()
             ) as r:
                 assert r.status == 200  # first create ok
             async with http.post(
-                f"http://127.0.0.1:{port}/layouts",
+                f"http://127.0.0.1:{port}/decks",
                 json={
                     "match": ["slack"],
                     "widgets": [],
@@ -302,7 +302,7 @@ async def test_post_create_400_empty_match(tmp_path: Path) -> None:
     try:
         async with aiohttp.ClientSession() as http:
             async with http.post(
-                f"http://127.0.0.1:{port}/layouts",
+                f"http://127.0.0.1:{port}/decks",
                 json={"match": [], "widgets": []},
             ) as r:
                 assert r.status == 400
@@ -325,7 +325,7 @@ async def test_post_create_400_unslugifiable_match_token(tmp_path: Path) -> None
     try:
         async with aiohttp.ClientSession() as http:
             async with http.post(
-                f"http://127.0.0.1:{port}/layouts",
+                f"http://127.0.0.1:{port}/decks",
                 json={"match": ["***"], "widgets": []},
             ) as r:
                 assert r.status == 400
@@ -345,7 +345,7 @@ async def test_post_create_400_sanitized_validation_errors(tmp_path: Path) -> No
     try:
         async with aiohttp.ClientSession() as http:
             async with http.post(
-                f"http://127.0.0.1:{port}/layouts",
+                f"http://127.0.0.1:{port}/decks",
                 json={"match": ["slack"], "bogus": 1},
             ) as r:
                 assert r.status == 400
@@ -363,13 +363,13 @@ async def test_post_create_401_when_auth_configured(tmp_path: Path) -> None:
     try:
         async with aiohttp.ClientSession() as http:
             async with http.post(
-                f"http://127.0.0.1:{port}/layouts", json=_slack_snapshot()
+                f"http://127.0.0.1:{port}/decks", json=_slack_snapshot()
             ) as r:
                 assert r.status == 401
         # Auth'd create still succeeds with the header.
         async with aiohttp.ClientSession() as http:
             async with http.post(
-                f"http://127.0.0.1:{port}/layouts",
+                f"http://127.0.0.1:{port}/decks",
                 json=_slack_snapshot(),
                 headers={"X-Deckd-Password": PASSWORD},
             ) as r:
@@ -383,20 +383,20 @@ async def test_post_create_reloads_via_watchfiles(tmp_path: Path) -> None:
     """A save round-trips through the watchfiles watcher into the live store."""
     server, ts = await _serve(tmp_path)
     port = ts.port
-    server.start_layouts_watcher()
+    server.start_decks_watcher()
     try:
         async with aiohttp.ClientSession() as http:
             async with http.post(
-                f"http://127.0.0.1:{port}/layouts", json=_slack_snapshot()
+                f"http://127.0.0.1:{port}/decks", json=_slack_snapshot()
             ) as r:
                 assert r.status == 200
         # The watcher reloads asynchronously; poll for at most a couple seconds.
         for _ in range(40):
-            if "Slack" in server.layouts:
+            if "Slack" in server.decks:
                 break
             await asyncio.sleep(0.05)
-        assert "Slack" in server.layouts
-        assert server.layouts["Slack"].widgets[0].label == "Snooze"
+        assert "Slack" in server.decks
+        assert server.decks["Slack"].widgets[0].label == "Snooze"
     finally:
         await server.stop()
         await ts.close()

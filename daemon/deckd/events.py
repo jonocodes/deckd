@@ -3,7 +3,7 @@
 Two responsibilities:
 
 - :class:`EventBus` lets the daemon publish ``"focus_change"``,
-  ``"layout_reload"``, ``"action"``, ``"auth"``, and ``"mpris"``
+  ``"deck_reload"``, ``"action"``, ``"auth"``, and ``"mpris"``
   events. Subscribers receive the :class:`DiagnosticEvent` payload
   on the event loop so they can fan it out to connected WebSocket
   sessions.
@@ -82,7 +82,7 @@ class DiagnosticEvent:
     Fields are redacted: the bus never carries the shared password,
     raw injected input, or arbitrary URL payloads (only IDs and small
     scalars). Subscribers that need richer data fetch it from the
-    appropriate daemon API (``server.current_layout``, ``mpris.row_ids``,
+    appropriate daemon API (``server.current_deck``, ``mpris.row_ids``,
     etc).
     """
 

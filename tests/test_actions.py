@@ -16,13 +16,13 @@ import pytest
 from conftest import FakeDbusBusFactory, FakePointerSink, requires_dbus
 
 from deckd.actions import ActionContext, execute as run_action
-from deckd.layouts import Action, Widget
+from deckd.decks import Action, Widget
 
 
 def _ctx(factory: FakeDbusBusFactory) -> ActionContext:
     return ActionContext(
-        send_layout=lambda: asyncio.sleep(0),
-        get_current_layout=lambda: None,
+        send_deck=lambda: asyncio.sleep(0),
+        get_current_deck=lambda: None,
         current_app="default",
         key_sink=None,
         dbus_bus_factory=cast(Any, factory),
@@ -261,8 +261,8 @@ async def test_run_shell_start_failure_is_logged(
 
 def _ctx_key_sink(sink: FakePointerSink) -> ActionContext:
     return ActionContext(
-        send_layout=lambda: asyncio.sleep(0),
-        get_current_layout=lambda: None,
+        send_deck=lambda: asyncio.sleep(0),
+        get_current_deck=lambda: None,
         current_app="default",
         key_sink=sink,
         dbus_bus_factory=None,

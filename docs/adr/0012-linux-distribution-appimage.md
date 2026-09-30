@@ -21,7 +21,7 @@ the channel:
    MPRIS, on the **unfiltered** session bus.
 
 Plus user-level autostart (systemd user unit or an XDG `.desktop`) and a
-bundled Python runtime + client + layouts.
+bundled Python runtime + client + decks.
 
 The GUIDE already rules out Docker for exactly these reasons
 (`docs/GUIDE.md:593`): the daemon needs host `/dev/uinput`, the host
@@ -102,7 +102,7 @@ Deferred until the AppImage path is proven on real hardware.
 
 All channels share Phase 0 of #168:
 
-1. a build recipe that assembles the runtime + client + layouts into a
+1. a build recipe that assembles the runtime + client + decks into a
    relocatable tree;
 2. a first-run/install script that performs the privileged + user-level
    integration;

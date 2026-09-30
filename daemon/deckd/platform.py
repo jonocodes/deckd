@@ -20,7 +20,7 @@ log = logging.getLogger("deckd.platform")
 # platforms and packaging (flatpak app-ids, X11 wm_class, macOS process
 # names). Matched case-insensitively as substrings so ``org.mozilla.firefox``,
 # ``firefox-esr`` and ``Navigator`` (Firefox's X11 wm_class) all count. Used
-# only to decide whether a title-matched layout is a *web app* (browser) vs a
+# only to decide whether a title-matched deck is a *web app* (browser) vs a
 # desktop app that merely matched by title — see ``AppInfo.is_browser``.
 _BROWSER_MARKERS = (
     "firefox",
@@ -57,8 +57,8 @@ class AppInfo:
 
         Best-effort substring match against a maintained marker list. It only
         gates the *web app* indicator (a browser-focused title match), never
-        layout resolution, so a miss just means no globe badge — never a wrong
-        layout.
+        deck resolution, so a miss just means no globe badge — never a wrong
+        deck.
         """
         hay = f"{self.app_id or ''} {self.wm_class or ''}".casefold()
         return any(marker in hay for marker in _BROWSER_MARKERS)
@@ -69,7 +69,7 @@ class WindowInfo:
     """One open window, enumerated by a platform backend (issues #119 /
     #120 / #126).
 
-    Two-layer shape: identity (the three keys the layout matcher
+    Two-layer shape: identity (the three keys the deck matcher
     compares against ``match`` tokens — ``wm_class`` /
     ``gtk_application_id`` / ``sandboxed_app_id`` per #117 / #118) plus
     state (``title`` for raw display fallback; ``workspace`` and
@@ -80,7 +80,7 @@ class WindowInfo:
     lifetime, opaque to the daemon, never parsed by the client. The
     matched label is *not* on this struct: it's a separate
     wire-payload field the daemon produces (backend interface is free
-    of layout-pipeline concerns, per #121).
+    of deck-pipeline concerns, per #121).
     """
 
     window_id: str
@@ -148,7 +148,7 @@ class SensorSource:
     """
 
     #: Short, stable identifier the client references (matches the
-    #: ``source`` field on a meter widget in a layout YAML).
+    #: ``source`` field on a meter widget in a deck YAML).
     name: str = ""
 
     #: Human-readable unit the value is in (e.g. ``"°C"``). Pushed
@@ -184,7 +184,7 @@ class SensorManager:
     """Owns a set of :class:`SensorSource` instances keyed by name.
 
     Built once at daemon startup with the platform-default sources.
-    Layouts reference sources by name; the manager hands the same
+    Decks reference sources by name; the manager hands the same
     ``SensorReading`` to every subscriber so two meter widgets bound
     to the same source see one canonical value rather than two
     polls racing against each other.
@@ -1051,7 +1051,7 @@ class KdeFocusBackend(GnomeShellFocusBackend):
       so the KWin script has a push target. Failures (no session bus,
       name already owned, ``dbus_fast`` errors) surface as
       :class:`FocusBackendUnavailable` carrying the install hint — the
-      daemon keeps running on the default layout rather than crashing.
+      daemon keeps running on the default deck rather than crashing.
     * ``stop`` releases the name and disconnects. Safe to call after a
       failed start.
 
@@ -1068,7 +1068,7 @@ class KdeFocusBackend(GnomeShellFocusBackend):
         "it. Install and enable the KWin focus bridge:\n"
         "  just install-focus-kwin\n"
         "Without the script the cache stays on its empty default and the "
-        "daemon holds the default layout until the next window activation."
+        "daemon holds the default deck until the next window activation."
     )
 
     def __init__(
@@ -1163,7 +1163,7 @@ class KdeFocusBackend(GnomeShellFocusBackend):
         The GNOME extension resolves ``RaiseApp`` compositor-side; on KDE
         the daemon already holds the enumerated window list, so it does
         the identity match itself (against the same three identity keys
-        the layout matcher uses — ``wm_class`` / ``gtk_application_id`` /
+        the deck matcher uses — ``wm_class`` / ``gtk_application_id`` /
         ``sandboxed_app_id``) and enqueues the winner's id. Returns
         ``True`` when a match was found and queued, ``False`` when no open
         window carries the identity — the same contract the inherited

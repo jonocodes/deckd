@@ -3,7 +3,7 @@
 Provides a single in-process collector that:
 
 - exposes the daemon's current state in a machine-readable snapshot for
-  ``GET /diag`` (focus backend, input sink, layouts, sessions, tasks,
+  ``GET /diag`` (focus backend, input sink, decks, sessions, tasks,
   MPRIS, sensors)
 - records the recent ring of action attempts and MPRIS events for
   ``GET /actions/recent`` and ``GET /mpris/events/recent``
@@ -28,7 +28,7 @@ import time
 from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
-    from .layouts import Layout, LayoutStore
+    from .decks import Deck, DeckStore
     from .media import MediaState
     from .mpris import ChromeMediaState, MprisBackend
     from .platform import AppInfo, PlatformBackend, SensorManager
@@ -54,7 +54,7 @@ class ActionRecord:
     """
 
     ts: float
-    layout_id: str
+    deck_id: str
     widget_id: str
     primitive: str  # "shell" | "key" | "dbus" | "terminal"
     outcome: str  # "ok" | "error" | "guard_dropped" | "no_sink" | "no_widget" | "skipped"
@@ -64,7 +64,7 @@ class ActionRecord:
     def to_wire(self) -> dict[str, Any]:
         return {
             "ts": self.ts,
-            "layout_id": self.layout_id,
+            "deck_id": self.deck_id,
             "widget_id": self.widget_id,
             "primitive": self.primitive,
             "outcome": self.outcome,
@@ -125,10 +125,10 @@ class Metrics:
     sessions_active: int = 0  # gauge (mirrored from server.session_count)
     uptime_started_at: float = dataclasses.field(default_factory=time.time)
 
-    # Layout / focus
-    layout_reload_total: int = 0
-    layout_error_total: int = 0
-    layout_reload_ok_total: int = 0
+    # Deck / focus
+    deck_reload_total: int = 0
+    deck_error_total: int = 0
+    deck_reload_ok_total: int = 0
     focus_events_total: int = 0
     focus_deckd_window_guard_total: int = 0
 
@@ -197,13 +197,13 @@ class Metrics:
         out.append("# TYPE deckd_sessions_active gauge")
         out.append(f"deckd_sessions_active {self.sessions_active}")
 
-        out.append("# HELP deckd_layout_reload_total Layout reload attempts")
-        out.append("# TYPE deckd_layout_reload_total counter")
-        out.append(f"deckd_layout_reload_total{self._lbl('status', 'ok')} {self.layout_reload_ok_total}")
-        out.append(f"deckd_layout_reload_total{self._lbl('status', 'error')} {self.layout_reload_total - self.layout_reload_ok_total}")
-        out.append("# HELP deckd_layout_error_total Layout YAML validation errors")
-        out.append("# TYPE deckd_layout_error_total counter")
-        out.append(f"deckd_layout_error_total {self.layout_error_total}")
+        out.append("# HELP deckd_deck_reload_total Deck reload attempts")
+        out.append("# TYPE deckd_deck_reload_total counter")
+        out.append(f"deckd_deck_reload_total{self._lbl('status', 'ok')} {self.deck_reload_ok_total}")
+        out.append(f"deckd_deck_reload_total{self._lbl('status', 'error')} {self.deck_reload_total - self.deck_reload_ok_total}")
+        out.append("# HELP deckd_deck_error_total Deck YAML validation errors")
+        out.append("# TYPE deckd_deck_error_total counter")
+        out.append(f"deckd_deck_error_total {self.deck_error_total}")
 
         out.append("# HELP deckd_focus_events_total Focus changes seen by daemon")
         out.append("# TYPE deckd_focus_events_total counter")
@@ -407,7 +407,7 @@ async def build_diag_snapshot(
     # ``tasks_state`` collapses four well-known asyncio tasks into a
     # single small map so the snapshot stays scannable.
     focus_task = getattr(server, "_focus_task", None)
-    layouts_task = getattr(server, "_layouts_task", None)
+    decks_task = getattr(server, "_decks_task", None)
     sensor_task = getattr(server, "_sensor_task", None)
     media_task = getattr(server, "_media_task", None)
 
@@ -435,16 +435,16 @@ async def build_diag_snapshot(
         "uinput_devnode": _uinput_devnode(key_sink),
     }
 
-    store = getattr(server, "layouts", None)
-    layouts_block: dict[str, Any] = {
-        "dir": str(getattr(server, "layouts_dir", "")),
+    store = getattr(server, "decks", None)
+    decks_block: dict[str, Any] = {
+        "dir": str(getattr(server, "decks_dir", "")),
         "overlay_dir": str(getattr(server, "overlay_dir", ""))
         if getattr(server, "overlay_dir", None) is not None
         else None,
-        "ids": [l.id for l in store.layouts] if store is not None else [],
+        "ids": [deck.id for deck in store.decks] if store is not None else [],
         "current_app_id": getattr(server, "_current_app_id", None),
-        "current_layout_id": getattr(server, "_current_layout", None)
-        and getattr(server, "_current_layout").id,
+        "current_deck_id": getattr(server, "_current_deck", None)
+        and getattr(server, "_current_deck").id,
         "error": getattr(server, "_current_error", None),
     }
 
@@ -452,7 +452,7 @@ async def build_diag_snapshot(
     sessions_block = [
         {
             "remote": safe_str(getattr(s.ws, "remote", None)),
-            "pinned_layout_id": s.pinned_layout_id,
+            "pinned_deck_id": s.pinned_deck_id,
             "view": s.view,
             "trace_id": s.trace_id,
         }
@@ -505,11 +505,11 @@ async def build_diag_snapshot(
         "scroll": scroll_block,
         "sensors": sensors_block,
         "media": mpris_block,
-        "layouts": layouts_block,
+        "decks": decks_block,
         "sessions": sessions_block,
         "tasks": {
             "focus_watcher": task_state(focus_task),
-            "layouts_watcher": task_state(layouts_task),
+            "decks_watcher": task_state(decks_task),
             "sensor_pump": task_state(sensor_task),
             "media_pump": task_state(media_task),
         },
@@ -597,31 +597,31 @@ async def build_mpris_diag(backend: "MprisBackend | None") -> dict[str, Any]:
     return out
 
 
-def build_layouts_snapshot(store: "LayoutStore", *, full: bool = False) -> dict[str, Any]:
-    """Snapshot the loaded ``LayoutStore`` for ``GET /layouts``.
+def build_decks_snapshot(store: "DeckStore", *, full: bool = False) -> dict[str, Any]:
+    """Snapshot the loaded ``DeckStore`` for ``GET /decks``.
 
     When ``full`` is True (authenticated editor), widgets include their
     action and macro bodies. Otherwise the response is safe to expose
     on the public diagnostics page (no shell/dbus/key strings)."""
-    layouts = []
-    for layout in store.layouts:
-        layouts.append(
+    decks = []
+    for deck in store.decks:
+        decks.append(
             {
-                "id": layout.id,
-                "match": list(layout.match),
-                "display_name": layout.display_name,
-                "theme": layout.theme,
-                "icon": layout.icon.model_dump() if layout.icon else None,
-                "jogstrip": layout.jogstrip,
-                "overflow": layout.overflow,
-                "widgets": [_safe_widget(w, full=full) for w in layout.widgets],
+                "id": deck.id,
+                "match": list(deck.match),
+                "display_name": deck.display_name,
+                "theme": deck.theme,
+                "icon": deck.icon.model_dump() if deck.icon else None,
+                "jogstrip": deck.jogstrip,
+                "overflow": deck.overflow,
+                "widgets": [_safe_widget(w, full=full) for w in deck.widgets],
             }
         )
-    return {"ok": True, "layouts": layouts}
+    return {"ok": True, "decks": decks}
 
 
 def _safe_widget(widget: Any, *, full: bool = False) -> dict[str, Any]:
-    """Widget summary safe to send on ``/layouts``.
+    """Widget summary safe to send on ``/decks``.
 
     ``exclude_defaults=True`` keeps the editor's save round-trip faithful
     to the human-owned YAML (#85): optional fields the author never set

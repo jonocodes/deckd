@@ -28,7 +28,7 @@ type Props = {
    * (ADR-0011): ``clip`` (default) trims trailing widgets so the survivors
    * keep their size; ``shrink-to-fit`` keeps every widget by letting cells
    * fall below the floor. Resolved by ``App`` from the device preference,
-   * falling back to the layout's ``overflow`` field. */
+   * falling back to the deck's ``overflow`` field. */
   overflow?: OverflowMode;
   /** Readability floor (client-side device preference, ADR-0011): the smallest
    * cell the user accepts. Decides how many widgets are visible under
@@ -238,7 +238,7 @@ export function ButtonGrid({
         // ``confirm: true`` widgets carry a persistent danger affordance
         // (issue #69 / #109): red border + small ⚠ badge so a user can
         // spot danger before pressing. The widget record the daemon
-        // relays on every layout push carries the field verbatim.
+        // relays on every deck push carries the field verbatim.
         const isDangerous = w.confirm === true;
         const cellClassName = isDangerous
           ? "cell cell-button cell-danger"

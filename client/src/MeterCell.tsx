@@ -37,7 +37,7 @@ type Props = {
 export function MeterCell({ widget, reading, style, labelScale = 1 }: Props) {
   const min = widget.min ?? 0;
   const max = widget.max ?? 100;
-  // Range validity guard — the daemon validates this in layouts.py,
+  // Range validity guard — the daemon validates this in decks.py,
   // but a malformed fixture shouldn't crash rendering. If max <= min,
   // collapse the bar to 0% rather than NaN-ing the fill calculation.
   const range = max > min ? max - min : 1;

@@ -108,7 +108,7 @@ def _annotation_to_ts(node: ast.AST | None) -> str:
         # Bare names are primitive types or self-refs we don't model.
         # ``dict`` shows up as ``list[dict]`` / ``dict`` in the protocol —
         # it's an opaque blob from the wire's perspective. ``Icon`` lives
-        # in the layouts layer (ADR-0006: the daemon relays it opaquely);
+        # in the decks layer (ADR-0006: the daemon relays it opaquely);
         # the consumer file (``client/src/protocol.ts``) declares the
         # real shape — the generated file carries the wire types only
         # and treats icon refs as a Record. The consumer redeclares the

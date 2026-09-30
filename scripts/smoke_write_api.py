@@ -1,13 +1,13 @@
-"""Smoke test: boot a Server against a throwaway copy of the shipping layouts,
-then exercise the layout write API (PUT /layouts/{id}, POST /layouts) end to
+"""Smoke test: boot a Server against a throwaway copy of the shipping decks,
+then exercise the deck write API (PUT /decks/{id}, POST /decks) end to
 end.
 
 Companion to ``scripts/smoke.py`` (which covers the WS action primitives).
 This one covers the editor's save/create path: it boots the real ``Server``
-code path, runsPUT and POST against the actual ``layouts/firefox.yaml``
+code path, runsPUT and POST against the actual ``decks/firefox.yaml``
 comment structure in a temp dir, and prints the resulting files so a human
 can eyeball the comment-preservation round-trip that the synthetic pytest
-fixtures (``tests/test_layout_write.py``) can't fully represent.
+fixtures (``tests/test_deck_write.py``) can't fully represent.
 
 Run with:
     .venv/bin/python scripts/smoke_write_api.py
@@ -27,21 +27,21 @@ from aiohttp.test_utils import TestServer
 
 from deckd.server import Server
 
-LAYOUTS_SRC = Path(__file__).resolve().parent.parent / "layouts"
+DECKS_SRC = Path(__file__).resolve().parent.parent / "decks"
 
 
 async def main() -> None:
     work = Path(tempfile.mkdtemp(prefix="deckd-write-smoke-"))
-    shutil.copytree(LAYOUTS_SRC, work, dirs_exist_ok=True)
-    print(f"layouts copy: {work}")
+    shutil.copytree(DECKS_SRC, work, dirs_exist_ok=True)
+    print(f"decks copy: {work}")
     before = (work / "firefox.yaml").read_text()
     print(
         f"firefox.yaml before: {sum(1 for _ in before.splitlines())} lines, "
         f"{before.count('#')} comment lines"
     )
 
-    server = Server(layouts_dir=work, host="127.0.0.1", port=0)
-    server.start_layouts_watcher()
+    server = Server(decks_dir=work, host="127.0.0.1", port=0)
+    server.start_decks_watcher()
     ts = TestServer(server.app, host="127.0.0.1")
     await ts.start_server()
     port = ts.port
@@ -50,12 +50,12 @@ async def main() -> None:
         async with aiohttp.ClientSession() as http:
             base = f"http://127.0.0.1:{port}"
 
-            print("\n== PUT /layouts/firefox (rename back->back-button, keep forward) ==")
+            print("\n== PUT /decks/firefox (rename back->back-button, keep forward) ==")
             # `forward` is kept byte-identical to the shipping file so its
             # `# label: Forward` comment (attached to `icon:`) must survive
             # the reconcile — the comment-preservation check at the end.
             async with http.put(
-                f"{base}/layouts/firefox",
+                f"{base}/decks/firefox",
                 json={
                     "match": ["firefox"],
                     "display_name": "Firefox",
@@ -73,22 +73,22 @@ async def main() -> None:
             ) as r:
                 body = await r.json()
                 print(f"  status={r.status} ok={body.get('ok')} "
-                      f"widget_ids={[w['id'] for w in body.get('layout', {}).get('widgets', [])]}")
+                      f"widget_ids={[w['id'] for w in body.get('deck', {}).get('widgets', [])]}")
                 assert r.status == 200 and body.get("ok") is True
 
             print("\n== PUT 404 unknown id ==")
-            async with http.put(f"{base}/layouts/ghost", json={"match": ["ghost"], "widgets": []}) as r:
+            async with http.put(f"{base}/decks/ghost", json={"match": ["ghost"], "widgets": []}) as r:
                 print(f"  status={r.status} body={await r.json()}")
                 assert r.status == 404
 
-            print("\n== PUT 409 rename (match[0]=chrome via /layouts/firefox) ==")
-            async with http.put(f"{base}/layouts/firefox", json={"match": ["chrome"], "widgets": []}) as r:
+            print("\n== PUT 409 rename (match[0]=chrome via /decks/firefox) ==")
+            async with http.put(f"{base}/decks/firefox", json={"match": ["chrome"], "widgets": []}) as r:
                 print(f"  status={r.status} body={await r.json()}")
                 assert r.status == 409
 
             print("\n== PUT 400 sanitized (duplicate widget id) ==")
             async with http.put(
-                f"{base}/layouts/firefox",
+                f"{base}/decks/firefox",
                 json={"match": ["firefox"], "widgets": [
                     {"id": "x", "kind": "button"}, {"id": "x", "kind": "button"}]},
             ) as r:
@@ -97,34 +97,34 @@ async def main() -> None:
                 assert r.status == 400
                 assert set(body["details"][0].keys()) == {"loc", "msg", "type"}
 
-            print("\n== POST /layouts (create Slack) ==")
+            print("\n== POST /decks (create Slack) ==")
             async with http.post(
-                f"{base}/layouts",
+                f"{base}/decks",
                 json={"match": ["Slack"], "widgets": [
                     {"id": "snooze", "kind": "button", "label": "Snooze", "action": {"shell": "echo hi"}}]},
             ) as r:
                 body = await r.json()
-                print(f"  status={r.status} ok={body.get('ok')} id={body.get('layout', {}).get('id')}")
+                print(f"  status={r.status} ok={body.get('ok')} id={body.get('deck', {}).get('id')}")
                 assert r.status == 200 and body.get("ok") is True
 
             print("\n== POST 409 collision (Slack again) ==")
-            async with http.post(f"{base}/layouts", json={"match": ["Slack"], "widgets": []}) as r:
+            async with http.post(f"{base}/decks", json={"match": ["Slack"], "widgets": []}) as r:
                 print(f"  status={r.status} body={await r.json()}")
                 assert r.status == 409
 
             print("\n== POST 400 empty match (structured) ==")
-            async with http.post(f"{base}/layouts", json={"match": [], "widgets": []}) as r:
+            async with http.post(f"{base}/decks", json={"match": [], "widgets": []}) as r:
                 body = await r.json()
                 print(f"  status={r.status} body={body}")
                 assert r.status == 400 and body["details"][0]["loc"] == ["match"]
 
         # watchfiles round-trip: the create should reach the live store.
         for _ in range(40):
-            if "Slack" in server.layouts:
+            if "Slack" in server.decks:
                 break
             await asyncio.sleep(0.05)
-        assert "Slack" in server.layouts, "watchfiles did not reload Slack into the live store"
-        print(f"\nlive store: {sorted(l.id for l in server.layouts.layouts)}")
+        assert "Slack" in server.decks, "watchfiles did not reload Slack into the live store"
+        print(f"\nlive store: {sorted(l.id for l in server.decks.decks)}")
         print(f"slack.yaml on disk: {(work / 'slack.yaml').exists()}")
     finally:
         await server.stop()

@@ -3,18 +3,18 @@ import { test, expect, type Page } from "@playwright/test";
 async function enterEditor(page: Page) {
   // The editor launch point moved out of the bottom chrome into settings.
   await page.getByRole("button", { name: "settings" }).click();
-  await page.getByRole("button", { name: /edit layout/i }).click();
+  await page.getByRole("button", { name: /edit deck/i }).click();
   await page.locator(".editor-header").waitFor();
 }
 
-interface LayoutEntry {
+interface DeckEntry {
   id: string;
   widgets: { id: string; label?: string }[];
 }
 
-interface LayoutListResponse {
+interface DeckListResponse {
   ok: boolean;
-  layouts: LayoutEntry[];
+  decks: DeckEntry[];
 }
 
 test.describe("editor save cycle (e2e)", () => {
@@ -25,7 +25,7 @@ test.describe("editor save cycle (e2e)", () => {
     await page.goto("/index.html", { waitUntil: "networkidle" });
 
     // Open editor. The e2e daemon only has default.yaml + editor.yaml so
-    // the active layout is always "default" regardless of host focus.
+    // the active deck is always "default" regardless of host focus.
     await enterEditor(page);
     await page.locator(".editor-canvas-grid").waitFor();
 
@@ -38,22 +38,22 @@ test.describe("editor save cycle (e2e)", () => {
 
     // The Label input is the first text field under "Label" text.
     await page.locator("text=Label").locator("..").locator("input").fill("E2E test");
-    await page.getByRole("button", { name: "save layout" }).click();
+    await page.getByRole("button", { name: "save deck" }).click();
     await expect(page.getByText("Saved")).toBeVisible({ timeout: 10000 });
 
-    // Verify persistence via the daemon's GET /layouts.
+    // Verify persistence via the daemon's GET /decks.
     await expect.poll(async () => {
-      const res = await request.get("/layouts");
-      const body: LayoutListResponse = await res.json();
-      const layout = body.layouts.find((l) => l.id === "default");
-      return layout?.widgets.find((w) => w.id === widgetId)?.label;
+      const res = await request.get("/decks");
+      const body: DeckListResponse = await res.json();
+      const deck = body.decks.find((l) => l.id === "default");
+      return deck?.widgets.find((w) => w.id === widgetId)?.label;
     }).toBe("E2E test");
 
     // Restore: clear the label (deletion = omission per #89).
     await page.locator(`[data-widget-id="${widgetId}"]`).click();
     const labelInput = page.locator("text=Label").locator("..").locator("input");
     await labelInput.fill("");
-    await page.getByRole("button", { name: "save layout" }).click();
+    await page.getByRole("button", { name: "save deck" }).click();
     await expect(page.getByText("Saved")).toBeVisible({ timeout: 10000 });
   });
 
@@ -72,28 +72,28 @@ test.describe("editor save cycle (e2e)", () => {
 
     // Give it a label, then save.
     await page.locator("text=Label").locator("..").locator("input").fill("E2E added");
-    await page.getByRole("button", { name: "save layout" }).click();
+    await page.getByRole("button", { name: "save deck" }).click();
     await expect(page.getByText("Saved")).toBeVisible({ timeout: 10000 });
 
-    // Verify via the daemon's GET /layouts that the widget was appended.
+    // Verify via the daemon's GET /decks that the widget was appended.
     await expect.poll(async () => {
-      const res = await request.get("/layouts");
-      const body: LayoutListResponse = await res.json();
-      const layout = body.layouts.find((l) => l.id === "default");
-      return layout?.widgets.find((w) => w.id === "button-1")?.label;
+      const res = await request.get("/decks");
+      const body: DeckListResponse = await res.json();
+      const deck = body.decks.find((l) => l.id === "default");
+      return deck?.widgets.find((w) => w.id === "button-1")?.label;
     }).toBe("E2E added");
 
     // Clean up: delete the widget and save again.
     await page.locator('[data-widget-id="button-1"]').click();
     await page.getByText("Delete widget").click();
-    await page.getByRole("button", { name: "save layout" }).click();
+    await page.getByRole("button", { name: "save deck" }).click();
     await expect(page.getByText("Saved")).toBeVisible({ timeout: 10000 });
 
     await expect.poll(async () => {
-      const res = await request.get("/layouts");
-      const body: LayoutListResponse = await res.json();
-      const layout = body.layouts.find((l) => l.id === "default");
-      return layout?.widgets.some((w) => w.id === "button-1");
+      const res = await request.get("/decks");
+      const body: DeckListResponse = await res.json();
+      const deck = body.decks.find((l) => l.id === "default");
+      return deck?.widgets.some((w) => w.id === "button-1");
     }).toBe(false);
   });
 });

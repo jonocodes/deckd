@@ -11,7 +11,7 @@ import type {
   MediaState,
   ServerChromeMedia,
   ServerConfirmRequest,
-  ServerLayout,
+  ServerDeck,
   ServerRunningWindows,
   ServerWidgetUpdate,
 } from "../protocol";
@@ -20,7 +20,7 @@ import { MockDaemon } from "./mock-daemon";
 const noop = () => {};
 
 export function usePlaygroundDaemon(
-  onLayout: (m: ServerLayout) => void,
+  onDeck: (m: ServerDeck) => void,
   onWidgetUpdate: (m: ServerWidgetUpdate) => void,
   onMediaState: (m: MediaState) => void,
   onChromeMedia?: (m: ServerChromeMedia) => void,
@@ -34,12 +34,12 @@ export function usePlaygroundDaemon(
   // Hold the latest callbacks in refs so the daemon effect keys only on
   // ``enabled`` — a fresh callback identity must not tear down and restart
   // the clock (that would reset playback on every render).
-  const onLayoutRef = useRef(onLayout);
+  const onDeckRef = useRef(onDeck);
   const onWidgetUpdateRef = useRef(onWidgetUpdate);
   const onMediaStateRef = useRef(onMediaState);
   const onChromeMediaRef = useRef(onChromeMedia);
   const onRunningWindowsRef = useRef(onRunningWindows);
-  onLayoutRef.current = onLayout;
+  onDeckRef.current = onDeck;
   onWidgetUpdateRef.current = onWidgetUpdate;
   onMediaStateRef.current = onMediaState;
   onChromeMediaRef.current = onChromeMedia;
@@ -48,7 +48,7 @@ export function usePlaygroundDaemon(
   useEffect(() => {
     if (!enabled) return;
     const daemon = new MockDaemon({
-      onLayout: (m) => onLayoutRef.current(m),
+      onDeck: (m) => onDeckRef.current(m),
       onMediaState: (m) => onMediaStateRef.current(m),
       onWidgetUpdate: (m) => onWidgetUpdateRef.current(m),
       onChromeMedia: (m) => onChromeMediaRef.current?.(m),

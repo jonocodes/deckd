@@ -110,7 +110,7 @@ jobs:
   # Nix packaging: builds packages.deckd + the focus-watcher bundles,
   # evaluates the NixOS/home-manager modules against dummy configs,
   # unit-tests the activation scripts in a sandbox, and boots the packaged
-  # daemon on loopback (health, bundled client, bundled layouts). Mirrors
+  # daemon on loopback (health, bundled client, bundled decks). Mirrors
   # `just nix-check` locally; see nix/tests/.
   nix:
     runs-on: ubuntu-latest

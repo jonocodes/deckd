@@ -8,7 +8,7 @@ import {
 } from "./settings-store";
 
 /** Dev-only responsive gallery. Renders the real client (via ``?demo=``) in
- * a set of device-sized iframes side by side, so a layout can be eyeballed
+ * a set of device-sized iframes side by side, so a deck can be eyeballed
  * across phone / tablet sizes and orientations without a daemon. Not part of
  * the production build — served by ``vite dev`` at ``/gallery.html``. */
 

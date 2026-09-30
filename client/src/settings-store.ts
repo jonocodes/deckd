@@ -39,7 +39,7 @@ export const SCROLL_SCALE_DEFAULT = 3;
 // decides how many buttons are visible: under `clip` the client trims the deck
 // until every cell can honour it, so it is a promise rather than a hint. The
 // cap only stops a nearly-empty deck from becoming a few enormous buttons.
-// Client-side per-device preferences (ADR-0006), never authored in layout
+// Client-side per-device preferences (ADR-0006), never authored in deck
 // YAML. Icon/label size derives from the resolved cell size via CSS container
 // units.
 export const CELL_SIZE_MIN = 48;
@@ -215,10 +215,10 @@ function readInitialCell(urlParam: string, key: string, fallback: number): numbe
 }
 
 /** What to do when the deck exceeds what the viewport holds at the floor
- * (ADR-0011). ``null`` means "follow the layout" and is the default: the
- * layout's ``overflow`` field supplies the starting policy, and the user may
+ * (ADR-0011). ``null`` means "follow the deck" and is the default: the
+ * deck's ``overflow`` field supplies the starting policy, and the user may
  * override it per device. This is the one sizing decision that is genuinely
- * both a layout concern and a device concern, so both get a say. */
+ * both a deck concern and a device concern, so both get a say. */
 export type OverflowPreference = "clip" | "shrink-to-fit" | null;
 
 function readInitialOverflow(): OverflowPreference {
@@ -232,7 +232,7 @@ function readInitialOverflow(): OverflowPreference {
   return null;
 }
 
-/** The device's override of the layout's overflow policy. */
+/** The device's override of the deck's overflow policy. */
 export function useOverflowPreference() {
   const [overflow, setOverflowState] = useState<OverflowPreference>(readInitialOverflow);
 

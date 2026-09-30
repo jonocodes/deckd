@@ -42,7 +42,7 @@ setup-linux:
 
 # macOS dev: [dev] + [macos] (PyObjC Quartz covers scroll, pointer, click,
 # and held-button drag for the trackpad). No [dbus] extra: macOS has no
-# session bus and the default layout's D-Bus/MPRIS targets don't exist there
+# session bus and the default deck's D-Bus/MPRIS targets don't exist there
 # (issue #27), so __main__ wires a null bus factory and the daemon serves
 # without those primitives.
 setup-macos:
@@ -68,15 +68,15 @@ setup:
         just setup-linux; \
     fi
 
-# Run the daemon against the layouts directory, serving the built client.
+# Run the daemon against the decks directory, serving the built client.
 run-daemon:
-    VLC_HTTP_PASSWORD=dummy deckd --layouts-dir layouts --client-dist client/dist --verbose
+    VLC_HTTP_PASSWORD=dummy deckd --decks-dir decks --client-dist client/dist --verbose
 
 # Run the daemon on the LAN without a built client (use dev-client-lan for HMR).
 # Binds to 0.0.0.0 so a phone on the LAN (or Tailscale) can reach it
 # (issue #66). Token auth still gates every non-localhost connection.
 run-daemon-lan:
-    VLC_HTTP_PASSWORD=dummy deckd --bind 0.0.0.0 --layouts-dir layouts --verbose
+    VLC_HTTP_PASSWORD=dummy deckd --bind 0.0.0.0 --decks-dir decks --verbose
 
 # Default ports, and the knobs that let worktrees coexist. `just worktree-adopt`
 # writes all four into a per-checkout ./.env (loaded above); set them by hand
@@ -146,7 +146,7 @@ dev-lan:
     wait -n
 
 # Run the daemon under a supervisor that restarts it when daemon/**/*.py
-# changes. Layout YAML hot-reload is built into the daemon itself; this is
+# changes. Deck YAML hot-reload is built into the daemon itself; this is
 # only useful when editing Python.
 dev-daemon:
     VLC_HTTP_PASSWORD=dummy deckd-dev --port {{DECKD_PORT}} --verbose
@@ -219,7 +219,7 @@ build-pages:
 ladle:
     cd client && npm run ladle
 
-# Take phone-framed screenshots of the demo layouts. Starts a Vite dev
+# Take phone-framed screenshots of the demo decks. Starts a Vite dev
 # server, opens /screenshots.html in Chromium (Playwright, reuses the
 # nix-store binary from e2e), snaps each configured shot, and saves them
 # to docs/screenshots/. Edit client/src/Screenshots.tsx to curate the list.
@@ -335,9 +335,9 @@ test-client:
     cd client && npm run test:e2e
 
 # End-to-end smoke test (boots daemon in-process, fires every action
-# primitive). Uses a stable fixture layout (scripts/smoke_fixtures/)
-# so shipping-layout edits can't break CI (#77). Pass --layouts-dir to
-# point at shipping layouts (or anything else) instead. Binds DECKD_SMOKE_PORT
+# primitive). Uses a stable fixture deck (scripts/smoke_fixtures/)
+# so shipping-deck edits can't break CI (#77). Pass --decks-dir to
+# point at shipping decks (or anything else) instead. Binds DECKD_SMOKE_PORT
 # (default :18765, well away from any live daemon) so two worktrees can run
 # it concurrently.
 smoke:
@@ -435,7 +435,7 @@ status:
     deckctl --port {{DECKD_PORT}} status
 
 # Hit /diag (issue #70): one-shot machine-readable snapshot of the
-# daemon's focus, input, layouts, sessions, and MPRIS state. Open-auth,
+# daemon's focus, input, decks, sessions, and MPRIS state. Open-auth,
 # so it works without the password. Same shape ``deckctl status``
 # uses, just on a richer endpoint.
 diag:
@@ -443,12 +443,12 @@ diag:
     set -euo pipefail
     deckctl --port {{DECKD_PORT}} diag
 
-# Hit /layouts (issue #70): enumeration of loaded layouts and safe
+# Hit /decks (issue #70): enumeration of loaded decks and safe
 # widget summaries (no action bodies).
-layouts:
+decks:
     #!/usr/bin/env bash
     set -euo pipefail
-    deckctl --port {{DECKD_PORT}} layouts
+    deckctl --port {{DECKD_PORT}} decks
 
 # Hit /metrics (issue #71): Prometheus text-format scrape. Open-auth
 # and stdlib-only on the server side; pipe into ``head`` or
@@ -590,7 +590,7 @@ install-system-integration *args:
 # Run the Nix flake checks: builds packages.deckd and the focus-watcher
 # bundles, evaluates the NixOS + home-manager modules, unit-tests the
 # activation scripts in a sandbox, and boots the packaged daemon on
-# loopback (health, client dist, bundled layouts). Needs Nix with flakes.
+# loopback (health, client dist, bundled decks). Needs Nix with flakes.
 # See docs/GUIDE.md "Nix flake, NixOS, and home-manager".
 nix-check:
     nix flake check -L

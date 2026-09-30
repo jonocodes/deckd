@@ -1,7 +1,7 @@
 /** Running-windows chrome view (issues #120 / #126).
  *
  * Covers the three observable contracts:
- *  1. The layout-grid icon renders in the bottom chrome strip next to
+ *  1. The deck-grid icon renders in the bottom chrome strip next to
  *     the editor button, always rendered regardless of platform
  *     capability (decision 8 — affordance stays discoverable).
  *  2. A first click opens the view (active class + ``select_view:
@@ -9,7 +9,7 @@
  *     class gone + ``clear_view`` on the wire). Mirrors the media
  *     browser / editor button handshake exactly.
  *  3. While the view is open, the surface renders the windows-list
- *     component instead of the focused-app layout. Three shapes:
+ *     component instead of the focused-app deck. Three shapes:
  *     - No ``running_windows`` frame yet → "unsupported on this
  *       platform" empty state (decision 8).
  *     - Empty snapshot → "no running programs" message.
@@ -26,19 +26,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   ClientMessage,
   ServerChromeMedia,
-  ServerLayout,
+  ServerDeck,
   ServerRunningWindows,
 } from "./protocol";
 
 const send = vi.fn<(message: ClientMessage) => void>();
 let runningWindowsHandler: ((m: ServerRunningWindows) => void) | null = null;
-const onLayout = vi.fn<(m: ServerLayout) => void>();
+const onDeck = vi.fn<(m: ServerDeck) => void>();
 const mockStatus: "connecting" | "open" | "closed" | "unauthorized" = "open";
 const authenticate = vi.fn();
 const deauthenticate = vi.fn();
 vi.mock("./socket", () => ({
   useDeckdSocket: (
-    layoutCb: (m: ServerLayout) => void,
+    deckCb: (m: ServerDeck) => void,
     _widgetUpdate: unknown,
     _mediaState: unknown,
     _chromeMediaCb: ((m: ServerChromeMedia) => void) | undefined,
@@ -46,7 +46,7 @@ vi.mock("./socket", () => ({
     runningWindowsCb: ((m: ServerRunningWindows) => void) | undefined,
     _options: unknown,
   ) => {
-    onLayout.mockImplementation(layoutCb);
+    onDeck.mockImplementation(deckCb);
     runningWindowsHandler = runningWindowsCb ?? null;
     return {
       get status() {
@@ -166,7 +166,7 @@ describe("App — running windows chrome view", () => {
     ]);
   });
 
-  it("closes the overlay back to the layout after a row tap", () => {
+  it("closes the overlay back to the deck after a row tap", () => {
     openRunningPrograms();
     const button = screen.getByRole("button", { name: "running programs" });
     expect(button.className).toContain("chrome-btn-active");
@@ -178,7 +178,7 @@ describe("App — running windows chrome view", () => {
   it("focus restoration returns to the running-programs button when the view closes", async () => {
     openRunningPrograms();
     const button = screen.getByRole("button", { name: "running programs" });
-    // Press Escape — the global handler should revert to the layout
+    // Press Escape — the global handler should revert to the deck
     // view and hand focus back to the chrome button that opened the
     // overlay (issue #60, AC #5 — same pattern as the editor and
     // now-playing view).

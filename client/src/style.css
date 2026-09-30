@@ -6,7 +6,7 @@
   background: #12161b;
   color: #e6e9ef;
   /* Multiplier for grid content (buttons + in-grid jogstrip). App sets this
-     on the layout area (.surface) from the user's Button-size setting; the
+     on the deck area (.surface) from the user's Button-size setting; the
      default of 1 here keeps chrome — and any context that doesn't set it,
      e.g. Ladle stories — at the responsive base size. */
   --content-scale: 1;
@@ -80,7 +80,7 @@ button:focus-visible {
 }
 
 /* ---------------------------------------------------------------------------
- * Chrome page: layout area (left) + persistent right-side jogstrip.
+ * Chrome page: deck area (left) + persistent right-side jogstrip.
  * The bottom strip lives outside this row.
  * ------------------------------------------------------------------------- */
 
@@ -180,9 +180,9 @@ button:focus-visible {
 
 /* Chrome app badge (ADR-0007): a compact pill in the bottom strip that
    carries the focused app's brand identity — optional icon + display name,
-   optionally tinted by the layout's ``theme`` colour. A layout that
+   optionally tinted by the deck's ``theme`` colour. A deck that
    declares neither a theme nor an icon falls back to the un-themed
-   ``app-name`` (bold text, no pill) so existing layouts look identical. */
+   ``app-name`` (bold text, no pill) so existing decks look identical. */
 .app-name {
   flex: 1;
   display: inline-flex;
@@ -227,7 +227,7 @@ button:focus-visible {
   color: #e6e9ef;
 }
 
-/* A brand glyph sits in a colored disc when the layout sets a ``theme``;
+/* A brand glyph sits in a colored disc when the deck sets a ``theme``;
    otherwise the icon uses the default chrome foreground. The disc lets a
    monochrome brand logo read against any age of theme. */
 .app-badge-themed .app-badge-icon {
@@ -243,7 +243,7 @@ button:focus-visible {
   text-overflow: ellipsis;
 }
 
-/* Web-app marker: a subdued globe after the name, signalling the layout was
+/* Web-app marker: a subdued globe after the name, signalling the deck was
    matched by the browser tab title rather than a desktop app identity. */
 .app-badge-webapp {
   flex: 0 0 auto;
@@ -404,7 +404,7 @@ button:focus-visible {
 }
 
 /* ---------------------------------------------------------------------------
- * Layout grid area (chrome-excluded)
+ * Deck grid area (chrome-excluded)
  * ------------------------------------------------------------------------- */
 
 /* Ordered-list reflow grid (ADR-0011). ``grid-template-columns``,
@@ -771,7 +771,7 @@ button:focus-visible {
   margin-top: 22px;
 }
 
-/* Prominent launch point for the layout editor. The editor moved out of the
+/* Prominent launch point for the deck editor. The editor moved out of the
    always-on bottom chrome into Settings, so this button has to read as the
    primary action of the page — full-width, cyan accent, icon + label. */
 .settings-editor-launch {
@@ -939,12 +939,12 @@ button:focus-visible {
 }
 
 /* ---------------------------------------------------------------------------
- * Layout error state: shown in place of the grid when the daemon fails to
- * load layouts (bad YAML, schema violation). Restored automatically on the
+ * Deck error state: shown in place of the grid when the daemon fails to
+ * load decks (bad YAML, schema violation). Restored automatically on the
  * next successful reload.
  * ------------------------------------------------------------------------- */
 
-.layout-error {
+.deck-error {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -958,7 +958,7 @@ button:focus-visible {
   overflow: auto;
 }
 
-.layout-error-title {
+.deck-error-title {
   font-size: clamp(16px, 3vw, 22px);
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -966,7 +966,7 @@ button:focus-visible {
   color: #f87171;
 }
 
-.layout-error-body {
+.deck-error-body {
   margin: 0;
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: clamp(11px, 1.8vw, 14px);
@@ -1056,7 +1056,7 @@ button:focus-visible {
  * reads as a first-class grid citizen; the bar gives a glance-readable
  * "is this OK" answer before the user reads the number.
  *
- * Layout:
+ * Deck:
  *   ┌────────────────────────┐
  *   │  [icon]                │
  *   │      58                │  <- .meter-readout (big number + unit)
@@ -1467,7 +1467,7 @@ button:focus-visible {
  * player's ``art_token`` is null and the client doesn't recognise its
  * ``DesktopEntry``.
  *
- * Layout (per row):
+ * Deck (per row):
  *   ┌──────────────────────────────────────────┐
  *   │ [art]  Title            [⏮  ▶/⏸  ⏭]    │
  *   │        Artist                             │
@@ -1740,7 +1740,7 @@ button:focus-visible {
  * (background, border, radius, non-pressable) but stacks "LABEL value" rows
  * instead of a single big number + bar, so 2–4 data points fit one grid slot.
  *
- * Layout:
+ * Deck:
  *   ┌────────────────────────┐
  *   │  System                │  <- .stats-title (optional caption)
  *   │  CPU              58 %  │  <- .stats-row (label ....... value unit)
@@ -2047,10 +2047,10 @@ button:focus-visible {
 .a11y-reduce-motion .tooltip-floating { animation: none; }
 
 /* ---------------------------------------------------------------------
-   Layout editor chrome view (issue #100).
+   Deck editor chrome view (issue #100).
 
    Three-pane layout: palette · canvas · properties. The header bar
-   sits above the panes and holds the exit button, layout picker, and
+   sits above the panes and holds the exit button, deck picker, and
    save button. The panes fill the remaining space in a flex row.
    --------------------------------------------------------------------- */
 
@@ -2677,7 +2677,7 @@ select.prop-field-input {
   overflow: hidden;
 }
 
-/* Canvas metadata row (layout name, match, widget count) */
+/* Canvas metadata row (deck name, match, widget count) */
 .editor-canvas-meta {
   display: flex;
   align-items: center;
@@ -2977,7 +2977,7 @@ select.prop-field-input {
   cursor: default;
 }
 
-/* ---- new-layout creation form (#104) ---- */
+/* ---- new-deck creation form (#104) ---- */
 
 .editor-picker-separator {
   height: 1px;
@@ -3386,12 +3386,12 @@ select.prop-field-input {
  *
  * Dangerous widgets also carry a persistent red border + ⚠ badge in
  * their resting state on the grid (the daemon relays ``widget.confirm``
- * on the pushed layout), so a user can spot danger before pressing.
+ * on the pushed deck), so a user can spot danger before pressing.
  * ------------------------------------------------------------------------- */
 
 /* Danger affordance on the grid: a 2px red border around the cell, plus
    a small ⚠ badge in the top-right corner. Read from the daemon's
-   ``widget.confirm`` field on every layout push (issues #69 / #108). */
+   ``widget.confirm`` field on every deck push (issues #69 / #108). */
 .cell-danger {
   border-color: #b91c1c;
   box-shadow: 0 0 0 1px rgba(185, 28, 28, 0.4);

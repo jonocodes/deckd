@@ -1,14 +1,14 @@
-# Stable smoke-test fixture layout (#77).
+# Stable smoke-test fixture deck (#77).
 #
 # The smoke test (scripts/smoke.py) presses the widget ids below by
-# name; this fixture keeps those ids stable so a layout edit in
-# layouts/ can't break CI. Mirrors the minimal shape of the shipping
-# default layout: a few buttons that exercise the shell / terminal /
+# name; this fixture keeps those ids stable so a deck edit in
+# decks/ can't break CI. Mirrors the minimal shape of the shipping
+# default deck: a few buttons that exercise the shell / terminal /
 # url / key / jog primitives, plus a meter and a stats widget for
 # widget_update coverage.
 #
-# NOT a shipping layout — do not edit layouts/ to mirror this. The
-# shipping layouts live at layouts/ and are user-facing config; this
+# NOT a shipping deck — do not edit decks/ to mirror this. The
+# shipping decks live at decks/ and are user-facing config; this
 # file is the smoke harness's private fixture.
 match:
   - default
@@ -40,7 +40,7 @@ widgets:
       terminal: true
 
   # Pressed as ``press: tilix`` — same terminal primitive under a
-  # different id, mirrors the shipping default layout's tilix button.
+  # different id, mirrors the shipping default deck's tilix button.
   - id: tilix
     kind: button
     icon:
@@ -74,7 +74,7 @@ widgets:
   # A meter widget: the daemon pushes widget_update frames for it
   # while the smoke session is connected. Not asserted on directly by
   # the smoke harness (the source's poll cadence would make that
-  # flaky), but kept here so a layout that includes a meter survives
+  # flaky), but kept here so a deck that includes a meter survives
   # the load + reload round-trip.
   - id: cpu-meter
     kind: meter

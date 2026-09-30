@@ -24,12 +24,12 @@ import {
   SCROLL_SCALE_MIN,
 } from "./settings-store";
 import type { OverflowPreference } from "./settings-store";
-import type { ServerLayout } from "./protocol";
+import type { ServerDeck } from "./protocol";
 
 type SocketStatus = "connecting" | "open" | "closed";
 
 type Props = {
-  layout: ServerLayout | null;
+  deck: ServerDeck | null;
   status: SocketStatus;
   scrollScale: number;
   scrollInvert: boolean;
@@ -45,15 +45,15 @@ type Props = {
   onMinCellChange: (n: number) => void;
   maxCell: number;
   onMaxCellChange: (n: number) => void;
-  /** The device's override of the layout's overflow policy; null follows the
-   * layout (ADR-0011). */
+  /** The device's override of the deck's overflow policy; null follows the
+   * deck (ADR-0011). */
   overflow: OverflowPreference;
   onOverflowChange: (next: OverflowPreference) => void;
-  /** What the active layout asks for, shown so "Follow layout" isn't opaque. */
-  layoutOverflow: "clip" | "shrink-to-fit";
+  /** What the active deck asks for, shown so "Follow deck" isn't opaque. */
+  deckOverflow: "clip" | "shrink-to-fit";
   /** Open the in-app explainer for the sizing controls below (ADR-0011). */
   onOpenHelp?: () => void;
-  /** Open the layout editor. The editor's launch point moved out of the
+  /** Open the deck editor. The editor's launch point moved out of the
    * always-on bottom chrome into Settings — editing is occasional, so the
    * button doesn't need to occupy the crowded bottom bar full-time. */
   onOpenEditor?: () => void;
@@ -87,7 +87,7 @@ type Health = {
  * dump. State for the editable half lives one level up in ``App`` so the
  * jogstrip widgets and the settings UI see the same values live. */
 export function Settings({
-  layout,
+  deck,
   status,
   scrollScale,
   scrollInvert,
@@ -105,7 +105,7 @@ export function Settings({
   onMaxCellChange,
   overflow,
   onOverflowChange,
-  layoutOverflow,
+  deckOverflow,
   onOpenHelp,
   onOpenEditor,
   jogWidth,
@@ -136,10 +136,10 @@ export function Settings({
     ["Desktop", health?.desktop ?? "…"],
     ["PWA / standalone", standalone ? "yes" : "no"],
     ["Connection", status],
-    ["App", layout?.app ?? "—"],
-    ["Widgets", layout ? String(layout.widgets.length) : "—"],
-    ["Chrome jogstrip", layout ? (layout.jogstrip_enabled ? "on" : "off") : "—"],
-    ["Layout error", layout?.error ? "yes" : "no"],
+    ["App", deck?.app ?? "—"],
+    ["Widgets", deck ? String(deck.widgets.length) : "—"],
+    ["Chrome jogstrip", deck ? (deck.jogstrip_enabled ? "on" : "off") : "—"],
+    ["Deck error", deck?.error ? "yes" : "no"],
     ["Orientation", orientation],
     ["Viewport", `${viewport[0]} × ${viewport[1]}`],
     ["Device pixel ratio", String(window.devicePixelRatio ?? 1)],
@@ -159,7 +159,7 @@ export function Settings({
           onClick={onOpenEditor}
         >
           <PencilIcon size={18} aria-hidden="true" />
-          <span>Edit layout</span>
+          <span>Edit deck</span>
         </button>
       ) : null}
 
@@ -261,15 +261,15 @@ export function Settings({
             {maxCell}px
           </span>
         </div>
-        {/* The one sizing decision that is both a layout concern and a device
-            concern (ADR-0011), so both get a say: the layout ships a default
-            and this overrides it. "Follow layout" clears the override. */}
+        {/* The one sizing decision that is both a deck concern and a device
+            concern (ADR-0011), so both get a say: the deck ships a default
+            and this overrides it. "Follow deck" clears the override. */}
         <div className="settings-control settings-control-choice">
           <span className="settings-control-label">When there&rsquo;s no room</span>
           <div className="settings-choice" role="group" aria-label="When there's no room">
             {(
               [
-                [null, "Follow layout", `Layout says: ${layoutOverflow === "clip" ? "hide extras" : "shrink buttons"}`],
+                [null, "Follow deck", `Deck says: ${deckOverflow === "clip" ? "hide extras" : "shrink buttons"}`],
                 ["clip", "Hide extras", "Keep buttons at least the minimum size"],
                 ["shrink-to-fit", "Shrink buttons", "Show every button, however small"],
               ] as const

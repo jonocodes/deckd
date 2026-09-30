@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerLayout, ServerMessage, ServerRunningWindows, ServerState, ServerWidgetUpdate, MediaState } from "./protocol";
-import { wireLayoutToServer, wireWindowsToServer } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerDeck, ServerMessage, ServerRunningWindows, ServerState, ServerWidgetUpdate, MediaState } from "./protocol";
+import { wireDeckToServer, wireWindowsToServer } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
 
@@ -30,19 +30,19 @@ function storePassword(value: string): void {
   }
 }
 
-// Demo pin: ``?layout=<name>`` forces this client to a named daemon layout
+// Demo pin: ``?deck=<name>`` forces this client to a named daemon deck
 // regardless of host focus (see demo.ts for the backend-free ``?demo=``
 // sibling). Read once at load; the daemon ignores an unknown name.
-function readPinnedLayout(): string {
+function readPinnedDeck(): string {
   try {
-    return new URLSearchParams(window.location.search).get("layout") ?? "";
+    return new URLSearchParams(window.location.search).get("deck") ?? "";
   } catch {
     return "";
   }
 }
 
 export function useDeckdSocket(
-  onLayout: (m: ServerLayout) => void,
+  onDeck: (m: ServerDeck) => void,
   onWidgetUpdate: (m: ServerWidgetUpdate) => void,
   onMediaState: (m: MediaState) => void,
   onChromeMedia?: (m: ServerChromeMedia) => void,
@@ -53,7 +53,7 @@ export function useDeckdSocket(
 ) {
   const { enabled = true } = options;
   // In demo mode the socket is disabled and reported as ``open`` so the
-  // chrome connection indicator reads "live" against a fixture layout.
+  // chrome connection indicator reads "live" against a fixture deck.
   const [status, setStatus] = useState<Status>(enabled ? "connecting" : "open");
   const wsRef = useRef<WebSocket | null>(null);
   const backoffRef = useRef(500);
@@ -94,12 +94,12 @@ export function useDeckdSocket(
         setStatus("open");
         backoffRef.current = 500;
         const password = passwordRef.current;
-        const pinnedLayout = readPinnedLayout();
+        const pinnedDeck = readPinnedDeck();
         const hello: ClientMessage = {
           type: "hello",
           client: "web",
           ...(password ? { password } : {}),
-          ...(pinnedLayout ? { layout: pinnedLayout } : {}),
+          ...(pinnedDeck ? { deck: pinnedDeck } : {}),
         };
         ws.send(JSON.stringify(hello));
       };
@@ -107,7 +107,7 @@ export function useDeckdSocket(
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data) as ServerMessage;
-          if (msg.type === "layout") onLayout(wireLayoutToServer(msg));
+          if (msg.type === "deck") onDeck(wireDeckToServer(msg));
           else if (msg.type === "widget_update") onWidgetUpdate(msg);
           else if (msg.type === "media_state") onMediaState(msg);
           // Issue #47: the daemon may push ``chrome_media`` to every
@@ -133,7 +133,7 @@ export function useDeckdSocket(
           // Issue #160: the two-state session screen awareness. Pushed
           // on every locked/blanked transition and replayed in the
           // connect snapshot, so a late joiner isn't stalled on a
-          // stale layout. The handler is optional for the same
+          // stale deck. The handler is optional for the same
           // forward-compat reason as the other chrome-side frames.
           else if (msg.type === "state" && onSessionState) {
             onSessionState(msg);
@@ -199,7 +199,7 @@ export function useDeckdSocket(
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onLayout, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, onSessionState, enabled, gen]);
+  }, [onDeck, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, onSessionState, enabled, gen]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;

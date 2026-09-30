@@ -1,13 +1,13 @@
-/** Layout editor chrome view (issue #100) + reflow canvas (issue #101).
+/** Deck editor chrome view (issue #100) + reflow canvas (issue #101).
  *
- *  Covers the Editor component in isolation with mock layout data:
+ *  Covers the Editor component in isolation with mock deck data:
  *   1. Three-pane layout (palette · canvas · properties) renders.
- *   2. Layout picker lists the mock entries, opens/closes, and
- *      selects a layout.
- *   3. Canvas pane shows the selected layout's details and widgets.
+ *   2. Deck picker lists the mock entries, opens/closes, and
+ *      selects a deck.
+ *   3. Canvas pane shows the selected deck's details and widgets.
  *   4. Exit button fires onExit + sends clear_view.
  *   5. Save button is wired and sends widgets + overflow.
- *   6. The editor layout entry is styled as a "chrome view".
+ *   6. The editor deck entry is styled as a "chrome view".
  *   7. Canvas renders widget cells with drag handles and kind labels.
  *   8. Overflow toggle and viewport-preview toolbar buttons render.
  *   9. Unsupported widgets (media, nowplaying) get placeholder badges.
@@ -15,12 +15,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { Editor } from "./Editor";
-import type { ClientMessage, ServerLayout, Widget } from "./protocol";
+import type { ClientMessage, ServerDeck, Widget } from "./protocol";
 
 const send = vi.fn<(msg: ClientMessage | { type: "select_view"; view: string } | { type: "clear_view" }) => void>();
 const onExit = vi.fn();
 
-const MOCK_LAYOUTS = [
+const MOCK_DECKS = [
   {
     id: "firefox",
     match: ["firefox", "Firefox"],
@@ -42,7 +42,7 @@ const MOCK_LAYOUTS = [
   {
     id: "editor",
     match: ["editor"],
-    display_name: "Layout Editor",
+    display_name: "Deck Editor",
     widgets: [],
   },
   {
@@ -80,44 +80,44 @@ afterAll(() => {
   roCallback = null;
 });
 
-describe("Editor — layout editor chrome view", () => {
+describe("Editor — deck editor chrome view", () => {
   afterEach(cleanup);
   beforeEach(() => {
     send.mockReset();
     onExit.mockReset();
   });
 
-  it("renders the three-pane shell with mock layouts", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    expect(screen.getByRole("region", { name: "layout editor" })).toBeTruthy();
+  it("renders the three-pane shell with mock decks", () => {
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    expect(screen.getByRole("region", { name: "deck editor" })).toBeTruthy();
     expect(screen.getByRole("complementary", { name: "widget palette" })).toBeTruthy();
     expect(screen.getByRole("complementary", { name: "properties panel" })).toBeTruthy();
     expect(screen.getByText("Palette")).toBeTruthy();
-    expect(screen.getByText("Layout")).toBeTruthy();
+    expect(screen.getByText("Deck")).toBeTruthy();
   });
 
-  it("pre-selects the first non-editor layout", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+  it("pre-selects the first non-editor deck", () => {
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
     expect(trigger.textContent).toContain("Firefox");
   });
 
-  it("shows the active layout's identity when provided", () => {
+  it("shows the active deck's identity when provided", () => {
     render(
       <Editor
-        layout={{ type: "layout", app: "youtube", display_name: "YouTube", jogstrip_enabled: true, widgets: [] }}
+        deck={{ type: "deck", app: "youtube", display_name: "YouTube", jogstrip_enabled: true, widgets: [] }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
-    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
     expect(trigger.textContent).toContain("YouTube");
   });
 
-  it("opens and closes the layout picker", async () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+  it("opens and closes the deck picker", async () => {
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
@@ -129,9 +129,9 @@ describe("Editor — layout editor chrome view", () => {
     await waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
   });
 
-  it("selects a layout from the picker", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+  it("selects a deck from the picker", () => {
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
     fireEvent.click(trigger);
     const youtubeOption = screen.getByText("YouTube");
     fireEvent.click(youtubeOption);
@@ -140,15 +140,15 @@ describe("Editor — layout editor chrome view", () => {
     expect(screen.getByText(/match: firefox, title:YouTube/)).toBeTruthy();
   });
 
-  it("shows widget count for the selected layout", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+  it("shows widget count for the selected deck", () => {
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
     // Default selection is firefox (1 widget).
     expect(screen.getByText("1 widget")).toBeTruthy();
   });
 
-  it("marks the editor layout entry as a chrome view", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+  it("marks the editor deck entry as a chrome view", () => {
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
     fireEvent.click(trigger);
     const editorOption = screen.getByText("chrome view");
     expect(editorOption).toBeTruthy();
@@ -156,7 +156,7 @@ describe("Editor — layout editor chrome view", () => {
   });
 
   it("exit button fires onExit and sends clear_view", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
     const exitBtn = screen.getByRole("button", { name: "close editor" });
     fireEvent.click(exitBtn);
     expect(send).toHaveBeenCalledWith({ type: "clear_view" });
@@ -164,66 +164,66 @@ describe("Editor — layout editor chrome view", () => {
   });
 
   it("renders a save button", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    expect(screen.getByRole("button", { name: "save layout" })).toBeTruthy();
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    expect(screen.getByRole("button", { name: "save deck" })).toBeTruthy();
   });
 
-  it("shows the title 'Edit layout' in the header", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    expect(screen.getByText("Edit layout")).toBeTruthy();
+  it("shows the title 'Edit deck' in the header", () => {
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    expect(screen.getByText("Edit deck")).toBeTruthy();
   });
 
-  it("shows canvas placeholder when no mock layouts provided and fetch fails", async () => {
-    render(<Editor layout={null} send={send} onExit={onExit} />);
-    const trigger = screen.getByRole("button", { name: "select layout to edit" });
-    expect(trigger.textContent).toContain("Select layout");
-    expect(screen.getByText("No layout selected")).toBeTruthy();
+  it("shows canvas placeholder when no mock decks provided and fetch fails", async () => {
+    render(<Editor deck={null} send={send} onExit={onExit} />);
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
+    expect(trigger.textContent).toContain("Select deck");
+    expect(screen.getByText("No deck selected")).toBeTruthy();
   });
 
   // ---- reflow canvas tests (issue #101) ----
 
   it("renders widget cells in the canvas with kind labels", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    // Firefox layout has one button: label "New tab", kind "BUTTON".
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    // Firefox deck has one button: label "New tab", kind "BUTTON".
     expect(screen.getByText("New tab")).toBeTruthy();
     expect(screen.getByText("button")).toBeTruthy();
   });
 
   it("renders drag handles on canvas cells", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
     const dragBtn = screen.getByLabelText("drag to reorder New tab");
     expect(dragBtn).toBeTruthy();
   });
 
   it("renders overflow toggle buttons", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
     expect(screen.getByLabelText("shrink to fit")).toBeTruthy();
     expect(screen.getByLabelText("clip")).toBeTruthy();
   });
 
   it("renders viewport-preview width buttons", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
     // Full / 1024 / 768 / 480 / 360
     expect(screen.getByLabelText("preview at full width")).toBeTruthy();
     expect(screen.getByLabelText("preview at 480 width")).toBeTruthy();
     expect(screen.getByLabelText("preview at 360 width")).toBeTruthy();
   });
 
-  it("shows empty state message when layout has no widgets", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+  it("shows empty state message when deck has no widgets", () => {
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
     fireEvent.click(trigger);
-    // Select the editor layout (has 0 widgets).
-    const editorOption = screen.getByText("Layout Editor");
+    // Select the editor deck (has 0 widgets).
+    const editorOption = screen.getByText("Deck Editor");
     fireEvent.click(editorOption);
     expect(screen.getByText("0 widgets")).toBeTruthy();
     expect(screen.getByText(/No widgets/)).toBeTruthy();
   });
 
   it("renders placeholder badge on unsupported widget kinds", () => {
-    // Select the 'default' layout which has a 'media' widget.
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+    // Select the 'default' deck which has a 'media' widget.
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
     fireEvent.click(trigger);
     const defaultOption = screen.getByText("default");
     fireEvent.click(defaultOption);
@@ -237,7 +237,7 @@ describe("Editor — layout editor chrome view", () => {
   });
 
   it("toggles overflow mode when clicking toolbar buttons", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
     const shrinkBtn = screen.getByLabelText("shrink to fit");
     const clipBtn = screen.getByLabelText("clip");
 
@@ -251,7 +251,7 @@ describe("Editor — layout editor chrome view", () => {
   });
 
   it("activates a viewport-preview width button", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
     const fullBtn = screen.getByLabelText("preview at full width");
     const btn480 = screen.getByLabelText("preview at 480 width");
 
@@ -269,8 +269,8 @@ describe("Editor — layout editor chrome view", () => {
 
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           display_name: "Firefox",
           jogstrip_enabled: true,
@@ -279,11 +279,11 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
-    const saveBtn = screen.getByRole("button", { name: "save layout" });
+    const saveBtn = screen.getByRole("button", { name: "save deck" });
     fireEvent.click(saveBtn);
 
     await waitFor(() => {
@@ -300,33 +300,33 @@ describe("Editor — layout editor chrome view", () => {
     vi.unstubAllGlobals();
   });
 
-  // ---- new-layout creation flow tests (issue #104) ----
+  // ---- new-deck creation flow tests (issue #104) ----
 
-  it("picker includes a 'New layout' entry with Plus icon", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+  it("picker includes a 'New deck' entry with Plus icon", () => {
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
     fireEvent.click(trigger);
-    const newOption = screen.getByText("New layout");
+    const newOption = screen.getByText("New deck");
     expect(newOption).toBeTruthy();
   });
 
-  it("clicking 'New layout' opens the manual creation form", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
-    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+  it("clicking 'New deck' opens the manual creation form", () => {
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
     fireEvent.click(trigger);
-    fireEvent.click(screen.getByText("New layout"));
-    expect(screen.getByText("New layout")).toBeTruthy();
+    fireEvent.click(screen.getByText("New deck"));
+    expect(screen.getByText("New deck")).toBeTruthy();
     // The creation form should show match / display-name inputs.
     expect(screen.getByPlaceholderText("e.g. firefox or title:*YouTube*")).toBeTruthy();
     expect(screen.getByPlaceholderText("(optional, derived from match)")).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Create layout" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create deck" })).toBeTruthy();
   });
 
   it("shows detect-and-offer prompt when app is 'default' with focused app", () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "default",
           jogstrip_enabled: true,
           widgets: [{ id: "dummy", kind: "button" as const }],
@@ -334,10 +334,10 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
-    expect(screen.getByText(/No layout for example-app yet/)).toBeTruthy();
+    expect(screen.getByText(/No deck for example-app yet/)).toBeTruthy();
     const matchInput = screen.getByPlaceholderText("e.g. firefox or title:*YouTube*") as HTMLInputElement;
     expect(matchInput.value).toBe("example-app");
   });
@@ -345,8 +345,8 @@ describe("Editor — layout editor chrome view", () => {
   it("shows browser branch prompt when focused app is a browser", () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "default",
           jogstrip_enabled: true,
           widgets: [{ id: "dummy", kind: "button" as const }],
@@ -354,21 +354,21 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
-    expect(screen.getByText(/No layout for.*yet/)).toBeTruthy();
+    expect(screen.getByText(/No deck for.*yet/)).toBeTruthy();
     // The alternate option for the site should be present.
-    expect(screen.getByText(/Layout for/)).toBeTruthy();
+    expect(screen.getByText(/Deck for/)).toBeTruthy();
   });
 
-  it("creates a new layout and saves via POST", async () => {
+  it("creates a new deck and saves via POST", async () => {
     const fetchSpy = vi.fn();
     fetchSpy.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
         ok: true,
-        layout: {
+        deck: {
           id: "example-app",
           match: ["example-app"],
           display_name: "Example App",
@@ -381,8 +381,8 @@ describe("Editor — layout editor chrome view", () => {
 
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "default",
           jogstrip_enabled: true,
           widgets: [{ id: "dummy", kind: "button" as const }],
@@ -390,19 +390,19 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
     // Confirm creation.
-    fireEvent.click(screen.getByRole("button", { name: "Create layout" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create deck" }));
 
-    // Should now be in new-layout editing mode.
-    expect(screen.getByText("New layout")).toBeTruthy();
+    // Should now be in new-deck editing mode.
+    expect(screen.getByText("New deck")).toBeTruthy();
     expect(screen.getByText("match: example-app")).toBeTruthy();
 
     // Save should POST.
-    fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+    fireEvent.click(screen.getByRole("button", { name: "save deck" }));
     await waitFor(() => {
       const postCall = fetchSpy.mock.calls.find(
         (call: unknown[]) => {
@@ -421,8 +421,8 @@ describe("Editor — layout editor chrome view", () => {
   it("cancel button dismisses creation form", () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "default",
           jogstrip_enabled: true,
           widgets: [{ id: "dummy", kind: "button" as const }],
@@ -430,20 +430,20 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
-    expect(screen.getByText(/No layout for/)).toBeTruthy();
+    expect(screen.getByText(/No deck for/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    // Form should be gone, canvas placeholder shown (since default layout isn't in MOCK_LAYOUTS).
-    expect(screen.queryByText(/No layout for/)).toBeFalsy();
+    // Form should be gone, canvas placeholder shown (since default deck isn't in MOCK_DECKS).
+    expect(screen.queryByText(/No deck for/)).toBeFalsy();
   });
 
   it("empty match disables the create button", () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "default",
           jogstrip_enabled: true,
           widgets: [{ id: "dummy", kind: "button" as const }],
@@ -451,23 +451,23 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
     const input = screen.getByPlaceholderText("e.g. firefox or title:*YouTube*") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "" } });
-    expect((screen.getByRole("button", { name: "Create layout" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Create deck" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("entering new-layout mode resets layout-level edit fields (#104)", () => {
-    // The layout-level properties panel (display_name/theme/icon/jogstrip)
-    // must not inherit stale values from a previously-loaded layout when
-    // entering new-layout mode — a brand-new layout has none of those
+  it("entering new-deck mode resets deck-level edit fields (#104)", () => {
+    // The deck-level properties panel (display_name/theme/icon/jogstrip)
+    // must not inherit stale values from a previously-loaded deck when
+    // entering new-deck mode — a brand-new deck has none of those
     // (#88: "no theme"), and showing stale fields would be misleading.
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           display_name: "Firefox",
           theme: "#ff7139",
@@ -477,23 +477,23 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
-    // Select the firefox layout (loaded with display_name/theme/icon set).
+    // Select the firefox deck (loaded with display_name/theme/icon set).
     expect(screen.getByDisplayValue("Firefox")).toBeTruthy();
     expect(screen.getByDisplayValue("#ff7139")).toBeTruthy();
 
     // Open the manual creation form, confirm with a match token.
-    const trigger = screen.getByRole("button", { name: "select layout to edit" });
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
     fireEvent.click(trigger);
-    fireEvent.click(screen.getByText("New layout"));
+    fireEvent.click(screen.getByText("New deck"));
     const matchInput = screen.getByPlaceholderText("e.g. firefox or title:*YouTube*");
     fireEvent.change(matchInput, { target: { value: "newapp" } });
-    fireEvent.click(screen.getByRole("button", { name: "Create layout" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create deck" }));
 
-    // The layout-level properties panel must now show the prefilled
+    // The deck-level properties panel must now show the prefilled
     // display_name (#88 "prefilled display_name") and empty/default
     // theme/icon — not the stale Firefox values.
     const displayNameInput = screen.getByPlaceholderText("(derived from match)") as HTMLInputElement;
@@ -502,7 +502,7 @@ describe("Editor — layout editor chrome view", () => {
     expect(themeInput.value).toBe("");
     const iconButton = screen.getByRole("button", { name: "Browse icons…" });
     expect(iconButton).toBeTruthy();
-    // Jogstrip defaults to true (#88: no override for a brand-new layout).
+    // Jogstrip defaults to true (#88: no override for a brand-new deck).
     const jogstripCheckbox = screen.getByRole("checkbox") as HTMLInputElement;
     expect(jogstripCheckbox.checked).toBe(true);
   });
@@ -510,8 +510,8 @@ describe("Editor — layout editor chrome view", () => {
   it("clicking the browser alt-button swaps match and display-name inputs", () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "default",
           jogstrip_enabled: true,
           widgets: [{ id: "dummy", kind: "button" as const }],
@@ -524,26 +524,26 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
     const matchInput = screen.getByPlaceholderText("e.g. firefox or title:*YouTube*") as HTMLInputElement;
     expect(matchInput.value).toBe("firefox");
-    const altBtn = screen.getByRole("button", { name: /Layout for/ });
+    const altBtn = screen.getByRole("button", { name: /Deck for/ });
     fireEvent.click(altBtn);
     expect(matchInput.value).toBe("title:*YouTube*");
     const displayNameInput = screen.getByPlaceholderText("(optional, derived from match)") as HTMLInputElement;
     expect(displayNameInput.value).toBe("YouTube");
   });
 
-  it("exit in new-layout mode shows the abandon confirm (#104)", () => {
+  it("exit in new-deck mode shows the abandon confirm (#104)", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
 
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "default",
           jogstrip_enabled: true,
           widgets: [{ id: "dummy", kind: "button" as const }],
@@ -551,16 +551,16 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
-    // Enter new-layout mode via the detect-and-offer prompt.
-    fireEvent.click(screen.getByRole("button", { name: "Create layout" }));
+    // Enter new-deck mode via the detect-and-offer prompt.
+    fireEvent.click(screen.getByRole("button", { name: "Create deck" }));
 
     // Exit must ask before abandoning the not-yet-saved draft.
     fireEvent.click(screen.getByRole("button", { name: "close editor" }));
-    expect(confirmSpy).toHaveBeenCalledWith("Abandon this new layout? Nothing is saved yet.");
+    expect(confirmSpy).toHaveBeenCalledWith("Abandon this new deck? Nothing is saved yet.");
     expect(send).not.toHaveBeenCalledWith({ type: "clear_view" });
     expect(onExit).not.toHaveBeenCalled();
 
@@ -569,11 +569,11 @@ describe("Editor — layout editor chrome view", () => {
 
   // ---- properties panel tests (issue #103) ----
 
-  it("shows layout-level fields in the properties panel when no widget is selected", () => {
+  it("shows deck-level fields in the properties panel when no widget is selected", () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           display_name: "Firefox",
           theme: "#ff7139",
@@ -582,18 +582,18 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
-    expect(screen.getByText("Layout")).toBeTruthy();
+    expect(screen.getByText("Deck")).toBeTruthy();
     expect(screen.getByText("Display name")).toBeTruthy();
   });
 
   it("shows widget properties when a canvas cell is clicked", () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           display_name: "Firefox",
           jogstrip_enabled: true,
@@ -603,7 +603,7 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
     const cell = document.querySelector('[data-widget-id="btn-1"]');
@@ -618,8 +618,8 @@ describe("Editor — layout editor chrome view", () => {
   it("shows meter fields when a meter widget is selected", () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [
@@ -635,7 +635,7 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
     const cell = document.querySelector('[data-widget-id="meter-1"]');
@@ -649,8 +649,8 @@ describe("Editor — layout editor chrome view", () => {
   it("shows unsupported placeholder for media widgets", () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [
@@ -659,7 +659,7 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
     const cell = document.querySelector('[data-widget-id="media-1"]');
@@ -670,8 +670,8 @@ describe("Editor — layout editor chrome view", () => {
   it("selected cell has highlight class", () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [
@@ -680,7 +680,7 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
     const cell = document.querySelector('[data-widget-id="btn-1"]');
@@ -688,14 +688,14 @@ describe("Editor — layout editor chrome view", () => {
     expect(cell?.className).toContain("editor-canvas-cell-selected");
   });
 
-  it("save includes layout-level presentation fields", async () => {
+  it("save includes deck-level presentation fields", async () => {
     const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
     vi.stubGlobal("fetch", fetchSpy);
 
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           display_name: "Firefox",
           theme: "#ff7139",
@@ -706,11 +706,11 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
-    const saveBtn = screen.getByRole("button", { name: "save layout" });
+    const saveBtn = screen.getByRole("button", { name: "save deck" });
     fireEvent.click(saveBtn);
 
     await waitFor(() => {
@@ -732,8 +732,8 @@ describe("Editor — layout editor chrome view", () => {
 
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [
@@ -747,11 +747,11 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
-    const saveBtn = screen.getByRole("button", { name: "save layout" });
+    const saveBtn = screen.getByRole("button", { name: "save deck" });
     fireEvent.click(saveBtn);
 
     await waitFor(() => {
@@ -771,8 +771,8 @@ describe("Editor — layout editor chrome view", () => {
   it("clicking the canvas background deselects widget", () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [
@@ -781,7 +781,7 @@ describe("Editor — layout editor chrome view", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
     // First select the widget
@@ -792,11 +792,11 @@ describe("Editor — layout editor chrome view", () => {
     // Click the grid container outside the cell
     const grid = document.querySelector(".editor-canvas-grid");
     fireEvent.click(grid!);
-    expect(screen.getByText("Layout")).toBeTruthy();
+    expect(screen.getByText("Deck")).toBeTruthy();
   });
 });
 
-describe("Editor — fetch layouts path (no mockLayouts)", () => {
+describe("Editor — fetch decks path (no mockDecks)", () => {
   afterEach(() => {
     cleanup();
     delete (globalThis as Record<string, unknown>).fetch;
@@ -806,7 +806,7 @@ describe("Editor — fetch layouts path (no mockLayouts)", () => {
     onExit.mockReset();
   });
 
-  const FETCH_LAYOUTS = [
+  const FETCH_DECKS = [
     {
       id: "firefox",
       match: ["firefox"],
@@ -818,7 +818,7 @@ describe("Editor — fetch layouts path (no mockLayouts)", () => {
     {
       id: "editor",
       match: ["editor"],
-      display_name: "Layout Editor",
+      display_name: "Deck Editor",
       widgets: [],
     },
     {
@@ -829,34 +829,34 @@ describe("Editor — fetch layouts path (no mockLayouts)", () => {
     },
   ];
 
-  it("fetches layouts and shows them in the picker", async () => {
+  it("fetches decks and shows them in the picker", async () => {
     (globalThis as Record<string, unknown>).fetch = vi.fn().mockResolvedValue({
       json: () =>
-        Promise.resolve({ ok: true, layouts: FETCH_LAYOUTS }),
+        Promise.resolve({ ok: true, decks: FETCH_DECKS }),
     });
 
     render(
-      <Editor layout={null} send={send} onExit={onExit} />,
+      <Editor deck={null} send={send} onExit={onExit} />,
     );
 
     await waitFor(() => {
       expect(screen.getAllByText("Firefox").length).toBeGreaterThan(0);
     });
 
-    fireEvent.click(screen.getByLabelText("select layout to edit"));
-    // Picker dropdown should show all fetched layouts
+    fireEvent.click(screen.getByLabelText("select deck to edit"));
+    // Picker dropdown should show all fetched decks
     expect(screen.getByText("Terminal")).toBeTruthy();
     expect(screen.queryByText("YouTube")).toBeFalsy();
   });
 
-  it("auto-selects first non-editor layout from fetch response", async () => {
+  it("auto-selects first non-editor deck from fetch response", async () => {
     (globalThis as Record<string, unknown>).fetch = vi.fn().mockResolvedValue({
       json: () =>
-        Promise.resolve({ ok: true, layouts: FETCH_LAYOUTS }),
+        Promise.resolve({ ok: true, decks: FETCH_DECKS }),
     });
 
     render(
-      <Editor layout={null} send={send} onExit={onExit} />,
+      <Editor deck={null} send={send} onExit={onExit} />,
     );
 
     await waitFor(() => {
@@ -864,48 +864,48 @@ describe("Editor — fetch layouts path (no mockLayouts)", () => {
     });
 
     expect(screen.getByText("Click")).toBeTruthy();
-    expect(screen.queryByText("Layout Editor")).toBeFalsy();
+    expect(screen.queryByText("Deck Editor")).toBeFalsy();
   });
 
-  it("shows 'Select layout' when fetch returns empty list", async () => {
+  it("shows 'Select deck' when fetch returns empty list", async () => {
     (globalThis as Record<string, unknown>).fetch = vi.fn().mockResolvedValue({
       json: () =>
-        Promise.resolve({ ok: true, layouts: [] }),
+        Promise.resolve({ ok: true, decks: [] }),
     });
 
     render(
-      <Editor layout={null} send={send} onExit={onExit} />,
+      <Editor deck={null} send={send} onExit={onExit} />,
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Select layout")).toBeTruthy();
+      expect(screen.getByText("Select deck")).toBeTruthy();
     });
   });
 
-  it("shows 'Select layout' when fetch returns non-ok", async () => {
+  it("shows 'Select deck' when fetch returns non-ok", async () => {
     (globalThis as Record<string, unknown>).fetch = vi.fn().mockResolvedValueOnce({
       json: () =>
-        Promise.resolve({ ok: false, layouts: [] }),
+        Promise.resolve({ ok: false, decks: [] }),
     });
 
     render(
-      <Editor layout={null} send={send} onExit={onExit} />,
+      <Editor deck={null} send={send} onExit={onExit} />,
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Select layout")).toBeTruthy();
+      expect(screen.getByText("Select deck")).toBeTruthy();
     });
   });
 
-  it("shows 'Select layout' when fetch fails", async () => {
+  it("shows 'Select deck' when fetch fails", async () => {
     (globalThis as Record<string, unknown>).fetch = vi.fn().mockRejectedValueOnce(new Error("network error"));
 
     render(
-      <Editor layout={null} send={send} onExit={onExit} />,
+      <Editor deck={null} send={send} onExit={onExit} />,
     );
 
     await waitFor(() => {
-      expect(screen.getByText("Select layout")).toBeTruthy();
+      expect(screen.getByText("Select deck")).toBeTruthy();
     });
   });
 });
@@ -922,7 +922,7 @@ describe("Editor — full save-cycle integration", () => {
   });
 
   function renderAndSave(opts: {
-    layout?: Record<string, unknown>;
+    deck?: Record<string, unknown>;
     edit?: () => Promise<void> | void;
   }) {
     const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
@@ -930,25 +930,25 @@ describe("Editor — full save-cycle integration", () => {
 
     render(
       <Editor
-        layout={(opts.layout as unknown as ServerLayout) ?? null}
+        deck={(opts.deck as unknown as ServerDeck) ?? null}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
     return { fetchSpy, clickSave: async () => {
       if (opts.edit) await opts.edit();
-      fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+      fireEvent.click(screen.getByRole("button", { name: "save deck" }));
       await waitFor(() => { expect(fetchSpy).toHaveBeenCalled(); });
       return fetchSpy.mock.calls[0] as [string, RequestInit];
     }};
   }
 
-  it("PUT body includes all layout-level fields", async () => {
+  it("PUT body includes all deck-level fields", async () => {
     const { clickSave } = renderAndSave({
-      layout: {
-        type: "layout",
+      deck: {
+        type: "deck",
         app: "firefox",
         widgets: [{ id: "btn-1", kind: "button" as const }],
       },
@@ -966,10 +966,10 @@ describe("Editor — full save-cycle integration", () => {
     expect(body.jogstrip).toBe(true);
   });
 
-  it("PUT body includes presentation fields from active layout", async () => {
+  it("PUT body includes presentation fields from active deck", async () => {
     const { clickSave } = renderAndSave({
-      layout: {
-        type: "layout",
+      deck: {
+        type: "deck",
         app: "firefox",
         display_name: "My Firefox",
         theme: "#ff0000",
@@ -992,8 +992,8 @@ describe("Editor — full save-cycle integration", () => {
 
   it("PUT body reflects widget changes (label, icon, color, size)", async () => {
     const { clickSave } = renderAndSave({
-      layout: {
-        type: "layout",
+      deck: {
+        type: "deck",
         app: "firefox",
         jogstrip_enabled: true,
         widgets: [{
@@ -1017,8 +1017,8 @@ describe("Editor — full save-cycle integration", () => {
 
   it("PUT body preserves unrendered fields (macro)", async () => {
     const { clickSave } = renderAndSave({
-      layout: {
-        type: "layout",
+      deck: {
+        type: "deck",
         app: "firefox",
         jogstrip_enabled: true,
         widgets: [{
@@ -1041,8 +1041,8 @@ describe("Editor — full save-cycle integration", () => {
 
   it("clearing a widget field omits it from the PUT body (#89 deletion = omission)", async () => {
     const { clickSave } = renderAndSave({
-      layout: {
-        type: "layout",
+      deck: {
+        type: "deck",
         app: "firefox",
         jogstrip_enabled: true,
         widgets: [
@@ -1066,8 +1066,8 @@ describe("Editor — full save-cycle integration", () => {
 
   it("PUT body reflects widget delete", async () => {
     const { clickSave } = renderAndSave({
-      layout: {
-        type: "layout",
+      deck: {
+        type: "deck",
         app: "firefox",
         jogstrip_enabled: true,
         widgets: [
@@ -1092,8 +1092,8 @@ describe("Editor — full save-cycle integration", () => {
 
   it("PUT body reflects widget reorder via drag", async () => {
     const { clickSave } = renderAndSave({
-      layout: {
-        type: "layout",
+      deck: {
+        type: "deck",
         app: "firefox",
         jogstrip_enabled: true,
         widgets: [
@@ -1130,19 +1130,19 @@ describe("Editor — full save-cycle integration", () => {
 
       render(
         <Editor
-          layout={{
-            type: "layout",
+          deck={{
+            type: "deck",
             app: "firefox",
             jogstrip_enabled: true,
             widgets: [{ id: "btn-1", kind: "button" as const }],
           }}
           send={send}
           onExit={onExit}
-          mockLayouts={MOCK_LAYOUTS}
+          mockDecks={MOCK_DECKS}
         />,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+      fireEvent.click(screen.getByRole("button", { name: "save deck" }));
       await waitFor(() => { expect(fetchSpy).toHaveBeenCalled(); });
       const req = fetchSpy.mock.calls[0][1] as RequestInit;
       expect(req.headers).toHaveProperty("X-Deckd-Password", "test-password");
@@ -1162,19 +1162,19 @@ describe("Editor — full save-cycle integration", () => {
 
       render(
         <Editor
-          layout={{
-            type: "layout",
+          deck={{
+            type: "deck",
             app: "firefox",
             jogstrip_enabled: true,
             widgets: [{ id: "btn-1", kind: "button" as const }],
           }}
           send={send}
           onExit={onExit}
-          mockLayouts={MOCK_LAYOUTS}
+          mockDecks={MOCK_DECKS}
         />,
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+      fireEvent.click(screen.getByRole("button", { name: "save deck" }));
       await waitFor(() => { expect(fetchSpy).toHaveBeenCalled(); });
       const req = fetchSpy.mock.calls[0][1] as RequestInit;
       expect(req.headers).not.toHaveProperty("X-Deckd-Password");
@@ -1186,44 +1186,44 @@ describe("Editor — full save-cycle integration", () => {
   it("shows error message when save fails", async () => {
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: false,
-      json: () => Promise.resolve({ error: "match[0] must equal the layout id" }),
+      json: () => Promise.resolve({ error: "match[0] must equal the deck id" }),
     });
     (globalThis as Record<string, unknown>).fetch = fetchSpy;
 
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [{ id: "btn-1", kind: "button" as const }],
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+    fireEvent.click(screen.getByRole("button", { name: "save deck" }));
     await waitFor(() => {
-      expect(screen.getByText("match[0] must equal the layout id")).toBeTruthy();
+      expect(screen.getByText("match[0] must equal the deck id")).toBeTruthy();
     });
   });
 
-  it("warns on exit when layout has unsaved changes", async () => {
+  it("warns on exit when deck has unsaved changes", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValueOnce(false);
 
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [{ id: "btn-1", kind: "button" as const, label: "Test" }],
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
@@ -1247,8 +1247,8 @@ describe("Editor — full save-cycle integration", () => {
 
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [{ id: "btn-1", kind: "button" as const }],
@@ -1256,17 +1256,17 @@ describe("Editor — full save-cycle integration", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
-    // With no widget selected, the layout-level overflow select is visible
+    // With no widget selected, the deck-level overflow select is visible
     const combobox = screen.getByRole("combobox");
     expect((combobox as HTMLSelectElement).value).toBe("shrink-to-fit");
     fireEvent.change(combobox, { target: { value: "clip" } });
 
     // Save and check the PUT body reflects the change
-    fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+    fireEvent.click(screen.getByRole("button", { name: "save deck" }));
     await waitFor(() => { expect(fetchSpy).toHaveBeenCalled(); });
     const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
     expect(body.overflow).toBe("clip");
@@ -1275,8 +1275,8 @@ describe("Editor — full save-cycle integration", () => {
   it("canvas cell renders icon glyph for widget with icon data", async () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [{
@@ -1288,7 +1288,7 @@ describe("Editor — full save-cycle integration", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
@@ -1311,8 +1311,8 @@ describe("Editor — full save-cycle integration", () => {
   it("canvas cell shows fallback glyph for widget without icon", async () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [{
@@ -1323,7 +1323,7 @@ describe("Editor — full save-cycle integration", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
@@ -1340,8 +1340,8 @@ describe("Editor — full save-cycle integration", () => {
   it("canvas cell shows macro badge when widget has macro", async () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [{
@@ -1353,7 +1353,7 @@ describe("Editor — full save-cycle integration", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
@@ -1373,8 +1373,8 @@ describe("Editor — full save-cycle integration", () => {
 
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [
@@ -1396,11 +1396,11 @@ describe("Editor — full save-cycle integration", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+    fireEvent.click(screen.getByRole("button", { name: "save deck" }));
     await waitFor(() => { expect(fetchSpy).toHaveBeenCalled(); });
     const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
 
@@ -1419,8 +1419,8 @@ describe("Editor — full save-cycle integration", () => {
 
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [
@@ -1436,11 +1436,11 @@ describe("Editor — full save-cycle integration", () => {
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+    fireEvent.click(screen.getByRole("button", { name: "save deck" }));
     await waitFor(() => { expect(fetchSpy).toHaveBeenCalled(); });
     const body = JSON.parse(fetchSpy.mock.calls[0][1].body as string);
 
@@ -1466,7 +1466,7 @@ describe("Editor — widget palette (issue #103)", () => {
 
   /** Find the PUT call among fetch invocations and parse its body. */
   async function saveAndParsePut(fetchSpy: ReturnType<typeof vi.fn>) {
-    fireEvent.click(screen.getByRole("button", { name: "save layout" }));
+    fireEvent.click(screen.getByRole("button", { name: "save deck" }));
     await waitFor(() => { expect(fetchSpy).toHaveBeenCalled(); });
     const putCall = fetchSpy.mock.calls.find(
       (call) => (call as [string, RequestInit])[1]?.method === "PUT",
@@ -1475,7 +1475,7 @@ describe("Editor — widget palette (issue #103)", () => {
   }
 
   it("renders the palette with the insertable kinds", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
     // #89: button / meter / stats / blank are palette-insertable; the media
     // family is not.
     expect(screen.getByRole("button", { name: "add button" })).toBeTruthy();
@@ -1487,7 +1487,7 @@ describe("Editor — widget palette (issue #103)", () => {
   });
 
   it("clicking a palette item appends a minted widget and selects it", async () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
     // Firefox starts with 1 widget ("new-tab").
     expect(screen.getByText("1 widget")).toBeTruthy();
 
@@ -1502,15 +1502,15 @@ describe("Editor — widget palette (issue #103)", () => {
   it("minted ids avoid collisions with existing widget ids", async () => {
     render(
       <Editor
-        layout={{
-          type: "layout",
+        deck={{
+          type: "deck",
           app: "firefox",
           jogstrip_enabled: true,
           widgets: [{ id: "button-1", kind: "button" as const }],
         }}
         send={send}
         onExit={onExit}
-        mockLayouts={MOCK_LAYOUTS}
+        mockDecks={MOCK_DECKS}
       />,
     );
 
@@ -1522,7 +1522,7 @@ describe("Editor — widget palette (issue #103)", () => {
   });
 
   it("minted ids are per-kind", async () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
 
     fireEvent.click(screen.getByRole("button", { name: "add meter" }));
     await waitFor(() => { expect(screen.getByDisplayValue("meter-1")).toBeTruthy(); });
@@ -1534,7 +1534,7 @@ describe("Editor — widget palette (issue #103)", () => {
     const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
     (globalThis as Record<string, unknown>).fetch = fetchSpy;
 
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
 
     fireEvent.click(screen.getByRole("button", { name: "add button" }));
     await waitFor(() => { expect(screen.getByDisplayValue("button-1")).toBeTruthy(); });
@@ -1550,7 +1550,7 @@ describe("Editor — widget palette (issue #103)", () => {
     const fetchSpy = vi.fn().mockResolvedValue({ ok: true });
     (globalThis as Record<string, unknown>).fetch = fetchSpy;
 
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={MOCK_LAYOUTS} />);
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
 
     fireEvent.click(screen.getByRole("button", { name: "add blank" }));
     await waitFor(() => { expect(screen.getByText("2 widgets")).toBeTruthy(); });
@@ -1560,9 +1560,9 @@ describe("Editor — widget palette (issue #103)", () => {
     expect(blank).toEqual({ id: "blank-1", kind: "blank" });
   });
 
-  it("palette items are disabled when no layout is selected", () => {
-    render(<Editor layout={null} send={send} onExit={onExit} mockLayouts={[]} />);
-    expect(screen.getByText("Select layout")).toBeTruthy();
+  it("palette items are disabled when no deck is selected", () => {
+    render(<Editor deck={null} send={send} onExit={onExit} mockDecks={[]} />);
+    expect(screen.getByText("Select deck")).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: "add button" }) as HTMLButtonElement).disabled,
     ).toBe(true);

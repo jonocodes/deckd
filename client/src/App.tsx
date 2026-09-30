@@ -31,14 +31,14 @@ import {
 import type { CSSProperties } from "react";
 import { useWakeLock } from "./wake-lock";
 import { useFullscreen } from "./fullscreen";
-import { getDemoLayout, getDemoView, MEDIA_DEMO_STATES, MPRIS_DEMO_STATES, EDITOR_DEMO_LAYOUTS } from "./demo";
+import { getDemoDeck, getDemoView, MEDIA_DEMO_STATES, MPRIS_DEMO_STATES, EDITOR_DEMO_DECKS } from "./demo";
 import { usePlaygroundDaemon } from "./playground/usePlaygroundDaemon";
 import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
 import type {
   Icon as IconRef,
   ServerChromeMedia,
-  ServerLayout,
+  ServerDeck,
   ServerRunningWindows,
   ServerState,
   WindowListEntry,
@@ -56,7 +56,7 @@ type SocketStatus = "connecting" | "open" | "closed" | "unauthorized";
 
 /** Sentinel ids for the always-on chrome widgets. The daemon's pad / jog
  * paths ignore ids for emission (they're just book-keeping keys), so these
- * never collide with real layout widgets. */
+ * never collide with real deck widgets. */
 const CHROME_JOG_ID = "__chrome__";
 const TRACKPAD_ID = "__trackpad__";
 
@@ -84,10 +84,10 @@ const HOSTNAME = (() => {
 })();
 
 export function App() {
-  // Demo mode (``?demo=<name>``): render a fixture layout with the socket
+  // Demo mode (``?demo=<name>``): render a fixture deck with the socket
   // disabled, so the client can be viewed without a daemon. Null in normal
   // daemon-backed operation.
-  const demoLayout = getDemoLayout();
+  const demoDeck = getDemoDeck();
   // Playground spike (#149): ``?playground`` swaps the WebSocket for an
   // in-browser MockDaemon (virtual apps ticking on a clock), so a visitor
   // experiences the press→feedback loop with no backend at all.
@@ -95,12 +95,12 @@ export function App() {
     () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("playground"),
     [],
   );
-  const [layout, setLayout] = useState<ServerLayout | null>(demoLayout);
+  const [deck, setDeck] = useState<ServerDeck | null>(demoDeck);
   // A view demo (``?demo=settings`` / ``?demo=trackpad``) opens straight into
-  // that chrome view; otherwise start on the layout grid.
+  // that chrome view; otherwise start on the deck grid.
   const [view, setView] = useState<View>(() => {
     const demoView = getDemoView();
-    return demoView === "layout" && window.location.pathname !== "/"
+    return demoView === "deck" && window.location.pathname !== "/"
       ? viewFromPath(window.location.pathname)
       : demoView;
   });
@@ -117,19 +117,19 @@ export function App() {
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
-  const onLayout = useCallback((m: ServerLayout) => setLayout(m), []);
-  // Track every sensor source the active layout references (from ``meter``
+  const onDeck = useCallback((m: ServerDeck) => setDeck(m), []);
+  // Track every sensor source the active deck references (from ``meter``
   // widgets and each ``stats`` widget's metrics) so the meter store can drop
   // readings that are no longer on screen — without this, a source would
-  // keep its last reading in memory forever, and a layout switch that hides
+  // keep its last reading in memory forever, and a deck switch that hides
   // meters would still remember them across reloads.
   const activeMeterSources = useMemo(() => {
     const sources = new Set<string>();
-    if (layout) {
+    if (deck) {
       // ``widgets`` arrives over the wire as an opaque blob; cast at
       // the boundary to the schema-layer Widget type (#76 — the wire
       // protocol relays widgets opaquely).
-      for (const w of layout.widgets as unknown as Widget[]) {
+      for (const w of deck.widgets as unknown as Widget[]) {
         if (w.kind === "meter" && w.source) sources.add(w.source);
         if (w.kind === "stats" && w.metrics) {
           for (const m of w.metrics) if (m.source) sources.add(m.source);
@@ -137,9 +137,9 @@ export function App() {
       }
     }
     return sources;
-  }, [layout]);
+  }, [deck]);
   const meter = useMeterStore(activeMeterSources);
-  const activeMediaIds = useMemo(() => new Set((layout?.widgets ?? []).filter((w) => w.kind === "media").map((w) => w.id)), [layout]);
+  const activeMediaIds = useMemo(() => new Set((deck?.widgets ?? []).filter((w) => w.kind === "media").map((w) => w.id)), [deck]);
   // Now-playing rows arrive with ids of the form ``mpris.<suffix>`` —
   // the daemon enumerates them at runtime, so the client can't list
   // them up front. The media store accepts a set of prefixes alongside
@@ -147,19 +147,19 @@ export function App() {
   // visible to the cell without leaking the VLC media widget's id
   // into the now-playing surface.
   const activeMediaPrefixes = useMemo(
-    () => new Set((layout?.widgets ?? []).filter((w) => w.kind === "nowplaying").map(() => "mpris.")),
-    [layout],
+    () => new Set((deck?.widgets ?? []).filter((w) => w.kind === "nowplaying").map(() => "mpris.")),
+    [deck],
   );
-  // The single nowplaying widget in the active layout is the
+  // The single nowplaying widget in the active deck is the
   // configuration source for the chrome view; the chrome view has
   // nowhere else to learn about ``empty_state``. Hoist the lookup out
   // of the render path so the JSX stays declarative.
   const nowPlayingWidget = useMemo(
     () =>
-      (layout?.widgets as unknown as Widget[] | undefined ?? []).find(
+      (deck?.widgets as unknown as Widget[] | undefined ?? []).find(
         (w) => w.kind === "nowplaying",
       ) ?? null,
-    [layout],
+    [deck],
   );
   const media = useMediaStore(activeMediaIds, activeMediaPrefixes);
   // Pull out the store's ``onUpdate`` (a stable useCallback) and feed
@@ -205,7 +205,7 @@ export function App() {
   const onSessionState = useCallback((m: ServerState) => setSessionState(m), []);
   // Demo mode has no socket, so seed the media store once on mount with the
   // fixture readings — otherwise a media widget renders as "unavailable".
-  const isDemo = demoLayout !== null;
+  const isDemo = demoDeck !== null;
   useEffect(() => {
     if (!isDemo) return;
     for (const state of MEDIA_DEMO_STATES) onMediaState(state);
@@ -233,17 +233,17 @@ export function App() {
   // one connects. The real socket steps aside for demo fixtures and for the
   // playground; the MockDaemon runs only under ``?playground``.
   const realSocket = useDeckdSocket(
-    onLayout,
+    onDeck,
     onWidgetUpdate,
     onMediaState,
     onChromeMedia,
     onConfirmRequest,
     onRunningWindows,
     onSessionState,
-    { enabled: !demoLayout && !isPlayground },
+    { enabled: !demoDeck && !isPlayground },
   );
   const playgroundSocket = usePlaygroundDaemon(
-    onLayout,
+    onDeck,
     onWidgetUpdate,
     onMediaState,
     onChromeMedia,
@@ -258,13 +258,13 @@ export function App() {
   // ``locked`` is the soft "asleep, press anything to wake" state.
   const screenLocked = sessionState?.locked ?? false;
   const screenBlanked = !screenLocked && (sessionState?.blanked ?? false);
-  // Look the pressed widget up in the active layout so the modal
+  // Look the pressed widget up in the active deck so the modal
   // can show its label / icon (the daemon doesn't send command text
-  // on the wire). If the layout has rotated away between the press
+  // on the wire). If the deck has rotated away between the press
   // and the modal showing, fall back to a synthetic widget with
   // just the id so the prompt still names something concrete.
   const pendingWidget: Widget | null = pendingConfirm
-    ? (layout?.widgets as unknown as Widget[] | undefined)?.find(
+    ? (deck?.widgets as unknown as Widget[] | undefined)?.find(
         (w) => w.id === pendingConfirm.widgetId,
       ) ?? {
         id: pendingConfirm.widgetId,
@@ -348,15 +348,15 @@ export function App() {
     send({ type: "media_command", id, command });
   // Chrome view toggle (issue #51): the media icon mirrors the existing
   // trackpad / settings buttons. When opened it sends ``select_view``
-  // so the daemon pushes the mpris layout; when closed it sends
-  // ``clear_view`` so the daemon reverts to the focused-app layout.
+  // so the daemon pushes the mpris deck; when closed it sends
+  // ``clear_view`` so the daemon reverts to the focused-app deck.
   // The icon does not auto-close when the user picks another chrome view
   // (settings, trackpad) — that's intentional, mirroring how the
   // existing buttons don't reset each other, and keeps the daemon-side
   // view pinned across a brief settings detour.
   const toggleNowPlaying = useCallback(() => {
     if (view === "nowplaying") {
-      navigate("layout");
+      navigate("deck");
       send({ type: "clear_view" });
     } else {
       navigate("nowplaying");
@@ -364,25 +364,25 @@ export function App() {
     }
   }, [navigate, view, send]);
   // Editor view toggle (issue #100): the edit button in the bottom chrome
-  // sends ``select_view: "editor"`` so the daemon pushes the editor layout;
-  // on close it sends ``clear_view`` to revert to the focused-app layout.
+  // sends ``select_view: "editor"`` so the daemon pushes the editor deck;
+  // on close it sends ``clear_view`` to revert to the focused-app deck.
   const toggleEditor = useCallback(() => {
     if (view === "editor") {
-      navigate("layout");
+      navigate("deck");
       send({ type: "clear_view" });
     } else {
       navigate("editor");
       send({ type: "select_view", view: EDITOR_VIEW_ID });
     }
   }, [navigate, view, send]);
-  // Running-windows view toggle (issues #120 / #126): the layout-grid
+  // Running-windows view toggle (issues #120 / #126): the deck-grid
   // button in the bottom chrome sends ``select_view: "windows"`` so the
-  // daemon pushes the running-windows layout; on close it sends
-  // ``clear_view`` to revert to the focused-app layout. Same handshake
+  // daemon pushes the running-windows deck; on close it sends
+  // ``clear_view`` to revert to the focused-app deck. Same handshake
   // as the now-playing and editor — chrome-view carve-out per ADR-0008.
   const toggleWindows = useCallback(() => {
     if (view === "windows") {
-      navigate("layout");
+      navigate("deck");
       send({ type: "clear_view" });
     } else {
       navigate("windows");
@@ -392,11 +392,11 @@ export function App() {
   // Trackpad / settings openers: kept named so the keyboard-shortcut
   // effect below can call them without duplicating the toggle logic.
   const openTrackpad = useCallback(
-    () => navigate(view === "trackpad" ? "layout" : "trackpad"),
+    () => navigate(view === "trackpad" ? "deck" : "trackpad"),
     [navigate, view],
   );
   const openSettings = useCallback(
-    () => navigate(view === "settings" ? "layout" : "settings"),
+    () => navigate(view === "settings" ? "deck" : "settings"),
     [navigate, view],
   );
 
@@ -421,8 +421,8 @@ export function App() {
   const viewOriginRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (view === "layout") {
-      // Returning to the layout view: hand focus back to whichever
+    if (view === "deck") {
+      // Returning to the deck view: hand focus back to whichever
       // chrome button opened the overlay (or the app badge if no
       // overlay is in play). Prefer the view-origin button so a
       // window-level Escape still finds its target; fall back to
@@ -430,7 +430,7 @@ export function App() {
       const target = viewOriginRef.current ?? lastChromeFocus.current;
       viewOriginRef.current = null;
       lastChromeFocus.current = null;
-      // Defer so the layout area is rendered before we hand focus
+      // Defer so the deck area is rendered before we hand focus
       // back — otherwise focus lands on a button that isn't in the
       // DOM yet on the very first paint after a view switch.
       const id = window.setTimeout(() => {
@@ -455,7 +455,7 @@ export function App() {
   // AC #5). The gate is its own component and grabs focus via
   // ``autoFocus``; on a successful submit it unmounts and focus
   // drops to the body. Move focus to the surface so a keyboard
-  // user can Tab into the layout without first clicking anywhere.
+  // user can Tab into the deck without first clicking anywhere.
   // Only fires on the unauthorized → other transition, not on
   // every status update.
   const wasUnauthorized = useRef(status === "unauthorized");
@@ -472,7 +472,7 @@ export function App() {
   }, [status]);
 
   // Global keyboard shortcuts (issue #60, AC #4). Number keys open
-  // the matching chrome view; Escape returns to the layout. The
+  // the matching chrome view; Escape returns to the deck. The
   // handler ignores keystrokes while focus is inside a text input —
   // the password gate and the trackpad IME both rely on the
   // character keys landing in their target, so the shortcut layer
@@ -482,9 +482,9 @@ export function App() {
     const onKey = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
       if (target && isTypingTarget(target)) return;
-      if (e.key === "Escape" && view !== "layout") {
+      if (e.key === "Escape" && view !== "deck") {
         e.preventDefault();
-        navigate("layout");
+        navigate("deck");
         if (view === "nowplaying" || view === "editor" || view === "windows") send({ type: "clear_view" });
         return;
       }
@@ -527,7 +527,7 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [navigate, view, openTrackpad, openSettings, toggleNowPlaying, toggleEditor, toggleWindows, send, status, screenLocked]);
 
-  const jogstripEnabled = layout?.jogstrip_enabled ?? true;
+  const jogstripEnabled = deck?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
 
   // Bottom-chrome button visibility (declutter, portrait phones). The
@@ -549,14 +549,14 @@ export function App() {
   // Stage 1 fallback header (issue #123): when the daemon reports this
   // push is a genuine focus-driven default fallback (``is_default``),
   // append the live program identity (``wm_class || app_id``) to the
-  // layout name so users see ``Home (xterm)`` instead of bare ``Home``.
+  // deck name so users see ``Home (xterm)`` instead of bare ``Home``.
   // The daemon suppresses ``is_default`` on identity / title matches,
   // pinned views, and the auto-ignore hold — so the suffix only appears
   // for genuine fallback. Both the aria-live heading and the visible
   // chrome badge read the same suffix.
   const programSuffix = (() => {
-    const focused = layout?.focused_app;
-    if (layout?.is_default !== true || !focused) return "";
+    const focused = deck?.focused_app;
+    if (deck?.is_default !== true || !focused) return "";
     const id = focused.wm_class?.trim() || focused.app_id?.trim();
     return id ? ` (${id})` : "";
   })();
@@ -569,21 +569,21 @@ export function App() {
     if (view === "nowplaying") return "Now playing";
     if (view === "settings") return "Settings";
     if (view === "help") return "Button layout help";
-    if (view === "editor") return "Layout editor";
+    if (view === "editor") return "Deck editor";
     if (view === "windows") return "Running programs";
-    if (layout?.error) return "Layout error";
-    if (layout)
-      return (layout.display_name?.trim() || layout.app || "deckd") + programSuffix;
+    if (deck?.error) return "Deck error";
+    if (deck)
+      return (deck.display_name?.trim() || deck.app || "deckd") + programSuffix;
     return "deckd";
-  }, [view, layout, programSuffix]);
+  }, [view, deck, programSuffix]);
 
   // aria-live announcements for connection state, locked state,
-  // and layout switches (issue #63, AC #4). Each effect fires
+  // and deck switches (issue #63, AC #4). Each effect fires
   // only on a genuine transition — not on the initial render —
   // so the screen reader doesn't double-read the initial page.
   const [liveText, setLiveText] = useState("");
   const prevStatus = useRef(status);
-  const prevLayout = useRef(layout);
+  const prevDeck = useRef(deck);
   useEffect(() => {
     if (prevStatus.current === status) return;
     prevStatus.current = status;
@@ -605,36 +605,36 @@ export function App() {
     else if (sessionState != null) setLiveText("Home");
   }, [sessionState]);
   useEffect(() => {
-    if (prevLayout.current === layout) return;
-    prevLayout.current = layout;
-    if (!layout) return;
-    const app = layout.display_name?.trim() || layout.app || "deckd";
+    if (prevDeck.current === deck) return;
+    prevDeck.current = deck;
+    if (!deck) return;
+    const app = deck.display_name?.trim() || deck.app || "deckd";
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLiveText(`Layout: ${app}${programSuffix}`);
-  }, [layout, programSuffix]);
+    setLiveText(`Deck: ${app}${programSuffix}`);
+  }, [deck, programSuffix]);
 
   // Chrome app-identity badge (ADR-0007): the daemon relays an
-  // optional ``display_name`` / ``theme`` / ``icon`` per layout; the
+  // optional ``display_name`` / ``theme`` / ``icon`` per deck; the
   // client renders a branded pill in the always-on bottom strip from
   // them. The chrome keeps working with no schema present: an absent
   // display_name falls back to the raw match token (``app``), and an
   // absent theme leaves the badge on the default chrome treatment. A
-  // layout declaring neither an icon nor a theme renders the chrome
-  // unchanged (bold text, no pill) so existing layouts look identical.
+  // deck declaring neither an icon nor a theme renders the chrome
+  // unchanged (bold text, no pill) so existing decks look identical.
   // Issue #160: while the session is locked the badge reads "Screen
   // locked" in place of the app name.
   const appName = screenLocked
     ? "Screen locked"
-    : layout
-    ? (layout.display_name?.trim() || layout.app) + programSuffix
+    : deck
+    ? (deck.display_name?.trim() || deck.app) + programSuffix
     : "deckd";
-  const appTheme = layout?.theme?.trim() || null;
-  const appIcon: IconRef | null = layout?.icon ?? null;
-  // Web-app marker: the daemon resolved this layout by matching the focused
+  const appTheme = deck?.theme?.trim() || null;
+  const appIcon: IconRef | null = deck?.icon ?? null;
+  // Web-app marker: the daemon resolved this deck by matching the focused
   // browser's window title. Shown as a small globe on the badge to signal
   // the buttons target the current website (and depend on the page, not a
   // text field, having focus).
-  const isWebApp = layout?.web_app === true;
+  const isWebApp = deck?.web_app === true;
   const hasBadge = appTheme !== null || appIcon !== null;
   const badgeClass = hasBadge ? `app-badge${appTheme ? " app-badge-themed" : ""}` : "app-name";
   const a11yClass = [
@@ -666,22 +666,22 @@ export function App() {
   // Issue #160: per-capability gate, not a global switch. While the
   // session is locked, the surfaces that target the focused window
   // (grid, jogstrip, trackpad) are replaced by the lock takeover;
-  // now playing, settings, and the layout editor keep working (MPRIS
+  // now playing, settings, and the deck editor keep working (MPRIS
   // is alive behind the shield, settings are device-local, the editor
   // writes YAML to disk). The running-windows view is NOT in the
   // takeover set: its chrome button is disabled while locked, but a
   // session already on the view renders the list's lock-specific
   // empty state rather than dead rows (issue #160).
-  const lockBlockedView = view === "layout" || view === "trackpad";
+  const lockBlockedView = view === "deck" || view === "trackpad";
   const renderLockTakeover = screenLocked && lockBlockedView;
-  const renderBlankBanner = screenBlanked && !screenLocked && view === "layout";
+  const renderBlankBanner = screenBlanked && !screenLocked && view === "deck";
 
   return (
     <>
       <span role="status" className="sr-only">{liveText}</span>
       <div className={appClass}>
       <div className="chrome-page">
-        {/* The content-scale var is set here on the layout area only, so grid
+        {/* The content-scale var is set here on the deck area only, so grid
             content (buttons + in-grid jogstrip) scales while the persistent
             chrome — the sibling jogstrip and the bottom bar — stays fixed. */}
         <main
@@ -728,11 +728,11 @@ export function App() {
             // the daemon reports them (session bus ``ListNames``
             // reply — matching GNOME Shell, issue #58), and gates the
             // prev/next transport on each row's capabilities. The
-            // single nowplaying widget in the active layout is the
+            // single nowplaying widget in the active deck is the
             // configuration source; ``null`` falls back to the
             // "Nothing playing" placeholder so the chrome view still
             // renders something when the daemon hasn't pushed a
-            // nowplaying layout (e.g. a transient race during a
+            // nowplaying deck (e.g. a transient race during a
             // view switch).
             //
             // ``supported: false`` short-circuits both paths: the host
@@ -758,7 +758,7 @@ export function App() {
             </div>
           ) : view === "settings" ? (
             <Settings
-              layout={layout}
+              deck={deck}
               status={status}
               scrollScale={scroll.scale}
               scrollInvert={scroll.invert}
@@ -776,7 +776,7 @@ export function App() {
               onMaxCellChange={effectiveBand.setMaxCell}
               overflow={overflowPref.overflow}
               onOverflowChange={overflowPref.setOverflow}
-              layoutOverflow={layout?.overflow ?? "clip"}
+              deckOverflow={deck?.overflow ?? "clip"}
               jogWidth={jogWidth.width}
               onJogWidthChange={jogWidth.setWidth}
               bottomScale={bottomScale.scale}
@@ -786,7 +786,7 @@ export function App() {
               canDeauthenticate={hasPassword}
               onDeauthenticate={() => {
                 setAttemptedAuth(false);
-                navigate("layout");
+                navigate("deck");
                 deauthenticate();
               }}
               largerControls={largerControls.enabled}
@@ -808,7 +808,7 @@ export function App() {
             <ReflowHelp
               minCell={effectiveBand.minCell}
               maxCell={effectiveBand.maxCell}
-              overflow={overflowPref.overflow ?? layout?.overflow ?? "clip"}
+              overflow={overflowPref.overflow ?? deck?.overflow ?? "clip"}
               onApply={({ minCell, maxCell }) => {
                 effectiveBand.setMinCell(minCell);
                 effectiveBand.setMaxCell(maxCell);
@@ -817,10 +817,10 @@ export function App() {
             />
           ) : view === "editor" ? (
             <Editor
-              layout={layout}
+              deck={deck}
               send={send}
-              onExit={() => navigate("layout")}
-              mockLayouts={isDemo ? EDITOR_DEMO_LAYOUTS : undefined}
+              onExit={() => navigate("deck")}
+              mockDecks={isDemo ? EDITOR_DEMO_DECKS : undefined}
             />
           ) : view === "windows" ? (
             // Running-windows chrome list (issues #120 / #126).
@@ -837,23 +837,23 @@ export function App() {
               lockedHost={screenLocked ? HOSTNAME : null}
               onRowTap={(windowId) => {
                 // Stage 3 (#122): raise the tapped window, then close
-                // the overlay back to the focused-app layout. Same
+                // the overlay back to the focused-app deck. Same
                 // clear_view handshake ``toggleWindows`` uses; the
                 // daemon raises fire-and-forget, so we don't wait.
                 send({ type: "raise_window", window_id: windowId });
-                navigate("layout");
+                navigate("deck");
                 send({ type: "clear_view" });
               }}
             />
-          ) : layout?.error ? (
-            <div className="layout-error" role="alert">
-              <span className="layout-error-title">Layout error</span>
-              <pre className="layout-error-body">{layout.error}</pre>
+          ) : deck?.error ? (
+            <div className="deck-error" role="alert">
+              <span className="deck-error-title">Deck error</span>
+              <pre className="deck-error-body">{deck.error}</pre>
             </div>
-          ) : layout ? (
+          ) : deck ? (
             <ButtonGrid
-              widgets={layout.widgets}
-              overflow={overflowPref.overflow ?? layout.overflow ?? "clip"}
+              widgets={deck.widgets}
+              overflow={overflowPref.overflow ?? deck.overflow ?? "clip"}
               minCell={effectiveBand.minCell}
               maxCell={effectiveBand.maxCell}
               onPress={press}

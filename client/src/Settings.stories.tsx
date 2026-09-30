@@ -1,6 +1,6 @@
 import type { Story } from "@ladle/react";
 import { Settings } from "./Settings";
-import { DEMO_LAYOUTS } from "./demo";
+import { DEMO_DECKS } from "./demo";
 
 export default { title: "Settings" };
 
@@ -11,7 +11,7 @@ const noop = () => {};
 export const Default: Story = () => (
   <main className="surface" style={{ width: 390, height: 780 }}>
     <Settings
-      layout={DEMO_LAYOUTS.vlc}
+      deck={DEMO_DECKS.vlc}
       status="open"
       scrollScale={3}
       scrollInvert={false}
@@ -29,7 +29,7 @@ export const Default: Story = () => (
       onMaxCellChange={() => {}}
       overflow={null}
       onOverflowChange={() => {}}
-      layoutOverflow="clip"
+      deckOverflow="clip"
       jogWidth={1}
       onJogWidthChange={noop}
       bottomScale={1}

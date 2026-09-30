@@ -41,10 +41,10 @@ def main() -> None:
     sub.add_parser("reload")
     sub.add_parser("diag")
     sub.add_parser("metrics")
-    sub.add_parser("layouts")
-    layout_parser = sub.add_parser("layout")
-    layout_parser.add_argument(
-        "layout_id", help="Layout id (its first match token), e.g. firefox or default"
+    sub.add_parser("decks")
+    deck_parser = sub.add_parser("deck")
+    deck_parser.add_argument(
+        "deck_id", help="Deck id (its first match token), e.g. firefox or default"
     )
 
     args = parser.parse_args()
@@ -56,12 +56,12 @@ def main() -> None:
         _status(base, headers)
     elif args.cmd == "reload":
         _post_and_print(f"{base}/reload", headers)
-    elif args.cmd == "layout":
-        _post_and_print(f"{base}/layout/{args.layout_id}", headers)
+    elif args.cmd == "deck":
+        _post_and_print(f"{base}/deck/{args.deck_id}", headers)
     elif args.cmd == "diag":
         _get_and_print(f"{base}/diag", headers)
-    elif args.cmd == "layouts":
-        _get_and_print(f"{base}/layouts", headers)
+    elif args.cmd == "decks":
+        _get_and_print(f"{base}/decks", headers)
     elif args.cmd == "metrics":
         _get_and_print_text(f"{base}/metrics", headers)
 

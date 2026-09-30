@@ -13,7 +13,7 @@ import websockets
 from aiohttp.test_utils import TestServer
 from pydantic import ValidationError
 
-from conftest import LAYOUTS_DIR, ServerHandle, make_test_server
+from conftest import DECKS_DIR, ServerHandle, make_test_server
 from deckd.platform import SensorManager, SensorReading, SensorSource
 from deckd.protocol import WidgetUpdateMessage
 
@@ -68,12 +68,12 @@ def test_widget_update_message_default_stale_false() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Layout schema: meter widget
+# Deck schema: meter widget
 # ---------------------------------------------------------------------------
 
 
 def test_meter_widget_loads_with_source() -> None:
-    from deckd.layouts import load_layout
+    from deckd.decks import load_deck
 
     yaml = """
 match:
@@ -85,11 +85,11 @@ widgets:
     min: 0
     max: 100
 """
-    p = Path("/tmp/_meter_layout.yaml")
+    p = Path("/tmp/_meter_deck.yaml")
     p.write_text(yaml)
     try:
-        layout = load_layout(p)
-        w = layout.widgets[0]
+        deck = load_deck(p)
+        w = deck.widgets[0]
         assert w.kind == "meter"
         assert w.source == "cpu_percent"
         assert w.min == 0
@@ -99,7 +99,7 @@ widgets:
 
 
 def test_meter_widget_without_source_is_rejected() -> None:
-    from deckd.layouts import load_layout
+    from deckd.decks import load_deck
 
     yaml = """
 match:
@@ -108,17 +108,17 @@ widgets:
   - id: cpu
     kind: meter
 """
-    p = Path("/tmp/_meter_layout_bad.yaml")
+    p = Path("/tmp/_meter_deck_bad.yaml")
     p.write_text(yaml)
     try:
         with pytest.raises(SystemExit):
-            load_layout(p)
+            load_deck(p)
     finally:
         p.unlink()
 
 
 def test_meter_widget_with_inverted_range_is_rejected() -> None:
-    from deckd.layouts import load_layout
+    from deckd.decks import load_deck
 
     yaml = """
 match:
@@ -130,11 +130,11 @@ widgets:
     min: 100
     max: 50
 """
-    p = Path("/tmp/_meter_layout_bad2.yaml")
+    p = Path("/tmp/_meter_deck_bad2.yaml")
     p.write_text(yaml)
     try:
         with pytest.raises(SystemExit):
-            load_layout(p)
+            load_deck(p)
     finally:
         p.unlink()
 
@@ -151,8 +151,8 @@ async def ws_connected_no_auth(port: int) -> AsyncIterator[websockets.WebSocketC
 
 
 @pytest.fixture
-def meter_layout(tmp_path: Path) -> Path:
-    """A default layout with a meter bound to cpu_percent."""
+def meter_deck(tmp_path: Path) -> Path:
+    """A default deck with a meter bound to cpu_percent."""
     p = tmp_path / "default.yaml"
     p.write_text(
         """
@@ -169,10 +169,10 @@ widgets:
     return tmp_path
 
 
-async def test_server_pumps_widget_update_to_session(meter_layout: Path) -> None:
+async def test_server_pumps_widget_update_to_session(meter_deck: Path) -> None:
     src = _CpuSource(initial=42.0)
     mgr = SensorManager([src])
-    server, _, _, _ = make_test_server(layouts_dir=meter_layout, password=None)
+    server, _, _, _ = make_test_server(decks_dir=meter_deck, password=None)
     server.sensors = mgr
     # Re-sync now that the manager is installed (make_test_server
     # builds the Server before we swap sensors in).
@@ -182,12 +182,12 @@ async def test_server_pumps_widget_update_to_session(meter_layout: Path) -> None
     test_server = TestServer(server.app, host="127.0.0.1")
     await test_server.start_server()
     try:
-        # Connect a client; the server's initial layout push should
+        # Connect a client; the server's initial deck push should
         # include the meter widget, and the sensor pump should send a
         # widget_update frame shortly after.
         async with ws_connected_no_auth(test_server.port) as ws:
             initial = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-            assert initial["type"] == "layout"
+            assert initial["type"] == "deck"
             assert any(
                 w["kind"] == "meter" and w.get("source") == "cpu_percent"
                 for w in initial["widgets"]
@@ -213,14 +213,14 @@ async def test_server_pumps_widget_update_to_session(meter_layout: Path) -> None
         await test_server.close()
 
 
-async def test_server_pump_skips_unknown_sources(meter_layout: Path) -> None:
+async def test_server_pump_skips_unknown_sources(meter_deck: Path) -> None:
     """A meter bound to an unregistered source must not crash the pump."""
     src = _CpuSource(initial=10.0)
     mgr = SensorManager([src])
-    server, _, _, _ = make_test_server(layouts_dir=meter_layout, password=None)
+    server, _, _, _ = make_test_server(decks_dir=meter_deck, password=None)
     server.sensors = mgr
     # Build a manager that does NOT have cpu_percent — the meter in the
-    # layout references it but the manager only carries an unrelated
+    # deck references it but the manager only carries an unrelated
     # source. Subscriptions get filtered out by _active_sources; the
     # pump should run idle.
     unrelated = SensorSource()
@@ -235,7 +235,7 @@ async def test_server_pump_skips_unknown_sources(meter_layout: Path) -> None:
     await test_server.start_server()
     try:
         async with ws_connected_no_auth(test_server.port) as ws:
-            await asyncio.wait_for(ws.recv(), timeout=2)  # initial layout
+            await asyncio.wait_for(ws.recv(), timeout=2)  # initial deck
             # The pump polls at 100ms; wait three intervals then
             # confirm the test is still alive (no exception in the
             # pump loop) and no spam frames are pushed.
@@ -270,7 +270,7 @@ class _MemSource(SensorSource):
 
 
 def test_stats_widget_loads_with_metrics(tmp_path: Path) -> None:
-    from deckd.layouts import load_layouts
+    from deckd.decks import load_decks
 
     (tmp_path / "default.yaml").write_text(
         """
@@ -286,14 +286,14 @@ widgets:
       - source: mem_percent
 """
     )
-    w = next(w for w in load_layouts(tmp_path)["default"].widgets if w.kind == "stats")
+    w = next(w for w in load_decks(tmp_path)["default"].widgets if w.kind == "stats")
     assert [m.source for m in w.metrics] == ["cpu_percent", "mem_percent"]
     assert w.metrics[0].label == "CPU"
     assert w.metrics[1].label is None  # client derives it
 
 
 def test_stats_widget_without_metrics_is_rejected(tmp_path: Path) -> None:
-    from deckd.layouts import load_layouts
+    from deckd.decks import load_decks
 
     (tmp_path / "default.yaml").write_text(
         """
@@ -305,12 +305,12 @@ widgets:
 """
     )
     with pytest.raises(SystemExit):
-        load_layouts(tmp_path)
+        load_decks(tmp_path)
 
 
 @pytest.fixture
-def stats_layout(tmp_path: Path) -> Path:
-    """A default layout with a stats widget bound to two sources."""
+def stats_deck(tmp_path: Path) -> Path:
+    """A default deck with a stats widget bound to two sources."""
     (tmp_path / "default.yaml").write_text(
         """
 match:
@@ -329,11 +329,11 @@ widgets:
     return tmp_path
 
 
-async def test_stats_widget_pumps_all_its_sources(stats_layout: Path) -> None:
+async def test_stats_widget_pumps_all_its_sources(stats_deck: Path) -> None:
     """The pump subscribes to every source a stats widget references and
     pushes a widget_update (carrying the source) for each."""
     mgr = SensorManager([_CpuSource(initial=58.0), _MemSource(initial=41.0)])
-    server, _, _, _ = make_test_server(layouts_dir=stats_layout, password=None)
+    server, _, _, _ = make_test_server(decks_dir=stats_deck, password=None)
     server.sensors = mgr
     server._sync_sensor_subscriptions()  # type: ignore[attr-defined]
     server.start_sensor_pump()
@@ -343,7 +343,7 @@ async def test_stats_widget_pumps_all_its_sources(stats_layout: Path) -> None:
     try:
         async with ws_connected_no_auth(test_server.port) as ws:
             initial = json.loads(await asyncio.wait_for(ws.recv(), timeout=2))
-            assert initial["type"] == "layout"
+            assert initial["type"] == "deck"
             by_source: dict[str, float] = {}
             for _ in range(80):
                 try:

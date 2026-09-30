@@ -30,7 +30,7 @@ async def srv_with_focus(monkeypatch):
         FakeFocusBackend,
         FakePointerSink,
         FakeScrollSink,
-        LAYOUTS_DIR,
+        DECKS_DIR,
     )
     from deckd.input import ScrollController
     from deckd.server import Server
@@ -50,7 +50,7 @@ async def srv_with_focus(monkeypatch):
 
     backend = FakeFocusBackend()
     server = Server(
-        layouts_dir=LAYOUTS_DIR,
+        decks_dir=DECKS_DIR,
         host="127.0.0.1",
         port=0,
         scroll=ScrollController(FakeScrollSink()),
@@ -97,7 +97,7 @@ async def test_enable_events_receives_focus_change(srv_with_focus) -> None:
             data = json.loads(raw)
             if data.get("type") == "event" and data["name"] == "focus_change":
                 assert data["data"]["app_id"] == "firefox"
-                assert data["data"]["new_layout_id"] == "firefox"
+                assert data["data"]["new_deck_id"] == "firefox"
                 assert "ts" in data
                 saw_event = True
         assert saw_event, "expected a focus_change event within 2s"
@@ -115,10 +115,10 @@ async def test_disable_events_silences_stream(srv_with_focus) -> None:
         await ws.send(json.dumps({"type": "disable_events"}))
         await asyncio.sleep(0.05)
         await backend.push(AppInfo(app_id="firefox", wm_class="firefox"))
-        # Drain the layout push (focus_change → layout); then assert
+        # Drain the deck push (focus_change → deck); then assert
         # no event frames arrive.
         await asyncio.wait_for(ws.recv(), timeout=1)
-        # After the layout push completes, no further event frame
+        # After the deck push completes, no further event frame
         # should arrive.
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(ws.recv(), timeout=0.5)
@@ -132,14 +132,14 @@ async def test_enable_events_with_allow_list(srv_with_focus) -> None:
     async with websockets.connect(srv.ws_url) as ws:
         await _first_frame(ws)
         await ws.send(
-            json.dumps({"type": "enable_events", "events": ["layout_reload"]})
+            json.dumps({"type": "enable_events", "events": ["deck_reload"]})
         )
         await asyncio.sleep(0.05)
         await backend.push(AppInfo(app_id="firefox", wm_class="firefox"))
-        # Drain the layout push; the focus_change event must be
+        # Drain the deck push; the focus_change event must be
         # filtered out by the allow-list.
         await asyncio.wait_for(ws.recv(), timeout=1)
-        # Trigger a layout_reload event by POSTing to /reload.
+        # Trigger a deck_reload event by POSTing to /reload.
         import aiohttp
 
         async with aiohttp.ClientSession() as http:
@@ -149,9 +149,9 @@ async def test_enable_events_with_allow_list(srv_with_focus) -> None:
         while asyncio.get_event_loop().time() < deadline and not saw:
             raw = await asyncio.wait_for(ws.recv(), timeout=1)
             data = json.loads(raw)
-            if data.get("type") == "event" and data["name"] == "layout_reload":
+            if data.get("type") == "event" and data["name"] == "deck_reload":
                 saw = True
-        assert saw, "expected a layout_reload event after /reload"
+        assert saw, "expected a deck_reload event after /reload"
 
 
 async def test_event_carries_trace_id(srv: ServerHandle) -> None:
@@ -211,9 +211,9 @@ async def test_unknown_event_is_ignored_by_other_clients(srv_with_focus) -> None
         await ws_a.send(json.dumps({"type": "enable_events"}))
         await asyncio.sleep(0.05)
         await backend.push(AppInfo(app_id="firefox", wm_class="firefox"))
-        # Both sessions get the layout push; drain ws_b's layout push.
+        # Both sessions get the deck push; drain ws_b's deck push.
         await asyncio.wait_for(ws_b.recv(), timeout=1)
-        # Drain ws_a (it gets layout + event).
+        # Drain ws_a (it gets deck + event).
         deadline = asyncio.get_event_loop().time() + 1.0
         while asyncio.get_event_loop().time() < deadline:
             try:
@@ -247,7 +247,7 @@ async def test_session_trace_id_respects_hello_field(srv: ServerHandle) -> None:
     async with websockets.connect(srv.ws_url) as ws:
         await _first_frame(ws)
         await ws.send(json.dumps({"type": "hello", "client": "test", "trace": "abc"}))
-        # Drain any frames the dispatcher sends in response (a layout
+        # Drain any frames the dispatcher sends in response (a deck
         # push when the demo pin is empty).
         await asyncio.sleep(0.05)
         sessions = list(srv.server._sessions)

@@ -9,7 +9,7 @@
 #
 # Shortcuts are Meet's own browser keybinds (Linux/Windows shown below). On
 # macOS several differ (mic Cmd+D, camera Cmd+E, chat Ctrl+Cmd+C, people
-# Ctrl+Cmd+P; captions stays C) — add a layouts.macos/ overlay if you run
+# Ctrl+Cmd+P; captions stays C) — add a decks.macos/ overlay if you run
 # Meet there. Note: emoji reactions have NO keyboard shortcut, so they can't
 # be a button here — that needs the browser-extension path (#90).
 match:

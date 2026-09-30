@@ -1,25 +1,26 @@
 /* client/src/protocol.ts — public protocol types.
  *
  * Two layers, two sources:
- *   - Wire-protocol types (LayoutMessage, PressMessage, ...) are
+ *   - Wire-protocol types (DeckMessage, PressMessage, ...) are
  *     generated from daemon/deckd/protocol.py — see
  *     scripts/codegen_protocol_ts.py. Edit the Python side and run
  *     `just check-protocol`; the drift guard fails CI if the two
  *     diverge (#76).
  *   - Schema-layer types (Widget, Icon, ...) are hand-curated. They
- *     mirror daemon/deckd/layouts.py, which is YAML-loader concern,
+ *     mirror daemon/deckd/decks.py, which is YAML-loader concern,
  *     not wire. We keep them here for ergonomics — clients import
  *     ``Widget`` from this file — and rely on the daemon's Pydantic
  *     validators to backstop the editor's "save" path.
  *
- * Aliases at the bottom (``ServerLayout`` etc.) preserve the original
- * public surface for consumers that haven't migrated to the new names.
+ * The client-facing interfaces at the bottom (``ServerDeck`` etc.) are
+ * the names consumers import: the same wire shape, with ``widgets`` /
+ * ``icon`` widened to the schema-layer types.
  */
 
 // Wire-protocol types — re-exported from the codegen artifact.
 import type {
   FocusedAppInfo,
-  LayoutMessage,
+  DeckMessage,
   StateMessage,
   BrightnessMessage,
   WidgetUpdateMessage,
@@ -52,7 +53,7 @@ export {
 } from "./protocol.generated";
 export type {
   FocusedAppInfo,
-  LayoutMessage,
+  DeckMessage,
   StateMessage,
   BrightnessMessage,
   WidgetUpdateMessage,
@@ -85,7 +86,7 @@ export type {
   ClientMessage,
 } from "./protocol.generated";
 
-/* Schema-layer types (hand-curated; mirror daemon/deckd/layouts.py). */
+/* Schema-layer types (hand-curated; mirror daemon/deckd/decks.py). */
 
 /** An icon reference: ``source`` picks a client-side renderer (e.g.
  * "lucide", "simple-icons"), ``name`` is resolved within it. The daemon
@@ -144,33 +145,32 @@ export type Widget = {
    * an ``action`` or a ``macro``; the daemon emits the field on
    * every widget (`confirm: false` is the default). Optional in the
    * TS shape for the same reason ``empty_state`` is: real daemon
-   * layouts always carry it, but mock / test fixtures routinely
+   * decks always carry it, but mock / test fixtures routinely
    * omit it; consumers use ``=== true`` so an absent field falls
    * back to ``false`` at the comparison. */
   confirm?: boolean;
 };
 
-/* Backwards-compat aliases — wire types under their old public names.
+/* Client-facing message interfaces.
  *
- * The drift guard codegen emits the canonical names (``LayoutMessage``,
- * ``MediaStateMessage``, ``HelloMessage`` etc.) but consumers import the
- * older ``Server<Kind>`` and ``Client<Kind>`` names that predate #76.
- * Keep both alive so a one-shot rename isn't a breaking change.
+ * The codegen emits the wire names (``DeckMessage``, ``MediaStateMessage``,
+ * ``HelloMessage`` etc.) but consumers import the ``Server<Kind>`` /
+ * ``Client<Kind>`` names below.
  *
- * ``ServerLayout`` widens ``widgets`` from the wire's opaque blob to
+ * ``ServerDeck`` widens ``widgets`` from the wire's opaque blob to
  * the schema-layer ``Widget[]`` and ``icon`` to the typed ``Icon`` —
  * the daemon relays both opaquely, but the client renders them as
  * widgets with type-checked fields. Consumers can use the canonical
- * ``LayoutMessage`` if they want the strict wire shape. */
+ * ``DeckMessage`` if they want the strict wire shape. */
 
-// ``ServerLayout`` is the historical public name for ``LayoutMessage``.
+// ``ServerDeck`` is the typed client-side view of ``DeckMessage``.
 // We declare it as a standalone interface rather than an Omit+& so it
 // stays structurally compatible with the wire shape (the Omit+& form
-// produces an intersection that TS won't widen back to LayoutMessage).
+// produces an intersection that TS won't widen back to DeckMessage).
 // Consumers that need a strict-typed ``widgets`` can cast at the
 // boundary; the daemon relays widgets opaquely (ADR-0006).
-export interface ServerLayout {
-  type: "layout";
+export interface ServerDeck {
+  type: "deck";
   app?: string;
   view?: string | null;
   widgets: Widget[];
@@ -192,7 +192,7 @@ export type ServerError = ErrorMessage;
 export type ServerMacroResult = MacroResultMessage;
 export type ServerConfirmRequest = ConfirmRequestMessage;
 // WindowListEntry carries an opaque ``icon`` field on the wire but the
-// client renders it as a typed ``Icon``. Mirror the ServerLayout rule:
+// client renders it as a typed ``Icon``. Mirror the ServerDeck rule:
 // declare the alias as a standalone interface so it stays compatible
 // with the wire type at the message boundary.
 export interface ServerWindowListEntry {
@@ -222,36 +222,36 @@ export type ClientConfirmResponse = ConfirmResponseMessage;
 
 /* Wire-to-schema coercion helpers (#76).
  *
- * ``LayoutMessage`` and friends carry ``widgets`` / ``icon`` as opaque
+ * ``DeckMessage`` and friends carry ``widgets`` / ``icon`` as opaque
  * blobs (the daemon relays them, ADR-0006); the client renders them
  * against the typed ``Widget`` / ``Icon`` shapes. Centralise the cast
  * here so a single well-named helper replaces the scattered
- * ``as unknown as Widget[]`` / ``as ServerLayout`` sites — consumers
+ * ``as unknown as Widget[]`` / ``as ServerDeck`` sites — consumers
  * import one helper, and a future tightening of the wire shape has
  * exactly one place to update.
  */
 
-/** Coerce a wire ``LayoutMessage`` to the typed-schema ``ServerLayout``
+/** Coerce a wire ``DeckMessage`` to the typed-schema ``ServerDeck``
  * (Widget[] for ``widgets``, typed ``Icon`` for ``icon``). Throws nothing
  * — the wire shape is structurally compatible, so the cast is sound. */
-export function wireLayoutToServer(msg: LayoutMessage): ServerLayout {
-  return msg as unknown as ServerLayout;
+export function wireDeckToServer(msg: DeckMessage): ServerDeck {
+  return msg as unknown as ServerDeck;
 }
 
 /** Coerce a wire snapshot of window rows to the typed-schema
  * ``ServerWindowListEntry[]``. Same opaque-icon rationale as the
- * layout helper. */
+ * deck helper. */
 export function wireWindowsToServer(
   windows: WindowListEntry[] | undefined,
 ): ServerWindowListEntry[] | undefined {
   return windows as unknown as ServerWindowListEntry[] | undefined;
 }
 
-/** Lookup a widget by id in a wire ``LayoutMessage``. Convenience so
+/** Lookup a widget by id in a wire ``DeckMessage``. Convenience so
  * ``App.tsx``-style consumers don't repeat the opaque-blob cast. */
 export function widgetById(
-  layout: LayoutMessage,
+  deck: DeckMessage,
   id: string,
 ): Widget | undefined {
-  return (layout.widgets as unknown as Widget[]).find((w) => w.id === id);
+  return (deck.widgets as unknown as Widget[]).find((w) => w.id === id);
 }

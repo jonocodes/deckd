@@ -1,9 +1,9 @@
-# Web-app layout: a portable on-screen musical keyboard.
+# Web-app deck: a portable on-screen musical keyboard.
 #
 # This claims Musicca's keyboard instruments by window title. Musicca maps the
 # computer keyboard's top letter row to white keys and the number row to black
 # keys, and — crucially — every keyboard instrument (piano, synthesizer, ...)
-# uses the *same* mapping. So one layout drives all of them, and it will drive
+# uses the *same* mapping. So one deck drives all of them, and it will drive
 # any other site that adopts the same "letters = white, numbers = black" scheme:
 # just add that site's title token to `match:` below.
 #
@@ -14,7 +14,7 @@
 # Range: one octave F3-F4, the block verified against the live site. The lower
 # octave (z/x/c... rows) can be added once its keys are confirmed the same way.
 #
-# KNOWN LIMITATION (ADR-0010): this layout wants a piano's 2D alignment — black
+# KNOWN LIMITATION (ADR-0010): this deck wants a piano's 2D alignment — black
 # keys sitting *above* the white keys they belong between. The old coordinate
 # grid guaranteed that; reflow does not — the column count now follows the
 # viewport width, so the two rows only line up when the grid happens to render

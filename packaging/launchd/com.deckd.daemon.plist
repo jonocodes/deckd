@@ -22,8 +22,8 @@
     <key>ProgramArguments</key>
     <array>
         <string>@PROJECT_DIR@/.venv/bin/deckd</string>
-        <string>--layouts-dir</string>
-        <string>@PROJECT_DIR@/layouts</string>
+        <string>--decks-dir</string>
+        <string>@PROJECT_DIR@/decks</string>
         <string>--client-dist</string>
         <string>@PROJECT_DIR@/client/dist</string>
     </array>

@@ -1,7 +1,7 @@
 # Firefox on macOS. Same match token as the Linux firefox.yaml (the Mac
 # process is reported as `firefox`), so this file sorts first (the `-` is
 # ASCII 0x2D, before `.`) and wins on the Mac. On a Linux checkout delete
-# this file or restructure into per-platform layouts dirs.
+# this file or restructure into per-platform decks dirs.
 match:
   - firefox
 display_name: Firefox

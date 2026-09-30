@@ -119,7 +119,7 @@ script → `callDBus` → daemon-owned cache → `GetActiveWindow` (the polled
 consumer keeps the GNOME wire shape unchanged).
 
 **Install / enable flow** (develop.kde.org, "KWin scripting tutorial"):
-- Package layout: `<id>/metadata.json` (with `"KPackageStructure":
+- Package deck: `<id>/metadata.json` (with `"KPackageStructure":
   "KWin/Script"`, `"X-Plasma-API": "javascript"`,
   `"X-Plasma-MainScript": "code/main.js"`) and
   `<id>/contents/code/main.js`.
@@ -521,7 +521,7 @@ extension is GJS; the daemon is Python, so #31 picks a Python binding.)
     confirms #3 and #4 rejection.
 - KDE developer docs `develop.kde.org`:
   - `/docs/plasma/kwin/` — "KWin scripting tutorial" (install paths,
-    `kpackagetool6`, `kwriteconfig6`, KPackage layout, `metadata.json`
+    `kpackagetool6`, `kwriteconfig6`, KPackage deck, `metadata.json`
     `KPackageStructure: KWin/Script`).
   - `/docs/plasma/kwin/api/` — "KWin scripting API"; `workspace.activeWindow`,
     `workspace.windowActivated`, `Window.{resourceClass, resourceName,

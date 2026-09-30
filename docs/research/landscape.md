@@ -265,7 +265,7 @@ Three observations worth pulling out:
    cleanest open documentation of the pattern.** Espanso's `filter_title`
    is the only other project I found that documents "match on a website's
    title in a browser," and it's a text expander. deckd's `title:` glob in
-   the layout YAML is the same idea applied to a control surface. **The
+   the deck YAML is the same idea applied to a control surface. **The
    planned URL-based matching via a browser extension
    ([#90](https://github.com/jonocodes/deckd/issues/90)) would make
    deckd the only project with both per-app and per-URL focus rules in

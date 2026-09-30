@@ -7,7 +7,7 @@
  *     ``clear_view`` on the wire). Mirrors the settings button exactly.
  *  3. While the view is open, the surface renders the browser area with
  *     the "Nothing playing" placeholder instead of the
- *     focused-app layout. The placeholder is unconditional for v1
+ *     focused-app deck. The placeholder is unconditional for v1
  *     (real rows arrive via the NowPlayingCell ticket #53).
  *
  * The socket is mocked so the test owns the wire surface — we can assert
@@ -16,7 +16,7 @@
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ClientMessage, ServerChromeMedia, ServerLayout, ServerState } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerDeck, ServerState } from "./protocol";
 
 /** Replace the real socket hook with a controllable fake. The chrome
  * icon's job is to call ``send`` with the right message; the test
@@ -26,7 +26,7 @@ const send = vi.fn<(message: ClientMessage) => void>();
  * hook (issue #47). Tests invoke it directly to push synthetic
  * ``chrome_media`` frames and assert on the icon's class. */
 let chromeMediaHandler: ((m: ServerChromeMedia) => void) | null = null;
-const onLayout = vi.fn<(m: ServerLayout) => void>();
+const onDeck = vi.fn<(m: ServerDeck) => void>();
 /** Per-test socket status override. The default mock returns ``open``
  * (matches the demo path), but tests that exercise the password
  * gate / focus restoration flow can set ``mockStatus`` to drive
@@ -37,7 +37,7 @@ const deauthenticate = vi.fn();
 let sessionStateHandler: ((m: ServerState) => void) | null = null;
 vi.mock("./socket", () => ({
   useDeckdSocket: (
-    layoutCb: (m: ServerLayout) => void,
+    deckCb: (m: ServerDeck) => void,
     _widgetUpdate: unknown,
     _mediaState: unknown,
     chromeMediaCb: ((m: ServerChromeMedia) => void) | undefined,
@@ -46,7 +46,7 @@ vi.mock("./socket", () => ({
     sessionStateCb: ((m: ServerState) => void) | undefined,
     _options: unknown,
   ) => {
-    onLayout.mockImplementation(layoutCb);
+    onDeck.mockImplementation(deckCb);
     chromeMediaHandler = chromeMediaCb ?? null;
     sessionStateHandler = sessionStateCb ?? null;
     return {
@@ -67,7 +67,7 @@ describe("App — chrome media icon", () => {
   afterEach(cleanup);
   beforeEach(() => {
     send.mockReset();
-    // Each test sets a fresh demo URL so the App's initial layout is
+    // Each test sets a fresh demo URL so the App's initial deck is
     // deterministic and the socket stays disabled.
     window.history.replaceState(null, "", "/?demo=default");
   });
@@ -114,25 +114,25 @@ describe("App — chrome media icon", () => {
     // The editor's launch point moved into Settings (declutter, portrait
     // phones) — the always-on bottom chrome no longer carries it.
     render(<App />);
-    expect(screen.queryByRole("button", { name: "layout editor" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "deck editor" })).toBeNull();
   });
 
   it("launches the editor from Settings and sends select_view", () => {
     render(<App />);
     fireEvent.keyDown(window, { key: "3" }); // open settings
-    fireEvent.click(screen.getByRole("button", { name: /edit layout/i }));
+    fireEvent.click(screen.getByRole("button", { name: /edit deck/i }));
     expect(send).toHaveBeenCalledWith({ type: "select_view", view: "editor" });
-    expect(screen.getByRole("region", { name: "layout editor" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "deck editor" })).toBeTruthy();
   });
 
-  it("renders the browser placeholder in place of the focused-app layout while open", () => {
+  it("renders the browser placeholder in place of the focused-app deck while open", () => {
     render(<App />);
     const button = screen.getByRole("button", { name: /now playing/i });
     fireEvent.pointerDown(button);
     // The default demo has no nowplaying widget, so the chrome view
     // falls back to the "no players" placeholder (issue #51; #53 added
     // the real per-row cell that takes over once a nowplaying
-    // widget is in the active layout).
+    // widget is in the active deck).
     expect(screen.getByText("Nothing playing")).toBeTruthy();
   });
 });
@@ -205,7 +205,7 @@ describe("App — chrome media icon passive indicator", () => {
   afterEach(cleanup);
   beforeEach(() => {
     send.mockReset();
-    onLayout.mockReset();
+    onDeck.mockReset();
     chromeMediaHandler = null;
     window.history.replaceState(null, "", "/?demo=default");
   });
@@ -267,7 +267,7 @@ describe("App — now playing button visibility", () => {
   afterEach(cleanup);
   beforeEach(() => {
     send.mockReset();
-    onLayout.mockReset();
+    onDeck.mockReset();
     chromeMediaHandler = null;
     window.history.replaceState(null, "", "/?demo=default");
   });
@@ -462,7 +462,7 @@ describe("App — chrome keyboard activation", () => {
    Global keyboard shortcuts (issue #60, AC #4).
 
    Number keys open the matching chrome view; Escape returns to the
-   layout view. The handler must ignore keystrokes while a text
+   deck view. The handler must ignore keystrokes while a text
    input is focused (the password gate / IME input own character
    keys). The shortcuts are bound at the window level so a user can
    press them without first focusing the chrome.
@@ -502,11 +502,11 @@ describe("App — keyboard shortcuts", () => {
     // but the ``4`` power-user shortcut still opens the editor directly.
     render(<App />);
     fireEvent.keyDown(window, { key: "4" });
-    expect(screen.getByRole("region", { name: "layout editor" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "deck editor" })).toBeTruthy();
     expect(send).toHaveBeenCalledWith({ type: "select_view", view: "editor" });
   });
 
-  it("Escape returns to the layout view and clears the now-playing view", () => {
+  it("Escape returns to the deck view and clears the now-playing view", () => {
     render(<App />);
     fireEvent.keyDown(window, { key: "2" });
     expect(screen.getByRole("button", { name: /now playing/i }).className).toContain("chrome-btn-active");
@@ -518,9 +518,9 @@ describe("App — keyboard shortcuts", () => {
   it("Escape clears the editor view and sends clear_view", () => {
     render(<App />);
     fireEvent.keyDown(window, { key: "4" });
-    expect(screen.getByRole("region", { name: "layout editor" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "deck editor" })).toBeTruthy();
     fireEvent.keyDown(window, { key: "Escape" });
-    expect(screen.queryByRole("region", { name: "layout editor" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "deck editor" })).toBeNull();
     expect(send.mock.calls.map((c) => c[0])).toContainEqual({ type: "clear_view" });
   });
 
@@ -543,7 +543,7 @@ describe("App — keyboard shortcuts", () => {
    When the password gate opens, the user is on the body — no
    element is focused. When the gate closes (auth success), focus
    must move to a sensible element inside the surface so a keyboard
-   user can Tab into the layout without clicking anywhere.
+   user can Tab into the deck without clicking anywhere.
 
    Also covered: opening a chrome view via keyboard shortcut / button
    keeps the originating chrome button in scope, so closing the view
@@ -636,16 +636,16 @@ describe("App — screen-reader headings", () => {
     expect(heading.closest("main")).not.toBeNull();
   });
 
-  it("shows the app name as the heading in layout view", () => {
+  it("shows the app name as the heading in deck view", () => {
     render(<App />);
-    // "demo=default" layout has app: "default (demo)" with no display_name,
+    // "demo=default" deck has app: "default (demo)" with no display_name,
     // so the heading falls back to the raw app token.
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
       "default (demo)",
     );
   });
 
-  it("shows display_name as the heading when the layout has one", () => {
+  it("shows display_name as the heading when the deck has one", () => {
     window.history.replaceState(null, "", "/?demo=firefox");
     render(<App />);
     // Firefox demo has display_name: "Firefox".
@@ -678,15 +678,15 @@ describe("App — screen-reader headings", () => {
     );
   });
 
-  it("heading changes to Layout editor when the editor view opens", () => {
+  it("heading changes to Deck editor when the editor view opens", () => {
     render(<App />);
     fireEvent.keyDown(window, { key: "4" });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
-      "Layout editor",
+      "Deck editor",
     );
   });
 
-  it("heading returns to the app name when returning to the layout", () => {
+  it("heading returns to the app name when returning to the deck", () => {
     render(<App />);
     fireEvent.keyDown(window, { key: "3" });
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(
@@ -702,9 +702,9 @@ describe("App — screen-reader headings", () => {
 /* ---------------------------------------------------------------------
    Stage 1 fallback header (issue #123).
 
-   When the daemon reports ``is_default: true`` on a layout push, the
+   When the daemon reports ``is_default: true`` on a deck push, the
    client appends the live program's identity (``wm_class || app_id``)
-   to the layout name in both the screen-reader heading and the visible
+   to the deck name in both the screen-reader heading and the visible
    chrome badge. Suppressed on identity/title matches, pinned views,
    and when the daemon sends ``focused_app: null``.
 
@@ -716,7 +716,7 @@ describe("App — stage 1 fallback header suffix", () => {
   afterEach(cleanup);
   beforeEach(() => {
     send.mockReset();
-    onLayout.mockReset();
+    onDeck.mockReset();
     mockStatus = "open";
     window.history.replaceState(null, "", "/?demo=default");
   });
@@ -724,8 +724,8 @@ describe("App — stage 1 fallback header suffix", () => {
   it("appends (wm_class) to the heading when is_default is true", () => {
     render(<App />);
     act(() => {
-      onLayout({
-        type: "layout",
+      onDeck({
+        type: "deck",
         app: "default",
         display_name: "Home",
         jogstrip_enabled: true,
@@ -747,8 +747,8 @@ describe("App — stage 1 fallback header suffix", () => {
   it("appends (app_id) to the heading when wm_class is null", () => {
     render(<App />);
     act(() => {
-      onLayout({
-        type: "layout",
+      onDeck({
+        type: "deck",
         app: "default",
         display_name: "Home",
         jogstrip_enabled: true,
@@ -770,8 +770,8 @@ describe("App — stage 1 fallback header suffix", () => {
   it("does not append a suffix when is_default is false", () => {
     render(<App />);
     act(() => {
-      onLayout({
-        type: "layout",
+      onDeck({
+        type: "deck",
         app: "firefox",
         display_name: "Firefox",
         jogstrip_enabled: true,
@@ -793,8 +793,8 @@ describe("App — stage 1 fallback header suffix", () => {
   it("does not append a suffix when focused_app is null", () => {
     render(<App />);
     act(() => {
-      onLayout({
-        type: "layout",
+      onDeck({
+        type: "deck",
         app: "default",
         display_name: "Home",
         jogstrip_enabled: true,
@@ -808,11 +808,11 @@ describe("App — stage 1 fallback header suffix", () => {
     );
   });
 
-  it("appends the suffix to the aria-live layout announcement", () => {
+  it("appends the suffix to the aria-live deck announcement", () => {
     render(<App />);
     act(() => {
-      onLayout({
-        type: "layout",
+      onDeck({
+        type: "deck",
         app: "default",
         display_name: "Home",
         jogstrip_enabled: true,
@@ -827,15 +827,15 @@ describe("App — stage 1 fallback header suffix", () => {
       });
     });
     expect(screen.getByRole("status").textContent).toBe(
-      "Layout: Home (xterm)",
+      "Deck: Home (xterm)",
     );
   });
 
   it("appends the suffix to the visible chrome badge", () => {
     const { container } = render(<App />);
     act(() => {
-      onLayout({
-        type: "layout",
+      onDeck({
+        type: "deck",
         app: "default",
         display_name: "Home",
         jogstrip_enabled: true,
@@ -858,7 +858,7 @@ describe("App — stage 1 fallback header suffix", () => {
 /* ---------------------------------------------------------------------
    aria-live announcements (issue #63, AC #4).
 
-   Connection state, locked state, and layout switches must be
+   Connection state, locked state, and deck switches must be
    announced via live regions so the user hears what changed without
    losing context. A hidden <span role="status"> in the bottom chrome
    carries the announcement text.
@@ -868,7 +868,7 @@ describe("App — aria-live announcements", () => {
   afterEach(cleanup);
   beforeEach(() => {
     send.mockReset();
-    onLayout.mockReset();
+    onDeck.mockReset();
     mockStatus = "open";
     window.history.replaceState(null, "", "/?demo=default");
   });
@@ -910,11 +910,11 @@ describe("App — aria-live announcements", () => {
     expect(screen.getByRole("status").textContent).toBe("Connected");
   });
 
-  it("announces a layout switch", () => {
+  it("announces a deck switch", () => {
     const { rerender } = render(<App />);
     act(() => {
-      onLayout({
-        type: "layout",
+      onDeck({
+        type: "deck",
         app: "test-app",
         display_name: "Test App",
         jogstrip_enabled: true,
@@ -922,20 +922,20 @@ describe("App — aria-live announcements", () => {
       });
     });
     rerender(<App />);
-    expect(screen.getByRole("status").textContent).toBe("Layout: Test App");
+    expect(screen.getByRole("status").textContent).toBe("Deck: Test App");
   });
 
-  it("falls back to the raw app token when the layout has no display_name", () => {
+  it("falls back to the raw app token when the deck has no display_name", () => {
     render(<App />);
     act(() => {
-      onLayout({
-        type: "layout",
+      onDeck({
+        type: "deck",
         app: "generic-app",
         jogstrip_enabled: true,
         widgets: [],
       });
     });
-    expect(screen.getByRole("status").textContent).toBe("Layout: generic-app");
+    expect(screen.getByRole("status").textContent).toBe("Deck: generic-app");
   });
 
   it("does not announce on the initial render", () => {

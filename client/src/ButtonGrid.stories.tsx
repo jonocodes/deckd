@@ -1,7 +1,7 @@
 import type { Story } from "@ladle/react";
 import type { CSSProperties } from "react";
 import { ButtonGrid } from "./ButtonGrid";
-import { DEMO_LAYOUTS } from "./demo";
+import { DEMO_DECKS } from "./demo";
 import {
   CELL_SIZE_MIN,
   CELL_SIZE_MAX,
@@ -36,7 +36,7 @@ function Frame({
   contentScale,
   cellSize,
   showKeyHints,
-}: { name: keyof typeof DEMO_LAYOUTS; showKeyHints?: boolean } & Controls) {
+}: { name: keyof typeof DEMO_DECKS; showKeyHints?: boolean } & Controls) {
   return (
     <div
       style={
@@ -48,7 +48,7 @@ function Frame({
       }
     >
       <ButtonGrid
-        widgets={DEMO_LAYOUTS[name].widgets}
+        widgets={DEMO_DECKS[name].widgets}
         onPress={noop}
         onJog={noop}
         onJogEnd={noop}

@@ -3,7 +3,7 @@
 macOS-specific pieces of the menu-bar wrapper: the bundle id, the writable
 Application Support / Logs locations, the ``Info.plist``, and the
 background-thread server runner the AppKit wrapper needs. The platform-
-independent packaging mechanics (payload discovery, layout seeding, argv and
+independent packaging mechanics (payload discovery, deck seeding, argv and
 version) live in ``deckd.app_bundle`` and are re-exported here so
 ``packaging/macos/menubar.py`` keeps importing them from one place.
 
@@ -27,9 +27,9 @@ from .app_bundle import (
     app_argv,
     bundle_version,
     client_dist,
-    layouts_src,
+    decks_src,
     resource_root,
-    seed_layouts,
+    seed_decks,
 )
 
 __all__ = [
@@ -43,10 +43,10 @@ __all__ = [
     "bundle_version",
     "client_dist",
     "default_log_file",
-    "layouts_src",
+    "decks_src",
     "overlay_src",
     "resource_root",
-    "seed_layouts",
+    "seed_decks",
 ]
 
 log = logging.getLogger("deckd.macos_app")
@@ -54,14 +54,14 @@ log = logging.getLogger("deckd.macos_app")
 BUNDLE_ID = "com.deckd.daemon"
 
 # The daemon already defaults its password to ``~/.config/deckd/password``;
-# keep that so the app and a CLI run share one secret. Layouts, however,
+# keep that so the app and a CLI run share one secret. Decks, however,
 # must be writable (the editor saves back to disk) and the bundle is
 # read-only, so they are seeded into Application Support on first run.
 APP_SUPPORT_DIRNAME = "deckd"
 
 
 def overlay_src(root: Path) -> Path:
-    """Bundled macOS overlay layouts (``layouts.macos``)."""
+    """Bundled macOS overlay decks (``decks.macos``)."""
     from .app_bundle import overlay_src as _overlay_src
 
     return _overlay_src(root, "macos")

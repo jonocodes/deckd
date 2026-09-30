@@ -2,7 +2,7 @@
 
 Both the macOS app bundle (#165) and the Linux AppImage (#168) need the same
 mechanical pieces: locate the frozen payload, find the bundled client and
-layouts, seed layouts into a writable directory on first run, read the version
+decks, seed decks into a writable directory on first run, read the version
 seam, and build the daemon argv. Those live here so they can be unit-tested on
 any host, independent of the platform that ships them.
 
@@ -36,14 +36,14 @@ def client_dist(root: Path) -> Path:
     return root / "web"
 
 
-def layouts_src(root: Path) -> Path:
-    """Bundled layouts directory."""
-    return root / "layouts"
+def decks_src(root: Path) -> Path:
+    """Bundled decks directory."""
+    return root / "decks"
 
 
 def overlay_src(root: Path, suffix: str) -> Path:
-    """Bundled per-platform overlay layouts (``layouts.<suffix>``)."""
-    return root / f"layouts.{suffix}"
+    """Bundled per-platform overlay decks (``decks.<suffix>``)."""
+    return root / f"decks.{suffix}"
 
 
 def bundle_version(pyproject: Path | None = None) -> str:
@@ -64,14 +64,14 @@ def bundle_version(pyproject: Path | None = None) -> str:
     raise ValueError(f"no version found in {path}")
 
 
-def seed_layouts(
+def seed_decks(
     src: Path, dest: Path, *, overlay: Path | None = None, overlay_suffix: str = "macos"
 ) -> bool:
-    """Copy bundled layouts into the writable data dir on first run.
+    """Copy bundled decks into the writable data dir on first run.
 
     Returns ``True`` when it seeded, ``False`` when ``dest`` already existed.
     An existing directory is never overwritten, so a user's hand-edited
-    layouts survive an upgrade (mirrors the Nix module's seed-once behaviour).
+    decks survive an upgrade (mirrors the Nix module's seed-once behaviour).
     The per-platform overlay is copied to the sibling ``<dest>.<suffix>``
     directory the daemon auto-discovers.
     """
@@ -88,7 +88,7 @@ def seed_layouts(
 
 def app_argv(
     *,
-    layouts_dir: Path,
+    decks_dir: Path,
     client_dist: Path,
     port: int = DEFAULT_PORT,
     bind: list[str] | None = None,
@@ -101,7 +101,7 @@ def app_argv(
     Localhost-only unless ``bind`` is given, so the default stays safe.
     """
     argv = [
-        "--layouts-dir", str(layouts_dir),
+        "--decks-dir", str(decks_dir),
         "--client-dist", str(client_dist),
         "--port", str(port),
     ]

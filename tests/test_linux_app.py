@@ -43,32 +43,32 @@ def test_default_log_file_lives_in_data_dir(monkeypatch, tmp_path: Path) -> None
 
 
 def test_overlay_src_is_linux(tmp_path: Path) -> None:
-    assert linux_app.overlay_src(tmp_path) == tmp_path / "layouts.linux"
+    assert linux_app.overlay_src(tmp_path) == tmp_path / "decks.linux"
 
 
-def test_seed_layouts_uses_linux_overlay_suffix(tmp_path: Path) -> None:
+def test_seed_decks_uses_linux_overlay_suffix(tmp_path: Path) -> None:
     src = tmp_path / "bundled"
     _write(src / "default.yaml", "id: default\n")
     overlay = tmp_path / "bundled.linux"
     _write(overlay / "firefox.yaml", "id: firefox\n")
-    dest = tmp_path / "data" / "layouts"
+    dest = tmp_path / "data" / "decks"
 
-    assert linux_app.seed_layouts(src, dest, overlay=overlay) is True
+    assert linux_app.seed_decks(src, dest, overlay=overlay) is True
     assert (dest / "default.yaml").read_text() == "id: default\n"
-    # The daemon looks for ``layouts.linux`` beside the layouts dir.
-    assert (dest.parent / "layouts.linux" / "firefox.yaml").is_file()
+    # The daemon looks for ``decks.linux`` beside the decks dir.
+    assert (dest.parent / "decks.linux" / "firefox.yaml").is_file()
 
     # A user's edits survive: an existing dir is never re-seeded.
-    assert linux_app.seed_layouts(src, dest, overlay=overlay) is False
+    assert linux_app.seed_decks(src, dest, overlay=overlay) is False
 
 
-def test_prepare_seeds_writable_layouts_once(monkeypatch, tmp_path: Path) -> None:
+def test_prepare_seeds_writable_decks_once(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path))
     monkeypatch.delattr(app_bundle.sys, "_MEIPASS", raising=False)
 
-    layouts_dir, web, log_file = linux_app.prepare()
-    assert layouts_dir == tmp_path / "deckd" / "layouts"
-    assert layouts_dir.joinpath("default.yaml").exists()
+    decks_dir, web, log_file = linux_app.prepare()
+    assert decks_dir == tmp_path / "deckd" / "decks"
+    assert decks_dir.joinpath("default.yaml").exists()
     assert web.name == "web"
     assert log_file == tmp_path / "deckd" / "deckd.log"
     assert log_file.parent.is_dir()

@@ -52,7 +52,7 @@ widgets:
       password_ref: VLC_PASSWORD
 """
     )
-    server, *_ = make_test_server(layouts_dir=tmp_path, media_manager=manager)
+    server, *_ = make_test_server(decks_dir=tmp_path, media_manager=manager)
     test_server = TestServer(server.app, host="127.0.0.1")
     await test_server.start_server()
     server.start_media_pump()
@@ -65,7 +65,7 @@ async def test_media_state_and_command_cross_real_websocket_boundary(tmp_path: P
     port = test_server.port or 0
     try:
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "layout"
+            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "deck"
             state = json.loads(await asyncio.wait_for(ws.recv(), 2))
             assert state | {"art_token": None} == {
                 "type": "media_state",
@@ -91,7 +91,7 @@ async def test_media_state_and_command_cross_real_websocket_boundary(tmp_path: P
         assert manager.commands == [("media", "volume", 55.0, "media.local", 9090, "VLC_PASSWORD")]
 
         async with websockets.connect(f"ws://127.0.0.1:{port}/ws") as ws:
-            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "layout"
+            assert json.loads(await asyncio.wait_for(ws.recv(), 2))["type"] == "deck"
             await asyncio.sleep(1.1)
             assert manager.reads >= 2
     finally:

@@ -1,7 +1,7 @@
 # deckd — user & setup guide
 
 Everything beyond the [README](../README.md) showcase: installing and running the
-daemon, per-platform setup, writing layouts, the client features, and the
+daemon, per-platform setup, writing decks, the client features, and the
 development loop. For the exact CLI flags, environment variables, and HTTP
 endpoints see [REFERENCE.md](REFERENCE.md); for the system architecture see
 [ARCHITECTURE.md](ARCHITECTURE.md); for what works on which OS see
@@ -10,29 +10,29 @@ endpoints see [REFERENCE.md](REFERENCE.md); for the system architecture see
 ## Contents
 
 - [Repository layout](#repository-layout)
-- [Web-app layouts](#web-app-layouts)
+- [Web-app decks](#web-app-decks)
 - [Running deckd](#running-deckd) — install, macOS, KDE Plasma Wayland, phone/tablet testing
 - [Design tooling](#design-tooling-no-daemon-required), [hosted demo](#hosted-demo-github-pages), [PWA install](#pwa-install-over-https-tailscale)
-- Client features — [chrome](#client-chrome), [manual control](#manual-control-mode), [layout editor](#layout-editor), [app badge](#chrome-app-badge), [tuning](#client-tuning), [accessibility](#accessibility)
-- [uinput permissions](#uinput-permissions), [live reload](#live-reload), [focus watcher](#focus-watcher), [dev UX](#dev-ux-auto-ignore--layout-override), [smoke test](#smoke-test), [CLI](#cli)
+- Client features — [chrome](#client-chrome), [manual control](#manual-control-mode), [deck editor](#deck-editor), [app badge](#chrome-app-badge), [tuning](#client-tuning), [accessibility](#accessibility)
+- [uinput permissions](#uinput-permissions), [live reload](#live-reload), [focus watcher](#focus-watcher), [dev UX](#dev-ux-auto-ignore--deck-override), [smoke test](#smoke-test), [CLI](#cli)
 - [Running in production](#running-in-production)
-- [Configuration](#configuration) — layouts, actions, auth, bind scope, overlays, live widgets
+- [Configuration](#configuration) — decks, actions, auth, bind scope, overlays, live widgets
 - [Under the hood](#under-the-hood), [why a venv](#why-a-venv-not-a-nix-shell)
 - Media surfaces — [VLC media widgets](#vlc-media-widgets), [now playing](#now-playing), [running programs list](#running-programs-list-stage-2-of-the-switcher-design)
 
 ## Repository layout
 
 ```
-daemon/deckd/      Python daemon: aiohttp server, WebSocket, layout loader, action dispatch
+daemon/deckd/      Python daemon: aiohttp server, WebSocket, deck loader, action dispatch
 client/            Vite + React + TS web client (the dumb renderer)
-layouts/           Per-app YAML layouts (default.yaml + one per app)
+decks/             Per-app YAML decks (default.yaml + one per app)
 scripts/smoke.py   End-to-end test that boots the daemon over WS, clicks every button
 ```
 
-## Web-app layouts
+## Web-app decks
 
-A layout normally claims a desktop app by putting its `app_id`/`wm_class` in the
-`match:` list. A layout can also claim a **website** with a `title:` token — a
+A deck normally claims a desktop app by putting its `app_id`/`wm_class` in the
+`match:` list. A deck can also claim a **website** with a `title:` token — a
 case-insensitive glob matched against the focused browser's *window title*:
 
 ```yaml
@@ -41,17 +41,17 @@ match:
 ```
 
 When the focused app is a browser, a `title:` match outranks a generic
-browser layout (so `youtube.yaml` wins over `firefox.yaml`), and falls back to
-the browser layout when no site matches. The buttons are ordinary actions —
-the shipped `layouts/youtube.yaml` and `layouts/netflix.yaml` drive each site's
+browser deck (so `youtube.yaml` wins over `firefox.yaml`), and falls back to
+the browser deck when no site matches. The buttons are ordinary actions —
+the shipped `decks/youtube.yaml` and `decks/netflix.yaml` drive each site's
 own keyboard shortcuts (`key: k`, `key: s`, …), so no special capability is
-needed beyond a layout file.
+needed beyond a deck file.
 
 The same idea also turns a site into an **on-screen musical keyboard**:
-`layouts/musicca.yaml` matches `title:*Musicca*` and fires the letter/number
+`decks/musicca.yaml` matches `title:*Musicca*` and fires the letter/number
 keys that [Musicca](https://www.musicca.com/piano)'s keyboard instruments listen
 for (top letter row = white keys, number row = black keys). Because Musicca's
-piano and synthesizer share one mapping, a single layout plays both — and any
+piano and synthesizer share one mapping, a single deck plays both — and any
 other site using the same mapping, once you add its title to `match:`. It's just
 keystrokes (no MIDI/velocity). See [#96](https://github.com/jonocodes/deckd/issues/96)
 for range/sustain/UI follow-ups.
@@ -90,7 +90,7 @@ just build-client
 just run-daemon
 ```
 
-Open `http://127.0.0.1:8765` in any browser. You should see the active layout's buttons filling the main area, an always-on jogstrip pinned to the right edge, and a chrome bottom strip with the app name, a connection status dot, a `manual control` button, and a `settings` button. Drag or flick vertically on the right-side jogstrip to emit `REL_WHEEL_HI_RES` deltas through uinput (log-only when uinput is unavailable). Tap the `manual control` button to swap the button grid for a combined trackpad + IME surface — see the [Manual control mode](#manual-control-mode) section.
+Open `http://127.0.0.1:8765` in any browser. You should see the active deck's buttons filling the main area, an always-on jogstrip pinned to the right edge, and a chrome bottom strip with the app name, a connection status dot, a `manual control` button, and a `settings` button. Drag or flick vertically on the right-side jogstrip to emit `REL_WHEEL_HI_RES` deltas through uinput (log-only when uinput is unavailable). Tap the `manual control` button to swap the button grid for a combined trackpad + IME surface — see the [Manual control mode](#manual-control-mode) section.
 
 > **aarch64 Linux (e.g. Asahi):** `evdev-binary` publishes x86_64 wheels only, so it can't cover aarch64. Instead `just setup-linux` source-builds `python-evdev` via `scripts/install_evdev_source.sh` (the `uinput` extra also declares plain `evdev` on non-x86_64 via a `platform_machine` marker). The source build needs a C compiler and kernel headers — the flox dev env pins `gcc` for exactly this (Nix hides the headers from evdev's `build_ecodes`, so the script locates them via the compiler and passes them explicitly). With that plus `/dev/uinput` write access (see [uinput permissions](#uinput-permissions)), scroll/key/trackpad injection works natively on aarch64, **including KDE Plasma Wayland** — keys are injected at the kernel evdev layer, so the compositor routes them to the focused window. If the build is skipped the sink degrades gracefully to log-only.
 
@@ -98,7 +98,7 @@ Open `http://127.0.0.1:8765` in any browser. You should see the active layout's 
 
 ### macOS
 
-The daemon runs on macOS via `daemon/deckd/platform_macos.py` — focus + key injection work out of the box, and the jogstrip + trackpad need `pyobjc-framework-Quartz` (pulled in via the `[macos]` extra). The GNOME Shell focus extension is Linux-only. The `[dbus]` extra (`dbus-fast`) is Linux-only and deliberately skipped on macOS — there's no session bus and the default layout's D-Bus/MPRIS targets don't exist, so the daemon wires a null bus factory and serves without the `dbus:` action primitive or MPRIS now-playing (issue #27).
+The daemon runs on macOS via `daemon/deckd/platform_macos.py` — focus + key injection work out of the box, and the jogstrip + trackpad need `pyobjc-framework-Quartz` (pulled in via the `[macos]` extra). The GNOME Shell focus extension is Linux-only. The `[dbus]` extra (`dbus-fast`) is Linux-only and deliberately skipped on macOS — there's no session bus and the default deck's D-Bus/MPRIS targets don't exist, so the daemon wires a null bus factory and serves without the `dbus:` action primitive or MPRIS now-playing (issue #27).
 
 Setup (no `uv`/uinput bits):
 
@@ -112,7 +112,7 @@ just dev-daemon       # listens on http://127.0.0.1:8765, auto-restarts on Pytho
 
 To force a specific platform's setup (e.g. on a CI box): `just setup-linux` or `just setup-macos`.
 
-First time you focus a non-default window, **System Events** will pop a TCC prompt asking you to allow the controlling terminal/iTerm/whatever wraps Python. Accept it once and the focus watcher runs forever after. The focus backend uses the process name as `app_id`, so layouts match by process name — `firefox`, `Terminal`, `kitty`, `code` etc. work as-is. The GNOME-specific per-app YAMLs (`org.gnome.Console`, `foot`, `konsole`…) won't match on macOS unless you rename them to the Mac process name.
+First time you focus a non-default window, **System Events** will pop a TCC prompt asking you to allow the controlling terminal/iTerm/whatever wraps Python. Accept it once and the focus watcher runs forever after. The focus backend uses the process name as `app_id`, so decks match by process name — `firefox`, `Terminal`, `kitty`, `code` etc. work as-is. The GNOME-specific per-app YAMLs (`org.gnome.Console`, `foot`, `konsole`…) won't match on macOS unless you rename them to the Mac process name.
 
 What works / doesn't on macOS:
 
@@ -122,7 +122,7 @@ What works / doesn't on macOS:
 | focus detection                    | yes (osascript + System Events)                                                         |
 | running-window enumeration         | yes (Quartz `CGWindowList`, front-to-back order) — app names only, see TCC below         |
 | running-window raise              | yes (AppKit activation + Accessibility `AXRaise`)                                       |
-| running-window row → layout match  | yes (identity matching is case-insensitive, so `CGWindowList`'s `Firefox` matches the `firefox` token — #140) |
+| running-window row → deck match  | yes (identity matching is case-insensitive, so `CGWindowList`'s `Firefox` matches the `firefox` token — #140) |
 | `key:` action (printable + combos) | yes (osascript `keystroke`)                                                             |
 | `key:` action (non-printable)      | partial (HID-code map covers the common ones — arrows, esc, tab, enter, F-keys)         |
 | `shell:` / `terminal:` actions     | yes                                                                                     |
@@ -139,13 +139,13 @@ Machine-verified on hardware 2026-08-06 (macOS 15.6.1, Apple Silicon) by driving
 - **Accessibility** gates Quartz `CGEventPost` *and* the `AXRaise` half of raise. Without it, pointer/click/drag/scroll are **silently dropped** (no error, no log line) and `raise_window` fails with `kAXErrorAPIDisabled` (-25211) after the app has already been activated — so the app comes forward but the specific window doesn't rise.
 - **System Events** (the focus + `keystroke` path) is a *separate* grant, which is why focus detection and key injection can work fine while every Quartz path is dead.
 - Run the daemon from a *different* terminal (or under an editor/agent harness) and you inherit that tree's grants, not the ones you clicked through earlier.
-- **Screen Recording** gates `kCGWindowName`. Without it every enumerated window's `title` is `None`, so the running-windows list is labelled by app name alone. deckd works either way — the label falls back — but title-based layout matching (`title:` tokens) can't see enumerated windows.
+- **Screen Recording** gates `kCGWindowName`. Without it every enumerated window's `title` is `None`, so the running-windows list is labelled by app name alone. deckd works either way — the label falls back — but title-based deck matching (`title:` tokens) can't see enumerated windows.
 
-When the layout doesn't switch as expected, run `python scripts/check_focus_macos.py` for a one-shot diagnostic: it prints what `osascript` reports for the frontmost app, whether the auto-ignore rule would hold, and which layout `resolve_layout` would pick. Saves reading the daemon log for the common cases (TCC denied, stale daemon, wrong app_id).
+When the deck doesn't switch as expected, run `python scripts/check_focus_macos.py` for a one-shot diagnostic: it prints what `osascript` reports for the frontmost app, whether the auto-ignore rule would hold, and which deck `resolve_deck` would pick. Saves reading the daemon log for the common cases (TCC denied, stale daemon, wrong app_id).
 
 ### KDE Plasma Wayland
 
-Two KDE-specific pieces on top of the base setup: a **KWin script** for focus-based layout switching, and `/dev/uinput` **access** so button/scroll/trackpad injection actually reaches apps. This walkthrough is distro-neutral; Nix/flox users get the extra CLI tools automatically (see the [Tooling note](#kde-plasma-wayland-sessions) under the focus watcher) and can skip the package-install hints.
+Two KDE-specific pieces on top of the base setup: a **KWin script** for focus-based deck switching, and `/dev/uinput` **access** so button/scroll/trackpad injection actually reaches apps. This walkthrough is distro-neutral; Nix/flox users get the extra CLI tools automatically (see the [Tooling note](#kde-plasma-wayland-sessions) under the focus watcher) and can skip the package-install hints.
 
 **0. Check the KDE CLI tools are present.** These ship with a standard Plasma 6 desktop; run this to spot any gaps:
 
@@ -184,7 +184,7 @@ just install-focus-kwin         # installs + enables + hot-starts the KWin focus
 
 Order matters slightly: the script pushes focus to the *running* daemon, so start the daemon first (or just re-run `install-focus-kwin` afterwards — see [Cold-start ordering](#kde-plasma-wayland-sessions)). Details and verification are in [KDE Plasma Wayland sessions](#kde-plasma-wayland-sessions) under the focus watcher.
 
-**4. Verify.** Open `http://127.0.0.1:8765`, focus different apps and watch the layout follow (`just watch-focus`), and press a browser button — it should fire the keystroke in the focused window. If buttons do nothing, it's almost always step 2 (`just check-uinput`).
+**4. Verify.** Open `http://127.0.0.1:8765`, focus different apps and watch the deck follow (`just watch-focus`), and press a browser button — it should fire the keystroke in the focused window. If buttons do nothing, it's almost always step 2 (`just check-uinput`).
 
 ### Phone/tablet testing
 
@@ -204,8 +204,8 @@ Open `http://<desktop-lan-ip>:8765` on the phone, for example `http://192.168.30
 
 The client can be viewed and design-iterated without a running daemon:
 
-- **Demo mode** — append `?demo=<name>` to the client URL (`firefox`, `default`, or `showcase`) to render a fixture layout with the WebSocket disabled. The `showcase` fixture exercises every icon path (Lucide glyphs, Simple Icons brand logos, per-button colour, a no-icon button, and the unknown-icon placeholder). Dev-only; adds no cost when the param is absent. (For forcing a *real* daemon layout with a live backend, use the per-client `?layout=<name>` pin — see [Layout override](#dev-ux-auto-ignore--layout-override).)
-- **Responsive gallery** — `cd client && npm run dev`, then open `/gallery.html`. Renders the real client in phone / large-phone / 7" / 10"-tablet iframes at once, with layout, orientation, and **key hints** selectors — for checking how a layout reads across screen sizes (the key-hints toggle drives each frame's `?showKeyHints=1`). Dev-only entry, not in the production build.
+- **Demo mode** — append `?demo=<name>` to the client URL (`firefox`, `default`, or `showcase`) to render a fixture deck with the WebSocket disabled. The `showcase` fixture exercises every icon path (Lucide glyphs, Simple Icons brand logos, per-button colour, a no-icon button, and the unknown-icon placeholder). Dev-only; adds no cost when the param is absent. (For forcing a *real* daemon deck with a live backend, use the per-client `?deck=<name>` pin — see [Deck override](#dev-ux-auto-ignore--deck-override).)
+- **Responsive gallery** — `cd client && npm run dev`, then open `/gallery.html`. Renders the real client in phone / large-phone / 7" / 10"-tablet iframes at once, with deck, orientation, and **key hints** selectors — for checking how a deck reads across screen sizes (the key-hints toggle drives each frame's `?showKeyHints=1`). Dev-only entry, not in the production build.
 - **Screenshot page** — `cd client && npm run dev`, then open `/screenshots.html`. Renders curated demo views inside phone-framed iframes, one per configured shot — the source of truth for `just screenshots`. Curate the list by editing the `SHOTS` array in `client/src/Screenshots.tsx`.
 - **Layout explainer** — `cd client && npm run dev`, then open `/help`. The user-facing help page (also mounted standalone as `/help.html`, and from Settings via the **How layout and sizing work** link). It imports the real `client/src/reflow.ts`, so its diagrams cannot disagree with the app; a design mockup with chrome modelling and every settled-fork toggle lives at `docs/mockups/reflow-adr0011.html`.
 - **Ladle** (component workbench) — `cd client && npm run ladle`. Browse `ButtonGrid` / `Icon` / `JogStrip` stories in isolation with width/theme controls, plus `Surface → Device sizes` stories that render the grid in fixed phone/tablet frames (size + orientation) for a quick per-component resolution check. Stories live in `src/*.stories.tsx` (Storybook-compatible CSF).
@@ -217,7 +217,7 @@ The client can be viewed and design-iterated without a running daemon:
 
 Every push to `main` builds the client and Ladle and publishes them to GitHub Pages, so the previews above can be browsed with no daemon and no local checkout:
 
-- **Live client (demo mode)** — `https://jonocodes.github.io/deckd/?demo=showcase` (also `?demo=firefox`, `?demo=default`). Without `?demo=` the client loads and shows "disconnected" since there's no daemon behind the Pages site; the param lets the fixture layout run.
+- **Live client (demo mode)** — `https://jonocodes.github.io/deckd/?demo=showcase` (also `?demo=firefox`, `?demo=default`). Without `?demo=` the client loads and shows "disconnected" since there's no daemon behind the Pages site; the param lets the fixture deck run.
 - **Responsive gallery** — `https://jonocodes.github.io/deckd/gallery.html`.
 - **Layout help** — `https://jonocodes.github.io/deckd/help.html`. The standalone build of the in-app explainer (below); no daemon, no icons.
 - **Ladle stories** — `https://jonocodes.github.io/deckd/ladle/`.
@@ -265,18 +265,18 @@ That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws
 
 ### Client chrome
 
-Every layout renders inside a persistent **chrome** shell that the daemon does not know about:
+Every deck renders inside a persistent **chrome** shell that the daemon does not know about:
 
-- **Bottom strip** (always visible): the current app badge (from `LayoutMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the layout's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected) whose text label collapses to just the dot when the strip is too narrow for it (portrait phones) and returns on rotation to a wider viewport, a `manual control` button that swaps the main area for the combined trackpad + IME surface (see [Manual control mode](#manual-control-mode)), a `now playing` button (when enabled — see [Now playing](#now-playing); ADR-0008 records the chrome-view carve-out that lets the client pin a specific layout) that asks the daemon for the global now-playing view, a `fullscreen` button that toggles the browser's fullscreen mode, and a `settings` button (see [Client tuning](#client-tuning)). To keep the strip uncluttered on narrow screens, the daemon-driven buttons appear only when they're actionable: `manual control`, `now playing`, and `running programs` all require a live connection, so they're hidden while disconnected (leaving the badge, status, `fullscreen`, and `settings`); `now playing` additionally appears only when a media session is present (playing or paused), staying out of the way when there's nothing to control. (`fullscreen` and `settings` are client-side, so they stay put regardless of connection.) The layout editor is reached from the `settings` view rather than the strip (see [Layout editor](#layout-editor)).
-- **Right-side jogstrip** (always visible): a full-height scroll strip that works the same as the in-grid `jogstrip` widget. A layout can suppress it with `jogstrip: false` at the YAML top level — the daemon forwards this as `jogstrip_enabled` on every `LayoutMessage`.
+- **Bottom strip** (always visible): the current app badge (from `DeckMessage.app` — optionally a branded icon + `display_name` + `theme` colour from the deck's YAML, see [Chrome app badge](#chrome-app-badge)), a connection dot (live / reconnecting / disconnected) whose text label collapses to just the dot when the strip is too narrow for it (portrait phones) and returns on rotation to a wider viewport, a `manual control` button that swaps the main area for the combined trackpad + IME surface (see [Manual control mode](#manual-control-mode)), a `now playing` button (when enabled — see [Now playing](#now-playing); ADR-0008 records the chrome-view carve-out that lets the client pin a specific deck) that asks the daemon for the global now-playing view, a `fullscreen` button that toggles the browser's fullscreen mode, and a `settings` button (see [Client tuning](#client-tuning)). To keep the strip uncluttered on narrow screens, the daemon-driven buttons appear only when they're actionable: `manual control`, `now playing`, and `running programs` all require a live connection, so they're hidden while disconnected (leaving the badge, status, `fullscreen`, and `settings`); `now playing` additionally appears only when a media session is present (playing or paused), staying out of the way when there's nothing to control. (`fullscreen` and `settings` are client-side, so they stay put regardless of connection.) The deck editor is reached from the `settings` view rather than the strip (see [Deck editor](#deck-editor)).
+- **Right-side jogstrip** (always visible): a full-height scroll strip that works the same as the in-grid `jogstrip` widget. A deck can suppress it with `jogstrip: false` at the YAML top level — the daemon forwards this as `jogstrip_enabled` on every `DeckMessage`.
 
-Widgets in a layout's `widgets:` list are an **ordered list** that reflows against the viewport width (ADR-0010). There are no grid coordinates. The client packs widgets left-to-right and wraps down, computing the column count from the available width against a client-side cell-size band. A widget may carry a `size: [w, h]` span (default `[1, 1]`) for non-uniform cells; the list order is the only positional input. Portrait just fits fewer columns — no transpose, no orientation conventions.
+Widgets in a deck's `widgets:` list are an **ordered list** that reflows against the viewport width (ADR-0010). There are no grid coordinates. The client packs widgets left-to-right and wraps down, computing the column count from the available width against a client-side cell-size band. A widget may carry a `size: [w, h]` span (default `[1, 1]`) for non-uniform cells; the list order is the only positional input. Portrait just fits fewer columns — no transpose, no orientation conventions.
 
 ### Manual control mode
 
-Tap the `manual control` button in the bottom chrome and the layout area is replaced by a single combined surface: a **trackpad** for cursor movement and a **keyboard passthrough** for typing into the currently-focused desktop app, both live at the same time. No mode switching. The trackpad handles pointing and clicking, and a small **strip at the top** of the surface hosts the few keys mobile IMEs can't produce (Esc, Tab, arrows) plus a keyboard-icon toggle that raises the phone's soft keyboard when you want to type. When the IME is open you can still drag on the trackpad area to move the cursor — the two coexist.
+Tap the `manual control` button in the bottom chrome and the deck area is replaced by a single combined surface: a **trackpad** for cursor movement and a **keyboard passthrough** for typing into the currently-focused desktop app, both live at the same time. No mode switching. The trackpad handles pointing and clicking, and a small **strip at the top** of the surface hosts the few keys mobile IMEs can't produce (Esc, Tab, arrows) plus a keyboard-icon toggle that raises the phone's soft keyboard when you want to type. When the IME is open you can still drag on the trackpad area to move the cursor — the two coexist.
 
-Manual control covers the long tail layouts don't: URL bars, chat boxes, ad-hoc commands, plus anywhere you'd normally reach for a trackpad. Known per-app shortcuts stay in layouts as buttons.
+Manual control covers the long tail decks don't: URL bars, chat boxes, ad-hoc commands, plus anywhere you'd normally reach for a trackpad. Known per-app shortcuts stay in decks as buttons.
 
 **Trackpad gestures** (client-side; daemon receives `pad` / `pad_tap` / `pad_drag` events and maps them to `REL_X` / `REL_Y` + `BTN_LEFT` / `BTN_RIGHT` on the same uinput device that handles keys and scroll):
 
@@ -291,10 +291,10 @@ Manual control covers the long tail layouts don't: URL bars, chat boxes, ad-hoc 
 
 The right-side jogstrip stays available for scrolling while you're pointing.
 
-**Keyboard passthrough** is opt-in: the IME is closed when you enter manual control. Tap the keyboard-icon button on the strip to raise the phone's soft keyboard; tap it again to dismiss. While the IME is open, the hidden input behind the trackpad captures glyphs and forwards them to the daemon via the `type` / `key` wire messages — the same path layout `key` actions use. The trackpad surface still captures pointer events; you can type and move the cursor in the same session without switching modes.
+**Keyboard passthrough** is opt-in: the IME is closed when you enter manual control. Tap the keyboard-icon button on the strip to raise the phone's soft keyboard; tap it again to dismiss. While the IME is open, the hidden input behind the trackpad captures glyphs and forwards them to the daemon via the `type` / `key` wire messages — the same path deck `key` actions use. The trackpad surface still captures pointer events; you can type and move the cursor in the same session without switching modes.
 
 - **The IME does the typing.** Letters, symbols, autocorrect, swipe-typing — the client diffs the hidden field's contents on every input event and sends the delta (`type` message), so whatever the IME commits is what the desktop gets. Enter and Backspace travel as named `key` messages instead (Android: via `beforeinput` inputType inspection; iOS / physical keyboards: via `keydown`).
-- **Minimal strip.** Mobile keyboards have no Esc / Tab / arrow keys, so the strip at the top of the surface sends those as named combos. There are deliberately no sticky Ctrl/Alt modifiers — combos belong in layouts.
+- **Minimal strip.** Mobile keyboards have no Esc / Tab / arrow keys, so the strip at the top of the surface sends those as named combos. There are deliberately no sticky Ctrl/Alt modifiers — combos belong in decks.
 - **ASCII only, US layout.** Injected text is translated to evdev keycodes char-by-char; capitals and shifted symbols get an implicit Shift per the **US keyboard layout**. The desktop's own layout reinterprets keycodes, so exact fidelity requires the desktop to use US layout. Anything outside printable ASCII (accented characters, CJK, emoji) is logged and dropped.
 - **Focus guard.** Injected keystrokes land on whatever window has desktop focus. If that's the deckd client itself (you opened the client on the same machine as the daemon), the daemon drops `type` / `key` messages rather than feed the client's own input back into itself.
 - **Physical keyboards.** A Bluetooth keyboard paired to the phone works through the `keydown` path with no extra setup.
@@ -303,26 +303,26 @@ The right-side jogstrip stays available for scrolling while you're pointing.
 
 
 
-### Layout editor
+### Deck editor
 
-Open **settings** and tap the prominent **Edit layout** button at the top to build and edit layouts in the browser — no hand-editing YAML. (Editing is occasional, so its launch point lives in settings rather than taking a permanent slot in the bottom chrome; the `4` keyboard shortcut still opens it directly.) Like manual control and now playing, it's a chrome view that swaps in over the button grid.
+Open **settings** and tap the prominent **Edit deck** button at the top to build and edit decks in the browser — no hand-editing YAML. (Editing is occasional, so its launch point lives in settings rather than taking a permanent slot in the bottom chrome; the `4` keyboard shortcut still opens it directly.) Like manual control and now playing, it's a chrome view that swaps in over the button grid.
 
-- **Palette** — pick a widget kind (button, jogstrip, meter, stats, media, blank, …) to append it to the layout.
-- **Reflow canvas** — widgets render exactly as the live deck does (ADR-0010, ordered-list reflow). Drag to reorder, adjust a widget's `size` span, and toggle the layout's `overflow` mode; the canvas repacks as you go.
-- **Properties panel** — edit the selected widget's `label`, `icon` (via a searchable Lucide / Simple Icons picker), `color`, and its `action` or `macro`. `color` offers a native colour swatch plus one-tap presets, alongside a free-text field that still accepts any CSS colour string; values the swatch can't hold (named colours, `hsl(...)`, `#RRGGBBAA`) show as a read-only preview and stay editable as text. Clearing the field unsets `color`. Fields the editor doesn't model yet are passed through opaquely, so editing a layout never drops hand-authored config.
-- **New layouts** — create a layout from scratch, setting its `match:` list; the filename is derived from the primary match token on first save.
+- **Palette** — pick a widget kind (button, jogstrip, meter, stats, media, blank, …) to append it to the deck.
+- **Reflow canvas** — widgets render exactly as the live deck does (ADR-0010, ordered-list reflow). Drag to reorder, adjust a widget's `size` span, and toggle the deck's `overflow` mode; the canvas repacks as you go.
+- **Properties panel** — edit the selected widget's `label`, `icon` (via a searchable Lucide / Simple Icons picker), `color`, and its `action` or `macro`. `color` offers a native colour swatch plus one-tap presets, alongside a free-text field that still accepts any CSS colour string; values the swatch can't hold (named colours, `hsl(...)`, `#RRGGBBAA`) show as a read-only preview and stay editable as text. Clearing the field unsets `color`. Fields the editor doesn't model yet are passed through opaquely, so editing a deck never drops hand-authored config.
+- **New decks** — create a deck from scratch, setting its `match:` list; the filename is derived from the primary match token on first save.
 
-Saving writes back to disk over the authed write API (`PUT`/`POST /layouts`, below), preserving YAML comments and widget identity; `watchfiles` then hot-reloads every connected client. The editor is in active development — most YAML is round-trippable today, but hand-editing remains the escape hatch for anything it doesn't yet surface.
+Saving writes back to disk over the authed write API (`PUT`/`POST /decks`, below), preserving YAML comments and widget identity; `watchfiles` then hot-reloads every connected client. The editor is in active development — most YAML is round-trippable today, but hand-editing remains the escape hatch for anything it doesn't yet surface.
 
 ### Chrome app badge
 
-The bottom strip's app badge carries the focused app's brand identity, sourced from the active layout's YAML — three optional top-level fields the daemon relays opaquely to the client:
+The bottom strip's app badge carries the focused app's brand identity, sourced from the active deck's YAML — three optional top-level fields the daemon relays opaquely to the client:
 
 - `display_name: Mozilla Firefox` — the human-readable label shown instead of the raw `match` token. Without it the badge falls back to the match token.
 - `theme: "#ff7139"` — any CSS colour string (hex, `hsl(...)`, named); tints the badge border and a thin accent stripe along the top edge of the bottom chrome, so the focused app reads at a glance from across the room.
 - `icon: { source: simple-icons, name: firefox }` — the same `{source, name}` dispatch widgets already use (ADR-0006); reuses the bundled Lucide + Simple Icons sets, so badging a new app is a YAML edit with no client/daemon rebuild.
 
-A layout with none of these keeps the chrome unchanged (the badge is just the bold app name). The daemon never resolves icons from `.desktop` files or the web — presentation stays in user-owned config, exactly like per-widget `color`. See ADR-0007 for the full rationale.
+A deck with none of these keeps the chrome unchanged (the badge is just the bold app name). The daemon never resolves icons from `.desktop` files or the web — presentation stays in user-owned config, exactly like per-widget `color`. See ADR-0007 for the full rationale.
 
 ```yaml
 match:
@@ -348,7 +348,7 @@ Tap the `settings` button in the bottom chrome for a control panel:
 - **Trackpad sensitivity** (slider, float 0.5×–3.0×, default 1.0×) — multiplier applied to raw pointer deltas before they're sent to the daemon.
 - **Min button size** (slider, 48–400 px, default 100 px) — the smallest a button may be drawn, which is what decides *how many* fit: raise it and fewer show. Under **Hide extras** it is a hard floor; under **Shrink buttons** it is never applied.
 - **Max button size** (slider, 48–400 px, default 240 px) — a cap on how large buttons grow, so a two-widget deck doesn't become two enormous tiles on a large screen.
-- **When there's no room** (Follow layout / Hide extras / Shrink buttons) — what happens when the deck doesn't fit at **Min button size**. **Hide extras** keeps the floor and hides trailing buttons; **Shrink buttons** shows every button and ignores the floor; **Follow layout** uses the active layout's `overflow:` default. Default is **Hide extras** ([ADR-0011](adr/0011-reflow.md)).
+- **When there's no room** (Follow deck / Hide extras / Shrink buttons) — what happens when the deck doesn't fit at **Min button size**. **Hide extras** keeps the floor and hides trailing buttons; **Shrink buttons** shows every button and ignores the floor; **Follow deck** uses the active deck's `overflow:` default. Default is **Hide extras** ([ADR-0011](adr/0011-reflow.md)).
 - **How layout and sizing work** — opens the in-app explainer at `/help`: a live, resizable sandbox plus three illustrated answers (why buttons move, why some are hidden, and why the last row is short). The same page ships standalone as `help.html`; changes to the size sliders there are only applied if you tap **Apply** when you close.
 - **Content size** (slider, float 0.75×–2.5×, default 1.0×) — multiplier for grid content (button icon + label, in-grid jogstrip) on top of the responsive base, so the deck stays readable across phone and tablet screens. The persistent chrome is unaffected.
 - **Text size** (slider, float 0.5×–1.5×, default 1.0×) — multiplier for the button label (the caption under each icon), applied on top of Content size, so the text can be dialled down without shrinking the icon.
@@ -375,7 +375,7 @@ http://<host>:5173/?showKeyHints=1
 Daemon-side flick momentum can be tuned with CLI flags:
 
 ```sh
-.venv/bin/deckd --layouts-dir layouts \
+.venv/bin/deckd --decks-dir decks \
   --scroll-momentum-friction 0.90 \
   --scroll-momentum-cutoff 20 \
   --verbose
@@ -392,7 +392,7 @@ sleep 2 && .venv/bin/python -u scripts/send_scroll.py --velocity 1200
 
 The client is usable end-to-end without a mouse (issues [#60](https://github.com/jonocodes/deckd/issues/60) and [#62](https://github.com/jonocodes/deckd/issues/62)).
 
-**Keyboard navigation** — `Tab` walks every interactive element in DOM/logical order: the bottom-chrome buttons (manual control / now playing / settings), the layout's widgets, the in-grid jogstrip, the settings sliders and toggles. `Shift+Tab` walks back. The focused element has a high-contrast cyan focus ring (a double-box-shadow; meets WCAG 2.1 SC 1.4.11 contrast); the ring is `focus-visible`-only, so a mouse click doesn't surface it.
+**Keyboard navigation** — `Tab` walks every interactive element in DOM/logical order: the bottom-chrome buttons (manual control / now playing / settings), the deck's widgets, the in-grid jogstrip, the settings sliders and toggles. `Shift+Tab` walks back. The focused element has a high-contrast cyan focus ring (a double-box-shadow; meets WCAG 2.1 SC 1.4.11 contrast); the ring is `focus-visible`-only, so a mouse click doesn't surface it.
 
 **Keyboard activation** — every button (chrome, grid, media, nowplaying, settings, jog-strip) responds to `Enter` and `Space`. Native `<button>` elements get this for free when they have an `onClick`; the project's `onPointerDown`-only pattern (kept for fast touch response) is paired with a matching `onKeyDown` so the keyboard path is preserved.
 
@@ -403,9 +403,9 @@ The client is usable end-to-end without a mouse (issues [#60](https://github.com
 | JogStrip    | `↑/↓/←/→` (small step), `PageUp/PageDown` (large step), `Home`/`End` (jump), held = auto-repeat |
 | Trackpad    | `↑/↓/←/→` (move), `Numpad 1/3/7/9` (diagonals), `PageUp/PageDown` (big step), `Space`/`Enter` (left click) |
 
-**Global shortcuts** — `1` toggles trackpad mode, `2` opens now playing, `3` opens settings, `Escape` returns to the focused-app layout. Shortcuts are suppressed while a text input is focused, so typing into the password gate or the trackpad IME isn't hijacked.
+**Global shortcuts** — `1` toggles trackpad mode, `2` opens now playing, `3` opens settings, `Escape` returns to the focused-app deck. Shortcuts are suppressed while a text input is focused, so typing into the password gate or the trackpad IME isn't hijacked.
 
-**Focus restoration** — opening a chrome view (settings, trackpad, now playing) pushes focus into the first interactive element of that view; closing it (via `Escape` or the same button) hands focus back to the chrome button that opened it. The password gate also restores focus to the surface after a successful submit, so a keyboard user can Tab into the layout without clicking anywhere.
+**Focus restoration** — opening a chrome view (settings, trackpad, now playing) pushes focus into the first interactive element of that view; closing it (via `Escape` or the same button) hands focus back to the chrome button that opened it. The password gate also restores focus to the surface after a successful submit, so a keyboard user can Tab into the deck without clicking anywhere.
 
 **OS-level preferences** — the theme respects `prefers-contrast: more` (thicker focus ring, higher-contrast cell borders, white halo on the connection dot) and `prefers-reduced-motion: reduce` (the connection-state pulse and the media-icon playback dot stop animating; press feedback loses its scale-down but keeps the static brightness shift). Status (connection state, playback state) is conveyed by **icon + text + colour** so it doesn't depend on colour alone: the connection indicator has a visible "live" / "reconnecting" / "disconnected" / "locked" label, and the media icon carries a screen-reader-only "now playing" / "idle" string alongside the pulsing green dot.
 
@@ -444,7 +444,7 @@ Both paths (flake modules or the classic unit) end in the same check above; if `
 
 ### Live reload
 
-Layout YAML is watched by the daemon itself — any edit under `layouts/` is picked up automatically and pushed to every connected client. No manual `deckctl reload` needed. A broken save (bad YAML, schema violation) is trapped: the daemon keeps the last-good layouts live and sends a `LayoutMessage` with `error: "<parse error>"` so the client shows a diagnostic in place of the grid until the next successful save.
+Deck YAML is watched by the daemon itself — any edit under `decks/` is picked up automatically and pushed to every connected client. No manual `deckctl reload` needed. A broken save (bad YAML, schema violation) is trapped: the daemon keeps the last-good decks live and sends a `DeckMessage` with `error: "<parse error>"` so the client shows a diagnostic in place of the grid until the next successful save.
 
 Python changes need a daemon restart. `just dev-daemon` runs a supervisor that watches `daemon/**/*.py` and restarts the child on save:
 
@@ -508,7 +508,7 @@ just watch-focus           # app_id=None, wm_class=<class>, title=<title>
 just watch-focus-once
 ```
 
-On X11 there is no `app_id` analogue (no Wayland / Flatpak app id), so `app_id` is always `None` and layouts match on `wm_class` only. If `xdotool` is missing or cannot reach the display, `watch-focus` and the daemon both print an install hint instead of crashing.
+On X11 there is no `app_id` analogue (no Wayland / Flatpak app id), so `app_id` is always `None` and decks match on `wm_class` only. If `xdotool` is missing or cannot reach the display, `watch-focus` and the daemon both print an install hint instead of crashing.
 
 #### KDE Plasma Wayland sessions
 
@@ -527,7 +527,7 @@ That recipe:
 1. Installs the KWin Script package into `~/.local/share/kwin/scripts/deckd-focus/` via `kpackagetool6 -i` (falling back to `-u` when a copy is already installed).
 2. Persists `deckd-focusEnabled=true` in `kwinrc` so the script survives relogin.
 3. `qdbus org.kde.KWin /KWin reconfigure` applies the enable flag without a relogin.
-4. Hot-starts the script via `org.kde.kwin.Scripting.loadScript`, which fires the script's initial `push(workspace.activeWindow)` against the running daemon's `org.deckd.Focus` cache so the layout switches to the currently focused app immediately instead of waiting for the next alt-tab.
+4. Hot-starts the script via `org.kde.kwin.Scripting.loadScript`, which fires the script's initial `push(workspace.activeWindow)` against the running daemon's `org.deckd.Focus` cache so the deck switches to the currently focused app immediately instead of waiting for the next alt-tab.
 
 Verify:
 
@@ -543,31 +543,31 @@ app_id='org.kde.dolphin' wm_class='dolphin' pid=4242 title='Dolphin — Home'
 app_id=None wm_class='firefox' pid=188566 title='YouTube — Mozilla Firefox'
 ```
 
-If the KWin script isn't installed or the daemon couldn't own `org.deckd.Focus`, `watch-focus` and the daemon both print the `install-focus-kwin` hint and keep running on the default layout (the same graceful-failure stance the X11 backend takes when `xdotool` is missing).
+If the KWin script isn't installed or the daemon couldn't own `org.deckd.Focus`, `watch-focus` and the daemon both print the `install-focus-kwin` hint and keep running on the default deck (the same graceful-failure stance the X11 backend takes when `xdotool` is missing).
 
 **Lifecycle note.** The daemon owns `org.deckd.Focus` only on KDE Plasma Wayland sessions (`XDG_CURRENT_DESKTOP=KDE` + `XDG_SESSION_TYPE=wayland`), so the GNOME extension and the KDE daemon-side cache never fight over the same bus name. KDE-X11 falls back to the `xdotool` path documented above.
 
 **Cold-start ordering.** Because KWin scripts can only `callDBus` outbound (they can't own a D-Bus name — see spike), the script's initial `push(workspace.activeWindow)` lands *nowhere* if the daemon isn't yet running. The cache stays empty until the next window activation, or until you re-run `just install-focus-kwin` (which hot-reloads the script and re-fires the initial push against the now-running daemon). Long-running sessions with the script enabled in `kwinrc` automatically re-fire the initial push on the next KWin restart, so day-to-day use doesn't require re-running the recipe.
 
-### Dev UX: auto-ignore + layout override
+### Dev UX: auto-ignore + deck override
 
 Two conveniences for local development without a separate device:
 
-**Auto-ignore.** When the focus watcher reports the deckd client browser window gaining focus (matched by the daemon's own port appearing in the window title, or the deckd page title `"deckd"` in the title), the daemon **holds the current layout** instead of switching away. So clicking the browser tab that's rendering the control surface doesn't flip the layout to the browser's own (e.g. Firefox) layout while you're testing something else.
+**Auto-ignore.** When the focus watcher reports the deckd client browser window gaining focus (matched by the daemon's own port appearing in the window title, or the deckd page title `"deckd"` in the title), the daemon **holds the current deck** instead of switching away. So clicking the browser tab that's rendering the control surface doesn't flip the deck to the browser's own (e.g. Firefox) deck while you're testing something else.
 
-**Layout override.** `deckctl layout <name>` force-switches every connected client to a named layout regardless of focus, so you can test a specific app's layout without opening that app:
+**Deck override.** `deckctl deck <name>` force-switches every connected client to a named deck regardless of focus, so you can test a specific app's deck without opening that app:
 
 ```sh
-deckctl layout firefox    # force the firefox layout on all clients
-deckctl layout default    # back to the default layout
-deckctl layout nonexistent  # error: unknown layout (exit 1)
+deckctl deck firefox    # force the firefox deck on all clients
+deckctl deck default    # back to the default deck
+deckctl deck nonexistent  # error: unknown deck (exit 1)
 ```
 
-This hits `POST /layout/<name>` on the daemon. The override is **global** (every connected client) and **not sticky**: the next genuine (non-deckd-window) focus change clears it and normal focus-driven switching resumes.
+This hits `POST /deck/<name>` on the daemon. The override is **global** (every connected client) and **not sticky**: the next genuine (non-deckd-window) focus change clears it and normal focus-driven switching resumes.
 
-**Layout save/create (write API).** The in-development layout editor writes layouts back to disk over two authed HTTP endpoints (plural `/layouts`, distinct from the runtime-override `POST /layout/<id>`): `PUT /layouts/<id>` performs an idempotent full-snapshot save of an existing layout (URL `<id>` must equal `match[0]`; a `match[0]` change is a `409` rename, use create instead), and `POST /layouts` creates a new file on first save, deriving the filename from slugified `match[0]` (`Slack` → `slack.yaml`) with a `409` on id collision. Both return sanitized structured `400`s (`loc`/`msg`/`type` only — no action payloads) and `200` echoing the canonical re-read; writes are atomic (temp + `os.replace`) so `watchfiles` hot-reloads the live deck. See [docs/REFERENCE.md](REFERENCE.md) for the full endpoint table.
+**Deck save/create (write API).** The in-development deck editor writes decks back to disk over two authed HTTP endpoints (plural `/decks`, distinct from the runtime-override `POST /deck/<id>`): `PUT /decks/<id>` performs an idempotent full-snapshot save of an existing deck (URL `<id>` must equal `match[0]`; a `match[0]` change is a `409` rename, use create instead), and `POST /decks` creates a new file on first save, deriving the filename from slugified `match[0]` (`Slack` → `slack.yaml`) with a `409` on id collision. Both return sanitized structured `400`s (`loc`/`msg`/`type` only — no action payloads) and `200` echoing the canonical re-read; writes are atomic (temp + `os.replace`) so `watchfiles` hot-reloads the live deck. See [docs/REFERENCE.md](REFERENCE.md) for the full endpoint table.
 
-**Per-client pin (`?layout=<name>`).** For a demo device you want to park on one view, append `?layout=<name>` to the client URL (e.g. `?layout=tilix`). The client sends the name in its `hello` frame and the daemon pins **just that session** to the named layout, ignoring host focus and unaffected by other clients — so a window switch on the host won't move it. The name is matched case-insensitively against each layout's id, `display_name`, or any `match` token, so `?layout=tilix` finds the layout even though its id is the reverse-DNS token `com.gexperts.Tilix`. The pin lives in the URL (survives reload) and re-resolves from disk on `deckctl reload`; an unknown name is ignored and the client follows focus as normal. This is the backend-driven counterpart to the backend-free `?demo=<name>` fixtures (see [Design tooling](#design-tooling-no-daemon-required)) — `?layout=` serves the *real* daemon layouts, so it never drifts.
+**Per-client pin (`?deck=<name>`).** For a demo device you want to park on one view, append `?deck=<name>` to the client URL (e.g. `?deck=tilix`). The client sends the name in its `hello` frame and the daemon pins **just that session** to the named deck, ignoring host focus and unaffected by other clients — so a window switch on the host won't move it. The name is matched case-insensitively against each deck's id, `display_name`, or any `match` token, so `?deck=tilix` finds the deck even though its id is the reverse-DNS token `com.gexperts.Tilix`. The pin lives in the URL (survives reload) and re-resolves from disk on `deckctl reload`; an unknown name is ignored and the client follows focus as normal. This is the backend-driven counterpart to the backend-free `?demo=<name>` fixtures (see [Design tooling](#design-tooling-no-daemon-required)) — `?deck=` serves the *real* daemon decks, so it never drifts.
 
 ### Smoke test
 
@@ -582,7 +582,7 @@ uv pip install -e ".[dev]"   # installs the websockets test dep
 
 ### CLI
 
-`deckctl` is the control CLI — `status`, `diag`, `reload`, `layout <id>`, `layouts`, `metrics`.
+`deckctl` is the control CLI — `status`, `diag`, `reload`, `deck <id>`, `decks`, `metrics`.
 
 > **Canonical reference:** every `deckd` / `deckctl` flag, command, environment variable, HTTP endpoint, `just` recipe, and diagnostic workflow lives in **[REFERENCE.md](REFERENCE.md)** ([Control CLI](REFERENCE.md#control-cli-deckctl) · [Daemon flags](REFERENCE.md#daemon-deckd) · [Authentication](REFERENCE.md#authentication)). It is the single source of truth, so this guide does not repeat the command tables.
 
@@ -623,7 +623,7 @@ Auth is on by default — the shared password is read from (or generated at) `~/
 # Linux
 systemctl --user status deckd           # check it's running
 journalctl --user -u deckd -f           # follow logs
-systemctl --user restart deckd          # only after a code/unit change — layout YAML hot-reloads
+systemctl --user restart deckd          # only after a code/unit change — deck YAML hot-reloads
 sudo loginctl enable-linger $USER       # optional: keep running while logged out (headless deck host)
 
 # macOS
@@ -635,7 +635,7 @@ tail -f deckd.log                       # follow logs (written in the checkout)
 
 ### macOS app bundle (experimental, [#165](https://github.com/jonocodes/deckd/issues/165))
 
-Beyond the source-checkout + LaunchAgent path above, deckd can be built as a self-contained `deckd.app`: a private Python runtime, the built client, and the layouts in one bundle, driven by a menu-bar UI. The target Mac needs no Python, Node, or Homebrew. Build it **on a Mac** (a `.app` needs Apple tooling):
+Beyond the source-checkout + LaunchAgent path above, deckd can be built as a self-contained `deckd.app`: a private Python runtime, the built client, and the decks in one bundle, driven by a menu-bar UI. The target Mac needs no Python, Node, or Homebrew. Build it **on a Mac** (a `.app` needs Apple tooling):
 
 ```sh
 just build-macos-app     # -> dist/deckd.app
@@ -648,11 +648,11 @@ The bundle is **ad-hoc signed, not notarized** (no paid Apple Developer Program)
 xattr -dr com.apple.quarantine /Applications/deckd.app
 ```
 
-Then grant the TCC permissions as for the source build (see [macOS](#macos) above): Accessibility, System Events, and — for window titles — Screen Recording. The app seeds layouts into `~/Library/Application Support/deckd/layouts` on first run and logs to `~/Library/Logs/deckd.log`. The menu offers Open surface / Open layouts folder / Restart server / Allow LAN access / Quit; it stays localhost-only until you enable LAN access.
+Then grant the TCC permissions as for the source build (see [macOS](#macos) above): Accessibility, System Events, and — for window titles — Screen Recording. The app seeds decks into `~/Library/Application Support/deckd/decks` on first run and logs to `~/Library/Logs/deckd.log`. The menu offers Open surface / Open decks folder / Restart server / Allow LAN access / Quit; it stays localhost-only until you enable LAN access.
 
 Because the bundle is ad-hoc signed, its code identity is its content hash: **every rebuild changes it, so macOS may ask you to re-grant Accessibility / System Events after an upgrade.** Remove the stale `deckd` entry from System Settings → Privacy & Security and re-add the app if a grant stops working.
 
-Verified so far (macOS 26.6.2, Apple Silicon): the bundle builds, launches as a menu-bar app, seeds layouts, and serves the surface on `127.0.0.1:8765` with logs in `~/Library/Logs/deckd.log`. The injected-input features still depend on the three TCC grants, which need a human on the target Mac to confirm — the same caveat as the source build.
+Verified so far (macOS 26.6.2, Apple Silicon): the bundle builds, launches as a menu-bar app, seeds decks, and serves the surface on `127.0.0.1:8765` with logs in `~/Library/Logs/deckd.log`. The injected-input features still depend on the three TCC grants, which need a human on the target Mac to confirm — the same caveat as the source build.
 
 #### Releasing a DMG
 
@@ -664,7 +664,7 @@ The DMG is **arm64 only** (Apple Silicon): `macos-14` runners are Apple Silicon.
 
 ### Linux AppImage (experimental, [#168](https://github.com/jonocodes/deckd/issues/168))
 
-Beyond the source-checkout + systemd user unit path above, deckd can be built as a self-contained AppImage: a private Python runtime, the built client, and the layouts in one file. The target machine needs no Python, Node, or checkout. Build it **on Linux** (appimagetool wraps a PyInstaller tree in a squashfs):
+Beyond the source-checkout + systemd user unit path above, deckd can be built as a self-contained AppImage: a private Python runtime, the built client, and the decks in one file. The target machine needs no Python, Node, or checkout. Build it **on Linux** (appimagetool wraps a PyInstaller tree in a squashfs):
 
 ```sh
 just build-linux-appimage   # -> dist/deckd-<version>-<arch>.AppImage
@@ -677,7 +677,7 @@ chmod +x deckd-<version>-x86_64.AppImage
 ./deckd-<version>-x86_64.AppImage
 ```
 
-It seeds layouts into `~/.local/share/deckd/layouts` on first run and logs to `~/.local/share/deckd/deckd.log`. It stays localhost-only until you add `--bind 0.0.0.0`, exactly like the daemon.
+It seeds decks into `~/.local/share/deckd/decks` on first run and logs to `~/.local/share/deckd/deckd.log`. It stays localhost-only until you add `--bind 0.0.0.0`, exactly like the daemon.
 
 If `libfuse2` is missing (Ubuntu 22.04+/Debian 12 no longer ship it), run with `--appimage-extract-and-run` or set `APPIMAGE_EXTRACT_AND_RUN=1`.
 
@@ -716,14 +716,14 @@ service.
 
 | Output | What it is |
 |---|---|
-| `packages.deckd` | daemon + built client + bundled layouts + the udev rule |
+| `packages.deckd` | daemon + built client + bundled decks + the udev rule |
 | `packages.deckd-focus-gnome` / `-kwin` | the focus watcher bundles |
 | `nixosModules.deckd` | system prerequisites: `uinput` module, udev rule, `input` group, `openFirewall` |
-| `homeModules.deckd` | the user service: ExecStart, layouts dir, password file |
+| `homeModules.deckd` | the user service: ExecStart, decks dir, password file |
 | `homeModules.deckd-gnome` / `-kde` | `homeModules.deckd` plus the desktop's focus watcher |
 
 Try it without installing anything (`nix run` serves the bundled client
-and layouts; auth is on by default and the password lands in
+and decks; auth is on by default and the password lands in
 `~/.config/deckd/password`):
 
 ```sh
@@ -756,10 +756,10 @@ services.deckd = {
 
 - a **user** service (`systemd.user.services.deckd`,
   `WantedBy=graphical-session.target`) running `packages.deckd` with the
-  built client and your writable layouts dir;
-- **layouts seeding**: the bundled layouts are copied into
-  `~/.config/deckd/layouts` on first activation and never overwritten after
-  (`seedLayouts = false` opts out, e.g. when the directory is in a dotfiles
+  built client and your writable decks dir;
+- **decks seeding**: the bundled decks are copied into
+  `~/.config/deckd/decks` on first activation and never overwritten after
+  (`seedDecks = false` opts out, e.g. when the directory is in a dotfiles
   repo);
 - the **password file** default (`~/.config/deckd/password`, generated on
   first start). Point `passwordFile` at a secret if you'd rather manage it.
@@ -794,10 +794,10 @@ half; run the daemon and watcher the classic way above
 
 ## Configuration
 
-A directory of YAML files in `layouts/` — one per app, plus a `default.yaml` fallback. Shipped layouts today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), an optional `size: [w, h]` span (default `[1, 1]`; for non-square widgets like wide meters), an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. Widgets pack in list order (ADR-0010); there are no grid coordinates. The special `kind: blank` skips a cell slot for visual gaps. A layout's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the layout with `match: [default]` is the fallback. A layout may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `LayoutMessage`. A layout may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:
+A directory of YAML files in `decks/` — one per app, plus a `default.yaml` fallback. Shipped decks today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), an optional `size: [w, h]` span (default `[1, 1]`; for non-square widgets like wide meters), an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. Widgets pack in list order (ADR-0010); there are no grid coordinates. The special `kind: blank` skips a cell slot for visual gaps. A deck's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the deck with `match: [default]` is the fallback. A deck may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `DeckMessage`. A deck may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:
 
 - `shell: "..."` — launch a command, fire-and-forget. The child is detached (its own session) and runs independently; stdin/stdout/stderr are discarded and the daemon does not wait for it or observe its exit code. This is the way to launch a program (`shell: firefox`, `shell: code`, `shell: "xdg-open https://…"`), including a specific terminal (`shell: tilix`).
-- `terminal: true` — open the auto-detected terminal emulator, resolved via `$TERMINAL` then a candidate list (`foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`). This is the only accepted form: `terminal` takes no command string — for a specific program (terminal or otherwise) use `shell:`. A string value is rejected at layout-load time with a message pointing you at `shell:`.
+- `terminal: true` — open the auto-detected terminal emulator, resolved via `$TERMINAL` then a candidate list (`foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`). This is the only accepted form: `terminal` takes no command string — for a specific program (terminal or otherwise) use `shell:`. A string value is rejected at deck-load time with a message pointing you at `shell:`.
 - `key: "ctrl+t"` — fire the keystroke through uinput as a single combo.
 - `dbus: "service:path org.Interface.Method arg1 arg2"` — call a D-Bus method via `dbus-fast` (the Linux-only `[dbus]` extra; on an install without it the action logs a warning and no-ops — issue #27). The bus is inferred from the interface name (`org.freedesktop.login1.*`, `systemd1.*`, `timedate1.*`, `locale1.*`, etc. → system bus; everything else → session bus). Errors are logged, not surfaced to the client. With the `service:path` prefix omitted, the daemon derives them from the first two / three segments of the interface name.
 - `raise: "firefox"` — raise the most recently focused running window whose `wm_class`, GTK application id, or sandboxed application id exactly matches the identity. This is currently supported by the GNOME Shell focus extension; X11, KDE, and macOS log and ignore it. Enable the updated extension and relogin after installing it.
@@ -884,13 +884,13 @@ The home-manager module takes the same list as `services.deckd.bind` and transla
 
 ### Per-platform overlay
 
-The daemon also loads a sibling directory next to `--layouts-dir` whose name is suffixed with the current platform: `layouts.macos/` on macOS, `layouts.linux/` on Linux. A missing overlay is fine (the most common case). Overlay entries load first and **replace** any base entry with the same `id` — so `layouts.macos/firefox.yaml` overrides `layouts/firefox.yaml` on Mac without you touching the shared base. The watcher also watches the overlay dir, so edits reload live. Pass `--no-overlay` to skip the overlay even when it exists (debugging, cross-platform checkout debugging, etc.).
+The daemon also loads a sibling directory next to `--decks-dir` whose name is suffixed with the current platform: `decks.macos/` on macOS, `decks.linux/` on Linux. A missing overlay is fine (the most common case). Overlay entries load first and **replace** any base entry with the same `id` — so `decks.macos/firefox.yaml` overrides `decks/firefox.yaml` on Mac without you touching the shared base. The watcher also watches the overlay dir, so edits reload live. Pass `--no-overlay` to skip the overlay even when it exists (debugging, cross-platform checkout debugging, etc.).
 
-This is how `layouts.macos/firefox.yaml` carries the `super+t` / `super+[` / `super+]` shortcuts without forking the rest of `firefox.yaml` for every Linux user who pulls the repo.
+This is how `decks.macos/firefox.yaml` carries the `super+t` / `super+[` / `super+]` shortcuts without forking the rest of `firefox.yaml` for every Linux user who pulls the repo.
 
 ### Live widgets (the `meter` kind)
 
-A layout can include widgets that display values pushed by the daemon in real time. Today the only kind is `meter` (a numeric readout with a horizontal bar). It looks like a button in the grid, doesn't react to taps, and renders the value the daemon keeps pushing on the bound sensor source.
+A deck can include widgets that display values pushed by the daemon in real time. Today the only kind is `meter` (a numeric readout with a horizontal bar). It looks like a button in the grid, doesn't react to taps, and renders the value the daemon keeps pushing on the bound sensor source.
 
 ```yaml
 - id: cpu_percent
@@ -922,7 +922,7 @@ We deliberately don't ship a `cpu_temp` source. The short version is that **Appl
 - `osx-cpu-temp` (Homebrew, ~100 lines of C) and `istats` (the `iStats` Ruby gem) both read classic Intel SMC keys (`TC0P`, `TC0D`, `TC0E`). Apple Silicon uses a completely different sensor namespace that Apple doesn't document and that changes per SoC generation; the brew arm64 bottle exists because the binary compiles and runs, not because it returns valid temperature data.
 - The only reliable M-series source is Apple's own `sudo powermetrics`, which requires root, an undocumented/unstable output format, and either a privileged helper or interactive sudo prompts.
 
-Net result: a cross-platform `cpu_temp` source would either silently fail on most Apple Silicon Macs (deceptive) or require a deployment story heavier than the rest of deckd put together (overkill). `cpu_percent` and `mem_percent` cover the same "is the box healthy" use case and work on every Linux + every macOS without any per-OS install step. Users who really want CPU temp on Linux specifically can keep a custom layout pointing at `/sys/class/thermal` (we removed the in-tree reader because nothing on macOS could share the code path; bringing it back is a small PR).
+Net result: a cross-platform `cpu_temp` source would either silently fail on most Apple Silicon Macs (deceptive) or require a deployment story heavier than the rest of deckd put together (overkill). `cpu_percent` and `mem_percent` cover the same "is the box healthy" use case and work on every Linux + every macOS without any per-OS install step. Users who really want CPU temp on Linux specifically can keep a custom deck pointing at `/sys/class/thermal` (we removed the in-tree reader because nothing on macOS could share the code path; bringing it back is a small PR).
 
 The meter rendering is a regular cell in the grid (it picks up `--content-scale` and the user's Button-size preference like every other widget). When the daemon hasn't pushed a value yet, the cell renders "—" with the bar at 0% and a dashed border so you can see at a glance it's waiting.
 
@@ -930,7 +930,7 @@ Try it without sensors: `?demo=meter` loads a backend-free demo with seeded CPU%
 
 ## Under the hood
 
-> **Canonical reference:** the component diagram and the nine end-to-end flows behind the features above (layout push, button press, scroll strip, manual control, MPRIS/VLC media, live meters, hot-reload, diagnostic events) live in **[ARCHITECTURE.md](ARCHITECTURE.md)** ([system diagram](ARCHITECTURE.md#system-diagram) · [key flows](ARCHITECTURE.md#key-flows)). The authoritative wire-protocol shape is `daemon/deckd/protocol.py` (with the generated TypeScript mirror `client/src/protocol.generated.ts`); see [REFERENCE.md § Layout wire protocol](REFERENCE.md#layout-wire-protocol). This guide does not restate them.
+> **Canonical reference:** the component diagram and the nine end-to-end flows behind the features above (deck push, button press, scroll strip, manual control, MPRIS/VLC media, live meters, hot-reload, diagnostic events) live in **[ARCHITECTURE.md](ARCHITECTURE.md)** ([system diagram](ARCHITECTURE.md#system-diagram) · [key flows](ARCHITECTURE.md#key-flows)). The authoritative wire-protocol shape is `daemon/deckd/protocol.py` (with the generated TypeScript mirror `client/src/protocol.generated.ts`); see [REFERENCE.md § Deck wire protocol](REFERENCE.md#deck-wire-protocol). This guide does not restate them.
 
 ## Why a venv, not a Nix shell?
 
@@ -982,7 +982,7 @@ curl -u ':$VLC_HTTP_PASSWORD' \
 
 A successful response is JSON with fields such as `state`, `time`, `length`, `volume`, and `information.meta`. A `401 Unauthorized` response means VLC is running but the supplied password does not match the active Lua HTTP password. If the endpoint cannot connect, enable the Web interface, confirm VLC was restarted, and check that port `8080` is listening.
 
-The daemon polls this endpoint once per second and forwards changed values to the client over its WebSocket. Volume and seek commands use the same HTTP interface; play/pause remains the configured keyboard action. Without `media_http`, a media widget renders keyboard-only `−`/`+` controls backed by `volume_down_action` and `volume_up_action`; with HTTP configured, it preserves the live volume slider. If VLC HTTP becomes unavailable, live values are explicitly shown as unavailable. The password is never stored directly in layout YAML, and `password_ref` must name a non-empty environment variable.
+The daemon polls this endpoint once per second and forwards changed values to the client over its WebSocket. Volume and seek commands use the same HTTP interface; play/pause remains the configured keyboard action. Without `media_http`, a media widget renders keyboard-only `−`/`+` controls backed by `volume_down_action` and `volume_up_action`; with HTTP configured, it preserves the live volume slider. If VLC HTTP becomes unavailable, live values are explicitly shown as unavailable. The password is never stored directly in deck YAML, and `password_ref` must name a non-empty environment variable.
 
 #### Album art
 
@@ -1005,17 +1005,17 @@ Now playing is a global media-control surface that works
 independently of the focused app: it lists every media player the
 system exposes over the session D-Bus (VLC, mpv, Spotify, Firefox
 audio, …) and gives each row a prev / play-pause / next transport.
-It's a *chrome view* — a full-bleed panel that replaces the layout
+It's a *chrome view* — a full-bleed panel that replaces the deck
 area — reached from the bottom chrome. It's deliberately separate
 from the VLC `media` widget (see [VLC media widgets](#vlc-media-widgets)):
 the VLC widget is per-VLC, the browser is per-host. A user with both
-sees the VLC widget in the VLC layout and the browser in the chrome
+sees the VLC widget in the VLC deck and the browser in the chrome
 view, side by side and not interfering.
 
 #### Enable it
 
-Drop a layout that declares the `nowplaying` widget kind into your
-`layouts/` directory. The shipped `mpris.yaml` is exactly this:
+Drop a deck that declares the `nowplaying` widget kind into your
+`decks/` directory. The shipped `mpris.yaml` is exactly this:
 
 ```yaml
 match: [mpris]
@@ -1031,17 +1031,17 @@ application reports `app_id == "mpris"` to the focus watcher. It
 exists so the server can address the chrome view by name; you don't
 need a focus match for any real app.
 
-Once the layout is on disk, restart the daemon (or just wait — YAML
+Once the deck is on disk, restart the daemon (or just wait — YAML
 changes are hot-reloaded). The bottom chrome gains a **music-note
 icon** between the manual-control and settings buttons — the chrome
 media icon, the entry point to the view. Tapping it pins this
 client to the MPRIS chrome view (sends `select_view: "mpris"` over
-the WebSocket). Tapping it again reverts to the focused-app layout
+the WebSocket). Tapping it again reverts to the focused-app deck
 (`clear_view`). The pin is per-client: a phone parked on the view
-doesn't lock a second phone out of its own focus-driven layout.
+doesn't lock a second phone out of its own focus-driven deck.
 
 The *bus connection* is opt-in: a daemon that has no `nowplaying`
-layout never opens the session D-Bus and never pays the bus-connect
+deck never opens the session D-Bus and never pays the bus-connect
 cost (`connect_mpris_backend`). The **button itself is always in the
 chrome** — it is rendered unconditionally alongside manual-control and
 settings (`App.tsx`), like every other chrome control, so the strip
@@ -1077,7 +1077,7 @@ time-window — the indicator fires precisely when the meaning
 changes, no sooner, no later.
 
 A fresh session receives a snapshot frame on connect (right after
-the layout + per-row `media_state` frames), so a phone that joins
+the deck + per-row `media_state` frames), so a phone that joins
 while a track is already playing tints immediately rather than
 waiting for the next boundary transition. On platforms without an
 `MprisBackend` (macOS today) no frames are produced and the icon
@@ -1086,8 +1086,8 @@ graceful-degradation stance the rest of the media surface takes.
 
 #### What the view shows
 
-The chrome view is the same `mpris.yaml` layout, rendered with the
-layout area replaced by the `nowplaying` widget. One row per
+The chrome view is the same `mpris.yaml` deck, rendered with the
+deck area replaced by the `nowplaying` widget. One row per
 discovered player. Each row is topped by an **app-name header** — the
 player's human-readable name from the MPRIS root interface's `Identity`
 (e.g. "Firefox", "VLC media player"), matching GNOME's media control —
@@ -1137,7 +1137,7 @@ The `nowplaying` widget has one optional knob:
 
 - `empty_state: show` (default) — when no players exist, render a
   single "Nothing playing" row so the chrome icon is still
-  reachable. `hide` collapses the cell so a layout that depends on
+  reachable. `hide` collapses the cell so a deck that depends on
   the surface can drop the cell entirely.
 
 The knob governs the *transient* empty state — "nothing is playing
@@ -1157,7 +1157,7 @@ session. There is no per-widget ordering knob (issue #58).
 
 The daemon enumerates every bus name matching
 `org.mpris.MediaPlayer2.*` on the session D-Bus at startup, gated on
-the layout actually containing a `nowplaying` widget — users who
+the deck actually containing a `nowplaying` widget — users who
 don't enable the feature don't pay the bus-connect cost. Two
 exclusions:
 
@@ -1239,7 +1239,7 @@ is out of scope for v1; the daemon streams the image as-is.
 #### Coexistence with the VLC media widget
 
 The two are independent features. The VLC `media` widget is per-VLC:
-it lives in the VLC layout, polls VLC's local HTTP interface for
+it lives in the VLC deck, polls VLC's local HTTP interface for
 playback state, and routes commands through VLC's HTTP API. The
 MPRIS browser is per-host: it lives in the chrome view, watches the
 session D-Bus for every media player, and routes commands through
@@ -1249,7 +1249,7 @@ daemon's dispatch routes `mpris.*` ids to the MPRIS backend and
 everything else to the VLC handler. Adding one feature doesn't
 affect the other.
 
-A user who has both sees the VLC `media` widget in the VLC layout
+A user who has both sees the VLC `media` widget in the VLC deck
 (with VLC's keyboard or HTTP-based transport) and the MPRIS
 now-playing surface in the chrome view (with per-player MPRIS
 transport), side by side and not interfering.
@@ -1264,15 +1264,15 @@ transport), side by side and not interfering.
   card is tapped. Out of scope for v1.
 
 See ADR-0008 for the chrome-view carve-out (the `select_view` /
-`clear_view` mechanism, the `view` field on `LayoutMessage`, and how
+`clear_view` mechanism, the `view` field on `DeckMessage`, and how
 the new general mechanism positions future chrome-shaped views).
 
 ### Running programs list (stage 2 of the switcher design)
 
 A second chrome view lists the host's currently-open windows. Tap
-the new layout-grid icon in the bottom chrome strip and the focused
-app's layout is replaced with a list of every window the platform
-backend can enumerate — labeled by the layout the window would match
+the new deck-grid icon in the bottom chrome strip and the focused
+app's deck is replaced with a list of every window the platform
+backend can enumerate — labeled by the deck the window would match
 against (`firefox.yaml` → row reads "Firefox", with the Simple Icons
 firefox glyph), and falling back to the raw `wm_class` (or
 `gtk_application_id`, then `title` last resort) on a default-fallback
@@ -1289,7 +1289,7 @@ switching into the view is instant (no spinner, no
 
 #### How to enable it
 
-The shipped `layouts/windows.yaml` is the layout the chrome view
+The shipped `decks/windows.yaml` is the deck the chrome view
 pins to:
 
 ```yaml
@@ -1317,11 +1317,11 @@ this platform" empty state, mirroring the now-playing surface's
   platform can enumerate but the desktop is idle" from "the platform
   can't enumerate".
 - **Non-empty snapshot**: one row per window. The label is the
-  matched layout's `display_name` (or the layout id when
-  `display_name` is absent). The icon rides from the matched layout
+  matched deck's `display_name` (or the deck id when
+  `display_name` is absent). The icon rides from the matched deck
   when present and is `null` on the default-fallback path.
 
 The `icon_for_window` helper re-derives on every push (no cache), so
-a layout reload (`POST /reload`) takes effect on the next snapshot
+a deck reload (`POST /reload`) takes effect on the next snapshot
 with no invalidation logic.
 

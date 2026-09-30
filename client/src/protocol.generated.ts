@@ -13,12 +13,12 @@ export const EDITOR_VIEW_ID = "editor";
 /**
  * The daemon's best-known identity of the currently focused application.
  *
- *     Carries the fields the editor's new-layout creation flow (#104) needs to
+ *     Carries the fields the editor's new-deck creation flow (#104) needs to
  *     prefill ``match`` tokens for the detect-and-offer prompt and the
  *     browser-vs-site branch. None when the daemon has not yet seen a focus
  *     event (headless, start-up race).
  *
- *     ``app_id`` and ``wm_class`` are the desktop-identity tokens the layout
+ *     ``app_id`` and ``wm_class`` are the desktop-identity tokens the deck
  *     matcher compares against ``match`` entries. ``title`` is the raw window
  *     title. ``is_browser`` gates the two-prefill browser branch — its value
  *     is the daemon's best-effort substring match against a maintained browser
@@ -36,9 +36,9 @@ export type FocusedAppInfo = {
   is_browser?: boolean;
 };
 
-export type LayoutMessage = {
+export type DeckMessage = {
 
-  type: "layout";
+  type: "deck";
 
   app?: string;
 
@@ -46,7 +46,7 @@ export type LayoutMessage = {
   /**
    * Overflow behaviour for the client's reflow (ADR-0010): ``clip`` drops
    * trailing widgets off-surface, ``shrink-to-fit`` shrinks cells below the
-   * band floor so all fit. Relayed from the layout's ``overflow`` field.
+   * band floor so all fit. Relayed from the deck's ``overflow`` field.
    */
   widgets: Record<string, unknown>[];
 
@@ -64,7 +64,7 @@ export type LayoutMessage = {
 
   theme?: string | null;
   /**
-   * True when this layout was resolved as a *web app*: it matched the focused
+   * True when this deck was resolved as a *web app*: it matched the focused
    * browser's window title (a ``title:`` token) AND the focused app is a
    * browser. The client renders a small globe on the badge. Derived by the
    * daemon, never authored in YAML — a plain title match on a non-browser
@@ -72,27 +72,27 @@ export type LayoutMessage = {
    */
   icon?: Record<string, unknown> | null;
   /**
-   * Non-null when the on-disk layouts failed to load. The client renders the
+   * Non-null when the on-disk decks failed to load. The client renders the
    * message in place of the widget grid; the daemon keeps the last-good
-   * layouts live so a fix on disk restores service without a restart.
+   * decks live so a fix on disk restores service without a restart.
    */
   web_app?: boolean;
   /**
    * The currently focused app's identity, populated when the daemon has a
    * focus backend (never in headless mode). ``None`` before the first focus
-   * event arrives. The editor's new-layout creation flow (#104) uses this to
+   * event arrives. The editor's new-deck creation flow (#104) uses this to
    * prefill ``match`` tokens for the detect-and-offer prompt and the
    * browser-vs-site branch.
    */
   error?: string | null;
   /**
-   * True only on a genuine focus-driven fallback to the default layout —
-   * i.e. the resolution missed every loaded layout and ``store.default()``
+   * True only on a genuine focus-driven fallback to the default deck —
+   * i.e. the resolution missed every loaded deck and ``store.default()``
    * was returned. The client uses this to render the live program next to
-   * the layout name (issues #116 / #123, stage 1). Forced ``False``
-   * whenever the daemon is serving a pinned layout/view (demo
-   * ``?layout=`` pin or chrome ``select_view`` pin), even if the pinned
-   * layout happens to be the default — a pin means "frozen, don't report
+   * the deck name (issues #116 / #123, stage 1). Forced ``False``
+   * whenever the daemon is serving a pinned deck/view (demo
+   * ``?deck=`` pin or chrome ``select_view`` pin), even if the pinned
+   * deck happens to be the default — a pin means "frozen, don't report
    * what's underneath".
    */
   focused_app?: FocusedAppInfo | null;
@@ -113,7 +113,7 @@ export type LayoutMessage = {
  *
  *     Pushed on every transition **and** replayed in the connect snapshot
  *     (``SERVER.push_session_state_snapshot``) so a phone joining mid-lock
- *     isn't stuck showing a stale layout. Never sent at all when the
+ *     isn't stuck showing a stale deck. Never sent at all when the
  *     backend can't observe lock state (no ``session_lock`` /
  *     ``session_blank`` capability) — the client's default false then
  *     reads as "not aware", and no lock view can strand on-screen.
@@ -264,8 +264,8 @@ export type ChromeMediaMessage = {
  *
  *     The daemon sends one of these to every connected session whenever a
  *     sensor the session has subscribed to produces a new reading.
- *     ``id`` is the widget id from the active layout; ``source`` echoes
- *     the bound sensor name so a client with a stale layout can still tell
+ *     ``id`` is the widget id from the active deck; ``source`` echoes
+ *     the bound sensor name so a client with a stale deck can still tell
  *     what the value belongs to; ``unit`` rides along so the client
  *     doesn't have to know a per-source unit registry.
  *
@@ -294,7 +294,7 @@ export type WidgetUpdateMessage = {
 /**
  * Daemon -> client push: a diagnostic event (issue #73).
  *
- *     Fires on focus changes, layout reloads, action attempts,
+ *     Fires on focus changes, deck reloads, action attempts,
  *     authentication outcomes, and MPRIS player / playback transitions.
  *     The client renders nothing on receipt — the events are observability
  *     fodder for an external watcher that has subscribed to this
@@ -350,7 +350,7 @@ export type MacroResultMessage = {
  *     :class:`ConfirmResponseMessage`. The client renders a confirmation
  *     prompt naming the widget (``widget_id``); the widget's action /
  *     command text is *not* sent over the wire — the client already holds
- *     it from the last ``LayoutMessage`` and generates the prompt text
+ *     it from the last ``DeckMessage`` and generates the prompt text
  *     locally (no custom copy from the daemon).
  *     
  */
@@ -373,9 +373,9 @@ export type ConfirmRequestMessage = {
  *     ``window_id`` is the per-session opaque string handle minted by the
  *     platform extension on enumeration (#119) — the client echoes it on
  *     tap (stage 3, #122) but never parses it. ``label`` is the
- *     daemon-derived display string: matched layout's ``display_name`` on
+ *     daemon-derived display string: matched deck's ``display_name`` on
  *     a hit, else a raw identity fallback (``wm_class`` then ``app_id``
- *     then ``title``, last resort). ``icon`` mirrors the matched layout's
+ *     then ``title``, last resort). ``icon`` mirrors the matched deck's
  *     icon when present and is ``null`` on a default-fallback row — the
  *     absence is honest (a generic terminal glyph would imply every xterm
  *     is the same xterm; the list is per-window precisely so they're not).
@@ -414,7 +414,7 @@ export type RunningWindowsMessage = {
   windows: WindowListEntry[];
 };
 
-export type ServerMessage = LayoutMessage | StateMessage | BrightnessMessage | WidgetUpdateMessage | MediaStateMessage | ChromeMediaMessage | EventMessage | MacroResultMessage | ConfirmRequestMessage | RunningWindowsMessage | ErrorMessage;
+export type ServerMessage = DeckMessage | StateMessage | BrightnessMessage | WidgetUpdateMessage | MediaStateMessage | ChromeMediaMessage | EventMessage | MacroResultMessage | ConfirmRequestMessage | RunningWindowsMessage | ErrorMessage;
 
 export type HelloMessage = {
 
@@ -428,9 +428,9 @@ export type HelloMessage = {
    */
   token?: string | null;
   /**
-   * Optional demo pin (``?layout=<name>`` in the client URL): forces this one
-   * session to the named layout regardless of host focus, so a demo device can
-   * be parked on a view. Ignored if the name doesn't match a loaded layout.
+   * Optional demo pin (``?deck=<name>`` in the client URL): forces this one
+   * session to the named deck regardless of host focus, so a demo device can
+   * be parked on a view. Ignored if the name doesn't match a loaded deck.
    */
   password?: string | null;
   /**
@@ -441,7 +441,7 @@ export type HelloMessage = {
    * ``X-Deckd-Trace`` upgrade header takes precedence when both are
    * present; absent both, the daemon mints a fresh short id.
    */
-  layout?: string | null;
+  deck?: string | null;
 
   trace?: string | null;
 };
@@ -521,12 +521,12 @@ export type MediaCommandMessage = {
 /**
  * Client -> daemon: ask the server to render a chrome view (issue #50).
  *
- *     The named view is the ``id`` of a layout whose ``match`` token is the
+ *     The named view is the ``id`` of a deck whose ``match`` token is the
  *     same string (e.g. ``mpris`` resolves to the ``mpris.yaml`` shipping
- *     layout). The server pushes the resolved layout with ``view`` set to
- *     the requested name, so the client can tell focus-driven layouts
+ *     deck). The server pushes the resolved deck with ``view`` set to
+ *     the requested name, so the client can tell focus-driven decks
  *     (``view: null``) from client-requested chrome views. An unknown
- *     name pushes the current focused-app layout with ``view`` set and
+ *     name pushes the current focused-app deck with ``view`` set and
  *     ``error: "view not found"`` so the client can show the failure
  *     without losing the chrome context.
  *     
@@ -541,11 +541,11 @@ export type SelectViewMessage = {
 };
 
 /**
- * Client -> daemon: revert to the focused-app layout (issue #50).
+ * Client -> daemon: revert to the focused-app deck (issue #50).
  *
  *     Undoes a prior ``select_view`` for this session only; other sessions
  *     keep whatever view they have selected (or none). The server pushes
- *     the current focused-app layout with ``view: null``.
+ *     the current focused-app deck with ``view: null``.
  *     
  */
 export type ClearViewMessage = {

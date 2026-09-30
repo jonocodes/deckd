@@ -1,12 +1,12 @@
 # Future: dynamic widget state for MPRIS and runtime content
 
-The current protocol is stateless per widget — the daemon pushes a full layout and the client renders it unchanged until the next layout push. This is intentional for v1 simplicity.
+The current protocol is stateless per widget — the daemon pushes a full deck and the client renders it unchanged until the next deck push. This is intentional for v1 simplicity.
 
-A planned future extension is runtime widget state updates: the daemon pushes delta updates to individual widget properties (label, icon, value) without replacing the whole layout. The primary driver is MPRIS (`org.mpris.MediaPlayer2` on D-Bus) — showing currently playing track, artist, volume, and play/pause state on dedicated widgets.
+A planned future extension is runtime widget state updates: the daemon pushes delta updates to individual widget properties (label, icon, value) without replacing the whole deck. The primary driver is MPRIS (`org.mpris.MediaPlayer2` on D-Bus) — showing currently playing track, artist, volume, and play/pause state on dedicated widgets.
 
 ## Protocol constraint
 
-When extending the `layout` message or adding new message types for this feature, do not design in a way that forecloses per-widget state pushes. A likely shape:
+When extending the `deck` message or adding new message types for this feature, do not design in a way that forecloses per-widget state pushes. A likely shape:
 
 ```json
 { "type": "widget_state", "id": "now-playing", "label": "Bohemian Rhapsody", "icon": "pause" }

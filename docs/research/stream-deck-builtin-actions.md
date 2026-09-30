@@ -26,7 +26,7 @@ things into categories; the deckd-equivalent comparison is roughly:
 The biggest gaps in deckd vs. the Stream Deck built-in surface are:
 
 - **Profiles / Smart Profiles** — automatic profile switching per focused app.
-- **Pages / Folders / Pinned Actions** — nested layouts and "always-there" keys.
+- **Pages / Folders / Pinned Actions** — nested decks and "always-there" keys.
 - **Multi Action / Key Logic / Random Action / Delay** — flow-control actions that
   turn one key into a sequence, a 3-mode press-detector, or a randomised pick.
 - **Switch Profile** — jump to another profile from a key.
@@ -99,7 +99,7 @@ Every entry below cites the source that names the action.
 | **Switch Profile** | Jump to a different profile by name. | [7.4 release notes](https://help.elgato.com/hc/en-us/articles/45347482546193-Elgato-Stream-Deck-7-4-Release-Notes) — "nested Switch Profile actions inside a Multi Action could lose their internal references". Also referenced in the [SDK Profiles guide](https://docs.elgato.com/streamdeck/sdk/guides/profiles). |
 | **Back to Profile** / "Auto Software Detection back-to-profile" action | Switch back to the previous profile after auto-switching. | [7.3 release notes](https://help.elgato.com/hc/en-us/articles/44411141578001-Elgato-Stream-Deck-7-3-0-Release-Notes) — "the **Auto Software Detection back-to-profile action**" |
 | **Toggle Virtual Stream Deck** | Toggle an on-screen virtual Stream Deck window. | [7.4 release notes](https://help.elgato.com/hc/en-us/articles/45347482546193-Elgato-Stream-Deck-7-4-Release-Notes) — "Toggle Virtual Stream Deck key could appear visually stuck" |
-| **Folder** | Opens a sub-layout (can be nested). Supports per-folder auto-exit (up to 60s). | [Explorer: Folders](https://www.elgato.com/us/en/explorer/products/stream-deck/how-to-use-folders-stream-deck/) |
+| **Folder** | Opens a sub-deck (can be nested). Supports per-folder auto-exit (up to 60s). | [Explorer: Folders](https://www.elgato.com/us/en/explorer/products/stream-deck/how-to-use-folders-stream-deck/) |
 
 > **Note on categories that I could *not* verify as containing specific built-in
 > named actions in current 7.x:** Stream Deck's product page advertises per-app
@@ -134,17 +134,17 @@ Every entry below cites the source that names the action.
 
 ---
 
-## 3. Layout / profile concepts (not actions, but worth knowing)
+## 3. Deck / profile concepts (not actions, but worth knowing)
 
 These are *features* the app exposes; they're configured in the Preferences
 window and don't appear as draggable actions on a key:
 
 | Concept | What it does | Source |
 |---|---|---|
-| **Profiles** | Per-device layout sets. Switchable manually or automatically. | [SDK Profiles guide](https://docs.elgato.com/streamdeck/sdk/guides/profiles); [Elgato product page "Profiles" comparison row](https://www.elgato.com/us/en/p/stream-deck) |
+| **Profiles** | Per-device deck sets. Switchable manually or automatically. | [SDK Profiles guide](https://docs.elgato.com/streamdeck/sdk/guides/profiles); [Elgato product page "Profiles" comparison row](https://www.elgato.com/us/en/p/stream-deck) |
 | **Smart Profiles** | Auto-switch the active profile based on the focused app. Per-profile → "Application" dropdown. | [Explorer: Smart Profiles](https://www.elgato.com/us/en/explorer/products/stream-deck/smart-profiles-stream-deck/) |
 | **Pages** | Multiple pages of keys per profile (think multiple Stream Decks in one). | [Elgato product page comparison table](https://www.elgato.com/us/en/p/stream-deck) |
-| **Folders** | Nested sub-layouts (a key opens a new key grid). | [Explorer: Folders](https://www.elgato.com/us/en/explorer/products/stream-deck/how-to-use-folders-stream-deck/) |
+| **Folders** | Nested sub-decks (a key opens a new key grid). | [Explorer: Folders](https://www.elgato.com/us/en/explorer/products/stream-deck/how-to-use-folders-stream-deck/) |
 | **Pinned Actions** | Right-click → Pin Action. Pinned to a key position across all pages/folders in the same profile. | [6.6 beta changelog](https://help.elgato.com/hc/en-us/articles/25430103180557-Stream-Deck-6-6-Beta-Changelog); [Explorer: Pinned Actions](https://www.elgato.com/us/en/explorer/products/stream-deck/pinned-actions-stream-deck/) |
 | **Key Logic (single key, multi-mode)** | Distinct from the "Key Logic" action above — refers to the *key press behaviour* (single press, double press, press-and-hold) that any action can be configured to respond to. Elgato's product page and 7.0 release notes describe this as the same capability surface. | [Elgato product page "Key Logic" row](https://www.elgato.com/us/en/p/stream-deck); [7.0 release notes](https://help.elgato.com/hc/en-us/articles/38011940576273-Elgato-Stream-Deck-7-0-Release-Notes) |
 | **Multi-state actions** | Two-state (on/off) actions are supported via the manifest; e.g., Mute/Unmute. | [SDK Keys guide — Multi-State Keys](https://docs.elgato.com/streamdeck/sdk/guides/keys#multi-state-keys) |

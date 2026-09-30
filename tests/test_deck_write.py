@@ -1,17 +1,17 @@
-"""Tests for the layout write API primitives (issues #99 / #84 / #85).
+"""Tests for the deck write API primitives (issues #99 / #84 / #85).
 
-Covers the three unit seams behind the ``PUT /layouts/{id}`` (save) and
-``POST /layouts`` (create) endpoints:
+Covers the three unit seams behind the ``PUT /decks/{id}`` (save) and
+``POST /decks`` (create) endpoints:
 
-* ``slugify_layout_id`` — derives a filesystem-safe filename stem from a
-  layout's primary ``match`` token (S1).
-* the layout-level duplicate widget-id validator on :class:`Layout` (S2).
-* ``reconcile_and_write_layout`` — comment-preserving reconcile of a
+* ``slugify_deck_id`` — derives a filesystem-safe filename stem from a
+  deck's primary ``match`` token (S1).
+* the deck-level duplicate widget-id validator on :class:`Deck` (S2).
+* ``reconcile_and_write_deck`` — comment-preserving reconcile of a
   client snapshot onto a fresh on-disk YAML, atomic temp-write +
   ``os.replace`` (S3).
 
 The HTTP endpoints themselves are integration-tested in
-``tests/test_layout_write_api.py`` (S4).
+``tests/test_deck_write_api.py`` (S4).
 """
 from __future__ import annotations
 
@@ -19,11 +19,11 @@ from pathlib import Path
 
 import pytest
 
-from deckd.layouts import Layout, reconcile_and_write_layout, slugify_layout_id
+from deckd.decks import Deck, reconcile_and_write_deck, slugify_deck_id
 
 
 # ---------------------------------------------------------------------------
-# S1 — slugify_layout_id
+# S1 — slugify_deck_id
 # ---------------------------------------------------------------------------
 
 
@@ -40,18 +40,18 @@ from deckd.layouts import Layout, reconcile_and_write_layout, slugify_layout_id
         ("My Cool App", "my-cool-app"),
     ],
 )
-def test_slugify_layout_id(match_token: str, expected: str) -> None:
-    assert slugify_layout_id(match_token) == expected
+def test_slugify_deck_id(match_token: str, expected: str) -> None:
+    assert slugify_deck_id(match_token) == expected
 
 
-def test_slugify_layout_id_rejects_blank_result() -> None:
+def test_slugify_deck_id_rejects_blank_result() -> None:
     """A match token that slugifies to the empty string can't name a file."""
     with pytest.raises(ValueError):
-        slugify_layout_id("***")
+        slugify_deck_id("***")
 
 
 # ---------------------------------------------------------------------------
-# S2 — layout-level duplicate widget-id validator
+# S2 — deck-level duplicate widget-id validator
 # ---------------------------------------------------------------------------
 
 
@@ -59,22 +59,22 @@ def _widget(wid: str, kind: str = "button") -> dict:
     return {"id": wid, "kind": kind}
 
 
-def test_layout_accepts_unique_widget_ids() -> None:
-    layout = Layout.model_validate(
+def test_deck_accepts_unique_widget_ids() -> None:
+    deck = Deck.model_validate(
         {
             "match": ["firefox"],
             "widgets": [_widget("back"), _widget("forward")],
         }
     )
-    assert [w.id for w in layout.widgets] == ["back", "forward"]
+    assert [w.id for w in deck.widgets] == ["back", "forward"]
 
 
-def test_layout_rejects_duplicate_widget_ids() -> None:
-    """#85 layout-level duplicate-id validator: two same ids is a schema error."""
+def test_deck_rejects_duplicate_widget_ids() -> None:
+    """#85 deck-level duplicate-id validator: two same ids is a schema error."""
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError) as exc_info:
-        Layout.model_validate(
+        Deck.model_validate(
             {
                 "match": ["firefox"],
                 "widgets": [_widget("back"), _widget("back")],
@@ -86,7 +86,7 @@ def test_layout_rejects_duplicate_widget_ids() -> None:
 
 
  # ---------------------------------------------------------------------------
- # S3 — reconcile_and_write_layout (comment-preserving, atomic, canonical)
+ # S3 — reconcile_and_write_deck (comment-preserving, atomic, canonical)
  # ---------------------------------------------------------------------------
 
 
@@ -94,10 +94,10 @@ import os
 
 from ruamel.yaml import YAML
 
-from deckd.layouts import load_layout
+from deckd.decks import load_deck
 
 
-def _layout_dict(match: list[str], widgets: list[dict], **extra: object) -> dict:
+def _deck_dict(match: list[str], widgets: list[dict], **extra: object) -> dict:
     out: dict = {"match": match, "widgets": widgets}
     out.update(extra)
     return out
@@ -119,14 +119,14 @@ def _read_yaml(path: Path) -> dict:
 
 def _canonical(path: Path) -> dict:
     """The post-save canonical shape a 200 response echoes."""
-    return load_layout(path).model_dump()
+    return load_deck(path).model_dump()
 
 
 def test_write_creates_new_file_from_scratch(tmp_path: Path) -> None:
     path = tmp_path / "slack.yaml"
-    snap = _layout_dict(["Slack"], [_button("snooze", "Snooze", action_shell="echo hi")])
+    snap = _deck_dict(["Slack"], [_button("snooze", "Snooze", action_shell="echo hi")])
 
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     assert path.exists()
     on_disk = _read_yaml(path)
@@ -141,7 +141,7 @@ def test_write_creates_new_file_from_scratch(tmp_path: Path) -> None:
 def test_write_preserves_comments_on_unchanged_structure(tmp_path: Path) -> None:
     path = tmp_path / "firefox.yaml"
     path.write_text(
-        "# top comment explaining the layout\n"
+        "# top comment explaining the deck\n"
         "match:\n"
         "  - firefox\n"
         "widgets:\n"
@@ -152,12 +152,12 @@ def test_write_preserves_comments_on_unchanged_structure(tmp_path: Path) -> None
         "    action:\n"
         "      shell: echo back\n"
     )
-    snap = _layout_dict(["firefox"], [_button("back", "Back", action_shell="echo back")])
+    snap = _deck_dict(["firefox"], [_button("back", "Back", action_shell="echo back")])
 
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     text = path.read_text()
-    assert "# top comment explaining the layout" in text
+    assert "# top comment explaining the deck" in text
     assert "# a button for going back" in text
 
 
@@ -168,9 +168,9 @@ def test_write_edits_scalar_field_preserving_widget_comments(tmp_path: Path) -> 
         "    # the label comment must survive a label edit\n"
         "    label: Old\n    action:\n      shell: old-cmd\n"
     )
-    snap = _layout_dict(["app"], [_button("go", "New", action_shell="new-cmd")])
+    snap = _deck_dict(["app"], [_button("go", "New", action_shell="new-cmd")])
 
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     text = path.read_text()
     assert "# the label comment must survive a label edit" in text
@@ -185,9 +185,9 @@ def test_write_reorders_widgets_by_id(tmp_path: Path) -> None:
         "match:\n  - app\n"
         "widgets:\n  - id: a\n    kind: button\n  - id: b\n    kind: button\n"
     )
-    snap = _layout_dict(["app"], [_button("b"), _button("a")])
+    snap = _deck_dict(["app"], [_button("b"), _button("a")])
 
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     ids = [w["id"] for w in _read_yaml(path)["widgets"]]
     assert ids == ["b", "a"]
@@ -201,12 +201,12 @@ def test_write_adds_and_deletes_widgets_by_id(tmp_path: Path) -> None:
         "  - id: keep\n    kind: button\n"
         "  - id: drop\n    kind: button\n"
     )
-    snap = _layout_dict(
+    snap = _deck_dict(
         ["app"],
         [_button("keep"), _button("added", "Added", action_shell="echo added")],
     )
 
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     ids = [w["id"] for w in _read_yaml(path)["widgets"]]
     assert ids == ["keep", "added"]
@@ -218,9 +218,9 @@ def test_write_replaces_match_sequence_atomically(tmp_path: Path) -> None:
     path.write_text(
         "match:\n  - app\n  - alias\nwidgets:\n  - id: w\n    kind: button\n"
     )
-    snap = _layout_dict(["only-app"], [_button("w")])
+    snap = _deck_dict(["only-app"], [_button("w")])
 
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     on_disk = _read_yaml(path)
     assert on_disk["match"] == ["only-app"]
@@ -234,9 +234,9 @@ def test_write_reconciles_nested_icon_map(tmp_path: Path) -> None:
         "widgets: []\n"
         "icon:\n  source: lucide\n  name: old-name\n"
     )
-    snap = _layout_dict("match" and ["app"], [], icon={"source": "lucide", "name": "new-name"})
+    snap = _deck_dict("match" and ["app"], [], icon={"source": "lucide", "name": "new-name"})
 
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     on_disk = _read_yaml(path)
     assert on_disk["icon"]["source"] == "lucide"
@@ -267,9 +267,9 @@ def test_write_round_trips_widget_color_unchanged(tmp_path: Path, color: str) ->
     path.write_text("match:\n  - app\nwidgets:\n  - id: go\n    kind: button\n")
     widget = _button("go", "Go")
     widget["color"] = color
-    snap = _layout_dict(["app"], [widget])
+    snap = _deck_dict(["app"], [widget])
 
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     assert _read_yaml(path)["widgets"][0]["color"] == color
     # And through a full parse, which is what the 200 response echoes back.
@@ -287,9 +287,9 @@ def test_write_clearing_widget_color_drops_the_key(tmp_path: Path) -> None:
         "match:\n  - app\n"
         'widgets:\n  - id: go\n    kind: button\n    color: "#1e3a8a"\n'
     )
-    snap = _layout_dict(["app"], [_button("go")])
+    snap = _deck_dict(["app"], [_button("go")])
 
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     assert "color" not in _read_yaml(path)["widgets"][0]
     assert _canonical(path)["widgets"][0]["color"] is None
@@ -298,9 +298,9 @@ def test_write_clearing_widget_color_drops_the_key(tmp_path: Path) -> None:
 def test_write_is_atomic_no_tempfile_leak_on_success(tmp_path: Path) -> None:
     path = tmp_path / "app.yaml"
     path.write_text("match:\n  - app\nwidgets: []\n")
-    snap = _layout_dict(["app"], [])
+    snap = _deck_dict(["app"], [])
 
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     leftovers = [p for p in tmp_path.iterdir() if p.name.endswith(".tmp") or ".yaml.tmp" in p.name]
     assert leftovers == []
@@ -320,7 +320,7 @@ def test_write_removes_top_level_key_dropped_from_snapshot(tmp_path: Path) -> No
     # Snapshot drops display_name and theme entirely.
     snap = {"match": ["app"], "widgets": []}
 
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     on_disk = _read_yaml(path)
     assert "display_name" not in on_disk
@@ -329,12 +329,12 @@ def test_write_removes_top_level_key_dropped_from_snapshot(tmp_path: Path) -> No
 
 def test_write_renders_indented_sequences_matching_repo_style(tmp_path: Path) -> None:
     """A fresh file emits block sequences indented two spaces under their key,
-    matching every shipping layout (``match:\n  - firefox``), not ruamel's
+    matching every shipping deck (``match:\n  - firefox``), not ruamel's
     default flush-left ``match:\n- firefox``. Valid YAML either way, but the
     repo's hand-authored style is the convention the editor writes into."""
     path = tmp_path / "slack.yaml"
-    snap = _layout_dict(["Slack"], [_button("snooze", "Snooze")])
-    reconcile_and_write_layout(path, snap)
+    snap = _deck_dict(["Slack"], [_button("snooze", "Snooze")])
+    reconcile_and_write_deck(path, snap)
     text = path.read_text()
     assert "match:\n  - Slack\n" in text
     assert "  - id: snooze\n" in text
@@ -348,7 +348,7 @@ def test_write_preserves_comments_and_key_order_on_unchanged_widget(
 
     Regression for the reconcile reassigning every scalar key: reassigning
     an unchanged value drops ruamel's attached comment and reorders the key
-    to the snapshot's order, mangling hand-authored layouts on save. The
+    to the snapshot's order, mangling hand-authored decks on save. The
     fix skips reassignment when the value is unchanged so the original node
     (comment + position) rides along untouched.
     """
@@ -370,14 +370,14 @@ def test_write_preserves_comments_and_key_order_on_unchanged_widget(
         "      key: alt+Right\n"
     )
     # Edit only the `back` widget; `forward` is byte-identical to the source.
-    snap = _layout_dict(
+    snap = _deck_dict(
         ["firefox"],
         [
             {"id": "back", "kind": "button", "label": "Backward", "action": {"key": "alt+Left"}},
             {"id": "forward", "kind": "button", "label": "Forward", "action": {"key": "alt+Right"}},
         ],
     )
-    reconcile_and_write_layout(path, snap)
+    reconcile_and_write_deck(path, snap)
 
     text = path.read_text()
     # The unchanged widget's comment survives at its original position...

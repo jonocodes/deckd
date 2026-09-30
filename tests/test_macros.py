@@ -16,13 +16,13 @@ from deckd.actions import (
     execute as run_action,
     execute_macro,
 )
-from deckd.layouts import Action, Macro, MacroStep, Widget
+from deckd.decks import Action, Macro, MacroStep, Widget
 
 
 def _ctx(factory: FakeDbusBusFactory | None = None) -> ActionContext:
     return ActionContext(
-        send_layout=lambda: asyncio.sleep(0),
-        get_current_layout=lambda: cast("Layout", None),
+        send_deck=lambda: asyncio.sleep(0),
+        get_current_deck=lambda: cast("Deck", None),
         current_app="default",
         key_sink=None,
         dbus_bus_factory=cast("Any", factory) if factory else None,
@@ -356,9 +356,9 @@ async def test_macro_press_sends_result_to_client(tmp_path) -> None:
 
     actions_mod._STEP_DISPATCH["key"] = trail_step
 
-    layouts_dir = tmp_path / "layouts"
-    layouts_dir.mkdir()
-    (layouts_dir / "default.yaml").write_text("""
+    decks_dir = tmp_path / "decks"
+    decks_dir.mkdir()
+    (decks_dir / "default.yaml").write_text("""
 match:
   - default
 widgets:
@@ -375,7 +375,7 @@ widgets:
 
     from conftest import make_test_server
 
-    server, _scroll, _key, _dbus = make_test_server(layouts_dir=layouts_dir)
+    server, _scroll, _key, _dbus = make_test_server(decks_dir=decks_dir)
 
     from aiohttp.test_utils import TestServer as _TestServer
     test_srv = _TestServer(server.app, host="127.0.0.1")
@@ -416,9 +416,9 @@ async def test_macro_failure_sends_result_with_error(tmp_path) -> None:
 
     actions_mod._STEP_DISPATCH["key"] = failing_step
 
-    layouts_dir = tmp_path / "layouts"
-    layouts_dir.mkdir()
-    (layouts_dir / "default.yaml").write_text("""
+    decks_dir = tmp_path / "decks"
+    decks_dir.mkdir()
+    (decks_dir / "default.yaml").write_text("""
 match:
   - default
 widgets:
@@ -433,7 +433,7 @@ widgets:
 
     from conftest import make_test_server
 
-    server, _scroll, _key, _dbus = make_test_server(layouts_dir=layouts_dir)
+    server, _scroll, _key, _dbus = make_test_server(decks_dir=decks_dir)
 
     from aiohttp.test_utils import TestServer as _TestServer
     test_srv = _TestServer(server.app, host="127.0.0.1")

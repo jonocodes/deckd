@@ -124,7 +124,7 @@ flag is removed — the module had no users yet.
   would break that.
 - **Hot reload of the bind list** — `start()` reads the bind specs
   once. Operators changing bind addresses have to restart the daemon.
-  This matches every other config knob (layouts, password, port) and
+  This matches every other config knob (decks, password, port) and
   avoids the question of how to close an existing listener cleanly.
 
 ## Consequences

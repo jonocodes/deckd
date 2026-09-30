@@ -146,7 +146,7 @@ function windowSnapshot(win) {
     return {
         window_id: windowId(win),
         // resourceClass is the WM_CLASS class slot — the primary identity
-        // token the layout matcher compares against.
+        // token the deck matcher compares against.
         wm_class: win.resourceClass || null,
         // KDE exposes no GTK application id; leave it null (GNOME fills it
         // for GTK apps). desktopFileName — KDE's .desktop id — is the
