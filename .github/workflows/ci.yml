@@ -33,35 +33,49 @@ jobs:
       - name: Install Python deps
         run: pip install -e ".[dev,uinput,dbus]"
 
+      # `npm ci` (not `npm install`) so the runner resolves the exact
+      # versions in client/package-lock.json — a resolver drift in CI is
+      # the opposite of the deterministic ladder #77 asks for.
       - name: Install client deps
-        run: npm install
+        run: npm ci
         working-directory: client
 
       # Each step is named so a failure points at the subsystem
       # (#77 — "failures identify the relevant subsystem and remediation
       # rather than only returning a generic nonzero result"). The
       # recipe these mirror is `just test-all`; run it locally to
-      # reproduce a CI failure.
-      - name: "[1/7] pyright daemon (Python typecheck)"
+      # reproduce a CI failure. Keep the ubuntu `test` job and `just
+      # test-all` in lockstep: same steps, same order, same numbering.
+      # (The macOS / Nix / 3.12 jobs below are CI-only.)
+      - name: "[1/8] pyright daemon (Python typecheck)"
         run: |
           pip install pyright
           pyright --pythonpath "$(command -v python)" daemon
 
-      - name: "[2/7] pytest (Python unit + integration)"
+      - name: "[2/8] pytest (Python unit + integration)"
         run: pytest
 
-      - name: "[3/7] tsc --noEmit (TypeScript typecheck)"
+      # The GNOME extension and KWin script are the upstream half of the
+      # focus wire protocol; these pure-node contracts guard the producer
+      # shape and parser reconciliation without a compositor (#130). They
+      # also run under `just test` locally.
+      - name: "[3/8] focus-wire contracts (GNOME + KWin producers)"
+        run: |
+          node scripts/test_focus_wire_shape.mjs
+          node scripts/test_kwin_focus_bridge.mjs
+
+      - name: "[4/8] tsc --noEmit (TypeScript typecheck)"
         run: npx tsc --noEmit
         working-directory: client
 
-      - name: "[4/7] vitest unit (client unit tests)"
+      - name: "[5/8] vitest unit (client unit tests)"
         run: npm run test:unit
         working-directory: client
 
       # Build the client before e2e — playwright serves client/dist, so
       # any TypeScript change in client/src must be bundled for the
       # browser to pick it up.
-      - name: "[5/7] playwright e2e (client end-to-end)"
+      - name: "[6/8] playwright e2e (client end-to-end)"
         run: |
           # No nix store on the runner, so find-chromium.mjs returns undefined
           # and Playwright falls back to its own managed browser — which must
@@ -72,10 +86,10 @@ jobs:
           npm run test:e2e
         working-directory: client
 
-      - name: "[6/7] smoke (daemon end-to-end via stable fixture #77)"
+      - name: "[7/8] smoke (daemon end-to-end via stable fixture #77)"
         run: python -u scripts/smoke.py
 
-      - name: "[7/7] eslint (client lint)"
+      - name: "[8/8] eslint (client lint)"
         run: npm run lint
         working-directory: client
 

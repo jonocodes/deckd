@@ -300,15 +300,16 @@ Run these in order. Each step must pass before the next.
 |---|---|---|
 | 1. Python typecheck | `pyright daemon` | Type correctness of the daemon |
 | 2. Python tests | `pytest` (or `just test`) | Full unit + integration test suite, including the protocol drift guard (#76) |
-| 3. TypeScript compile | `cd client && npx tsc --noEmit` | Type correctness of the client |
-| 4. Client unit tests | `cd client && npm run test:unit` | Vitest unit tests |
-| 5. Client E2E tests | `cd client && npm run test:e2e` | Playwright browser tests (boots daemon) |
-| 6. Smoke test | `just smoke` | End-to-end: boots daemon, connects WS, fires all action primitives against a stable fixture (`scripts/smoke_fixtures/`, #77) |
-| 7. Client lint | `cd client && npm run lint` | ESLint |
+| 3. Focus-wire contracts | `node scripts/test_focus_wire_shape.mjs && node scripts/test_kwin_focus_bridge.mjs` | GNOME + KWin producers agree on the window-JSON shape and the daemon parser reconciles it (pure, no compositor; #130) |
+| 4. TypeScript compile | `cd client && npx tsc --noEmit` | Type correctness of the client |
+| 5. Client unit tests | `cd client && npm run test:unit` | Vitest unit tests |
+| 6. Client E2E tests | `cd client && npm run test:e2e` | Playwright browser tests (boots daemon) |
+| 7. Smoke test | `just smoke` | End-to-end: boots daemon, connects WS, fires all action primitives against a stable fixture (`scripts/smoke_fixtures/`, #77) |
+| 8. Client lint | `cd client && npm run lint` | ESLint |
 
-Step 1 and 3 are cheap type safety gates. Always run at least steps 1–3 before considering changes complete.
+Steps 1, 3, and 4 are cheap gates. Always run at least steps 1–4 before considering changes complete.
 
-One-command reproduction of CI locally (#77): `just test-all` runs the whole ladder in order, with the same per-step headers CI emits so failures identify the subsystem. The GitHub Actions workflow (`.github/workflows/ci.yml`) mirrors the same ladder.
+One-command reproduction of CI locally (#77): `just test-all` runs the whole ladder in order, with the same per-step headers CI emits so failures identify the subsystem and how to re-run. The ubuntu `test` job in `.github/workflows/ci.yml` mirrors this ladder step-for-step, including `npm ci` for a lockfile-exact install; the macOS, Nix, and 3.12 jobs are CI-only (run `just nix-check` for the Nix one). `tests/test_ci_ladder_parity.py` fails the build if the two ladders drift.
 
 Nix packaging has its own ladder entry: `just nix-check` (or `nix flake check -L`) builds `packages.deckd` and the watcher bundles, evaluates the NixOS and home-manager modules against dummy configs (`nix/tests/modules.nix`), unit-tests the activation scripts in a sandbox (`nix/tests/scripts.nix`), and boots the packaged daemon on loopback to check `/health`, the bundled client, and the bundled decks (`nix/tests/smoke.nix`).
 
@@ -338,6 +339,7 @@ For each concern, exactly one artifact is authoritative. Others derive from it.
 | CLI flags | `daemon/deckd/__main__.py` (argparse) | The running daemon is self-documenting via `--help` |
 | HTTP endpoints | `daemon/deckd/server.py` (aiohttp routes) | `/health`, `/diag`, `/decks`, `/metrics`, `/media/...`, `/mpris/...`; mutating: `POST /reload`, `POST /deck/{id}` (runtime override), `PUT /decks/{id}` (save), `POST /decks` (create) |
 | Build/test commands | `Justfile` | All common commands in one place |
+| Verification ladder | `Justfile` (`test-all`) | `docs/ONBOARDING.md` lists the steps; the ubuntu `test` job in `.github/workflows/ci.yml` mirrors them; drift guard in `tests/test_ci_ladder_parity.py` |
 | Client rendering | `client/src/App.tsx` | Root component; widget components render per their kind |
 | Triage labels | `docs/agents/triage-labels.md` | Five-label triage vocabulary + the `human-verification-required` lifecycle state |
 | Research notes | `docs/research/` | Built-in actions catalog, etc. |

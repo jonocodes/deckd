@@ -245,11 +245,18 @@ icons:
     fi
 
 # Run the full verification ladder (docs/ONBOARDING.md) in order:
-# typechecks first (cheap gates), then Python unit/integration, then
-# TypeScript compile, client unit tests, Playwright e2e, the daemon
-# smoke test, and finally the lint sweep. Each step must pass before
-# the next. Skips nothing; anything that needs human-on-hardware
-# verification lives above this ladder (see docs/TESTING.md).
+# typechecks first (cheap gates), then Python unit/integration + the
+# producer/parser shape contracts, then TypeScript compile, client unit
+# tests, Playwright e2e, the daemon smoke test, and finally the lint
+# sweep. Each step must pass before the next. Skips nothing; anything
+# that needs human-on-hardware verification lives above this ladder
+# (see docs/TESTING.md).
+#
+# This mirrors the ubuntu `test` job in `.github/workflows/ci.yml` 1:1 —
+# same steps, same order, same numbering — so a failure there reproduces
+# exactly here. (CI's macOS, Nix, and 3.12 jobs have no local twin; run
+# `just nix-check` for the Nix one.) On failure the ERR trap names the
+# failed subsystem and how to re-run; see #77.
 test-all:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -259,25 +266,38 @@ test-all:
     if [ -x .venv/bin/python ]; then
         export PATH="$PWD/.venv/bin:$PATH"
     fi
-    echo "== 1/7  pyright daemon =="
+    # On any failure, say *which* subsystem broke and how to reproduce it
+    # (#77 AC: failures name the subsystem and remediation, not just a
+    # bare nonzero exit). STEP is reassigned before every step below.
+    STEP=""
+    trap 'code=$?; if [ -n "${STEP:-}" ]; then echo "" >&2; echo "FAILED: $STEP (exit $code)" >&2; echo "Fix the failure above, then re-run: just test-all" >&2; fi; exit $code' ERR
+    STEP="1/8  pyright daemon"; echo "== $STEP =="
     # --pythonpath resolves imports against whichever env is active
     # (flox cache or ./.venv); see [tool.pyright] in pyproject.toml.
     pyright --pythonpath "$(command -v python)" daemon
-    echo "== 2/7  pytest =="
+    STEP="2/8  pytest"; echo "== $STEP =="
     pytest
-    echo "== 3/7  tsc --noEmit =="
+    # The GNOME extension and KWin script are the upstream half of the
+    # focus wire protocol; these pure-node contracts guard the producer
+    # shape and parser reconciliation without a compositor (#130). They
+    # run under `just test` too — keep the ladder a superset of it.
+    STEP="3/8  focus-wire contracts"; echo "== $STEP =="
+    node scripts/test_focus_wire_shape.mjs
+    node scripts/test_kwin_focus_bridge.mjs
+    STEP="4/8  tsc --noEmit"; echo "== $STEP =="
     (cd client && npx tsc --noEmit)
-    echo "== 4/7  vitest unit =="
+    STEP="5/8  vitest unit"; echo "== $STEP =="
     (cd client && npm run test:unit)
+    STEP="6/8  playwright e2e"; echo "== $STEP =="
     # Build the client before e2e — playwright serves client/dist, so
     # any TypeScript change in client/src must be bundled for the
-    # browser to pick it up.
+    # browser to pick it up. The build lives in this step (not the vitest
+    # one) so a bundling failure is attributed to e2e, matching CI.
     (cd client && npm run build)
-    echo "== 5/7  playwright e2e =="
     (cd client && npm run test:e2e)
-    echo "== 6/7  smoke =="
+    STEP="7/8  smoke"; echo "== $STEP =="
     just smoke
-    echo "== 7/7  eslint =="
+    STEP="8/8  eslint"; echo "== $STEP =="
     (cd client && npm run lint)
 
 # Run the test suite.
