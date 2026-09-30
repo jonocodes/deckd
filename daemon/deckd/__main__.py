@@ -81,6 +81,23 @@ def _overlay_dir_for(layouts_dir: Path) -> Path:
     return layouts_dir.parent / f"{layouts_dir.name}.{suffix}"
 
 
+def _sink_failure_hint(exc: BaseException) -> str:
+    """One-line, copy-pasteable hint for the common Linux uinput failures.
+
+    The packaged AppImage's user has no checkout to read, so the permission
+    hint names the helper script they were given. Empty for anything else —
+    the bare exception is enough there.
+    """
+    if isinstance(exc, PermissionError):
+        return (
+            " — /dev/uinput is not accessible: install the udev rule or run "
+            "the Linux AppImage's install-system-integration.sh"
+        )
+    if isinstance(exc, FileNotFoundError):
+        return " — /dev/uinput is missing: load the uinput kernel module"
+    return ""
+
+
 def _build_sinks() -> tuple[object | None, ScrollSink, KeySink]:
     """Pick the (device, scroll, key) sinks for this process.
 
@@ -106,8 +123,11 @@ def _build_sinks() -> tuple[object | None, ScrollSink, KeySink]:
         sink = UinputSink()
         return sink, sink, sink
     except Exception as exc:
+        hint = _sink_failure_hint(exc) if sys.platform != "darwin" else ""
         logging.getLogger("deckd").warning(
-            "platform sink unavailable; falling back to logging only: %s", exc
+            "platform sink unavailable; falling back to logging only: %s%s",
+            exc,
+            hint,
         )
         return None, LoggingScrollSink(), LoggingKeySink()
 

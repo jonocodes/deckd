@@ -683,14 +683,15 @@ If `libfuse2` is missing (Ubuntu 22.04+/Debian 12 no longer ship it), run with `
 
 #### uinput, the focus watcher, and autostart
 
-Two things the AppImage can't do by itself. `/dev/uinput` needs a udev rule and the `input` group (a root action), and the focus watcher is desktop-specific. The AppImage carries both — the rule and the GNOME/KWin sources sit under `usr/share/deckd/integration` — and a `deckd-install-system-integration.sh` is attached next to every release. Run it once with `sudo`, pointing at the AppImage:
+Two things the AppImage can't do by itself. `/dev/uinput` needs a udev rule (a root action), and the focus watcher is desktop-specific. The AppImage carries both — the rule and the GNOME/KWin sources sit under `usr/share/deckd/integration` — and a `deckd-install-system-integration.sh` is attached next to every release. Run it once, pointing at the AppImage: `pkexec` on a desktop gives the native password dialog, `sudo` is the headless/SSH fallback.
 
 ```sh
 chmod +x deckd-install-system-integration.sh
-sudo ./deckd-install-system-integration.sh ./deckd-<version>-x86_64.AppImage
+pkexec ./deckd-install-system-integration.sh ./deckd-<version>-x86_64.AppImage
+# headless: sudo ./deckd-install-system-integration.sh ./deckd-<version>-x86_64.AppImage
 ```
 
-It installs the udev rule and adds you to `input`, installs the GNOME Shell extension or KWin script for the detected desktop (override with `--desktop gnome|kde`), installs the deckd mark into `~/.local/share/icons/hicolor` (`Icon=deckd` on the autostart entry resolves to it), and writes `~/.config/autostart/deckd.desktop` so deckd starts with your session. **Log out and back in** for the group change to take effect. The autostart entry points at the AppImage's path, so keep it where it is (or re-run the helper after moving it).
+It installs the udev rule, the GNOME Shell extension or KWin script for the detected desktop (override with `--desktop gnome|kde`), the deckd mark into `~/.local/share/icons/hicolor` (`Icon=deckd` on the autostart entry resolves to it), and `~/.config/autostart/deckd.desktop` so deckd starts with your session. The rule carries `TAG+="uaccess"`, so the active session user gets `/dev/uinput` access — **no relogin needed**. For a linger/headless setup (a service that runs with no active session), pass `--add-group` to also add the user to `input`; that one does need a logout. The autostart entry points at the AppImage's path, so keep it where it is (or re-run the helper after moving it).
 
 Re-run with `--uninstall` to undo the install. It removes exactly what the helper created — recorded per user in `/var/lib/deckd/system-integration.<user>.state` — so a pre-existing `input` membership or focus extension (say, from a NixOS/home-manager install) is left alone. If the AppImage runtime never sees `--appimage-extract` (a binfmt wrapper such as NixOS's `programs.appimage` runs the payload directly), the helper falls back to the bundled launcher's `--extract-integration` and still works.
 

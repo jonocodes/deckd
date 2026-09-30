@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
-# deckd Linux system integration (issue #168).
+# deckd Linux system integration (issues #168, #173).
 #
-# The AppImage cannot write /etc/udev/rules.d or add groups — that is a root
-# action on every channel. This script does the root step (the udev rule +
-# `input` group) *and* the user-level pieces the AppImage can't do by itself
-# (the desktop focus watcher and an XDG autostart entry), so one `sudo` run
-# finishes the install.
+# The AppImage cannot write /etc/udev/rules.d — that is a root action on every
+# channel. This script does the root step (the udev rule) *and* the user-level
+# pieces the AppImage can't do by itself (the desktop focus watcher, the app
+# icon, and an XDG autostart entry), so one elevated run finishes the install.
+#
+# On a desktop, run it with `pkexec` for the native password dialog; on a
+# headless/SSH box, use `sudo`:
+#
+#   pkexec ./install-system-integration.sh ./deckd-<version>-x86_64.AppImage
+#   sudo   ./install-system-integration.sh ./deckd-<version>-x86_64.AppImage
+#
+# The udev rule carries TAG+="uaccess", so the *active* session user gets an
+# ACL on /dev/uinput and the autostart case needs no relogin. `--add-group`
+# additionally adds the user to the `input` group for linger/headless setups
+# (that one does need a logout).
 #
 # It reads its assets from an *extracted* AppImage layout:
 #
@@ -22,16 +32,21 @@
 # bundled launcher's `--extract-integration`.
 #
 # Usage:
-#   sudo ./install-system-integration.sh ./deckd-<version>-x86_64.AppImage
-#   sudo ./install-system-integration.sh --assets /path/to/integration
-#   sudo ./install-system-integration.sh --uninstall
+#   pkexec ./install-system-integration.sh ./deckd-<version>-x86_64.AppImage
+#   sudo   ./install-system-integration.sh ./deckd-<version>-x86_64.AppImage
+#   sudo   ./install-system-integration.sh --assets /path/to/integration
+#   sudo   ./install-system-integration.sh --uninstall
 #
 # Options:
 #   --appimage PATH   AppImage to extract assets from and to autostart
 #   --assets DIR      Use a pre-extracted integration tree instead of an AppImage
-#   --user NAME       Target user (default: $SUDO_USER, else the login user)
+#   --user NAME       Target user (default: $SUDO_USER / $PKEXEC_UID, else the
+#                     login user)
 #   --desktop MODE    auto|gnome|kde|none  (default auto) — focus watcher to install
 #   --no-autostart    Do not write ~/.config/autostart/deckd.desktop
+#   --add-group       Also add the user to the `input` group (for linger /
+#                     headless setups; needs a logout). Default: rely on the
+#                     rule's uaccess ACL for the active session.
 #   --uninstall       Remove what this helper installed (recorded in
 #                     /var/lib/deckd/system-integration.<user>.state): the udev
 #                     rule, the focus watcher, the app icon, the autostart
@@ -43,6 +58,16 @@
 # Re-running install is safe: assets are replaced, not appended.
 
 set -euo pipefail
+
+# pkexec resets PATH to the distro default; NixOS keeps its tools in the
+# system profile instead. Append it when present (a no-op elsewhere, and it
+# never shadows the caller's PATH) so an explicitly-interpreted
+# `pkexec /run/current-system/sw/bin/bash helper ...` still finds udevadm,
+# usermod, grep, ...
+if [ -d /run/current-system/sw/bin ]; then
+    PATH="$PATH:/run/current-system/sw/bin"
+    export PATH
+fi
 
 UDEV_DEST="/etc/udev/rules.d/70-deckd-uinput.rules"
 STATE_DIR="/var/lib/deckd"
@@ -63,6 +88,7 @@ ASSETS_DIR=""
 TARGET_USER=""
 DESKTOP="auto"
 AUTOSTART=1
+ADD_GROUP=0
 UNINSTALL=0
 
 while [ $# -gt 0 ]; do
@@ -72,6 +98,7 @@ while [ $# -gt 0 ]; do
         --user)     TARGET_USER="${2:?--user needs a name}"; shift 2 ;;
         --desktop)  DESKTOP="${2:?--desktop needs a mode}"; shift 2 ;;
         --no-autostart) AUTOSTART=0; shift ;;
+        --add-group) ADD_GROUP=1; shift ;;
         --uninstall) UNINSTALL=1; shift ;;
         -h|--help) usage 0 ;;
         -*) die "unknown option: $1" ;;
@@ -79,12 +106,24 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-[ "$(id -u)" -eq 0 ] || die "must run as root: sudo $0 ..."
+[ "$(id -u)" -eq 0 ] || die "must run as root: sudo $0 ... (or pkexec $0 ...)"
 
-# The user the desktop belongs to. Under sudo that's SUDO_USER; otherwise fall
-# back to the owner of the invoking terminal.
+# How we were elevated, for copy-pasteable follow-up commands. pkexec sets
+# PKEXEC_UID; sudo sets SUDO_USER. Neither means a plain root shell.
+if [ -n "${PKEXEC_UID:-}" ]; then
+    ELEVATE="pkexec"
+else
+    ELEVATE="sudo"
+fi
+
+# The user the desktop belongs to. pkexec reports their uid in PKEXEC_UID;
+# sudo in SUDO_USER; otherwise fall back to the owner of the invoking terminal.
 if [ -z "$TARGET_USER" ]; then
-    TARGET_USER="${SUDO_USER:-$(logname 2>/dev/null || echo "${USER:-}")}"
+    if [ -n "${PKEXEC_UID:-}" ]; then
+        TARGET_USER="$(getent passwd "$PKEXEC_UID" | cut -d: -f1)"
+    else
+        TARGET_USER="${SUDO_USER:-$(logname 2>/dev/null || echo "${USER:-}")}"
+    fi
 fi
 [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ] \
     || die "could not determine the target user; pass --user NAME"
@@ -102,7 +141,7 @@ as_user() {
     if command -v sudo >/dev/null 2>&1; then
         sudo -u "$TARGET_USER" -H -- "$@"
     elif command -v runuser >/dev/null 2>&1; then
-        runuser -u "$TARGET_USER" -- "$@"
+        runuser -u "$TARGET_USER" -- env HOME="$HOME_DIR" "$@"
     else
         return 127
     fi
@@ -156,7 +195,14 @@ EOF
 # --- assets ----------------------------------------------------------------
 
 extract_dir=""
-cleanup() { [ -n "$extract_dir" ] && rm -rf "$extract_dir"; }
+cleanup() {
+    # Must return 0: a failing EXIT trap under `set -e` makes the whole
+    # helper exit non-zero even after a successful install (--assets leaves
+    # extract_dir empty).
+    if [ -n "$extract_dir" ]; then
+        rm -rf "$extract_dir"
+    fi
+}
 trap cleanup EXIT
 
 # Set ASSETS_DIR in the current shell (not a command substitution) so the
@@ -199,14 +245,23 @@ install_udev() {
     else
         note "udevadm not found; reboot for the rule to take effect"
     fi
-    if id -nG "$TARGET_USER" | tr ' ' '\n' | grep -qx input; then
-        note "= $TARGET_USER is already in the input group"
-        [ "$S_GROUP" = 1 ] || S_GROUP=0  # pre-existing; uninstall must leave it
-    else
-        note "+ adding $TARGET_USER to the input group"
+
+    local in_group=0
+    id -nG "$TARGET_USER" | tr ' ' '\n' | grep -qx input && in_group=1
+
+    if [ "$ADD_GROUP" -eq 1 ] && [ "$in_group" -eq 0 ]; then
+        note "+ adding $TARGET_USER to the input group (--add-group)"
         usermod -aG input "$TARGET_USER"
         S_GROUP=1
         note "! log out and back in for the group change to apply"
+    elif [ "$in_group" -eq 1 ]; then
+        note "= $TARGET_USER is already in the input group"
+        # Keep a previous run's record so --uninstall still removes it.
+        [ "$S_GROUP" = 1 ] || S_GROUP=0
+    else
+        note "= /dev/uinput access comes from the rule's uaccess ACL for the"
+        note "  active session — no relogin needed. --add-group covers"
+        note "  linger/headless setups (that one needs a logout)."
     fi
 }
 
@@ -352,7 +407,11 @@ if [ "$UNINSTALL" -eq 1 ]; then
     [ "$S_GROUP" = 1 ] && remove_input_group || true
     rm -f "$STATE_FILE"
     rmdir "$STATE_DIR" 2>/dev/null || true
-    echo "Done. Log out and back in to apply the group change."
+    if [ "$S_GROUP" = 1 ]; then
+        echo "Done. Log out and back in to apply the group change."
+    else
+        echo "Done."
+    fi
     exit 0
 fi
 
@@ -369,5 +428,7 @@ write_state
 echo
 echo "Done."
 echo "  - Run the AppImage (or log out/in for the autostart entry)."
-echo "  - Log out and back in so the input-group change takes effect."
-echo "  - Uninstall: sudo $0 --uninstall"
+if [ "$S_GROUP" = 1 ]; then
+    echo "  - Log out and back in so the input-group change takes effect."
+fi
+echo "  - Uninstall: $ELEVATE $0 --uninstall"
