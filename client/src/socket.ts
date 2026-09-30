@@ -240,6 +240,10 @@ export function useDeckdSocket(
         if (!stopped && !cancelledRef.current) {
           setStatus("closed");
           setLastError("daemon not reachable");
+          // The health gate failing is itself a connection attempt, so the
+          // overlay reads "Attempt 1" rather than "Attempt 0".
+          attemptRef.current += 1;
+          setAttempt(attemptRef.current);
           setRetrying(true);
           timer = window.setTimeout(() => connect(), 1000);
         }

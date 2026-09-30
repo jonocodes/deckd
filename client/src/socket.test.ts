@@ -65,6 +65,17 @@ describe("useDeckdSocket — reconnect feedback (issue #64)", () => {
     vi.unstubAllGlobals();
   });
 
+  it("counts a failed health gate as attempt 1", async () => {
+    vi.stubGlobal("fetch", vi.fn(() => Promise.reject(new Error("down"))));
+    const { result } = renderHook(() => useDeckdSocket(...hookArgs()));
+    await waitFor(() =>
+      expect(result.current.lastError).toBe("daemon not reachable"),
+    );
+    expect(result.current.attempt).toBe(1);
+    expect(result.current.retrying).toBe(true);
+    expect(FakeWebSocket.instances.length).toBe(0);
+  });
+
   it("resets attempt on open and records the last error on close", async () => {
     const { result } = renderHook(() => useDeckdSocket(...hookArgs()));
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1));
