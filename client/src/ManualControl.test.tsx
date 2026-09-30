@@ -110,6 +110,95 @@ describe("ManualControl", () => {
       expect(onKey).toHaveBeenCalledExactlyOnceWith("esc");
       expect(ev.defaultPrevented).toBe(true);
     });
+
+    it("lays out the six keys plus Ctrl and the IME toggle", () => {
+      render(
+        <ManualControl
+          onType={() => {}}
+          onKey={() => {}}
+          onPad={() => {}}
+          onTap={() => {}}
+          onDrag={() => {}}
+          sensitivity={1}
+        />,
+      );
+      expect(document.querySelectorAll(".kbd-strip-btn")).toHaveLength(8);
+      // Arrows lead the DOM so the grid's top row is ← ↑ ↓ →.
+      const labels = Array.from(document.querySelectorAll(".kbd-strip-btn")).map((el) =>
+        el.getAttribute("aria-label"),
+      );
+      expect(labels.slice(0, 4)).toEqual(["left", "up", "down", "right"]);
+    });
+  });
+
+  describe("sticky Ctrl", () => {
+    function renderWith(mocks: { onKey: (combo: string) => void; onType: (t: string) => void }) {
+      render(
+        <ManualControl
+          onType={mocks.onType}
+          onKey={mocks.onKey}
+          onPad={() => {}}
+          onTap={() => {}}
+          onDrag={() => {}}
+          sensitivity={1}
+        />,
+      );
+    }
+
+    it("arms on tap and disarms after sending one ctrl-combo", () => {
+      const onKey = vi.fn();
+      renderWith({ onKey, onType: () => {} });
+      const ctrl = screen.getByRole("button", { name: "ctrl" });
+      act(() => {
+        ctrl.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+      });
+      expect(ctrl.getAttribute("aria-pressed")).toBe("true");
+      expect(onKey).not.toHaveBeenCalled();
+
+      act(() => {
+        screen
+          .getByLabelText("tab")
+          .dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+      });
+      expect(onKey).toHaveBeenCalledExactlyOnceWith("ctrl+tab");
+      // One-shot: the modifier clears.
+      expect(ctrl.getAttribute("aria-pressed")).toBe("false");
+    });
+
+    it("sends a typed character as ctrl+<char> and does not also type it", () => {
+      const onKey = vi.fn();
+      const onType = vi.fn();
+      renderWith({ onKey, onType });
+      act(() => {
+        screen
+          .getByRole("button", { name: "ctrl" })
+          .dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+      });
+      getInput().dispatchEvent(
+        new KeyboardEvent("keydown", { key: "c", bubbles: true, cancelable: true }),
+      );
+      expect(onKey).toHaveBeenCalledExactlyOnceWith("ctrl+c");
+      expect(onType).not.toHaveBeenCalled();
+    });
+
+    it("tapping Ctrl a second time cancels without sending", () => {
+      const onKey = vi.fn();
+      renderWith({ onKey, onType: () => {} });
+      const ctrl = screen.getByRole("button", { name: "ctrl" });
+      const tap = () =>
+        act(() => {
+          ctrl.dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+        });
+      tap();
+      tap();
+      expect(ctrl.getAttribute("aria-pressed")).toBe("false");
+      act(() => {
+        screen
+          .getByLabelText("esc")
+          .dispatchEvent(new Event("pointerdown", { bubbles: true, cancelable: true }));
+      });
+      expect(onKey).toHaveBeenCalledExactlyOnceWith("esc");
+    });
   });
 
   describe("sendDelta (input event path)", () => {

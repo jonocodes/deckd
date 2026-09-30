@@ -104,6 +104,9 @@ button:focus-visible {
   /* Base responsive width, scaled by the user's scroll-bar width preference
      (``--jog-width``, default 1). App sets the var on this element. */
   width: calc(clamp(56px, 12vw, 88px) * var(--jog-width, 1));
+  /* Touch floor (issue #61): even at the thinnest width preference the
+     drag strip never narrows below the 44px minimum. */
+  min-width: 44px;
   padding: 8px 8px 8px 0;
   /* In landscape a notch/camera-cutout on the right side would eat into
      the strip; pad it out so the touch target stays clear. */
@@ -140,7 +143,9 @@ button:focus-visible {
   --bottom-scale: 1;
   display: flex;
   align-items: center;
-  gap: calc(10px * var(--bottom-scale));
+  /* At least 8px between adjacent controls (issue #61) even when the
+     user shrinks the bar below the default gap. */
+  gap: max(8px, calc(10px * var(--bottom-scale)));
   padding: calc(10px * var(--bottom-scale)) calc(14px * var(--bottom-scale));
   /* Extend the bar into the iOS home-indicator area so the background
      colour still reaches the screen edge; the extra space is added
@@ -300,6 +305,15 @@ button:focus-visible {
 }
 
 .chrome-btn {
+  /* Icon-only chrome controls (issue #61): the glyph may scale down with
+     the bottom-bar preference, but the hit area never drops below the
+     44px touch minimum. Inline-flex keeps the glyph centred in the
+     expanded box. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
   padding: calc(8px * var(--bottom-scale, 1)) calc(12px * var(--bottom-scale, 1));
   border-radius: 9px;
   background: #1b222a;
@@ -639,17 +653,29 @@ button:focus-visible {
 }
 
 .kbd-strip {
-  display: flex;
+  /* Fixed 4x2 keypad (issue #61): arrows on the top row, the command keys
+     + Ctrl + IME on the bottom. A deliberate grid (rather than flex-wrap)
+     keeps the four arrows from splitting across rows at phone widths,
+     while every key still clears the 44px touch minimum with an 8px gap. */
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-  justify-content: center;
 }
 
 .kbd-strip-btn {
-  flex: 1;
-  min-width: 0;
+  min-width: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+
+/* Armed sticky Ctrl: the next key press is sent as ctrl+<key>, then the
+   modifier disarms. Same cyan accent as an active chrome view so the
+   armed state is unmistakable. */
+.kbd-strip-ctrl-armed {
+  background: #2a333d;
+  border-color: #3fb1d8;
+  color: #7dd3fc;
 }
 
 .kbd-strip-ime {
@@ -839,18 +865,32 @@ button:focus-visible {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 6px;
-  border-radius: 999px;
-  background: linear-gradient(90deg, #14364a, #2a333d);
+  /* Touch target (issue #61): the input box is 44px tall so a tap
+     anywhere across the row lands, while the visible track is drawn
+     thin via the runnable-track pseudo-element below. */
+  height: 44px;
+  background: transparent;
   outline: none;
   touch-action: pan-x;
   cursor: pointer;
+}
+.slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #14364a, #2a333d);
+}
+.slider::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #14364a, #2a333d);
 }
 .slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 24px;
   height: 24px;
+  /* Centre the thumb on the 6px track inside the 44px hit area. */
+  margin-top: -9px;
   border-radius: 50%;
   background: #7dd3fc;
   border: 2px solid #101418;
@@ -872,7 +912,9 @@ button:focus-visible {
 .toggle {
   position: relative;
   width: 54px;
-  height: 30px;
+  /* Touch target (issue #61): 44px tall button; the visible track stays
+     30px and is vertically centred inside it. */
+  height: 44px;
   padding: 0;
   border: 0;
   background: transparent;
@@ -882,7 +924,11 @@ button:focus-visible {
 
 .toggle-track {
   position: absolute;
-  inset: 0;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 30px;
   border-radius: 999px;
   background: #1b222a;
   border: 1px solid #2a333d;
@@ -891,10 +937,11 @@ button:focus-visible {
 
 .toggle-thumb {
   position: absolute;
-  top: 3px;
+  top: 50%;
   left: 3px;
   width: 22px;
   height: 22px;
+  transform: translateY(-50%);
   border-radius: 50%;
   background: #6b7785;
   transition: transform 120ms ease, background 120ms ease;
@@ -905,7 +952,7 @@ button:focus-visible {
   border-color: #3fb1d8;
 }
 .toggle-on .toggle-thumb {
-  transform: translateX(24px);
+  transform: translateY(-50%) translateX(24px);
   background: #7dd3fc;
 }
 
@@ -1039,6 +1086,8 @@ button:focus-visible {
 
 .settings-logout {
   width: 100%;
+  /* Touch target floor (issue #61). */
+  min-height: 44px;
   padding: 12px 16px;
   border-radius: 12px;
   border: 1px solid #5b2634;
@@ -1343,6 +1392,9 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Touch target floor (issue #61). */
+  min-width: 44px;
+  min-height: 44px;
   border: 0;
   background: transparent;
   color: #c4d2dd;
@@ -1369,8 +1421,8 @@ button:focus-visible {
 }
 
 .media-speed button {
-  min-width: 30px;
-  min-height: 30px;
+  min-width: 44px;
+  min-height: 44px;
   border: 1px solid #3b4d5b;
   border-radius: 8px;
   background: #1b2a36;
@@ -1416,8 +1468,8 @@ button:focus-visible {
 }
 
 .media-volume-fallback button {
-  min-width: 38px;
-  min-height: 38px;
+  min-width: 44px;
+  min-height: 44px;
   border: 1px solid #3b4d5b;
   border-radius: 8px;
   background: #1b2a36;
@@ -1593,8 +1645,9 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  /* Touch target floor (issue #61). */
+  width: 44px;
+  height: 44px;
   border: 0;
   background: transparent;
   color: #c4d2dd;
@@ -1622,8 +1675,9 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  /* Touch target floor (issue #61). */
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   border: 0;
   background: #7dd3fc;
@@ -1979,6 +2033,7 @@ button:focus-visible {
 .a11y-larger-controls .slider::-webkit-slider-thumb {
   width: 32px;
   height: 32px;
+  margin-top: -13px;
 }
 .a11y-larger-controls .slider::-moz-range-thumb {
   width: 32px;
@@ -1986,6 +2041,9 @@ button:focus-visible {
 }
 .a11y-larger-controls .toggle {
   width: 60px;
+  height: 44px;
+}
+.a11y-larger-controls .toggle-track {
   height: 36px;
 }
 .a11y-larger-controls .toggle-thumb {
@@ -3552,6 +3610,8 @@ select.prop-field-input {
 .settings-choice-option {
   flex: 1 1 0;
   min-width: 0;
+  /* Touch target floor (issue #61). */
+  min-height: 44px;
   padding: 7px 8px;
   border-radius: 9px;
   border: 1px solid #2a333d;
@@ -3576,6 +3636,8 @@ select.prop-field-input {
   align-items: center;
   gap: 8px;
   width: 100%;
+  /* Touch target floor (issue #61). */
+  min-height: 44px;
   padding: 9px 12px;
   border: 1px solid #2a333d;
   border-radius: 9px;
