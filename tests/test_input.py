@@ -8,6 +8,8 @@ canonical form here.
 """
 from __future__ import annotations
 
+import logging
+
 import pytest
 
 from deckd.input import (
@@ -159,3 +161,35 @@ def test_build_sinks_falls_back_to_logging_when_platform_sink_raises(
     assert sink is None
     assert isinstance(scroll_sink, LoggingScrollSink)
     assert isinstance(key_sink, LoggingKeySink)
+
+
+def test_sink_failure_hint_names_the_fix_for_uinput_access() -> None:
+    """#173: the packaged user has no checkout to read, so the warning says
+    what to do about a locked-down /dev/uinput."""
+    import deckd.__main__ as main_mod
+
+    hint = main_mod._sink_failure_hint(PermissionError(13, "Permission denied"))
+    assert "install-system-integration" in hint
+
+    hint = main_mod._sink_failure_hint(FileNotFoundError(2, "No such file"))
+    assert "kernel module" in hint
+
+    # Anything else: the bare exception is enough.
+    assert main_mod._sink_failure_hint(RuntimeError("no uinput here")) == ""
+
+
+def test_build_sinks_warning_carries_the_hint(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import deckd.__main__ as main_mod
+
+    monkeypatch.delenv("DECKD_FAKE_INPUT", raising=False)
+    monkeypatch.setattr(main_mod.sys, "platform", "linux")
+
+    def boom() -> None:
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(main_mod, "UinputSink", boom)
+    with caplog.at_level(logging.WARNING, logger="deckd"):
+        main_mod._build_sinks()
+    assert "install-system-integration" in caplog.text

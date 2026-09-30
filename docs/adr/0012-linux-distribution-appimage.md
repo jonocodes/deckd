@@ -12,8 +12,9 @@ deckd is a per-user desktop-session daemon. Three of its capabilities decide
 the channel:
 
 1. **Global input injection via `/dev/uinput`** — needs a udev rule in
-   `/etc/udev/rules.d` and membership in the `input` group. Both are **root**
-   actions.
+   `/etc/udev/rules.d` (a **root** action). The rule's `TAG+="uaccess"`
+   covers the active session user; `input`-group membership is the optional
+   fallback for linger/headless setups.
 2. **Reading other apps' windows through a compositor plugin** — a GNOME
    Shell extension or a KWin script, installed and enabled **per user**.
 3. **Talking to the session D-Bus bus** — the `dbus:` action primitive plus
@@ -74,12 +75,15 @@ is the documented fallback.
 ### The privileged step is a first-run helper, not part of the AppImage
 
 Because the root step exists on every channel, it is factored into a single
-`install-system-integration.sh` helper (run with `sudo`) that is idempotent
-and has a matching `--uninstall`. It installs:
+`install-system-integration.sh` helper that is idempotent and has a matching
+`--uninstall`. It is elevated once — `pkexec` on a desktop (native password
+dialog) or `sudo` headless — and installs:
 
 - `/etc/udev/rules.d/70-deckd-uinput.rules` (the existing
   `packaging/udev/70-deckd-uinput.rules`), then reloads/triggers udev;
-- the current user into the `input` group.
+- the current user into the `input` group only with `--add-group`: the rule's
+  uaccess ACL already covers the active session, so the group is for
+  linger/headless setups.
 
 It also installs the user-level pieces — the focus watcher and an XDG
 autostart entry — so a single "install" flow covers everything the AppImage
@@ -111,9 +115,11 @@ The channel is a thin skin over that tree. AppImage is simply the first skin.
 - **Runtime**: PyInstaller `onedir`, reusing the #165 macOS spec shape; the
   AppDir wraps the `onedir` output. Parity with macOS wins over avoiding the
   freezer's edge cases (aiohttp, dbus).
-- **Helper UX**: a shell script run with `sudo` — transparent,
-  headless-friendly, no PolicyKit dependency. It prints every change it makes
-  and ships a matching uninstall.
+- **Helper UX**: a shell script elevated once — transparent,
+  headless-friendly, no *hard* PolicyKit dependency. `sudo` remains the
+  mechanism; `pkexec` is the documented desktop front-end for the native
+  password dialog (#173). uaccess first, `--add-group` opt-in. It prints
+  every change it makes and ships a matching uninstall.
 - **Focus watcher + autostart**: the helper auto-installs both, detecting
   GNOME vs KDE and writing `~/.config/autostart/deckd.desktop`. The AppImage
   itself never silently writes into the user's shell.
@@ -127,7 +133,7 @@ The channel is a thin skin over that tree. AppImage is simply the first skin.
   workflow that mirrors `release-macos.yml` and reuses the `DECKD_VERSION`
   seam from #165.
 - The root step is explicit and documented rather than hidden in a package
-  manager; users on AppImage grant it once with a `sudo` prompt.
+  manager; users on AppImage grant it once with a `sudo`/`pkexec` prompt.
 - Flatpak/Snap are off the table, so no manifest or portal work is spent on a
   model that cannot work.
 - The relocatable tree + integration helper are the reusable asset; deb/rpm
