@@ -33,6 +33,7 @@ import { useWakeLock } from "./wake-lock";
 import { useFullscreen } from "./fullscreen";
 import { getDemoDeck, getDemoView, MEDIA_DEMO_STATES, MPRIS_DEMO_STATES, EDITOR_DEMO_DECKS } from "./demo";
 import { usePlaygroundDaemon } from "./playground/usePlaygroundDaemon";
+import { PlaygroundAppSwitcher } from "./playground/PlaygroundAppSwitcher";
 import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
 import type {
@@ -434,6 +435,13 @@ export function App() {
       send({ type: "select_view", view: WINDOWS_VIEW_ID });
     }
   }, [navigate, view, send]);
+  // Raise a window by its opaque id. Shared by the running-programs row tap
+  // (#122) and the Playground app-switcher chips (#152): the daemon's focus
+  // watcher then re-resolves the focused app's deck.
+  const raiseWindow = useCallback(
+    (windowId: string) => send({ type: "raise_window", window_id: windowId }),
+    [send],
+  );
   // Trackpad / settings openers: kept named so the keyboard-shortcut
   // effect below can call them without duplicating the toggle logic.
   const openTrackpad = useCallback(
@@ -739,6 +747,9 @@ export function App() {
   const reconnecting = !cancelled && (status === "connecting" || retrying);
   const showConnectionOverlay =
     !screenLocked && (retrying || status === "closed" || !!lastError);
+  // Playground app roster (issue #152): the mock's running-windows frame is
+  // the app list, MRU-ordered (front = focused). Only the playground reads it.
+  const playgroundApps = isPlayground ? wireWindowsToServer(runningWindows) : undefined;
 
   return (
     <>
@@ -795,6 +806,15 @@ export function App() {
                   </span>
                 </div>
               )}
+              {/* Playground app switcher (#152). A browser has no OS focus,
+                  so the visitor taps a chip to fake a frontmost app; the
+                  tap rides the real ``raise_window`` message, and the mock
+                  (like the daemon's focus watcher) pushes the new deck.
+                  Deck view only: the other surfaces either have their own
+                  rows (running programs) or aren't app-scoped. */}
+              {view === "deck" && playgroundApps && playgroundApps.length > 0 ? (
+                <PlaygroundAppSwitcher apps={playgroundApps} onSelect={raiseWindow} />
+              ) : null}
               {view === "trackpad" ? (
             <ManualControl
               onPad={pad}
@@ -922,7 +942,7 @@ export function App() {
                 // the overlay back to the focused-app deck. Same
                 // clear_view handshake ``toggleWindows`` uses; the
                 // daemon raises fire-and-forget, so we don't wait.
-                send({ type: "raise_window", window_id: windowId });
+                raiseWindow(windowId);
                 navigate("deck");
                 send({ type: "clear_view" });
               }}
