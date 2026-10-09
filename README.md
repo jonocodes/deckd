@@ -160,6 +160,13 @@ per-platform setup (macOS, KDE Plasma Wayland, X11), phone/tablet pairing,
 `/dev/uinput` permissions, and running deckd as a login service — is in the
 [user & setup guide](docs/GUIDE.md#running-deckd).
 
+**Playground (no backend).** Append `?playground` to the URL
+(`http://127.0.0.1:8765/?playground`) for a backend-free session: an
+in-browser mock backend drives virtual apps that tick on a clock, and an
+app-switcher strip stands in for OS focus (which a browser doesn't have).
+Presses, media transport, and app switches all flow through the real
+client UI — no WebSocket, nothing installed.
+
 ### Nix
 
 The flake at the repo root builds the daemon and the client, and ships
