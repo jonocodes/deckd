@@ -363,6 +363,10 @@ class PsutilMemoryPercentSensorSource(SensorSource):
 
 
 class PlatformBackend:
+    # Latest error of an ongoing focus-query failure streak, None when the
+    # last poll succeeded. Maintained by :meth:`watch_active_app`.
+    _focus_query_error: str | None = None
+
     def capabilities(self) -> frozenset[str]:
         """Backend capability flags consumed by the server (issue #121).
 
@@ -415,9 +419,26 @@ class PlatformBackend:
         raise NotImplementedError
 
     async def watch_active_app(self, *, interval_s: float = 0.1) -> AsyncIterator[AppInfo]:
+        # Query errors (extension not yet owning the bus name at login,
+        # gnome-shell restart, a gdbus timeout) must not escape: an
+        # exception here ends the generator and with it the server's
+        # focus task, silently pinning every client to the default deck.
+        # Log the first failure of a streak, sleep through it, and resume.
+        # The streak's latest error is kept on ``_focus_query_error`` so
+        # ``/diag`` can report a watcher that is alive but not working.
         last: AppInfo | None = None
         while True:
-            current = await self.get_active_app()
+            try:
+                current = await self.get_active_app()
+            except Exception as exc:
+                if self._focus_query_error is None:
+                    log.warning("focus query failed (will keep retrying): %s", exc)
+                self._focus_query_error = str(exc) or type(exc).__name__
+                await asyncio.sleep(interval_s)
+                continue
+            if self._focus_query_error is not None:
+                log.info("focus query recovered")
+                self._focus_query_error = None
             if current != last:
                 last = current
                 yield current
@@ -538,7 +559,7 @@ class GnomeShellFocusBackend(PlatformBackend):
 
         Errors from the gdbus shell-out (extension not installed,
         session bus unreachable) are logged once and the loop sleeps
-        through them — mirrors the focus watcher's behaviour so a
+        through them — same as :meth:`watch_active_app`, so a
         daemon started before the extension is enabled survives and
         the windows list catches up the moment the bus replies.
         """

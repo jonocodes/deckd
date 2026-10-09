@@ -419,14 +419,28 @@ async def build_diag_snapshot(
         return "running"
 
     focus_backend = getattr(server, "focus_backend", None)
+    focus_started_ok = getattr(server, "_focus_started_ok", None)
+    focus_query_error = getattr(focus_backend, "_focus_query_error", None)
+    # ``healthy`` is the one field to check for "is context switching
+    # working right now": the backend started, the watcher task is still
+    # alive, and its latest poll succeeded. ``started_ok`` alone stays
+    # true after the task dies. None when focus is disabled.
+    focus_healthy: bool | None = None
+    if focus_backend is not None:
+        focus_healthy = (
+            focus_started_ok is not False
+            and focus_task is not None
+            and not focus_task.done()
+            and focus_query_error is None
+        )
     focus_block: dict[str, Any] = {
         "backend": type(focus_backend).__name__ if focus_backend is not None else None,
         "platform": safe_str(getattr(server, "_focus_platform", None)),
         "last_app": _app_info_to_dict(getattr(server, "_last_focus", None)),
-        "started_ok": getattr(server, "_focus_started_ok", None),
+        "started_ok": focus_started_ok,
+        "healthy": focus_healthy,
+        "query_error": focus_query_error,
     }
-    if focus_backend is None:
-        focus_block["backend"] = None
 
     key_sink = getattr(server, "key_sink", None)
     sink_name = type(key_sink).__name__ if key_sink is not None else None

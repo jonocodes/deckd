@@ -497,6 +497,7 @@ app_id='org.gnome.Console' wm_class='org.gnome.Console' pid=1234 title='Terminal
 app_id=None wm_class='firefox' pid=188566 title='YouTube — Mozilla Firefox'
 ```
 
+**Deck stuck on Home?** Check `deckctl diag` → `focus.healthy`. It is `true` only when the backend started, the watcher task is alive, and the latest focus poll succeeded; `focus.query_error` carries the current failure (e.g. `ServiceUnknown … not activatable` while the extension isn't loaded yet). The watcher retries every poll, so a daemon started at login before the extension is ready catches up on its own once the bus name appears.
 
 
 #### X11 sessions (any desktop environment)

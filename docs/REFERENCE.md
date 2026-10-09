@@ -116,7 +116,7 @@ All are read-only and unauthenticated unless noted.
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Host identity (`hostname`, `os`, `desktop`), sessions, current app, bind surface (`bind`, `addresses`, `url`). Used by `deckctl status` and the client Settings panel. |
-| `GET /diag` | Full snapshot: focus watcher status, input sink, deck store, sessions, tasks, MPRIS state (if active). Machine-readable for AI-assisted debugging. |
+| `GET /diag` | Full snapshot: focus watcher status (`focus.healthy` = context switching is working right now; `focus.query_error` = current poll failure), input sink, deck store, sessions, tasks, MPRIS state (if active). Machine-readable for AI-assisted debugging. |
 | `GET /metrics` | Prometheus text-format scrape target. Counters: `deckd_actions_total{primitive,outcome}`, `deckd_dbus_calls*`, `deckd_deck_reloads*`, `deckd_ws_sessions_active`, `deckd_mpris_*`, etc. |
 | `GET /decks` | Enumeration of every loaded deck with safe widget summaries (id, kind, label, grid, `has_action`; no raw shell/dbus/url/text command bodies). |
 | `GET /actions/recent?limit=N` | Bounded ring buffer of recent action attempts (id, outcome, timestamp; no command text). Default 64. |
