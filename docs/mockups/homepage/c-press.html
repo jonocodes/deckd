@@ -3,7 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>deckd</title>
+<title>deckd — buttons that change with the app you're in</title>
+<meta name="description" content="deckd turns any phone, tablet or browser into a touch deck that follows the focused app on your computer — including websites like Gmail, YouTube and Google Meet. Open source, for Linux and macOS.">
+<meta property="og:title" content="deckd">
+<meta property="og:description" content="A touch deck that follows the focused app — and website — on your computer.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#e8e4dc">
+<link rel="icon" type="image/svg+xml" href="../../../assets/deckd-mark.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -60,6 +66,12 @@
   .readout .tag { margin-top: 12px; }
   .readout [data-dk="phone"] { max-width: 640px; }
   .more { margin-top: 80px; }
+  .long { margin-top: 96px; }
+  .long h2 { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin: 0 0 28px; padding-top: 18px; border-top: 2px solid var(--ink); }
+  .long .sub { max-width: 40em; margin: -10px 0 24px; }
+  .dk-table { background: #f4f1eb; border: 1px solid #d5cfc3; }
+  .dk-faq summary { font-size: 18px; }
+  .dk-faq p, .dk-points dd { color: #4a4740; }
   .more h3 { font: 500 13px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 18px; }
   .dk-install .dl { color: #fff; }
   .dk-install pre { background: #f4f1eb; border: 1px solid #d5cfc3; padding: 12px 14px; border-radius: 8px; font: 13px/1.6 var(--mono); overflow-x: auto; }
@@ -67,15 +79,20 @@
   pre { font: 13.5px/1.6 var(--mono); background: #f4f1eb; border: 1px solid #d5cfc3; padding: 14px 16px; border-radius: 8px; margin: 0; overflow-x: auto; }
   pre .k { color: #9a3412; } pre .c { color: var(--muted); }
 
-  footer { margin-top: 72px; padding-top: 18px; border-top: 2px solid var(--ink); display: flex; justify-content: space-between; font: 13px var(--mono); }
+  footer { margin-top: 96px; flex-wrap: wrap; gap: 8px 24px; padding-top: 18px; border-top: 2px solid var(--ink); display: flex; justify-content: space-between; font: 13px var(--mono); }
 
   @media (max-width: 760px) {
     .mast h1 { font-size: 72px; } .tag { font-size: 20px; }
-    .grid { grid-template-columns: repeat(3, 1fr); } .strip { display: none; }
+    /* still a full 4x2 deck on a phone: smaller keys, no gap */
+    .grid { grid-template-columns: repeat(4, 1fr); gap: 6px; } .strip { display: none; }
+    .device { padding: 10px; border-radius: 22px; }
+    .key { aspect-ratio: .9; gap: 6px; font-size: 11px; border-radius: 9px; padding: 2px; }
+    .key svg { width: 24px; height: 24px; }
     .readout .head { grid-template-columns: 1fr; gap: 12px; }
   }
 </style>
 <link rel="stylesheet" href="shared/scenes.css">
+<script src="shared/content.js" defer></script>
 <script src="shared/scenes.js" defer></script>
 </head>
 <body>
@@ -83,8 +100,9 @@
   <div class="mast">
     <h1>deckd</h1>
     <nav>
+      <a href="#install">install</a>
+      <a href="#faq">faq</a>
       <a href="https://github.com/jonocodes/deckd/blob/main/docs/GUIDE.md">guide</a>
-      <a href="https://jonocodes.github.io/deckd/?demo=home">live client</a>
       <a href="https://github.com/jonocodes/deckd">github</a>
     </nav>
   </div>
@@ -104,7 +122,15 @@
 
   <section class="readout" id="readout"></section>
 
-  <footer><span>GPL-3.0 · pre-alpha, used daily</span><span>Linux · macOS</span></footer>
+  <section class="long"><h2>Where it runs</h2><div data-dk="platforms"></div></section>
+  <section class="long"><h2>Why not a Stream Deck?</h2><p class="sub">You already own a better touchscreen. deckd started as a Stream Deck that could do more — open-ended controls, any device, any platform.</p><div data-dk="compare"></div></section>
+  <section class="long"><h2>Pre-alpha, used daily</h2><div data-dk="roadmap"></div></section>
+  <section class="long" id="faq"><h2>Questions</h2><div data-dk="faq"></div></section>
+
+  <footer>
+    <span><b>deckd</b> · GPL-3.0 · no account, no cloud</span>
+    <span><a href="https://github.com/jonocodes/deckd">source</a> · <a href="https://github.com/jonocodes/deckd/issues">issues</a> · <a href="https://github.com/jonocodes/deckd/blob/main/docs/GUIDE.md">guide</a></span>
+  </footer>
 </div>
 
 <script>
@@ -136,7 +162,7 @@ addEventListener("DOMContentLoaded", () => {
     { label: "Any action", icon: "terminal", lcd: "shell: loginctl lock-session",
       h: "Keys, commands, launchers.", body: "<p>A button can send a key chord, run a command, open a URL or start a terminal — or chain them into a macro. Live readouts like CPU and memory sit right alongside.</p>", dk: "phone", q: "demo=home" },
     { label: "Locked down", icon: "lock", lcd: "session locked · input refused",
-      h: "Quiet by default.", body: "<p>Localhost-only until you open it to your network. A password on every client. Presses are refused while your desktop is locked.</p>" },
+      h: "Yours, on your network.", body: "<p>Nothing goes through anyone else's servers.</p>", dk: "security" },
     { label: "Get it", icon: "download", c: "#c2410c", lcd: "deckd · ready on :8765",
       h: "Install.", body: "<p>Linux and macOS. Then open the address on your phone.</p>", dk: "install" },
   ];
@@ -156,6 +182,11 @@ addEventListener("DOMContentLoaded", () => {
     b.onclick = () => show(k, b);
     grid.insertBefore(b, strip);
     if (i === 0) show(k, b);
+  });
+  document.querySelector('a[href="#install"]').addEventListener("click", (e) => {
+    e.preventDefault();
+    [...grid.querySelectorAll(".key")].find((k) => k.textContent.trim() === "Get it").click();
+    readout.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 });
 </script>

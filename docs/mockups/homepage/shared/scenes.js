@@ -10,6 +10,8 @@ const APP = new URLSearchParams(location.search).get("app") || document.document
 const LANDSCAPE = [700, 390]; // a 4x2 deck fills this edge to edge
 const PORTRAIT = [390, 760];
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+// ?eager loads every phone up front (for full-page screenshots).
+const LOADING = new URLSearchParams(location.search).has("eager") ? "eager" : "lazy";
 
 const h = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
@@ -29,7 +31,7 @@ function phone(queries, { passive = true, size = LANDSCAPE } = {}) {
     <div class="dk-stage${passive ? " passive" : ""}" style="width:${w}px;height:${hgt}px"><div class="dk-overlay"></div></div></div></div>`);
   const screen = el.querySelector(".dk-screen"), stage = el.querySelector(".dk-stage"), overlay = el.querySelector(".dk-overlay");
   const frames = queries.map((q, i) => {
-    const f = h(`<iframe loading="lazy" src="${APP}?${q}" title="deckd client" ${passive ? 'tabindex="-1" aria-hidden="true" inert' : ""}></iframe>`);
+    const f = h(`<iframe loading="${LOADING}" src="${APP}?${q}" title="deckd client" ${passive ? 'tabindex="-1" aria-hidden="true" inert' : ""}></iframe>`);
     if (queries.length > 1) { f.style.transition = "opacity .3s"; f.style.opacity = i === 0 ? 1 : 0; }
     stage.insertBefore(f, overlay);
     return f;
@@ -259,7 +261,7 @@ addEventListener("scroll", () => {
   lastActive = a; lastY = scrollY;
 }, { passive: true });
 
-const MOUNTS = { cycle, trackpad, scroll, focus, webapps, nowplaying, install, phone: single };
+const MOUNTS = { cycle, trackpad, scroll, focus, webapps, nowplaying, install, phone: single, ...(window.DK_CONTENT || {}) };
 document.querySelectorAll("[data-dk]").forEach((el) => MOUNTS[el.dataset.dk]?.(el));
 
 // For pages that mount scenes on demand (design C's readout).

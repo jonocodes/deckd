@@ -11,7 +11,9 @@ in each; only the style differs.
 
 `shared/scenes.{js,css}` holds the parts all three use: auto-cycling hero,
 web-app row, now-playing phone, trackpad and scroll-strip animations,
-install tabs. Every phone is the real client in an iframe, rendered at a
+install tabs. `shared/content.js` holds the long-form sections (platforms,
+privacy, comparison, roadmap, FAQ), written from the README, GUIDE and
+PLATFORM-PARITY — keep it in step when those change. Every phone is the real client in an iframe, rendered at a
 fixed viewport (700×390 landscape, 390×760 portrait) and scaled to fit.
 
 ## Viewing
@@ -27,4 +29,5 @@ cd client && npx vite dev --port 5288 --host 127.0.0.1
 ```
 
 Without `?app=` the pages use the public build at
-`https://jonocodes.github.io/deckd/`.
+`https://jonocodes.github.io/deckd/`. Add `?eager` to load every phone up
+front (for full-page screenshots).
