@@ -193,7 +193,7 @@ Primary development operations. Run `just` (no args) to list all available recip
 - Manual control mode: combined trackpad + keyboard passthrough (IME → evdev).
 - Now playing (chrome view with per-player transport, album art proxy, passive playback indicator).
 - VLC media widget (HTTP-backed live state, album art proxy).
-- Live `meter` / `stats` widgets (`cpu_percent`, `mem_percent` sensors).
+- Live `meter` / `stats` widgets (`cpu_percent`, `mem_percent`, `swap_percent`, `disk_percent` sensors).
 - Deck hot-reload (watches `decks/` directory; bad YAML surfaces as diagnostic on client).
 - Platform overlay (`decks.macos/`, `decks.linux/`).
 - Bind-scope control (`--bind 127.0.0.1`, `--bind iface:wlan0`, `--bind 0.0.0.0`).
