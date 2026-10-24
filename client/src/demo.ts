@@ -36,12 +36,13 @@ const YOUTUBE: ServerDeck = {
   web_app: true,
   jogstrip_enabled: true,
   widgets: [
-    { id: "play-pause", kind: "button", label: "Play/Pause", icon: { source: "lucide", name: "play" }, color: "#ff0000", action: { key: "k" } },
+    { id: "play-pause", kind: "button", label: "Play/Pause", icon: { source: "lucide", name: "play" }, color: "#ff0000", size: [2, 1], action: { key: "k" } },
     { id: "mute", kind: "button", label: "Mute", icon: { source: "lucide", name: "volume-x" }, action: { key: "m" } },
     { id: "fullscreen", kind: "button", label: "Fullscreen", icon: { source: "lucide", name: "maximize" }, action: { key: "f" } },
     { id: "back-10", kind: "button", label: "-10s", icon: { source: "lucide", name: "rewind" }, action: { key: "j" } },
     { id: "fwd-10", kind: "button", label: "+10s", icon: { source: "lucide", name: "fast-forward" }, action: { key: "l" } },
     { id: "captions", kind: "button", label: "Captions", icon: { source: "lucide", name: "captions" }, action: { key: "c" } },
+    { id: "next", kind: "button", label: "Next video", icon: { source: "lucide", name: "skip-forward" }, action: { key: "shift+n" } },
   ],
 };
 
@@ -83,10 +84,9 @@ const SHOWCASE: ServerDeck = {
 
 // Backend-free meter demo (issue #40). Mirrors what the daemon would
 // push for a real CPU%/MEM% source — a couple of realistic values so
-// the bar's color-graded fill renders across the spectrum. Wired via
-// the meter store's localStorage hydration on mount, so opening
-// ``/?demo=meter`` lands in a "fresh deck, pre-populated values"
-// state without needing the daemon at all.
+// the bar's color-graded fill renders across the spectrum. App pushes
+// METER_DEMO_SEEDS into the meter store on mount for every demo, so
+// ``/?demo=meter`` lands with pre-populated values and no daemon.
 const METER: ServerDeck = {
   type: "deck",
   app: "meter (demo)",
@@ -132,16 +132,14 @@ const METER: ServerDeck = {
   ],
 };
 
-// Seed values for the meter demo so the bar renders with realistic
-// values on first paint (localStorage hydration, see meter-store.ts).
-// These are written into localStorage by the app on first mount when
-// the meter demo is selected, and cleared when the user navigates
-// away to a non-meter demo. Keeping the seeds in the same file as the
-// fixture means a designer iterating on the meter deck doesn't have
-// to remember to update two places.
+// Seed sensor readings, keyed by source. App pushes these into the meter
+// store on mount for every demo page, so any meter or stats cell (the meter
+// demo, the home launcher's CPU/MEM cell) renders realistic values.
 export const METER_DEMO_SEEDS: Record<string, { value: number; unit: string }> = {
   cpu_percent: { value: 58, unit: "%" },
   mem_percent: { value: 41, unit: "%" },
+  swap_percent: { value: 12, unit: "%" },
+  disk_percent: { value: 72, unit: "%" },
 };
 
 // Backend-free VLC media demo. A single full-width media cell, matching the
@@ -333,6 +331,80 @@ const MACRO: ServerDeck = {
   ],
 };
 
+// -- Showcase fixtures -------------------------------------------------------
+// Curated for the public homepage, README screenshots and the gallery:
+// icon-forward, few words, real colours. Keep test fixtures above; these may
+// change for looks at any time.
+
+// The home launcher, after the shipping decks/default.yaml.
+const HOME: ServerDeck = {
+  type: "deck",
+  app: "home",
+  display_name: "Home",
+  jogstrip_enabled: true,
+  widgets: [
+    { id: "code", kind: "button", icon: { source: "lucide", name: "file-code" }, color: "#2e328a", action: { shell: "code" } },
+    { id: "firefox", kind: "button", icon: { source: "simple-icons", name: "firefox" }, color: "#b5641d", action: { shell: "firefox" } },
+    { id: "obsidian", kind: "button", icon: { source: "simple-icons", name: "obsidian" }, color: "#6d28c8", action: { shell: "obsidian" } },
+    { id: "system", kind: "stats", label: "System", metrics: [{ source: "cpu_percent", label: "CPU" }, { source: "mem_percent", label: "MEM" }, { source: "swap_percent", label: "SWAP" }, { source: "disk_percent", label: "DISK" }] },
+    { id: "github", kind: "button", icon: { source: "simple-icons", name: "github" }, color: "#000000", action: { url: "https://github.com" } },
+    { id: "terminal", kind: "button", icon: { source: "lucide", name: "square-terminal" }, color: "#6b0101", action: { terminal: true } },
+    { id: "thunderbird", kind: "button", icon: { source: "simple-icons", name: "thunderbird" }, color: "#0a84ff", action: { shell: "thunderbird" } },
+    { id: "lock", kind: "button", icon: { source: "lucide", name: "lock" }, color: "#334155", action: { shell: "loginctl lock-session" } },
+  ],
+};
+
+// A web app: Gmail's own keyboard shortcuts, matched by window title.
+const GMAIL: ServerDeck = {
+  type: "deck",
+  app: "gmail",
+  display_name: "Gmail",
+  theme: "#ea4335",
+  icon: { source: "simple-icons", name: "gmail" },
+  web_app: true,
+  jogstrip_enabled: true,
+  widgets: [
+    { id: "compose", kind: "button", label: "Compose", icon: { source: "lucide", name: "square-pen" }, color: "#a5281b", action: { key: "c" } },
+    { id: "reply", kind: "button", label: "Reply", icon: { source: "lucide", name: "reply" }, action: { key: "r" } },
+    { id: "reply-all", kind: "button", label: "Reply all", icon: { source: "lucide", name: "reply-all" }, action: { key: "a" } },
+    { id: "forward", kind: "button", label: "Forward", icon: { source: "lucide", name: "forward" }, action: { key: "f" } },
+    { id: "archive", kind: "button", label: "Archive", icon: { source: "lucide", name: "archive" }, color: "#1e3a8a", action: { key: "e" } },
+    { id: "delete", kind: "button", label: "Delete", icon: { source: "lucide", name: "trash-2" }, action: { key: "shift+3" } },
+    { id: "newer", kind: "button", label: "Newer", icon: { source: "lucide", name: "chevron-up" }, action: { key: "k" } },
+    { id: "older", kind: "button", label: "Older", icon: { source: "lucide", name: "chevron-down" }, action: { key: "j" } },
+  ],
+};
+
+// A web app: mirrors decks/google-meet.yaml.
+const MEET: ServerDeck = {
+  type: "deck",
+  app: "google-meet",
+  display_name: "Google Meet",
+  theme: "#00897b",
+  icon: { source: "simple-icons", name: "googlemeet" },
+  web_app: true,
+  jogstrip_enabled: true,
+  widgets: [
+    { id: "toggle-mic", kind: "button", label: "Mic", icon: { source: "lucide", name: "mic" }, color: "#00897b", size: [2, 1], action: { key: "ctrl+d" } },
+    { id: "toggle-camera", kind: "button", label: "Camera", icon: { source: "lucide", name: "video" }, color: "#00695c", size: [2, 1], action: { key: "ctrl+e" } },
+    { id: "raise-hand", kind: "button", label: "Raise hand", icon: { source: "lucide", name: "hand" }, action: { key: "ctrl+alt+h" } },
+    { id: "toggle-chat", kind: "button", label: "Chat", icon: { source: "lucide", name: "message-square" }, action: { key: "ctrl+alt+c" } },
+    { id: "toggle-participants", kind: "button", label: "People", icon: { source: "lucide", name: "users" }, action: { key: "ctrl+alt+p" } },
+    { id: "toggle-captions", kind: "button", label: "Captions", icon: { source: "lucide", name: "captions" }, action: { key: "c" } },
+  ],
+};
+
+/** Now-playing rows for the ``?demo=media`` showcase: several ordinary
+ * players at once, so it reads as "any player" rather than one brand. */
+export const SHOWCASE_MEDIA_STATES: MediaState[] = [
+  { type: "media_state", id: "mpris.spotify", available: true, stale: false, playing: true, title: "Open Roads", artist: "The Long Weekend", app_name: "Spotify", desktop_entry: "spotify", can_go_next: true, can_go_previous: true },
+  { type: "media_state", id: "mpris.rhythmbox", available: true, stale: false, playing: false, title: "Night Drive", artist: "Lumen Park", app_name: "Rhythmbox", desktop_entry: "rhythmbox", can_go_next: true, can_go_previous: true },
+  { type: "media_state", id: "mpris.firefox", available: true, stale: false, playing: false, title: "Ep. 112 — Small tools", artist: "Builder Radio", app_name: "Firefox", desktop_entry: "firefox", can_go_next: true, can_go_previous: true },
+  { type: "media_state", id: "mpris.mpv", available: true, stale: false, playing: false, title: "Signals, lecture 4", artist: "mpv", app_name: "mpv", desktop_entry: "mpv", can_go_next: false, can_go_previous: false },
+  { type: "media_state", id: "mpris.audacity", available: true, stale: false, playing: false, title: "Interview, take 3", artist: "Audacity", app_name: "Audacity", desktop_entry: "audacity", can_go_next: false, can_go_previous: false },
+  { type: "media_state", id: "mpris.chromium", available: true, stale: false, playing: false, title: "Rain on a tin roof", artist: "Ambient Sounds", app_name: "Chromium", desktop_entry: "chromium", can_go_next: true, can_go_previous: true },
+];
+
 const DEMOS: Record<string, ServerDeck> = {
   firefox: FIREFOX,
   youtube: YOUTUBE,
@@ -342,6 +414,9 @@ const DEMOS: Record<string, ServerDeck> = {
   vlc: VLC,
   mpris: MPRIS,
   macro: MACRO,
+  home: HOME,
+  gmail: GMAIL,
+  meet: MEET,
 };
 
 type DemoView = "deck" | "trackpad" | "settings" | "nowplaying" | "editor";
@@ -356,12 +431,14 @@ const DEMO_VIEWS: Record<string, DemoView> = {
   settings: "settings",
   trackpad: "trackpad",
   mpris: "nowplaying",
+  media: "nowplaying",
   editor: "editor",
 };
 const VIEW_DEMO_BASE = VLC;
 const VIEW_DEMO_BASE_FOR: Record<string, ServerDeck> = {
   mpris: MPRIS,
-  editor: FIREFOX,
+  media: MPRIS,
+  editor: HOME,
 };
 
 /** The demo fixtures, keyed by name — for the gallery and Ladle stories. */
@@ -399,6 +476,20 @@ export function getDemoView(): DemoView {
  * picker renders with sample entries. */
 export const EDITOR_DEMO_DECKS = [
   {
+    id: "home",
+    match: ["default"],
+    display_name: "Home",
+    widgets: HOME.widgets,
+  },
+  {
+    id: "gmail",
+    match: ["title:*Gmail*"],
+    display_name: "Gmail",
+    theme: GMAIL.theme,
+    icon: GMAIL.icon,
+    widgets: GMAIL.widgets,
+  },
+  {
     id: "firefox",
     match: ["firefox", "Firefox", "firefox-esr"],
     display_name: "Firefox",
@@ -428,3 +519,11 @@ export const EDITOR_DEMO_DECKS = [
     widgets: [],
   },
 ];
+
+/** The MPRIS rows to seed for the current ``?demo=`` page: the curated
+ * showcase rows for ``media``, the test fixture rows otherwise. */
+export function getDemoMediaStates(): MediaState[] {
+  if (typeof window === "undefined") return MPRIS_DEMO_STATES;
+  const name = new URLSearchParams(window.location.search).get("demo");
+  return name === "media" ? SHOWCASE_MEDIA_STATES : MPRIS_DEMO_STATES;
+}

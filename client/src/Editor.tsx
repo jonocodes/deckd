@@ -130,10 +130,15 @@ function buildCreationForm(
 }
 
 export function Editor({ deck: activeDeck, send, onExit, mockDecks }: EditorProps) {
-  const initialSelectedId =
-    (activeDeck && activeDeck.app !== EDITOR_VIEW_ID)
-      ? activeDeck.app
-      : (mockDecks ? (mockDecks.find((entry) => entry.id !== EDITOR_VIEW_ID)?.id ?? mockDecks[0]?.id ?? null) : null);
+  const activeId = activeDeck && activeDeck.app !== EDITOR_VIEW_ID ? activeDeck.app : null;
+  // With mock decks (demo mode) the active deck's ``app`` may not be one of
+  // the entries (``"Firefox (demo)"``); fall back to the first real deck so
+  // the canvas isn't left on "No deck selected".
+  const initialSelectedId = mockDecks
+    ? (mockDecks.some((entry) => entry.id === activeId)
+      ? activeId
+      : (mockDecks.find((entry) => entry.id !== EDITOR_VIEW_ID)?.id ?? mockDecks[0]?.id ?? null))
+    : activeId;
   const [decks, setDecks] = useState<DeckEntry[]>(mockDecks ?? []);
   // ``initialSelectedId``'s ternary resolves to ``string | null | undefined``
   // (the ``mockDecks?.find(...)?.id`` branch is ``undefined`` when no

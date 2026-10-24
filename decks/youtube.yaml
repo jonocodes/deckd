@@ -21,6 +21,7 @@ widgets:
       source: lucide
       name: play
     color: "#ff0000"
+    size: [2, 1]
     action:
       key: "k"
   - id: mute
@@ -63,3 +64,11 @@ widgets:
       name: captions
     action:
       key: "c"
+  - id: next
+    kind: button
+    label: Next video
+    icon:
+      source: lucide
+      name: skip-forward
+    action:
+      key: "shift+n"

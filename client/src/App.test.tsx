@@ -235,6 +235,22 @@ describe("App — nowplaying per-row cell", () => {
  * registers, so these tests can push synthetic frames and assert on
  * the icon's class without standing up a real daemon.
  */
+describe("App — demo sensor readings", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    window.localStorage.clear();
+    window.history.replaceState(null, "", "/?demo=meter");
+  });
+
+  it("seeds the meter demo's CPU/MEM readings so cells aren't blank", () => {
+    render(<App />);
+    // METER_DEMO_SEEDS: cpu_percent 58, mem_percent 41. The stats cell
+    // shows both; without seeding it renders "—".
+    const values = [...document.querySelectorAll(".stats-row-value")].map((el) => el.textContent);
+    expect(values).toEqual(["58%", "41%"]);
+  });
+});
+
 describe("App — chrome media icon passive indicator", () => {
   afterEach(cleanup);
   beforeEach(() => {
@@ -632,6 +648,58 @@ describe("App — focus restoration", () => {
     });
     await new Promise((r) => setTimeout(r, 10));
     expect(document.activeElement).toBe(screen.getByRole("button", { name: "settings" }));
+  });
+
+  it("moves focus without scrolling, so an embedded client can't scroll its host page", async () => {
+    // The homepage embeds the client in iframes; a plain focus() there
+    // scrolls the parent page to the iframe. Every view-switch focus must
+    // pass ``preventScroll``.
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      render(<App />);
+      fireEvent.keyDown(window, { key: "1" });
+      await new Promise((r) => setTimeout(r, 10));
+      await act(async () => {
+        fireEvent.keyDown(window, { key: "Escape" });
+      });
+      await new Promise((r) => setTimeout(r, 10));
+      expect(focus.mock.calls.length).toBeGreaterThanOrEqual(2);
+      for (const call of focus.mock.calls) expect(call[0]).toMatchObject({ preventScroll: true });
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
+  it("lands focus on play/pause, not Previous, when now playing opens", async () => {
+    // The primary control of a view is marked ``data-autofocus``; the
+    // first focusable (the Previous skip button) is only the fallback.
+    window.history.replaceState(null, "", "/?demo=mpris");
+    render(<App />);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(document.activeElement?.className).toContain("nowplaying-play");
+  });
+
+  it("shows the focus ring only when the view was reached by keyboard", async () => {
+    // A view that is open on load (a deep link, a demo page) or opened by
+    // tapping must not paint a focus ring on its first control; a keyboard
+    // shortcut must, so keyboard users can see where they are.
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      window.history.replaceState(null, "", "/?demo=mpris");
+      render(<App />);
+      await new Promise((r) => setTimeout(r, 10));
+      expect(focus.mock.calls.at(-1)?.[0]).toMatchObject({ focusVisible: false });
+      cleanup();
+      focus.mockClear();
+
+      window.history.replaceState(null, "", "/?demo=default");
+      render(<App />);
+      fireEvent.keyDown(window, { key: "1" });
+      await new Promise((r) => setTimeout(r, 10));
+      expect(focus.mock.calls.at(-1)?.[0]).toMatchObject({ focusVisible: true });
+    } finally {
+      focus.mockRestore();
+    }
   });
 
   it("returns focus to the settings button after closing the editor view", async () => {
