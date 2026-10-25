@@ -9,6 +9,7 @@ describe("view routing", () => {
     ["/now-playing", "nowplaying"],
     ["/editor", "editor"],
     ["/windows", "windows"],
+    ["/agents", "agents"],
     ["/help", "help"],
   ] as const)("maps %s to %s", (path, view) => {
     expect(viewFromPath(path)).toBe(view);

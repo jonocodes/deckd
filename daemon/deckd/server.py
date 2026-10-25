@@ -65,6 +65,7 @@ if TYPE_CHECKING:
     from dbus_fast import BusType as BusTypeT
     from dbus_fast.aio import MessageBus
 
+    from .agents import AgentSource, AgentStatus
     from .bind import ResolvedBind
     from .input import KeySink
     from .decks import Action, Macro, Widget
@@ -595,6 +596,7 @@ class Server:
         media_manager: MediaManager | None = None,
         mpris_backend: MprisBackend | None = None,
         mpris_art_resolver: "Callable[[str | None], Awaitable[tuple[str, bytes] | None]] | None" = None,
+        agent_source: "AgentSource | None" = None,
     ) -> None:
         self.decks_dir = decks_dir
         self.overlay_dir = overlay_dir
@@ -764,6 +766,13 @@ class Server:
         # the snapshot the watcher is about to compute, so the snapshot
         # replay rides through ``push_running_windows_snapshot`` below.
         self._last_running_windows: list["WindowInfo"] | None = None
+        # Agent tiles (issue #180). ``None`` source = feature off: no
+        # task, no ``agents`` frame ever, so the client keeps its chrome
+        # button hidden. ``_last_agents`` is ``None`` until the source's
+        # first snapshot lands.
+        self.agent_source = agent_source
+        self._agents_task: asyncio.Task[None] | None = None
+        self._last_agents: list["AgentStatus"] | None = None
         # Sensor subscriptions for the active deck. Re-derived whenever
         # the active deck changes (focus change or hot reload) so the
         # daemon only polls sensors the current view is actually using.
@@ -1172,6 +1181,62 @@ class Server:
             return None
         self._windows_task = asyncio.create_task(self.run_windows_watcher())
         return self._windows_task
+
+    # -- agent tiles (issue #180) ---------------------------------------------
+    #
+    # Same shape as the windows watcher: one long-running task drains the
+    # source's snapshot iterator, dedupes by value, and broadcasts an
+    # ``agents`` frame. View-only — nothing flows back to the source.
+
+    async def run_agents_watcher(self) -> None:
+        source = self.agent_source
+        if source is None:
+            return
+        try:
+            async for snapshot in source.watch():
+                if self._last_agents is not None and self._last_agents == snapshot:
+                    continue
+                self._last_agents = list(snapshot)
+                await self._broadcast_message(self._agents_message(self._last_agents))
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            log.warning("agent source %s exited: %s", source.name, exc)
+
+    @staticmethod
+    def _agents_message(snapshot: Sequence["AgentStatus"]) -> "p.AgentsMessage":
+        return p.AgentsMessage(
+            type="agents",
+            agents=[
+                p.AgentEntry(
+                    source=a.source,
+                    id=a.id,
+                    title=a.title,
+                    state=a.state,
+                    cwd=a.cwd,
+                    detail=a.detail,
+                    since=a.since,
+                )
+                for a in snapshot
+            ],
+        )
+
+    async def push_agents_snapshot(self, session: Session) -> None:
+        """Replay the agent tiles to a just-connected session.
+
+        With a source configured but no snapshot yet (upstream still
+        connecting), send an empty list so the client knows the feature
+        is on and can show its chrome button straight away.
+        """
+        if self.agent_source is None:
+            return
+        await session.send(self._agents_message(self._last_agents or []))
+
+    def start_agents_watcher(self) -> asyncio.Task[None] | None:
+        if self.agent_source is None or self._agents_task is not None:
+            return None
+        self._agents_task = asyncio.create_task(self.run_agents_watcher())
+        return self._agents_task
 
     # -- session lock/blank watcher (issue #160) ------------------------------
     #
@@ -2497,6 +2562,8 @@ class Server:
             # change. A backend without ``watch_windows`` is a silent
             # no-op; the chrome view's empty state is the signal.
             await self.push_running_windows_snapshot(session)
+            # Issue #180: agent tiles, same replay rationale.
+            await self.push_agents_snapshot(session)
             # Issue #160: replay the session-state snapshot so a phone
             # joining mid-lock isn't stuck showing a stale deck. An
             # unobserving backend answers all-false — the honest
@@ -3171,7 +3238,7 @@ class Server:
             await asyncio.sleep(3600)
 
     async def stop(self) -> None:
-        for task in (self._focus_task, self._windows_task, self._session_state_task, self._decks_task, self._sensor_task, self._media_task):
+        for task in (self._focus_task, self._windows_task, self._agents_task, self._session_state_task, self._decks_task, self._sensor_task, self._media_task):
             if task is not None:
                 task.cancel()
                 try:

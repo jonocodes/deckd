@@ -31,6 +31,7 @@ import type {
   MacroResultMessage,
   ConfirmRequestMessage,
   RunningWindowsMessage,
+  AgentsMessage,
   HelloMessage,
   PressMessage,
   JogMessage,
@@ -66,6 +67,8 @@ export type {
   ConfirmRequestMessage,
   WindowListEntry,
   RunningWindowsMessage,
+  AgentEntry,
+  AgentsMessage,
   ServerMessage,
   HelloMessage,
   PressMessage,
@@ -211,6 +214,9 @@ export interface ServerWindowListEntry {
 export type ServerRunningWindows = Omit<RunningWindowsMessage, "windows"> & {
   windows: ServerWindowListEntry[];
 };
+// Issue #180: agent tiles are plain data (no opaque icon), so the wire
+// type is the server type.
+export type ServerAgents = AgentsMessage;
 export type MediaState = MediaStateMessage;
 
 export type ClientHello = HelloMessage;

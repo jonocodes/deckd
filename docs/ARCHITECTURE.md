@@ -24,6 +24,7 @@ graph TB
         WATCHER["File Watcher<br/>watchfiles (YAML hot-reload)"]
         EVENTS["Event Stream<br/>events.py"]
         SENSORS["Sensor Polling<br/>platform.py (psutil)"]
+        AGENTS["Agent Source<br/>agents.py (Paseo WS)"]
     end
 
     subgraph "Action Dispatch"
@@ -80,6 +81,8 @@ graph TB
 
     SENSORS -->|"cpu_percent<br/>mem_percent<br/>etc."| WS
     EVENTS -->|"focus change, deck reload,<br/>action attempt, MPRIS transitions"| WS
+    PASEO["Paseo daemon<br/>ws://127.0.0.1:6767/ws"] -->|"agent snapshots + agent_update"| AGENTS
+    AGENTS -->|"AgentsMessage"| WS
 ```
 
 ## Key flows
@@ -100,7 +103,9 @@ graph TB
 
 8. **Hot-reload**: `watchfiles` monitors the decks directory → on any `.yaml` write, re-loads all decks, resolves current focus → pushes new `DeckMessage` to every connected session. Invalid YAML pushes `DeckMessage` with `error` set (last-good decks stay live).
 
-9. **Diagnostic events**: Client sends `enable_events` → daemon pushes `EventMessage` frames for focus changes, deck reloads, action outcomes, auth events, and MPRIS transitions. Event stream is per-session and opt-in.
+9. **Agent tiles** (issue #180): an `AgentSource` (`agents.py`; Paseo first) holds a WebSocket subscription to the orchestrator, translates each agent into one of six agent states, and yields full snapshots → daemon dedupes and broadcasts an `AgentsMessage` to every session (replayed on connect). The client renders them in the client-local `agents` view. View-only: nothing flows back.
+
+10. **Diagnostic events**: Client sends `enable_events` → daemon pushes `EventMessage` frames for focus changes, deck reloads, action outcomes, auth events, and MPRIS transitions. Event stream is per-session and opt-in.
 
 ## Documentation index
 

@@ -84,6 +84,20 @@ _Avoid_: host, listen address, exposed interface
 The single `http://<bind-host>:<port>/` URL a phone types into its browser to reach the daemon. Surfaced as the `url` field on `/health` and `/diag`, and prepended above the JSON body of `deckctl status`. Prefers IPv4 over IPv6 so a phone on a typical home LAN doesn't get a `http://[::1]:.../` link it can't resolve. The password gate still has to be cleared by every non-localhost client; the pairing URL is a convenience, not a bypass.
 _Avoid_: connection URL, daemon URL
 
+### Agent status (issue #180)
+
+**Agent tile**:
+One live AI coding agent in the client's agents view: a title, its project (`cwd` basename), a short `detail` reason, how long it has been in its state, and an **agent state**. View-only — nothing flows back to the orchestrator. Never carries prompt or transcript text in `detail`.
+_Avoid_: agent card, session tile, job
+
+**Agent state**:
+The source-agnostic six-value status every **agent source** translates into, in urgency order: `needs_input` (blocked on the human — permission, question, plan review), `error`, `working`, `done` (finished, not yet looked at), `idle`, `offline`. Mirrors Paseo's own state bucketing; the mapping from every evaluated orchestrator is in `docs/research/agent-orchestrator-status.md` §6.
+_Avoid_: agent status (ambiguous with the whole entry), phase, lifecycle
+
+**Agent source**:
+A daemon-side adapter that streams full agent snapshots from one orchestrator (`deckd.agents.AgentSource`). The first is Paseo, subscribed over its daemon WebSocket. Sources own all orchestrator vocabulary; the wire and client only ever see agent states.
+_Avoid_: bridge (reserve for an out-of-process pusher), integration, provider
+
 ### Session screen state (issue #160)
 
 **Screen locked**:

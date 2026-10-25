@@ -5,6 +5,7 @@ export type View =
   | "nowplaying"
   | "editor"
   | "windows"
+  | "agents"
   | "help";
 
 const PATH_BY_VIEW: Record<View, string> = {
@@ -14,6 +15,7 @@ const PATH_BY_VIEW: Record<View, string> = {
   nowplaying: "/now-playing",
   editor: "/editor",
   windows: "/windows",
+  agents: "/agents",
   // Reached from Settings rather than an always-on chrome button: it explains
   // the sizing controls sitting right above the link (ADR-0011).
   help: "/help",

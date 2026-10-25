@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Lock as LockIcon, Moon as MoonIcon, Settings as SettingsIcon, Globe as GlobeIcon, Maximize as MaximizeIcon, Minimize as MinimizeIcon } from "lucide-react";
-import { LayoutGrid as LayoutGridIcon, Music as MusicIcon, PointerIcon } from "lucide-react";
+import { Bot as BotIcon, LayoutGrid as LayoutGridIcon, Music as MusicIcon, PointerIcon } from "lucide-react";
 import { useDeckdSocket } from "./socket";
 import { ButtonGrid } from "./ButtonGrid";
 import { JogStrip } from "./JogStrip";
 import { ManualControl } from "./ManualControl";
 import { NowPlayingCell } from "./NowPlayingCell";
 import { RunningWindowsList } from "./RunningWindowsList";
+import { AgentTiles } from "./AgentTiles";
 import { Tooltip } from "./Tooltip";
 import { PasswordGate } from "./PasswordGate";
 import { Settings } from "./Settings";
@@ -41,6 +42,8 @@ import type {
   ServerDeck,
   ServerMediaError,
   ServerRunningWindows,
+  ServerAgents,
+  AgentEntry,
   ServerState,
   WindowListEntry,
 } from "./protocol";
@@ -198,6 +201,13 @@ export function App() {
   // platform" empty state in the meantime (issue #120 decision 8).
   const [runningWindows, setRunningWindows] = useState<WindowListEntry[] | undefined>(undefined);
   const onRunningWindows = useCallback((m: ServerRunningWindows) => setRunningWindows(m.windows), []);
+  // Agent tiles (issue #180). ``undefined`` until the first ``agents``
+  // frame — a daemon with no agent source never sends one, so the chrome
+  // button stays hidden. The view is client-local (no select_view): the
+  // tiles are global data, not a deck.
+  const [agents, setAgents] = useState<AgentEntry[] | undefined>(undefined);
+  const onAgents = useCallback((m: ServerAgents) => setAgents(m.agents), []);
+  const agentsNeedingYou = agents?.filter((a) => a.state === "needs_input").length ?? 0;
   // Two-state session screen awareness (issue #160). ``null`` until the
   // first ``state`` frame arrives — both halves read false, which is
   // exactly what a daemon without lock detection ever pushes. ``locked``
@@ -254,6 +264,7 @@ export function App() {
     onRunningWindows,
     onSessionState,
     onMediaError,
+    onAgents,
     { enabled: !demoDeck && !isPlayground },
   );
   const playgroundSocket = usePlaygroundDaemon(
@@ -263,6 +274,7 @@ export function App() {
     onChromeMedia,
     onConfirmRequest,
     onRunningWindows,
+    onAgents,
     { enabled: isPlayground },
   );
   const {
@@ -440,6 +452,10 @@ export function App() {
     () => navigate(view === "trackpad" ? "deck" : "trackpad"),
     [navigate, view],
   );
+  const openAgents = useCallback(
+    () => navigate(view === "agents" ? "deck" : "agents"),
+    [navigate, view],
+  );
   const openSettings = useCallback(
     () => navigate(view === "settings" ? "deck" : "settings"),
     [navigate, view],
@@ -460,6 +476,7 @@ export function App() {
   const settingsBtnRef = useRef<HTMLButtonElement | null>(null);
   const mediaBtnRef = useRef<HTMLButtonElement | null>(null);
   const windowsBtnRef = useRef<HTMLButtonElement | null>(null);
+  const agentsBtnRef = useRef<HTMLButtonElement | null>(null);
   // Remember the chrome button that opened the current view so a
   // window-level Escape (where ``e.target`` is the body, not a
   // button) can still hand focus back to the right place.
@@ -566,11 +583,18 @@ export function App() {
         viewOriginRef.current = windowsBtnRef.current;
         lastChromeFocus.current = windowsBtnRef.current;
         toggleWindows();
+      } else if (e.key === "6" && agents !== undefined) {
+        // Agent tiles are view-only, so unlike 1/5 they stay open
+        // while the screen is locked.
+        e.preventDefault();
+        viewOriginRef.current = agentsBtnRef.current;
+        lastChromeFocus.current = agentsBtnRef.current;
+        openAgents();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [navigate, view, openTrackpad, openSettings, toggleNowPlaying, toggleEditor, toggleWindows, send, status, screenLocked]);
+  }, [navigate, view, openTrackpad, openSettings, toggleNowPlaying, toggleEditor, toggleWindows, openAgents, agents, send, status, screenLocked]);
 
   const jogstripEnabled = deck?.jogstrip_enabled ?? true;
   const statusLabel = STATUS_LABEL[status];
@@ -616,6 +640,7 @@ export function App() {
     if (view === "help") return "Button layout help";
     if (view === "editor") return "Deck editor";
     if (view === "windows") return "Running programs";
+    if (view === "agents") return "Agents";
     if (deck?.error) return "Deck error";
     if (deck)
       return (deck.display_name?.trim() || deck.app || "deckd") + programSuffix;
@@ -927,6 +952,9 @@ export function App() {
                 send({ type: "clear_view" });
               }}
             />
+          ) : view === "agents" ? (
+            // Agent tiles (issue #180): view-only, the whole surface.
+            <AgentTiles agents={agents} />
           ) : deck?.error ? (
             <div className="deck-error" role="alert">
               <span className="deck-error-title">Deck error</span>
@@ -1086,6 +1114,39 @@ export function App() {
               })}
             >
               <LayoutGridIcon size={18} />
+            </button>
+          </Tooltip>
+        )}
+        {connected && agents !== undefined && (
+          // Agent tiles (issue #180). Only shown once the daemon has sent
+          // an ``agents`` frame, i.e. it has an agent source. An amber
+          // count rides on the button while any agent needs you, so it's
+          // visible from every deck.
+          <Tooltip
+            ref={agentsBtnRef}
+            label={agentsNeedingYou ? `agents (${agentsNeedingYou} need you)` : "agents"}
+          >
+            <button
+              className={`chrome-btn${view === "agents" ? " chrome-btn-active" : ""}${agentsNeedingYou ? " chrome-btn-agents-alert" : ""}`}
+              aria-label={agentsNeedingYou ? `agents, ${agentsNeedingYou} need you` : "agents"}
+              aria-pressed={view === "agents"}
+              onPointerDown={() => {
+                viewOriginRef.current = agentsBtnRef.current;
+                lastChromeFocus.current = agentsBtnRef.current;
+                openAgents();
+              }}
+              onKeyDown={onActivate(() => {
+                viewOriginRef.current = agentsBtnRef.current;
+                lastChromeFocus.current = agentsBtnRef.current;
+                openAgents();
+              })}
+            >
+              <BotIcon size={18} />
+              {agentsNeedingYou > 0 && (
+                <span className="chrome-btn-badge" aria-hidden="true">
+                  {agentsNeedingYou}
+                </span>
+              )}
             </button>
           </Tooltip>
         )}

@@ -461,7 +461,61 @@ export type RunningWindowsMessage = {
   windows: WindowListEntry[];
 };
 
-export type ServerMessage = DeckMessage | StateMessage | BrightnessMessage | WidgetUpdateMessage | MediaStateMessage | MediaErrorMessage | ChromeMediaMessage | EventMessage | MacroResultMessage | ConfirmRequestMessage | RunningWindowsMessage | ErrorMessage;
+/**
+ * One agent tile in the ``agents`` snapshot (issue #180).
+ *
+ *     Source-agnostic: each orchestrator bridge (Paseo first) translates
+ *     its native states into ``state`` before anything reaches the wire,
+ *     so the client never learns a source's vocabulary. ``(source, id)``
+ *     is the identity. ``detail`` is a short reason ("Approve Bash",
+ *     "Starting") — never prompt or transcript text. ``since`` is epoch
+ *     seconds for when the agent entered ``state`` (``null`` when the
+ *     source can't say).
+ *     
+ */
+export type AgentEntry = {
+  /**
+   * constraint: min_length=1
+   */
+  source: string;
+  /**
+   * constraint: min_length=1
+   */
+  id: string;
+  /**
+   * constraint: min_length=1
+   */
+  title: string;
+
+  state: "needs_input" | "error" | "working" | "done" | "idle" | "offline";
+
+  cwd?: string | null;
+
+  detail?: string | null;
+
+  since?: number | null;
+};
+
+/**
+ * Daemon -> client push: the agent-tiles snapshot (issue #180).
+ *
+ *     Full snapshot per push, already sorted most-urgent-first (the
+ *     client renders in wire order). Broadcast to every session on change
+ *     and replayed on connect, same shape as ``running_windows``. A
+ *     daemon with no agent source configured never sends one, so the
+ *     client can hide the chrome button until the first frame lands; an
+ *     empty list means "source up, no live agents" (or the source lost
+ *     its upstream).
+ *     
+ */
+export type AgentsMessage = {
+
+  type: "agents";
+
+  agents: AgentEntry[];
+};
+
+export type ServerMessage = DeckMessage | StateMessage | BrightnessMessage | WidgetUpdateMessage | MediaStateMessage | MediaErrorMessage | ChromeMediaMessage | EventMessage | MacroResultMessage | ConfirmRequestMessage | RunningWindowsMessage | AgentsMessage | ErrorMessage;
 
 export type HelloMessage = {
 
