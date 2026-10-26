@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>deckd — a touch deck that follows your focus</title>
+<meta name="description" content="deckd turns any phone, tablet or browser into a touch deck that follows the focused app on your computer — including websites like Gmail, YouTube and Google Meet. Open source, for Linux and macOS.">
+<meta property="og:title" content="deckd">
+<meta property="og:description" content="A touch deck that follows the focused app — and website — on your computer.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#f5f2ea">
+<link rel="icon" type="image/svg+xml" href="../../../assets/deckd-mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper: #f5f2ea;
+    --ink: #1d1c1a;
+    --muted: #6b665c;
+    --rule: #d9d3c4;
+    --accent: #d9480f;
+    --serif: "Source Serif 4", Georgia, serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font: 19px/1.6 var(--serif);
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 760px; margin: 0 auto; padding: 32px 24px 96px; }
+  header.top {
+    display: flex; align-items: center; gap: 12px;
+    font: 14px var(--mono);
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 14px;
+  }
+  header.top img { width: 22px; height: 22px; }
+  header.top b { font-weight: 500; }
+  header.top nav { margin-left: auto; display: flex; gap: 20px; }
+  a { color: inherit; text-decoration-color: var(--accent); text-underline-offset: 3px; }
+  a:hover { color: var(--accent); }
+
+  h1 {
+    font-weight: 600;
+    font-size: 44px;
+    line-height: 1.12;
+    letter-spacing: -0.015em;
+    margin: 72px 0 20px;
+    max-width: 15em;
+  }
+  .lede { font-size: 21px; color: #3a3833; max-width: 34em; }
+
+  figure { margin: 48px -60px 12px; }
+  figcaption {
+    font: 13px/1.5 var(--mono); color: var(--muted);
+    margin: 12px 60px 0;
+  }
+  .apps span { color: var(--ink); transition: color .2s; }
+  .apps span[aria-current] { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+  .apps em { font-style: normal; color: var(--muted); }
+
+  h2 {
+    font: 500 13px var(--mono);
+    text-transform: uppercase; letter-spacing: .08em;
+    color: var(--muted);
+    margin: 72px 0 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+  }
+  ol.steps { padding-left: 1.2em; }
+  ol.steps li { margin: 0 0 10px; padding-left: 6px; }
+  ol.steps li::marker { font: 15px var(--mono); color: var(--accent); }
+
+  dl.uses { display: grid; grid-template-columns: 11em 1fr; gap: 10px 24px; margin: 0; }
+  dl.uses dt { font-style: italic; }
+  dl.uses dd { margin: 0; color: #3a3833; }
+
+  code, pre { font-family: var(--mono); font-size: 15px; }
+  pre {
+    background: #ece7da; border-left: 3px solid var(--accent);
+    padding: 14px 18px; overflow-x: auto; line-height: 1.55;
+  }
+  pre .c { color: var(--muted); }
+
+  .dk-table { font-size: 16px; }
+  .dk-table th { font-size: 11px; }
+  .dk-points dt { font-style: italic; font-weight: 600; }
+  .dk-points dd, .dk-faq p { color: #3a3833; }
+  .dk-faq summary { font-weight: 600; }
+  .dk-roadmap h3 { font-size: 11px; }
+
+  footer { margin-top: 96px; padding-top: 16px; border-top: 1px solid var(--rule); display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; font: 13px/1.7 var(--mono); color: var(--muted); }
+
+  @media (max-width: 860px) { figure { margin-inline: 0; } figcaption { margin-inline: 0; } }
+  @media (max-width: 560px) {
+    body { font-size: 17px; } h1 { font-size: 32px; margin-top: 40px; }
+    dl.uses { grid-template-columns: 1fr; } dl.uses dd { margin-bottom: 8px; }
+    header.top nav { gap: 12px; }
+  }
+  :root {
+    --dk-ink: var(--ink); --dk-muted: var(--muted); --dk-line: var(--rule);
+    --dk-desk: #fffdf8; --dk-desk-ink: #222; --dk-accent: var(--accent); --dk-mono: var(--mono); --dk-yes: #2f7d32;
+  }
+  figure.wide { margin: 24px -60px 0; }
+  .figcap { font: 13px var(--mono); color: var(--muted); margin-top: 10px; }
+  .dk-row figcaption { margin: 10px 0 0; }
+  figure[data-dk="phone"] { max-width: 620px; margin-inline: auto; }
+  
+  .dk-install pre { font-size: 14px; }
+  .dk-install .dl { color: #fff; }
+  @media (max-width: 860px) { figure.wide { margin-inline: 0; } }
+</style>
+<link rel="stylesheet" href="shared/scenes.css">
+<script src="shared/content.js" defer></script>
+<script src="shared/scenes.js" defer></script>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <img src="../../../assets/deckd-mark.svg" alt="">
+    <b>deckd</b>
+    <nav>
+      <a href="#install">install</a>
+      <a href="#faq">faq</a>
+      <a href="https://github.com/jonocodes/deckd/blob/main/docs/GUIDE.md">guide</a>
+      <a href="https://github.com/jonocodes/deckd">github</a>
+    </nav>
+  </header>
+
+  <h1>A touch deck for your desktop that changes with the app you're using.</h1>
+  <p class="lede">
+    deckd runs a small daemon on your computer and serves a page of buttons to
+    any browser — your phone, an old tablet, a second laptop. Focus Firefox and
+    you get tab controls. Open Gmail and you get compose, reply and archive.
+    No app to install on the phone, no USB hardware.
+  </p>
+
+  <figure data-dk="cycle">
+    <div class="dk-cycle-phone"></div>
+    <figcaption class="apps">
+      Fig. 1 — the real client, following focus:
+      <span data-q="demo=home">the desktop</span>,
+      <span data-q="demo=firefox">Firefox</span>,
+      <span data-q="demo=gmail">Gmail</span><em>*</em>,
+      <span data-q="demo=youtube">YouTube</span><em>*</em>,
+      <span data-q="demo=meet">Google Meet</span><em>*</em>.
+      <em>* websites, matched by window title.</em>
+    </figcaption>
+  </figure>
+
+  <h2>How it works</h2>
+  <ol class="steps">
+    <li>A small program on your computer watches which window has focus.</li>
+    <li>It picks the deck for that app — or for the website you're on.</li>
+    <li>Your phone redraws instantly. Presses come back as keystrokes, commands, or media controls.</li>
+  </ol>
+
+  <h2>Websites are apps too</h2>
+  <p>Most remotes see "Firefox" and stop there. deckd reads the window title, so Gmail, YouTube and Google Meet each get their own buttons, driving the site's own keyboard shortcuts. No browser extension, and any site with shortcuts can have a deck.</p>
+  <figure class="wide" data-dk="webapps"></figure>
+
+  <h2>Everything that's playing</h2>
+  <p>A music app, a podcast in a browser tab, a video in mpv: every player shows up in one list with play, pause and skip, a tap away from any deck.</p>
+  <figure class="wide" data-dk="nowplaying"></figure>
+
+  <h2>Your phone as a trackpad</h2>
+  <p>For everything a deck doesn't cover: drag to move the pointer, tap to click, and a keyboard when you need to type.</p>
+  <figure class="wide" data-dk="trackpad"></figure>
+  <p class="figcap">Animation. The phone is the real client; the window on the right stands in for your desktop.</p>
+
+  <h2>A scroll wheel for any window</h2>
+  <p>The strip on the right edge of every deck scrolls whatever's focused — flick it and it coasts, like a real wheel.</p>
+  <figure class="wide" data-dk="scroll"></figure>
+  <p class="figcap">Animation.</p>
+
+  <h2>Decks for anything</h2>
+  <p>Open an app, run a command, open a site, lock the screen — beside live CPU, memory, swap and disk. Decks are built in the editor inside the app, and every screen updates as you save.</p>
+  <figure class="wide" data-dk="phone" data-q="demo=home"></figure>
+
+  <h2>Where it runs</h2>
+  <div data-dk="platforms"></div>
+
+  <h2>Private by default</h2>
+  <div data-dk="security"></div>
+
+  <h2>Compared to</h2>
+  <p>The original inspiration was the Stream Deck. I wanted something that could do more — open-ended controls, on any device, across platforms.</p>
+  <div data-dk="compare"></div>
+
+  <h2 id="install">Install</h2>
+  <div data-dk="install"></div>
+
+  <h2>Where it's going</h2>
+  <div data-dk="roadmap"></div>
+
+  <h2 id="faq">Questions</h2>
+  <div data-dk="faq"></div>
+
+  <footer>
+    <span>deckd · GPL-3.0 · no account, no cloud</span>
+    <span><a href="https://github.com/jonocodes/deckd">source</a> · <a href="https://github.com/jonocodes/deckd/issues">issues</a> · <a href="https://github.com/jonocodes/deckd/blob/main/docs/GUIDE.md">guide</a> · <a href="https://github.com/jonocodes/deckd/blob/main/docs/REFERENCE.md">reference</a></span>
+  </footer>
+</div>
+</body>
+</html>

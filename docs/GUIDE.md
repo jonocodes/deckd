@@ -926,7 +926,9 @@ Built-in sensors (all psutil-backed — see "Why no CPU temperature?" below for 
 |----------------|--------------------------------|--------------------------------------------------|--------|
 | `cpu_percent`  | Whole-system CPU utilisation   | `psutil.cpu_percent(interval=None)` — delta since the last call. The first reading is `0.0` (no baseline); subsequent readings land in `[0, 100]`. | 1s     |
 | `mem_percent`  | Memory used / total            | `psutil.virtual_memory().percent`                 | 1s     |
-| *(more TBD)*   | CPU frequency, battery, swap   | `psutil.cpu_freq()`, `psutil.sensors_battery()`, `psutil.swap_memory()` — all the same API. Open to contributions. | varies |
+| `swap_percent` | Swap used / total (`0` with no swap) | `psutil.swap_memory().percent`              | 1s     |
+| `disk_percent` | Root filesystem (`/`) used / total | `psutil.disk_usage("/").percent`             | 1s     |
+| *(more TBD)*   | CPU frequency, battery         | `psutil.cpu_freq()`, `psutil.sensors_battery()` — all the same API. Open to contributions. | varies |
 
 #### Why no CPU temperature?
 

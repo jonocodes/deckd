@@ -31,7 +31,7 @@ import {
 import type { CSSProperties } from "react";
 import { useWakeLock } from "./wake-lock";
 import { useFullscreen } from "./fullscreen";
-import { getDemoDeck, getDemoView, MEDIA_DEMO_STATES, MPRIS_DEMO_STATES, EDITOR_DEMO_DECKS } from "./demo";
+import { getDemoDeck, getDemoView, getDemoMediaStates, MEDIA_DEMO_STATES, METER_DEMO_SEEDS, EDITOR_DEMO_DECKS } from "./demo";
 import { usePlaygroundDaemon } from "./playground/usePlaygroundDaemon";
 import { Icon } from "./Icon";
 import type { JogHandle } from "./JogStrip";
@@ -225,8 +225,12 @@ export function App() {
     // The mpris demo seeds the same MPRIS rows the daemon would
     // push; the now-playing cell filters to ``mpris.*`` ids so the VLC
     // fixture doesn't leak into the now-playing surface.
-    for (const state of MPRIS_DEMO_STATES) onMediaState(state);
-  }, [isDemo, onMediaState]);
+    for (const state of getDemoMediaStates()) onMediaState(state);
+    // Sensor readings too, so meter / stats cells aren't blank ("—").
+    for (const [source, seed] of Object.entries(METER_DEMO_SEEDS)) {
+      onWidgetUpdate({ type: "widget_update", id: source, source, value: seed.value, unit: seed.unit });
+    }
+  }, [isDemo, onMediaState, onWidgetUpdate]);
   // Confirmation handshake state (issues #69 / #107). The daemon
   // sends ``confirm_request`` instead of running a ``confirm: true``
   // action; this state holds the pending prompt and drives a modal
@@ -464,6 +468,25 @@ export function App() {
   // window-level Escape (where ``e.target`` is the body, not a
   // button) can still hand focus back to the right place.
   const viewOriginRef = useRef<HTMLElement | null>(null);
+  // Whether the last input was a key (vs. a tap / click, or nothing yet).
+  // Programmatic focus only shows a ring when it was: a view open on load or
+  // opened by touch shouldn't paint one on its first control.
+  const keyboardInputRef = useRef(false);
+  useEffect(() => {
+    const onKey = () => (keyboardInputRef.current = true);
+    const onPointer = () => (keyboardInputRef.current = false);
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("pointerdown", onPointer, true);
+    return () => {
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("pointerdown", onPointer, true);
+    };
+  }, []);
+  // ``preventScroll``: an embedded client (the homepage) must not scroll its
+  // host page. ``focusVisible`` isn't in TS's DOM lib yet; browsers that
+  // don't know it ignore it.
+  const moveFocus = (el: HTMLElement | null | undefined) =>
+    el?.focus({ preventScroll: true, focusVisible: keyboardInputRef.current } as FocusOptions);
 
   useEffect(() => {
     if (view === "deck") {
@@ -479,19 +502,20 @@ export function App() {
       // back — otherwise focus lands on a button that isn't in the
       // DOM yet on the very first paint after a view switch.
       const id = window.setTimeout(() => {
-        target?.focus();
+        moveFocus(target);
       }, 0);
       return () => window.clearTimeout(id);
     }
-    // Switching into a chrome view: snap focus to the first focusable
-    // child of the surface (slider, trackpad, transport button, etc.).
+    // Switching into a chrome view: snap focus to the view's primary control
+    // (marked ``data-autofocus``, e.g. play/pause), else the first focusable
+    // child of the surface (slider, trackpad, etc.).
     const id = window.setTimeout(() => {
       const surface = surfaceRef.current;
       if (!surface) return;
-      const focusable = surface.querySelector<HTMLElement>(
+      const focusable = surface.querySelector<HTMLElement>("[data-autofocus]:not([disabled])") ?? surface.querySelector<HTMLElement>(
         'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
       );
-      focusable?.focus();
+      moveFocus(focusable);
     }, 0);
     return () => window.clearTimeout(id);
   }, [view]);

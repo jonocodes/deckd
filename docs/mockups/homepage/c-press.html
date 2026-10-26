@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>deckd — buttons that change with the app you're in</title>
+<meta name="description" content="deckd turns any phone, tablet or browser into a touch deck that follows the focused app on your computer — including websites like Gmail, YouTube and Google Meet. Open source, for Linux and macOS.">
+<meta property="og:title" content="deckd">
+<meta property="og:description" content="A touch deck that follows the focused app — and website — on your computer.">
+<meta property="og:type" content="website">
+<meta name="theme-color" content="#e8e4dc">
+<link rel="icon" type="image/svg+xml" href="../../../assets/deckd-mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #e8e4dc;
+    --ink: #16181b;
+    --muted: #6e6a62;
+    --bezel: #16181b;
+    --tile: #23272e;
+    --tile-hi: #2c313a;
+    --sans: "Archivo", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.55 var(--sans); }
+  a { color: inherit; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 28px 80px; }
+
+  .mast { display: flex; align-items: baseline; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  .mast h1 { font-size: 112px; font-weight: 800; letter-spacing: -0.055em; line-height: .9; margin: 0; }
+  .mast nav { font: 14px var(--mono); display: flex; gap: 18px; }
+  .tag { font-size: 24px; font-weight: 500; max-width: 26em; margin: 22px 0 40px; line-height: 1.3; }
+  .tag em { font-style: normal; background: linear-gradient(transparent 62%, #fb923c88 62%); }
+
+  /* The device */
+  .device { background: var(--bezel); border-radius: 30px; padding: 16px; box-shadow: 0 2px 0 #fff8 inset, 0 30px 50px -30px #0008; }
+  .grid { display: grid; grid-template-columns: repeat(4, 1fr) 54px; grid-template-rows: repeat(2, 1fr); gap: 10px; }
+  .key {
+    aspect-ratio: 1.15; border: 1px solid #ffffff10; border-radius: 12px;
+    background: var(--c, var(--tile)); color: #eef0f2;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    font: 600 15px var(--sans); cursor: pointer;
+    transition: transform .06s, filter .1s;
+  }
+  .key svg { width: 38px; height: 38px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .key:hover { filter: brightness(1.15); }
+  .key:active, .key.pressed { transform: scale(.96); filter: brightness(1.35); }
+  .key[aria-pressed="true"] { outline: 2px solid #fb923c; outline-offset: 2px; }
+  .strip {
+    grid-row: 1 / 3; grid-column: 5; border-radius: 12px; border: 1px solid #ffffff14;
+    background: linear-gradient(#1c2027, #15181d);
+    writing-mode: vertical-rl; display: flex; align-items: center; justify-content: center;
+    font: 11px var(--mono); letter-spacing: .3em; color: #6b7480;
+  }
+  .bar { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 10px 6px 2px; border-top: 1px solid #fb923c66; color: #cfd3d8; font: 13px var(--mono); }
+  .badge { border: 1px solid #fb923c; border-radius: 99px; padding: 4px 12px; color: #fff; }
+  .lcd { flex: 1; color: #9aa3ad; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .live { color: #4ade80; } .live::before { content: "● "; }
+
+  .readout { margin-top: 44px; min-height: 420px; }
+  .readout .head { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 26px; }
+  .readout h2 { font-size: 30px; letter-spacing: -0.02em; line-height: 1.1; margin: 0; }
+  .readout p { margin: 0 0 12px; }
+  .readout .tag { margin-top: 12px; }
+  .readout [data-dk="phone"] { max-width: 640px; }
+  .more { margin-top: 80px; }
+  .long { margin-top: 96px; }
+  .long h2 { font-size: 40px; font-weight: 800; letter-spacing: -0.03em; line-height: 1; margin: 0 0 28px; padding-top: 18px; border-top: 2px solid var(--ink); }
+  .long .sub { max-width: 40em; margin: -10px 0 24px; }
+  .dk-table { background: #f4f1eb; border: 1px solid #d5cfc3; }
+  .dk-faq summary { font-size: 18px; }
+  .dk-faq p, .dk-points dd { color: #4a4740; }
+  .more h3 { font: 500 13px var(--mono); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 18px; }
+  .dk-install .dl { color: #fff; }
+  .dk-install pre { background: #f4f1eb; border: 1px solid #d5cfc3; padding: 12px 14px; border-radius: 8px; font: 13px/1.6 var(--mono); overflow-x: auto; }
+  :root { --dk-ink: var(--ink); --dk-muted: var(--muted); --dk-line: #cfc8bb; --dk-desk: #fbfaf7; --dk-desk-ink: #222; --dk-accent: #ea580c; --dk-mono: var(--mono); }
+  pre { font: 13.5px/1.6 var(--mono); background: #f4f1eb; border: 1px solid #d5cfc3; padding: 14px 16px; border-radius: 8px; margin: 0; overflow-x: auto; }
+  pre .k { color: #9a3412; } pre .c { color: var(--muted); }
+
+  footer { margin-top: 96px; flex-wrap: wrap; gap: 8px 24px; padding-top: 18px; border-top: 2px solid var(--ink); display: flex; justify-content: space-between; font: 13px var(--mono); }
+
+  @media (max-width: 760px) {
+    .mast h1 { font-size: 72px; } .tag { font-size: 20px; }
+    /* still a full 4x2 deck on a phone: smaller keys, no gap */
+    .grid { grid-template-columns: repeat(4, 1fr); gap: 6px; } .strip { display: none; }
+    .device { padding: 10px; border-radius: 22px; }
+    .key { aspect-ratio: .9; gap: 6px; font-size: 11px; border-radius: 9px; padding: 2px; }
+    .key svg { width: 24px; height: 24px; }
+    .readout .head { grid-template-columns: 1fr; gap: 12px; }
+  }
+</style>
+<link rel="stylesheet" href="shared/scenes.css">
+<script src="shared/content.js" defer></script>
+<script src="shared/scenes.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+  <div class="mast">
+    <h1>deckd</h1>
+    <nav>
+      <a href="#install">install</a>
+      <a href="#faq">faq</a>
+      <a href="https://github.com/jonocodes/deckd/blob/main/docs/GUIDE.md">guide</a>
+      <a href="https://github.com/jonocodes/deckd">github</a>
+    </nav>
+  </div>
+  <p class="tag">Buttons for your desktop on any touchscreen — and they <em>change with the app you're in</em>. Go on, press one.</p>
+
+  <div class="device">
+    <div class="grid" id="grid">
+      <!-- keys rendered from KEYS below -->
+      <div class="strip">SCROLL</div>
+    </div>
+    <div class="bar">
+      <span class="badge" id="badge">deckd</span>
+      <span class="lcd" id="lcd">waiting for a press…</span>
+      <span class="live">live</span>
+    </div>
+  </div>
+
+  <section class="readout" id="readout"></section>
+
+  <section class="long"><h2>Where it runs</h2><div data-dk="platforms"></div></section>
+  <section class="long"><h2>Why not a Stream Deck?</h2><p class="sub">You already own a better touchscreen. deckd started as a Stream Deck that could do more — open-ended controls, any device, any platform.</p><div data-dk="compare"></div></section>
+  <section class="long"><h2>Pre-alpha, used daily</h2><div data-dk="roadmap"></div></section>
+  <section class="long" id="faq"><h2>Questions</h2><div data-dk="faq"></div></section>
+
+  <footer>
+    <span><b>deckd</b> · GPL-3.0 · no account, no cloud</span>
+    <span><a href="https://github.com/jonocodes/deckd">source</a> · <a href="https://github.com/jonocodes/deckd/issues">issues</a> · <a href="https://github.com/jonocodes/deckd/blob/main/docs/GUIDE.md">guide</a></span>
+  </footer>
+</div>
+
+<script>
+addEventListener("DOMContentLoaded", () => {
+
+  const I = {
+    focus: '<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><circle cx="12" cy="12" r="1"/><path d="M18.944 12.33a1 1 0 0 0 0-.66 7.5 7.5 0 0 0-13.888 0 1 1 0 0 0 0 .66 7.5 7.5 0 0 0 13.888 0"/>',
+    globe: '<circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/>',
+    hand: '<path d="M18 11V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2"/><path d="M14 10V4a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2"/><path d="M10 10.5V6a2 2 0 0 0-2-2a2 2 0 0 0-2 2v8"/><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>',
+    music: '<path d="M21 16V3a1 1 0 0 0-1.28-.96l-10 2.917a1 1 0 0 0-.72.96V19"/><circle cx="18" cy="16" r="3"/><circle cx="6" cy="19" r="3"/>',
+    code: '<path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 12.5 8 15l2 2.5"/><path d="m14 12.5 2 2.5-2 2.5"/>',
+    lock: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    terminal: '<path d="M12 19h8"/><path d="m4 17 6-6-6-6"/>',
+    download: '<path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/>',
+  };
+  I.scroll = '<path d="M12 2v20"/><path d="m8 18 4 4 4-4"/><path d="m8 6 4-4 4 4"/>';
+  const ANIM = '<span class="dk-tag anim">animation</span>', LIVE = '<span class="dk-tag live">live — try it</span>';
+  const KEYS = [
+    { label: "Follows focus", icon: "focus", c: "#1e3a8a", lcd: "focus → gmail (firefox) · deck swapped",
+      h: "It follows your focus.", body: "<p>A small program on your computer watches the focused window and sends the matching deck to every connected screen. Switch apps, the buttons change.</p>" + ANIM, dk: "focus" },
+    { label: "Websites too", icon: "globe", lcd: 'match "title:*Gmail*"',
+      h: "Websites are apps too.", body: "<p>Most remotes see \"Firefox\" and stop. deckd reads the window title, so Gmail, YouTube and Google Meet get their own buttons, driving each site's keyboard shortcuts. No browser extension.</p>", dk: "webapps" },
+    { label: "Trackpad", icon: "hand", lcd: "manual mode · trackpad + keyboard",
+      h: "Or just a trackpad.", body: "<p>For everything decks don't cover: drag to move the pointer, tap to click, and a keyboard when you need to type.</p>" + ANIM, dk: "trackpad" },
+    { label: "Now playing", icon: "music", c: "#6d28d9", lcd: "6 players · 1 playing",
+      h: "Everything that's playing.", body: "<p>A music app, a podcast in a browser tab, a video in mpv — every player in one list, with play, pause and skip, a tap away from any deck.</p>", dk: "nowplaying" },
+    { label: "Scroll strip", icon: "scroll", lcd: "jogstrip · flick · coasting",
+      h: "A jog wheel on every deck.", body: "<p>The strip on the right edge scrolls whatever's focused. Flick it and it coasts.</p>" + ANIM, dk: "scroll" },
+    { label: "Any action", icon: "terminal", lcd: "shell: loginctl lock-session",
+      h: "Keys, commands, launchers.", body: "<p>A button can send a key chord, run a command, open a URL or start a terminal — or chain them into a macro. Live readouts like CPU and memory sit right alongside.</p>", dk: "phone", q: "demo=home" },
+    { label: "Locked down", icon: "lock", lcd: "session locked · input refused",
+      h: "Yours, on your network.", body: "<p>Nothing goes through anyone else's servers.</p>", dk: "security" },
+    { label: "Get it", icon: "download", c: "#c2410c", lcd: "deckd · ready on :8765",
+      h: "Install.", body: "<p>Linux and macOS. Then open the address on your phone.</p>", dk: "install" },
+  ];
+  const grid = document.getElementById("grid"), strip = grid.querySelector(".strip");
+  const lcd = document.getElementById("lcd"), readout = document.getElementById("readout");
+  function show(k, btn) {
+    grid.querySelectorAll(".key").forEach((b) => b.setAttribute("aria-pressed", b === btn));
+    lcd.textContent = k.lcd;
+    readout.innerHTML = `<div class="head"><div><h2>${k.h}</h2></div><div>${k.body}</div></div>`;
+    if (k.dk) { const m = document.createElement("div"); m.dataset.dk = k.dk; if (k.q) m.dataset.q = k.q; readout.append(m); window.dkMount(m); }
+  }
+  KEYS.forEach((k, i) => {
+    const b = document.createElement("button");
+    b.className = "key";
+    if (k.c) b.style.setProperty("--c", k.c);
+    b.innerHTML = `<svg viewBox="0 0 24 24">${I[k.icon]}</svg>${k.label}`;
+    b.onclick = () => show(k, b);
+    grid.insertBefore(b, strip);
+    if (i === 0) show(k, b);
+  });
+  document.querySelector('a[href="#install"]').addEventListener("click", (e) => {
+    e.preventDefault();
+    [...grid.querySelectorAll(".key")].find((k) => k.textContent.trim() === "Get it").click();
+    readout.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+});
+</script>
+</body>
+</html>
