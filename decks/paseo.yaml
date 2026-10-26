@@ -9,14 +9,15 @@
 #     ("<agent title> — Mozilla Firefox").
 #   - title:Paseo… — Paseo's non-workspace pages (home, settings), which keep
 #     the static page title.
-#   - paseo / sh.paseo.desktop — the Electron desktop app's identity.
+#   - paseo — the Electron desktop app. WM_CLASS under XWayland
+#     (StartupWMClass=Paseo) and app_id on native Wayland (desktopName
+#     Paseo.desktop) are both "Paseo"; matching is case-insensitive.
 #
 # The tiles need the daemon's agent source (`--agents auto`, on whenever
 # ~/.paseo exists); without it this deck still matches but shows "agent
 # status: no source configured".
 match:
-  - paseo  # first token is the deck id
-  - sh.paseo.desktop
+  - paseo  # desktop app identity; first token is the deck id
   - "agent:paseo"
   - "title:Paseo"
   - "title:Paseo — *"

@@ -417,7 +417,8 @@ def test_shipped_paseo_deck_claims_paseo_windows() -> None:
     assert deck_for(app_id="firefox", wm_class="firefox", title="Fix the reflow bug — Mozilla Firefox") == "paseo"
     # Paseo's non-workspace pages keep the static title.
     assert deck_for(app_id="firefox", wm_class="firefox", title="Paseo — Mozilla Firefox") == "paseo"
-    # The Electron desktop app.
-    assert deck_for(app_id="sh.paseo.desktop", wm_class=None, title="whatever") == "paseo"
+    # The Electron desktop app: XWayland WM_CLASS, or native-Wayland app_id.
+    assert deck_for(app_id=None, wm_class="Paseo", title="Fix the reflow bug") == "paseo"
+    assert deck_for(app_id="Paseo", wm_class=None, title="whatever") == "paseo"
     # Any other tab stays on the browser deck.
     assert deck_for(app_id="firefox", wm_class="firefox", title="GitHub — Mozilla Firefox") == "firefox"

@@ -80,8 +80,7 @@ are renamed. The shipped `decks/paseo.yaml`:
 
 ```yaml
 match:
-  - paseo                # desktop app identity (also the deck id)
-  - sh.paseo.desktop
+  - paseo                # desktop app: WM_CLASS / Wayland app_id "Paseo" (also the deck id)
   - "agent:paseo"        # the web app, via live agent titles
   - "title:Paseo"        # non-workspace pages keep the static title
   - "title:Paseo — *"
