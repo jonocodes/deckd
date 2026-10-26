@@ -17,11 +17,12 @@ soft (no tiles) on anything it doesn't recognise.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
 import uuid
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncGenerator, AsyncIterator, Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -189,7 +190,9 @@ def paseo_agent_status(agent: Mapping[str, Any]) -> AgentStatus | None:
     return AgentStatus(
         source="paseo",
         id=agent_id,
-        title=_truncate(title),
+        # Untruncated: it doubles as the browser-window title an
+        # ``agent:paseo`` deck token matches (issue #180). The client clamps.
+        title=title.strip(),
         state=state,
         cwd=cwd,
         detail=_paseo_detail(agent, state),
@@ -248,9 +251,13 @@ class PaseoAgentSource:
         while True:
             connected = False
             try:
-                async for snapshot in self._session():
-                    connected = True
-                    yield snapshot
+                # ``aclosing`` so closing ``watch()`` also closes the inner
+                # session generator — and with it the Paseo socket —
+                # instead of leaving it open until garbage collection.
+                async with contextlib.aclosing(self._session()) as session:
+                    async for snapshot in session:
+                        connected = True
+                        yield snapshot
             except asyncio.CancelledError:
                 raise
             except (OSError, aiohttp.ClientError, asyncio.TimeoutError, PaseoProtocolError, ValueError) as exc:
@@ -269,7 +276,7 @@ class PaseoAgentSource:
             await asyncio.sleep(delay)
             delay = min(delay * 2, self.retry_max_s)
 
-    async def _session(self) -> AsyncIterator[list[AgentStatus]]:
+    async def _session(self) -> AsyncGenerator[list[AgentStatus], None]:
         token = self._read_token()
         async with self._session_factory() as http, http.ws_connect(self.url, heartbeat=30) as ws:
             await ws.send_json(

@@ -10,7 +10,7 @@ An app-aware touch control surface for the Linux desktop. A daemon watches the f
 The per-app configuration of what to show on the client surface: an ordered list of widgets plus the chrome identity (ADR-0007). Defined in a YAML file matched by the focused app's identity; one deck is the default fallback.
 
 **Widget**:
-A single interactive element in a deck. Current kinds: `button`, `jogstrip`, `trackpad`, `meter`, `stats`, `media`. A media widget is a composite surface with internal playback, position, volume, and metadata controls.
+A single interactive element in a deck. Current kinds: `button`, `jogstrip`, `trackpad`, `meter`, `stats`, `media`, `nowplaying`, `agents`. A media widget is a composite surface with internal playback, position, volume, and metadata controls.
 _Avoid_: control, element, tile
 
 **Reflow**:
@@ -63,7 +63,7 @@ The identity of the currently focused application as reported by the platform ba
 _Avoid_: window info, focus info, app context
 
 **Match**:
-The list of `app_id` / `wm_class` strings in a deck's YAML that determine which focused app activates that deck. The daemon falls back to the `default` deck when no match is found.
+The list of `app_id` / `wm_class` strings in a deck's YAML that determine which focused app activates that deck. Two site-tier token forms outrank identity: `title:GLOB` (the focused window title) and `agent:SOURCE` (the window title is a live agent title from that **agent source** — how a web app that never names itself, like Paseo, is recognised). The daemon falls back to the `default` deck when no match is found.
 _Avoid_: trigger, selector, rule
 
 ### System boundary
@@ -87,7 +87,7 @@ _Avoid_: connection URL, daemon URL
 ### Agent status (issue #180)
 
 **Agent tile**:
-One live AI coding agent in the client's agents view: a title, its project (`cwd` basename), a short `detail` reason, how long it has been in its state, and an **agent state**. View-only — nothing flows back to the orchestrator. Never carries prompt or transcript text in `detail`.
+One live AI coding agent, rendered by an `agents` widget (the shipped Paseo deck is one full-surface `agents` widget, so the tiles show whenever Paseo is focused — there is no dedicated chrome view): a title, its project (`cwd` basename), a short `detail` reason, how long it has been in its state, and an **agent state**. View-only — nothing flows back to the orchestrator. Never carries prompt or transcript text in `detail`.
 _Avoid_: agent card, session tile, job
 
 **Agent state**:

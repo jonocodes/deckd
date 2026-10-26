@@ -105,3 +105,37 @@ async def test_no_source_sends_no_agents_frame(tmp_path: Path) -> None:
     finally:
         await server.stop()
         await ts.close()
+
+
+async def test_focus_reresolves_when_agent_titles_arrive(tmp_path: Path) -> None:
+    """The browser is focused before the agent source has reported: it
+    sits on the browser deck, then flips to the Paseo deck the moment a
+    snapshot names the window's title — and back when the agent goes."""
+    from conftest import FakeFocusBackend
+    from deckd.platform import AppInfo
+
+    (tmp_path / "default.yaml").write_text("match: [default]\nwidgets:\n  - id: x\n    kind: blank\n")
+    (tmp_path / "firefox.yaml").write_text("match: [firefox]\nwidgets:\n  - id: x\n    kind: blank\n")
+    (tmp_path / "paseo.yaml").write_text(
+        "match: [paseo, 'agent:paseo']\nwidgets:\n  - id: agents\n    kind: agents\n    size: full\n"
+    )
+    backend = FakeFocusBackend()
+    backend.set_initial(AppInfo(app_id="firefox", wm_class="firefox", title="Refactor — Mozilla Firefox", pid=1))
+    source = QueueAgentSource()
+    server, *_ = make_test_server(decks_dir=tmp_path, focus_backend=backend, agent_source=source)
+    ts = TestServer(server.app, host="127.0.0.1")
+    await ts.start_server()
+    server.start_focus_watcher()
+    server.start_agents_watcher()
+    try:
+        while server._current_app_id != "firefox":
+            await asyncio.sleep(0.01)
+        async with websockets.connect(f"ws://127.0.0.1:{ts.port}/ws") as ws:
+            assert (await _frames(ws, "deck"))["app"] == "firefox"
+            await source.queue.put([WORKING])
+            assert (await _frames(ws, "deck"))["app"] == "paseo"
+            await source.queue.put([ASKING])
+            assert (await _frames(ws, "deck"))["app"] == "firefox"
+    finally:
+        await server.stop()
+        await ts.close()

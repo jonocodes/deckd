@@ -6,6 +6,7 @@ import os
 import re
 import tempfile
 from pathlib import Path
+from collections.abc import Collection, Mapping
 from typing import Any, Literal
 
 import yaml  # type: ignore[import-untyped]
@@ -282,7 +283,7 @@ class Widget(BaseModel):
             # surface (``media`` / ``nowplaying`` — issue #108's
             # clarification) has nothing to confirm; rejecting at load
             # is clearer than silently ignoring the field.
-            forbidden_confirm_kinds = {"blank", "meter", "stats", "media", "nowplaying"}
+            forbidden_confirm_kinds = {"blank", "meter", "stats", "media", "nowplaying", "agents"}
             if self.kind in forbidden_confirm_kinds:
                 raise ValueError(
                     f"confirm: true is not valid on kind={self.kind!r} widgets"
@@ -397,7 +398,7 @@ class Deck(BaseModel):
             seen.add(widget.id)
         return self
 
-    def matches(self, app: AppInfo) -> bool:
+    def matches(self, app: AppInfo, *, agent_titles: "AgentTitles | None" = None) -> bool:
         """True if this deck's ``match`` list covers the given app.
 
         A match is satisfied when any of the focused app's identifiers
@@ -413,17 +414,27 @@ class Deck(BaseModel):
         lets a deck claim a *site* heuristically, e.g.
         ``match: ["title:*YouTube*"]``. It is best-effort: it breaks whenever
         a site changes how it formats ``<title>``.
-        """
-        return self.matches_title(app) or self.matches_identity(app)
 
-    def matches_title(self, app: AppInfo) -> bool:
-        """True if a ``title:`` glob token covers the focused window title."""
+        Agent tiles (issue #180): a token of the form ``agent:SOURCE`` is a
+        site-tier match driven by live data rather than a fixed glob — see
+        :func:`window_title_names_agent`. ``agent_titles`` carries the
+        current titles per agent source; without it the token never matches.
+        """
+        return self.matches_title(app, agent_titles=agent_titles) or self.matches_identity(app)
+
+    def matches_title(self, app: AppInfo, *, agent_titles: "AgentTitles | None" = None) -> bool:
+        """True if a ``title:`` glob or ``agent:`` token covers the focused
+        window title."""
         if not app.title:
             return False
         for token in self.match:
             if token.startswith("title:"):
                 pattern = token[len("title:") :]
                 if fnmatch.fnmatch(app.title.casefold(), pattern.casefold()):
+                    return True
+            elif token.startswith("agent:") and agent_titles:
+                titles = agent_titles.get(token[len("agent:") :].casefold())
+                if titles and window_title_names_agent(app, titles):
                     return True
         return False
 
@@ -642,16 +653,54 @@ class DeckStore:
         )
 
 
-def resolve_deck(store: DeckStore, app: AppInfo) -> Deck:
+#: Live agent titles per agent source (issue #180), casefolded:
+#: ``{"paseo": {"fix the reflow bug", ...}}``. Feeds ``agent:SOURCE`` tokens.
+AgentTitles = Mapping[str, Collection[str]]
+
+#: What a browser (or Electron shell) puts between the page title and its
+#: own name: ``Page — Mozilla Firefox``, ``Page - Google Chrome``, …
+_TITLE_SEPARATORS = (" — ", " - ", " – ", " | ")
+
+
+def window_title_names_agent(app: AppInfo, titles: Collection[str]) -> bool:
+    """True when the focused window is showing one of ``titles`` (casefolded).
+
+    Web apps like Paseo set ``document.title`` to the active agent's
+    title and never mention themselves, so a fixed ``title:`` glob can't
+    claim them. The daemon knows every live agent title, though:
+
+    - a window titled *exactly* an agent title matches (an Electron or
+      installed-PWA window shows the bare page title);
+    - a *browser* window titled ``<agent title><sep><browser name>``
+      matches (``Fix the bug — Mozilla Firefox``). Restricted to
+      browsers so an agent titled ``deckd`` can't claim a
+      ``deckd — fish`` terminal.
+    """
+    title = (app.title or "").strip().casefold()
+    if not title:
+        return False
+    if title in titles:
+        return True
+    if not app.is_browser:
+        return False
+    for sep in _TITLE_SEPARATORS:
+        head, found, _tail = title.rpartition(sep)
+        if found and head in titles:
+            return True
+    return False
+
+
+def resolve_deck(store: DeckStore, app: AppInfo, *, agent_titles: AgentTitles | None = None) -> Deck:
     """Pick the deck for the given focused app.
 
-    A site (``title:``) match is more specific than a plain app-identity
-    match, so it wins even if a generic browser deck also claims the app
-    and is loaded first. Within each tier it is first-match-wins by load
-    order. If nothing matches, the ``default`` deck is returned.
+    A site (``title:`` / ``agent:``) match is more specific than a plain
+    app-identity match, so it wins even if a generic browser deck also
+    claims the app and is loaded first. Within each tier it is
+    first-match-wins by load order. If nothing matches, the ``default``
+    deck is returned.
     """
     for deck in store.decks:
-        if deck.matches_title(app):
+        if deck.matches_title(app, agent_titles=agent_titles):
             return deck
     for deck in store.decks:
         if deck.matches_identity(app):
@@ -698,7 +747,7 @@ def _humanize_identity(identity: str) -> str:
     return " ".join(word if word.isupper() else word.capitalize() for word in name.split())
 
 
-def label_for_window(store: DeckStore, win: WindowInfo) -> str:
+def label_for_window(store: DeckStore, win: WindowInfo, *, agent_titles: AgentTitles | None = None) -> str:
     """Compute a single row label for one enumerated window (issues
     #119 / #120 / #126).
 
@@ -721,14 +770,14 @@ def label_for_window(store: DeckStore, win: WindowInfo) -> str:
     and the daemon runs it once per push — adding it to the list tick
     doesn't change the per-tick cost meaningfully.
     """
-    deck = resolve_deck(store, _window_to_app(win))
+    deck = resolve_deck(store, _window_to_app(win), agent_titles=agent_titles)
     if deck is not store.default():
         return deck.display_name or _humanize_identity(deck.id) or "unknown"
     identity = win.wm_class or win.gtk_application_id or win.sandboxed_app_id
     return win.app_name or (_humanize_identity(identity) if identity else None) or win.title or "unknown"
 
 
-def icon_for_window(store: DeckStore, win: WindowInfo) -> "Icon | None":
+def icon_for_window(store: DeckStore, win: WindowInfo, *, agent_titles: AgentTitles | None = None) -> "Icon | None":
     """Compute the per-row ``icon`` for one enumerated window (issue #126).
 
     Returns the matched deck's icon when the window resolves to a
@@ -742,7 +791,7 @@ def icon_for_window(store: DeckStore, win: WindowInfo) -> "Icon | None":
     (the list is per-window precisely so they're not — #120 decision
     6).
     """
-    deck = resolve_deck(store, _window_to_app(win))
+    deck = resolve_deck(store, _window_to_app(win), agent_titles=agent_titles)
     if deck is store.default():
         return None
     return deck.icon

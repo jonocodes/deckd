@@ -66,6 +66,7 @@ if TYPE_CHECKING:
     from dbus_fast.aio import MessageBus
 
     from .agents import AgentSource, AgentStatus
+    from .decks import AgentTitles
     from .bind import ResolvedBind
     from .input import KeySink
     from .decks import Action, Macro, Widget
@@ -510,7 +511,7 @@ class Session:
         web_app = bool(
             focus_app is not None
             and focus_app.is_browser
-            and deck.matches_title(focus_app)
+            and deck.matches_title(focus_app, agent_titles=self.server.agent_titles())
         )
         # Focused-app identity for the editor's new-deck creation flow (#104).
         # Populated from the daemon's last-known focus; None before the first
@@ -942,7 +943,7 @@ class Server:
         self._deckd_window_focused = False
         # A genuine (non-deckd) focus change re-resolves the deck, so a
         # `deckctl deck` override never sticks past the next real switch.
-        new_deck = resolve_deck(self.decks, app)
+        new_deck = resolve_deck(self.decks, app, agent_titles=self.agent_titles())
         new_app_id = new_deck.id
         if new_app_id == self._current_app_id and new_deck is self._current_deck:
             return
@@ -1123,8 +1124,9 @@ class Server:
         """
         entries: list[p.WindowListEntry] = []
         for win in snapshot:
-            label = label_for_window(self.decks, win)
-            icon = icon_for_window(self.decks, win)
+            titles = self.agent_titles()
+            label = label_for_window(self.decks, win, agent_titles=titles)
+            icon = icon_for_window(self.decks, win, agent_titles=titles)
             entries.append(
                 p.WindowListEntry(
                     window_id=win.window_id,
@@ -1196,12 +1198,42 @@ class Server:
             async for snapshot in source.watch():
                 if self._last_agents is not None and self._last_agents == snapshot:
                     continue
+                old_titles = self.agent_titles()
                 self._last_agents = list(snapshot)
                 await self._broadcast_message(self._agents_message(self._last_agents))
+                new_titles = self.agent_titles()
+                if new_titles != old_titles:
+                    await self._on_agent_titles_change(old_titles, new_titles)
         except asyncio.CancelledError:
             raise
         except Exception as exc:
             log.warning("agent source %s exited: %s", source.name, exc)
+
+    def agent_titles(self) -> "AgentTitles":
+        """Live agent titles per source, casefolded, for ``agent:`` deck
+        tokens (issue #180). Empty until the first snapshot."""
+        titles: dict[str, set[str]] = {}
+        for agent in self._last_agents or ():
+            titles.setdefault(agent.source.casefold(), set()).add(agent.title.strip().casefold())
+        return {source: frozenset(found) for source, found in titles.items()}
+
+    async def _on_agent_titles_change(self, old: "AgentTitles", new: "AgentTitles") -> None:
+        """An agent appeared, vanished, or was renamed: the focused window
+        may now be (or stop being) an agent web app.
+
+        Re-resolve only when the *titles* flip the focused window's deck —
+        not on every snapshot — so a ``deckctl deck`` pin survives agent
+        churn that doesn't concern the focused window. Running-programs
+        labels are re-derived for the same reason.
+        """
+        app = self._last_focus
+        if app is not None and not self._deckd_window_focused:
+            before = resolve_deck(self.decks, app, agent_titles=old)
+            after = resolve_deck(self.decks, app, agent_titles=new)
+            if before is not after:
+                await self._on_focus(app)
+        if self._last_running_windows is not None:
+            await self._broadcast_running_windows(self._last_running_windows)
 
     @staticmethod
     def _agents_message(snapshot: Sequence["AgentStatus"]) -> "p.AgentsMessage":

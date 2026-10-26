@@ -103,7 +103,7 @@ graph TB
 
 8. **Hot-reload**: `watchfiles` monitors the decks directory → on any `.yaml` write, re-loads all decks, resolves current focus → pushes new `DeckMessage` to every connected session. Invalid YAML pushes `DeckMessage` with `error` set (last-good decks stay live).
 
-9. **Agent tiles** (issue #180): an `AgentSource` (`agents.py`; Paseo first) holds a WebSocket subscription to the orchestrator, translates each agent into one of six agent states, and yields full snapshots → daemon dedupes and broadcasts an `AgentsMessage` to every session (replayed on connect). The client renders them in the client-local `agents` view. View-only: nothing flows back.
+9. **Agent tiles** (issue #180): an `AgentSource` (`agents.py`; Paseo first) holds a WebSocket subscription to the orchestrator, translates each agent into one of six agent states, and yields full snapshots → daemon dedupes and broadcasts an `AgentsMessage` to every session (replayed on connect). Live agent titles also feed `agent:` deck tokens, so focusing Paseo's web app (whose page title is just the agent title) resolves to `decks/paseo.yaml`, whose full-surface `agents` widget renders the tiles. View-only: nothing flows back.
 
 10. **Diagnostic events**: Client sends `enable_events` → daemon pushes `EventMessage` frames for focus changes, deck reloads, action outcomes, auth events, and MPRIS transitions. Event stream is per-session and opt-in.
 

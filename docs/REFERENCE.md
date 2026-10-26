@@ -29,7 +29,7 @@ deckd [--bind ADDR] [--port PORT] [--decks-dir PATH] [--no-overlay]
 | `--scroll-momentum-friction F` | `0.90` | Momentum decay per 60 Hz frame. |
 | `--scroll-momentum-cutoff C` | `20` | Min absolute velocity before momentum stops. |
 | `--log-format {text,json}` | `text` | `json` emits structured JSON-per-record. |
-| `--agents {auto,paseo,off}` | `auto` | Agent-tiles source (issue #180). `auto` subscribes to a local Paseo daemon when `$PASEO_HOME` (`~/.paseo`) exists; `paseo` always tries (retrying quietly while Paseo is down); `off` hides the agents view. |
+| `--agents {auto,paseo,off}` | `auto` | Agent-tiles source (issue #180). `auto` subscribes to a local Paseo daemon when `$PASEO_HOME` (`~/.paseo`) exists; `paseo` always tries (retrying quietly while Paseo is down); `off` disables it (the Paseo deck then shows "no source configured", and `agent:` tokens never match). |
 | `--paseo-url URL` | `ws://127.0.0.1:6767/ws` | Paseo daemon WebSocket. Auth uses the same-user `$PASEO_HOME/local-credential` token, re-read on every reconnect. |
 | `--log-file PATH` | stderr only | Append structured logs to file (also writes stderr). |
 | `-v`, `--verbose` | off | Increase log level to DEBUG. |

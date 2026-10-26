@@ -1,4 +1,4 @@
-/** Agent tiles chrome view (issue #180).
+/** Agent tiles: the ``agents`` widget's surface (issue #180).
  *
  * View-only fleet view: one tile per live AI coding agent, coloured by
  * state. The daemon translates every source (Paseo today) into the same
@@ -16,8 +16,8 @@ import { AGENT_STATE_LABEL, formatAge } from "./agent-format";
 
 export type AgentTilesProps = {
   /** ``undefined`` while no ``agents`` frame has landed — the daemon has
-   *  no agent source configured (the chrome button is hidden then, so
-   *  this branch only shows on a direct ``/agents`` load). */
+   *  no agent source configured (e.g. ``--agents off``) yet a deck with
+   *  an ``agents`` widget is focused. */
   agents: AgentEntry[] | undefined;
   /** Clock override for tests and stories (epoch ms). */
   now?: number;

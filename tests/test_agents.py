@@ -346,3 +346,78 @@ async def test_source_survives_missing_paseo(tmp_path: Path) -> None:
     with pytest.raises(asyncio.TimeoutError):
         await asyncio.wait_for(it.__anext__(), 0.2)
     await it.aclose()
+
+
+# -- deck matching: ``agent:SOURCE`` tokens -----------------------------------
+
+from deckd.decks import Deck, window_title_names_agent  # noqa: E402
+from deckd.platform import AppInfo  # noqa: E402
+
+TITLES = frozenset({"fix the reflow bug", "deckd"})
+
+
+def _app(title: str, *, browser: bool = True) -> AppInfo:
+    ident = "firefox" if browser else "kitty"
+    return AppInfo(app_id=ident, wm_class=ident, title=title, pid=1)
+
+
+@pytest.mark.parametrize(
+    ("title", "browser", "expected"),
+    [
+        ("Fix the reflow bug — Mozilla Firefox", True, True),
+        ("fix THE reflow bug - Google Chrome", True, True),
+        # A bare page title: Electron / installed-PWA windows.
+        ("Fix the reflow bug", False, True),
+        # An agent titled "deckd" must not claim a terminal named after it…
+        ("deckd — fish", False, False),
+        # …but does claim a browser showing that agent.
+        ("deckd — Mozilla Firefox", True, True),
+        # A prefix isn't a match.
+        ("Fix the reflow bug in another repo — Mozilla Firefox", True, False),
+        ("GitHub — Mozilla Firefox", True, False),
+        ("", True, False),
+    ],
+)
+def test_window_title_names_agent(title: str, browser: bool, expected: bool) -> None:
+    assert window_title_names_agent(_app(title, browser=browser), TITLES) is expected
+
+
+def _deck(*match: str) -> Deck:
+    return Deck.model_validate({"match": list(match), "widgets": [{"id": "a", "kind": "agents", "size": "full"}]})
+
+
+def test_agent_token_is_a_site_tier_match() -> None:
+    deck = _deck("paseo", "agent:paseo")
+    app = _app("Fix the reflow bug — Mozilla Firefox")
+    assert deck.matches_title(app, agent_titles={"paseo": TITLES})
+    # No live titles (source off / not connected yet) → no match.
+    assert not deck.matches_title(app)
+    assert not deck.matches_title(app, agent_titles={})
+    # Titles from a different source don't count.
+    assert not deck.matches_title(app, agent_titles={"t3code": TITLES})
+
+
+def test_agents_widget_rejects_confirm() -> None:
+    with pytest.raises(ValueError, match="confirm: true is not valid"):
+        Deck.model_validate(
+            {"match": ["x"], "widgets": [{"id": "a", "kind": "agents", "confirm": True, "action": {"key": "a"}}]}
+        )
+
+
+def test_shipped_paseo_deck_claims_paseo_windows() -> None:
+    from deckd.decks import load_decks, resolve_deck
+
+    store = load_decks(Path(__file__).parent.parent / "decks")
+    titles = {"paseo": frozenset({"fix the reflow bug"})}
+
+    def deck_for(**kw: Any) -> str:
+        return resolve_deck(store, AppInfo(pid=1, **kw), agent_titles=titles).id
+
+    # The web app, over the generic Firefox deck.
+    assert deck_for(app_id="firefox", wm_class="firefox", title="Fix the reflow bug — Mozilla Firefox") == "paseo"
+    # Paseo's non-workspace pages keep the static title.
+    assert deck_for(app_id="firefox", wm_class="firefox", title="Paseo — Mozilla Firefox") == "paseo"
+    # The Electron desktop app.
+    assert deck_for(app_id="sh.paseo.desktop", wm_class=None, title="whatever") == "paseo"
+    # Any other tab stays on the browser deck.
+    assert deck_for(app_id="firefox", wm_class="firefox", title="GitHub — Mozilla Firefox") == "firefox"

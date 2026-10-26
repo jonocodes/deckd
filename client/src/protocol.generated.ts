@@ -501,9 +501,9 @@ export type AgentEntry = {
  *
  *     Full snapshot per push, already sorted most-urgent-first (the
  *     client renders in wire order). Broadcast to every session on change
- *     and replayed on connect, same shape as ``running_windows``. A
- *     daemon with no agent source configured never sends one, so the
- *     client can hide the chrome button until the first frame lands; an
+ *     and replayed on connect, same shape as ``running_windows``. An
+ *     ``agents`` widget in the focused deck (``decks/paseo.yaml``)
+ *     renders it. A daemon with no agent source never sends one; an
  *     empty list means "source up, no live agents" (or the source lost
  *     its upstream).
  *     

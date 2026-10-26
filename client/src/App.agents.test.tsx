@@ -1,73 +1,61 @@
-/** Agent tiles chrome view (issue #180).
+/** Agent tiles in the App (issue #180).
  *
- * Contracts:
- *  1. No ``agents`` frame -> no chrome button (the daemon has no agent
- *     source; the affordance would only ever show an empty state).
- *  2. First frame -> the button appears; clicking it opens the
- *     client-local ``agents`` view (no ``select_view`` on the wire —
- *     tiles are global data, not a deck) and a second click closes it.
- *  3. Agents in ``needs_input`` badge the button with a count, so the
- *     "an agent needs you" signal is visible from every deck.
+ * Paseo is an ordinary app: when the daemon resolves focus to the Paseo
+ * deck (desktop app identity, or the web app via its live agent titles)
+ * it pushes a deck whose single full-surface ``agents`` widget renders
+ * the global ``agents`` snapshot. There is no chrome button or separate
+ * view for it.
  */
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentEntry, ClientMessage, ServerAgents } from "./protocol";
+import type { AgentEntry, ServerAgents, ServerDeck } from "./protocol";
 
-const send = vi.fn<(message: ClientMessage) => void>();
+let deckHandler: ((m: ServerDeck) => void) | null = null;
 let agentsHandler: ((m: ServerAgents) => void) | null = null;
 vi.mock("./socket", () => ({
   useDeckdSocket: (...args: unknown[]) => {
-    // Positional: ..., onSessionState (6), onMediaError (7), onAgents (8).
+    // Positional: onDeck (0), …, onSessionState (6), onMediaError (7), onAgents (8).
+    deckHandler = args[0] as (m: ServerDeck) => void;
     agentsHandler = (args[8] as ((m: ServerAgents) => void) | undefined) ?? null;
-    return { status: "open", send, authenticate: vi.fn(), deauthenticate: vi.fn(), hasPassword: false };
+    return { status: "open", send: vi.fn(), authenticate: vi.fn(), deauthenticate: vi.fn(), hasPassword: false };
   },
 }));
 
 import { App } from "./App";
 
+const PASEO_DECK: ServerDeck = {
+  type: "deck",
+  app: "paseo",
+  display_name: "Paseo",
+  jogstrip_enabled: false,
+  widgets: [{ id: "agents", kind: "agents", size: "full" }],
+} as ServerDeck;
+
 function agent(id: string, state: AgentEntry["state"]): AgentEntry {
   return { source: "paseo", id, title: `Agent ${id}`, state, cwd: "/src/deckd", detail: null, since: null };
 }
 
-function push(agents: AgentEntry[]) {
-  act(() => agentsHandler?.({ type: "agents", agents }));
-}
-
-describe("App — agents chrome button", () => {
+describe("App — Paseo deck", () => {
   afterEach(cleanup);
   beforeEach(() => {
-    send.mockReset();
+    deckHandler = null;
     agentsHandler = null;
-    window.history.replaceState(null, "", "/?demo=default");
+    window.history.replaceState(null, "", "/");
   });
 
-  it("hides the button until the daemon sends an agents frame", () => {
+  it("renders live agent tiles when the Paseo deck is focused", () => {
     render(<App />);
-    expect(screen.queryByRole("button", { name: /^agents/ })).toBeNull();
-    push([]);
-    expect(screen.getByRole("button", { name: "agents" })).toBeTruthy();
-  });
-
-  it("opens and closes the client-local agents view", () => {
-    render(<App />);
-    push([agent("1", "working"), agent("2", "idle")]);
-    const button = screen.getByRole("button", { name: "agents" });
-    fireEvent.pointerDown(button);
-    expect(button.getAttribute("aria-pressed")).toBe("true");
+    act(() => deckHandler?.(PASEO_DECK));
+    act(() => agentsHandler?.({ type: "agents", agents: [agent("1", "needs_input"), agent("2", "working")] }));
     const region = screen.getByRole("region", { name: "agents" });
     expect(region.querySelectorAll(".agent-tile")).toHaveLength(2);
-    expect(send.mock.calls.some(([m]) => m.type === "select_view")).toBe(false);
-    fireEvent.pointerDown(button);
-    expect(screen.queryByRole("region", { name: "agents" })).toBeNull();
+    act(() => agentsHandler?.({ type: "agents", agents: [agent("2", "working")] }));
+    expect(region.querySelectorAll(".agent-tile")).toHaveLength(1);
   });
 
-  it("badges the button with the needs-you count and updates live", () => {
+  it("adds no chrome button for agents", () => {
     render(<App />);
-    push([agent("1", "needs_input"), agent("2", "needs_input"), agent("3", "working")]);
-    const button = screen.getByRole("button", { name: "agents, 2 need you" });
-    expect(button.className).toContain("chrome-btn-agents-alert");
-    expect(button.querySelector(".chrome-btn-badge")?.textContent).toBe("2");
-    push([agent("3", "working")]);
-    expect(screen.getByRole("button", { name: "agents" }).querySelector(".chrome-btn-badge")).toBeNull();
+    act(() => agentsHandler?.({ type: "agents", agents: [agent("1", "needs_input")] }));
+    expect(screen.queryByRole("button", { name: /agents/i })).toBeNull();
   });
 });

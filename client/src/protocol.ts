@@ -115,7 +115,7 @@ export type NowPlayingEmptyState = "show" | "hide";
 export type WidgetSize = [number, number] | "full";
 export type Widget = {
   id: string;
-  kind: "button" | "blank" | "jogstrip" | "trackpad" | "meter" | "stats" | "media" | "nowplaying";
+  kind: "button" | "blank" | "jogstrip" | "trackpad" | "meter" | "stats" | "media" | "nowplaying" | "agents";
   label?: string | null;
   icon?: Icon | null;
   /** Reflow extent (ADR-0010). Absent means a ``[1, 1]`` single cell. */

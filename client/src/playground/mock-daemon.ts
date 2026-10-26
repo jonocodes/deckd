@@ -283,6 +283,38 @@ class BrowserApp implements VirtualApp {
   }
 }
 
+/** Paseo (issue #180): mirrors ``decks/paseo.yaml`` — one full-surface
+ * ``agents`` widget rendering the daemon's global ``agents`` snapshot,
+ * which the MockDaemon's AgentFleet emits independently of focus. */
+class PaseoApp implements VirtualApp {
+  readonly id = "paseo";
+  readonly windowLabel = "Paseo";
+  readonly icon: Icon = { source: "lucide", name: "bot" };
+
+  deck(): ServerDeck {
+    return {
+      type: "deck",
+      app: "paseo",
+      display_name: "Paseo",
+      icon: this.icon,
+      jogstrip_enabled: false,
+      widgets: [{ id: "agents", kind: "agents", size: "full" }],
+    };
+  }
+
+  initialFrames(): AppFrame[] {
+    return [];
+  }
+
+  tick(): AppFrame[] {
+    return [];
+  }
+
+  handle(): AppFrame[] {
+    return [];
+  }
+}
+
 /** Agent tiles fixture (issue #180): a fleet as a Paseo bridge would report
  * it, already in the daemon's urgency order. ``since`` is seconds-ago here
  * and stamped against the clock on emit. */
@@ -359,7 +391,7 @@ export class MockDaemon {
   private agents = new AgentFleet();
 
   constructor(private emit: DaemonEmit) {
-    this.apps = [new MusicApp(), new LightsApp(), new BrowserApp()];
+    this.apps = [new MusicApp(), new LightsApp(), new BrowserApp(), new PaseoApp()];
     this.order = this.apps.map((a) => a.id);
   }
 

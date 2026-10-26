@@ -66,6 +66,44 @@ window title, never the active tab's URL, so:
 Reliable URL/domain matching is planned via a browser extension
 ([#90](https://github.com/jonocodes/deckd/issues/90)).
 
+### Agent web apps: `agent:` tokens
+
+Some web apps never name themselves in the title. Paseo sets the page title
+to the active agent's title (`Fix the reflow bug — Mozilla Firefox`), so no
+`title:` glob can claim it. An `agent:SOURCE` token matches against *live
+data* instead: the focused window is the app when its title is one of the
+current agent titles from that [agent source](#agent-tiles) — exactly, or
+followed by a browser's ` — Browser Name` suffix (browser windows only, so an
+agent titled `deckd` can't claim a `deckd — fish` terminal). It ranks with
+`title:` tokens, and the daemon re-resolves focus when agents appear, vanish or
+are renamed. The shipped `decks/paseo.yaml`:
+
+```yaml
+match:
+  - paseo                # desktop app identity (also the deck id)
+  - sh.paseo.desktop
+  - "agent:paseo"        # the web app, via live agent titles
+  - "title:Paseo"        # non-workspace pages keep the static title
+  - "title:Paseo — *"
+  - "title:Paseo - *"
+jogstrip: false
+widgets:
+  - id: agents
+    kind: agents
+    size: full           # ADR-0010: takes the whole deck area
+```
+
+### Agent tiles
+
+The `agents` widget is a view-only fleet view of your AI coding agents: one
+tile per live agent, labelled *Needs you* / *Error* / *Working* / *Done* /
+*Idle*, most urgent first, with the project, a short reason ("Approve Bash")
+and how long it's been in that state. Tiles come from the daemon's agent
+source — today a subscription to the local [Paseo](https://github.com/getpaseo/paseo)
+daemon (`--agents auto`, on whenever `~/.paseo` exists; `--agents off`
+disables). Use it with `size: full`, as above. Try it backend-free: open
+`/?playground`, then pick **Paseo** in running programs.
+
 
 ## Running deckd
 
