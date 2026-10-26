@@ -380,8 +380,49 @@ class RunningWindowsMessage(BaseModel):
     windows: list[WindowListEntry]
 
 
+class AgentEntry(BaseModel):
+    """One agent tile in the ``agents`` snapshot (issue #180).
+
+    Source-agnostic: each orchestrator bridge (Paseo first) translates
+    its native states into ``state`` before anything reaches the wire,
+    so the client never learns a source's vocabulary. ``(source, id)``
+    is the identity. ``detail`` is a short reason ("Approve Bash",
+    "Starting") — never prompt or transcript text. ``since`` is epoch
+    seconds for when the agent entered ``state`` (``null`` when the
+    source can't say).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: str = Field(min_length=1)
+    id: str = Field(min_length=1)
+    title: str = Field(min_length=1)
+    state: Literal["needs_input", "error", "working", "done", "idle", "offline"]
+    cwd: str | None = None
+    detail: str | None = None
+    since: float | None = None
+
+
+class AgentsMessage(BaseModel):
+    """Daemon -> client push: the agent-tiles snapshot (issue #180).
+
+    Full snapshot per push, already sorted most-urgent-first (the
+    client renders in wire order). Broadcast to every session on change
+    and replayed on connect, same shape as ``running_windows``. An
+    ``agents`` widget in the focused deck (``decks/paseo.yaml``)
+    renders it. A daemon with no agent source never sends one; an
+    empty list means "source up, no live agents" (or the source lost
+    its upstream).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["agents"]
+    agents: list[AgentEntry]
+
+
 ServerMessage = Annotated[
-    Union[DeckMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, MediaErrorMessage, ChromeMediaMessage, EventMessage, MacroResultMessage, ConfirmRequestMessage, RunningWindowsMessage, ErrorMessage],
+    Union[DeckMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, MediaErrorMessage, ChromeMediaMessage, EventMessage, MacroResultMessage, ConfirmRequestMessage, RunningWindowsMessage, AgentsMessage, ErrorMessage],
     Field(discriminator="type"),
 ]
 

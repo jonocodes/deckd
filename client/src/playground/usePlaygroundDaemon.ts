@@ -12,6 +12,7 @@ import type {
   ServerChromeMedia,
   ServerConfirmRequest,
   ServerDeck,
+  ServerAgents,
   ServerRunningWindows,
   ServerWidgetUpdate,
 } from "../protocol";
@@ -26,6 +27,7 @@ export function usePlaygroundDaemon(
   onChromeMedia?: (m: ServerChromeMedia) => void,
   _onConfirmRequest?: (m: ServerConfirmRequest) => void,
   onRunningWindows?: (m: ServerRunningWindows) => void,
+  onAgents?: (m: ServerAgents) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -39,11 +41,13 @@ export function usePlaygroundDaemon(
   const onMediaStateRef = useRef(onMediaState);
   const onChromeMediaRef = useRef(onChromeMedia);
   const onRunningWindowsRef = useRef(onRunningWindows);
+  const onAgentsRef = useRef(onAgents);
   onDeckRef.current = onDeck;
   onWidgetUpdateRef.current = onWidgetUpdate;
   onMediaStateRef.current = onMediaState;
   onChromeMediaRef.current = onChromeMedia;
   onRunningWindowsRef.current = onRunningWindows;
+  onAgentsRef.current = onAgents;
 
   useEffect(() => {
     if (!enabled) return;
@@ -53,6 +57,7 @@ export function usePlaygroundDaemon(
       onWidgetUpdate: (m) => onWidgetUpdateRef.current(m),
       onChromeMedia: (m) => onChromeMediaRef.current?.(m),
       onRunningWindows: (m) => onRunningWindowsRef.current?.(m),
+      onAgents: (m) => onAgentsRef.current?.(m),
     });
     daemonRef.current = daemon;
     daemon.start();

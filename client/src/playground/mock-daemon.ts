@@ -18,11 +18,13 @@
  * so this can later double as a test fixture (epic #157, foundation #150).
  */
 import type {
+  AgentEntry,
   ClientMessage,
   Icon,
   MediaState,
   ServerChromeMedia,
   ServerDeck,
+  ServerAgents,
   ServerRunningWindows,
   ServerWidgetUpdate,
 } from "../protocol";
@@ -39,6 +41,7 @@ export type DaemonEmit = {
   onWidgetUpdate: (m: ServerWidgetUpdate) => void;
   onChromeMedia?: (m: ServerChromeMedia) => void;
   onRunningWindows?: (m: ServerRunningWindows) => void;
+  onAgents?: (m: ServerAgents) => void;
 };
 
 /** A running virtual app: it owns a deck, holds state, ticks on the clock,
@@ -280,6 +283,98 @@ class BrowserApp implements VirtualApp {
   }
 }
 
+/** Paseo (issue #180): mirrors ``decks/paseo.yaml`` — one full-surface
+ * ``agents`` widget rendering the daemon's global ``agents`` snapshot,
+ * which the MockDaemon's AgentFleet emits independently of focus. */
+class PaseoApp implements VirtualApp {
+  readonly id = "paseo";
+  readonly windowLabel = "Paseo";
+  readonly icon: Icon = { source: "lucide", name: "bot" };
+
+  deck(): ServerDeck {
+    return {
+      type: "deck",
+      app: "paseo",
+      display_name: "Paseo",
+      icon: this.icon,
+      jogstrip_enabled: false,
+      widgets: [{ id: "agents", kind: "agents", size: "full" }],
+    };
+  }
+
+  initialFrames(): AppFrame[] {
+    return [];
+  }
+
+  tick(): AppFrame[] {
+    return [];
+  }
+
+  handle(): AppFrame[] {
+    return [];
+  }
+}
+
+/** Agent tiles fixture (issue #180): a fleet as a Paseo bridge would report
+ * it, already in the daemon's urgency order. ``since`` is seconds-ago here
+ * and stamped against the clock on emit. */
+export const DEMO_AGENTS: (Omit<AgentEntry, "since"> & { ago: number })[] = [
+  { source: "paseo", id: "a-perm", title: "Migrate the deck loader to pydantic v3", state: "needs_input", cwd: "/home/me/src/deckd", detail: "Approve Bash", ago: 95 },
+  { source: "paseo", id: "a-err", title: "Bump flake inputs and fix the build", state: "error", cwd: "/home/me/src/nixos-config", detail: null, ago: 420 },
+  { source: "paseo", id: "a-work", title: "Add agent tiles view (#180)", state: "working", cwd: "/home/me/src/deckd", detail: null, ago: 40 },
+  { source: "paseo", id: "a-work2", title: "Write the remotestorage widget tests", state: "working", cwd: "/home/me/src/remotestorage-widget", detail: null, ago: 610 },
+  { source: "paseo", id: "a-done", title: "Review feedback on the reflow PR", state: "done", cwd: "/home/me/src/deckd", detail: null, ago: 180 },
+  { source: "paseo", id: "a-idle", title: "How does the rclone plugin system work?", state: "idle", cwd: "/home/me/src/rclone-remotestorage", detail: null, ago: 7200 },
+  { source: "paseo", id: "a-idle2", title: "Home page for the project", state: "idle", cwd: "/home/me/src/deckd", detail: null, ago: 86400 },
+];
+
+/** The cycling agent's script: one agent walks working -> needs you ->
+ * working -> done -> idle so the Playground shows tiles (and the chrome
+ * badge) changing. Seconds per step. */
+const AGENT_CYCLE: { state: AgentEntry["state"]; detail: string | null; secs: number }[] = [
+  { state: "working", detail: null, secs: 6 },
+  { state: "needs_input", detail: "Approve Edit", secs: 6 },
+  { state: "working", detail: null, secs: 6 },
+  { state: "done", detail: null, secs: 6 },
+  { state: "idle", detail: null, secs: 4 },
+];
+
+const URGENCY: AgentEntry["state"][] = ["needs_input", "error", "working", "done", "idle", "offline"];
+
+/** Deterministic agent fleet: static fixture plus one agent on a loop. */
+export class AgentFleet {
+  private elapsed = 0;
+  private step = 0;
+  private stepStarted = 0;
+
+  /** Advance ``dt`` seconds; true when the snapshot changed. */
+  tick(dt: number): boolean {
+    this.elapsed += dt;
+    if (this.elapsed - this.stepStarted < AGENT_CYCLE[this.step].secs) return false;
+    this.step = (this.step + 1) % AGENT_CYCLE.length;
+    this.stepStarted = this.elapsed;
+    return true;
+  }
+
+  snapshot(nowSec: number): ServerAgents {
+    const cur = AGENT_CYCLE[this.step];
+    const cycling: AgentEntry = {
+      source: "paseo",
+      id: "a-cycle",
+      title: "Fix flaky e2e reconnect test",
+      state: cur.state,
+      cwd: "/home/me/src/deckd",
+      detail: cur.detail,
+      since: nowSec - (this.elapsed - this.stepStarted),
+    };
+    const fixed: AgentEntry[] = DEMO_AGENTS.map(({ ago, ...a }) => ({ ...a, since: nowSec - ago }));
+    const agents = [cycling, ...fixed].sort(
+      (a, b) => URGENCY.indexOf(a.state) - URGENCY.indexOf(b.state) || (b.since ?? 0) - (a.since ?? 0),
+    );
+    return { type: "agents", agents };
+  }
+}
+
 const TICK_MS = 250;
 const TICK_DT = TICK_MS / 1000;
 
@@ -293,9 +388,10 @@ export class MockDaemon {
   // most-recently-used running-windows ordering).
   private order: string[];
   private timer: ReturnType<typeof setInterval> | null = null;
+  private agents = new AgentFleet();
 
   constructor(private emit: DaemonEmit) {
-    this.apps = [new MusicApp(), new LightsApp(), new BrowserApp()];
+    this.apps = [new MusicApp(), new LightsApp(), new BrowserApp(), new PaseoApp()];
     this.order = this.apps.map((a) => a.id);
   }
 
@@ -312,11 +408,13 @@ export class MockDaemon {
   start(): void {
     this.emitFrame(this.current.deck());
     this.emitRunningWindows();
+    this.emit.onAgents?.(this.agents.snapshot(Date.now() / 1000));
     // Seed every app's state, not just the focused one, so a background app
     // (the music player) is already live the moment you switch to it.
     for (const app of this.apps) app.initialFrames().forEach((f) => this.emitFrame(f));
     this.timer = setInterval(() => {
       for (const app of this.apps) app.tick(TICK_DT).forEach((f) => this.emitFrame(f));
+      if (this.agents.tick(TICK_DT)) this.emit.onAgents?.(this.agents.snapshot(Date.now() / 1000));
     }, TICK_MS);
   }
 
