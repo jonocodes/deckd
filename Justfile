@@ -70,13 +70,13 @@ setup:
 
 # Run the daemon against the decks directory, serving the built client.
 run-daemon:
-    VLC_HTTP_PASSWORD=dummy deckd --decks-dir decks --client-dist client/dist --verbose
+    VLC_HTTP_PASSWORD=dummy deckd --port {{DECKD_PORT}} --decks-dir decks --client-dist client/dist --verbose
 
 # Run the daemon on the LAN without a built client (use dev-client-lan for HMR).
 # Binds to 0.0.0.0 so a phone on the LAN (or Tailscale) can reach it
 # (issue #66). Token auth still gates every non-localhost connection.
 run-daemon-lan:
-    VLC_HTTP_PASSWORD=dummy deckd --bind 0.0.0.0 --decks-dir decks --verbose
+    VLC_HTTP_PASSWORD=dummy deckd --bind 0.0.0.0 --port {{DECKD_PORT}} --decks-dir decks --verbose
 
 # Default ports, and the knobs that let worktrees coexist. `just worktree-adopt`
 # writes all four into a per-checkout ./.env (loaded above); set them by hand
