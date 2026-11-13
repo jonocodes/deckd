@@ -94,14 +94,14 @@ jobs:
           to osascript -e '
             tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
               ignoring application responses
-                click menu bar item 1 of menu bar 2
+                click menu bar item 1 of menu bar 1
               end ignoring
             end tell'
           sleep 2
           screencapture -x shots/1-menu-open.png; echo "menu screencapture exit $?"
           to osascript -e '
             tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
-              set m to menu 1 of menu bar item 1 of menu bar 2
+              set m to menu 1 of menu bar item 1 of menu bar 1
               set out to ""
               repeat with mi in menu items of m
                 set out to out & (name of mi as text) & " | mark=" & (value of attribute "AXMenuItemMarkChar" of mi as text) & linefeed
@@ -118,20 +118,20 @@ jobs:
           echo "before:"; curl -fs -m 3 "http://$ip:8765/health" >/dev/null && echo "  LAN reachable" || echo "  LAN refused"
           to osascript -e '
             tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
-              click menu item "Allow LAN access" of menu 1 of menu bar item 1 of menu bar 2
+              click menu item "Allow LAN access" of menu 1 of menu bar item 1 of menu bar 1
             end tell'
           echo "click exit $?"
           for i in $(seq 30); do curl -fs -m 2 "http://$ip:8765/health" >/dev/null && echo "after: LAN reachable (${i}x0.5s)" && break; sleep 0.5; done
           to osascript -e '
             tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
               ignoring application responses
-                click menu bar item 1 of menu bar 2
+                click menu bar item 1 of menu bar 1
               end ignoring
             end tell'
           sleep 2; screencapture -x shots/2-lan-on.png
           to osascript -e '
             tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
-              return value of attribute "AXMenuItemMarkChar" of menu item "Allow LAN access" of menu 1 of menu bar item 1 of menu bar 2
+              return value of attribute "AXMenuItemMarkChar" of menu item "Allow LAN access" of menu 1 of menu bar item 1 of menu bar 1
             end tell'
           to osascript -e 'tell application "System Events" to key code 53'
 
@@ -142,13 +142,13 @@ jobs:
           to osascript -e '
             tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
               ignoring application responses
-                click menu bar item 1 of menu bar 2
+                click menu bar item 1 of menu bar 1
               end ignoring
             end tell'
           sleep 1
           to osascript -e '
             tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
-              click menu item "Quit deckd" of menu 1 of menu bar item 1 of menu bar 2
+              click menu item "Quit deckd" of menu 1 of menu bar item 1 of menu bar 1
             end tell'
           sleep 3
           pgrep -fl deckd && echo "STILL RUNNING" || echo "process gone"
