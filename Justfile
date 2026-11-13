@@ -226,6 +226,20 @@ ladle:
 screenshots:
     cd client && node screenshots.mjs
 
+# Preview the homepage mockups (docs/mockups/homepage) over http. The client's
+# Vite dev server on :5288 serves the demo decks the pages embed; a static
+# server on :5289 serves the pages themselves (browsers won't let a file://
+# page frame localhost, so opening the HTML files directly shows blank
+# phones). Ctrl+C stops both.
+mockups:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    trap 'kill 0' EXIT
+    (cd client && npx vite dev --port 5288 --strictPort --host 127.0.0.1) &
+    uv run --no-sync python -m http.server 5289 --bind 127.0.0.1 --directory . >/dev/null 2>&1 &
+    echo "homepage mockups: http://127.0.0.1:5289/docs/mockups/homepage/b-desk.html (also a-notebook.html, c-press.html)"
+    wait -n
+
 # Rasterises client/public/icon.svg (the source of truth) into the PWA any +
 # maskable PNGs, the apple-touch-icon, and packaging/macos/deckd.icns. Uses
 # the e2e Chromium, so client/node_modules must be installed; the .icns step

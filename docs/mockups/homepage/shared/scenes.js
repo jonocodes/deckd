@@ -2,11 +2,14 @@
 // Every phone is the real deckd client in an iframe, rendered at a fixed
 // viewport and scaled to fit. They're passive: no input reaches the client.
 //
-// The client comes from ?app=<url> on the page, <html data-app>, or the
-// public Pages build. The showcase fixtures (home, gmail, meet, media) need a
-// client from this branch: ?app=http://127.0.0.1:5288/ with `vite dev` running.
+// The client comes from ?app=<url> on the page, <html data-app>, the local
+// client on :5288 when the page itself is served from localhost (`just
+// mockups`), or else the public Pages build.
 
-const APP = new URLSearchParams(location.search).get("app") || document.documentElement.dataset.app || "https://jonocodes.github.io/deckd/";
+// Served locally (`just mockups`), default to the local client on :5288.
+const LOCAL = /^https?:$/.test(location.protocol) && ["127.0.0.1", "localhost"].includes(location.hostname);
+const APP = new URLSearchParams(location.search).get("app") || document.documentElement.dataset.app
+  || (LOCAL ? `${location.protocol}//${location.hostname}:5288/` : "https://jonocodes.github.io/deckd/");
 const LANDSCAPE = [700, 390]; // a 4x2 deck fills this edge to edge
 const PORTRAIT = [390, 760];
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
