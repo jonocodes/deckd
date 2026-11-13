@@ -138,3 +138,45 @@ The channel is a thin skin over that tree. AppImage is simply the first skin.
   model that cannot work.
 - The relocatable tree + integration helper are the reusable asset; deb/rpm
   and any future channel build on them without touching the payload.
+
+## Amendment (2026-11-12): a tarball beside the AppImage, and GUI launches open the browser
+
+Two things the AppImage path got wrong for a windowless daemon, found while
+preparing the first release:
+
+**A GUI launch looked like nothing happened.** deckd has no window; the
+surface is a web page. Opened from an app menu or a file manager, the
+AppImage started a background server and showed nothing. The launcher now
+opens the surface in the default browser once the daemon answers `/health`,
+and when a daemon is already running (autostart, a second click) it just
+opens the browser and exits rather than failing on the busy port. "GUI
+launch" is inferred — no terminal on stdin and a graphical session present —
+because a file-manager double-click passes no arguments; `--open` /
+`--no-open` override it, and every autostart path passes `--no-open`
+(`deckd.open_surface`).
+
+**AppImage is a desktop-app format; deckd is a service.** FUSE (`libfuse2`)
+is missing on current Ubuntu/Debian, the autostart entry breaks when the file
+moves, and the XDG autostart is the weaker mechanism this ADR already called
+out. So the relocatable tree from "Relationship to the substrate" now ships
+as-is, as a second artifact: `deckd-<version>-<arch>.tar.gz` (`bin/deckd`,
+`share/deckd/integration/`, the helper at the top level). Run from inside the
+extracted tree, the helper:
+
+- copies it to `~/.local/opt/deckd` — a stable path; re-running from a newer
+  tarball is the upgrade, and the download can be deleted;
+- installs a **systemd user service** (wanted by `graphical-session.target`,
+  `Restart=on-failure`) instead of the XDG entry;
+- removes the other channel's autostart when switching, so two daemons never
+  race for the port.
+
+The AppImage stays the "download and double-click" channel; the tarball is
+the documented one for headless/always-on hosts and FUSE-less distros. Both
+come from one PyInstaller freeze (`just build-linux`) and one release
+workflow. deb/rpm remain deferred; they would wrap this same tree, now
+proven as a shipping layout.
+
+The helper gained a test seam, `DECKD_HELPER_TEST_ROOT`, which relocates its
+system paths and the user's home into a sandbox so its logic is unit-tested
+without root (`tests/test_install_helper.py`). `sudo` and `pkexec` scrub the
+environment, so an elevated run never sees it.

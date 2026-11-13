@@ -2,7 +2,7 @@
 Type=Application
 Name=deckd
 Comment=App-aware touch control surface
-Exec=deckd
+Exec=deckd --open
 Icon=deckd
 Categories=Utility;
 Terminal=false

@@ -1,12 +1,13 @@
-name: Release Linux AppImage
+name: Release Linux (AppImage + tarball)
 
-# Phase 2 of #168: build the self-contained deckd AppImage on a Linux runner
-# and attach it to the GitHub release.
+# Phase 2 of #168: build the self-contained deckd AppImage and tarball on a
+# Linux runner and attach them to the GitHub release.
 #
-# The build itself is `just build-linux-appimage` — the same recipe a
-# contributor runs locally (docs/GUIDE.md § "Linux AppImage") — so CI and the
-# documented path can't drift. This job only supplies the runner, the
-# toolchain, and the publish step.
+# The build itself is `just build-linux` (build-linux-appimage +
+# build-linux-tarball over one PyInstaller freeze) — the same recipes a
+# contributor runs locally (docs/GUIDE.md § "Linux AppImage" / "Linux
+# tarball") — so CI and the documented path can't drift. This job only
+# supplies the runner, the toolchain, and the publish step.
 #
 # Two architectures, one matrix: x86_64 on ubuntu-24.04 (arm64 hosted runners
 # are free for public repos). aarch64 has no evdev-binary wheel, so the recipe
@@ -85,8 +86,8 @@ jobs:
       - name: Resolve version from the tag
         run: echo "DECKD_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
 
-      - name: Build AppImage
-        run: just build-linux-appimage
+      - name: Build AppImage + tarball
+        run: just build-linux
 
       # Boot the frozen payload: --help parses args and exits before the
       # server starts, which proves the bundle's interpreter and imports work.
@@ -106,19 +107,64 @@ jobs:
           test -d "$tmp/gnome-shell/deckd-focus@local"
           test -f "$tmp/install-system-integration.sh"
 
+      # A GUI launch opens the browser; with a daemon already up it must just
+      # open the browser and exit rather than fail on the busy port. A stub
+      # xdg-open records the URL and that the frozen bundle's LD_LIBRARY_PATH
+      # didn't leak into the browser's environment.
+      - name: Smoke-test GUI launch (open / attach)
+        run: |
+          export APPIMAGE_EXTRACT_AND_RUN=1 DECKD_FAKE_INPUT=1
+          stub="$(mktemp -d)"
+          printf '#!/bin/sh\necho "$1 ${LD_LIBRARY_PATH:-unset}" >> "%s/opened"\n' "$stub" > "$stub/xdg-open"
+          chmod +x "$stub/xdg-open"
+          app="$(ls dist/deckd-*.AppImage)"
+          "$app" --no-open --no-focus </dev/null >daemon.log 2>&1 &
+          daemon=$!
+          for _ in $(seq 60); do curl -fs http://127.0.0.1:8765/health >/dev/null && break; sleep 0.5; done
+          PATH="$stub:$PATH" timeout 20 "$app" --open </dev/null
+          # xdg-open is detached, so give the stub a moment to write.
+          for _ in $(seq 20); do [ -s "$stub/opened" ] && break; sleep 0.25; done
+          cat "$stub/opened"
+          grep -qx 'http://127.0.0.1:8765/ unset' "$stub/opened"
+          kill "$daemon"
+
+      # The tarball: the extracted payload boots, finds its own integration
+      # assets (bin/../share/deckd/integration), and its top-level helper
+      # installs the tree it sits in. The helper runs in its test sandbox
+      # (DECKD_HELPER_TEST_ROOT) with systemctl/udevadm stubbed, so this checks
+      # the shipped layout, not the runner's systemd.
+      - name: Smoke-test the tarball
+        run: |
+          tmp="$(mktemp -d)"
+          tar -C "$tmp" -xzf dist/deckd-*.tar.gz
+          tree="$(ls -d "$tmp"/deckd-*/)"
+          "$tree/bin/deckd" --help >/dev/null
+          "$tree/bin/deckd" --extract-integration "$tmp/ext"
+          test -f "$tmp/ext/70-deckd-uinput.rules"
+          mkdir "$tmp/stubs" "$tmp/root"
+          for cmd in systemctl udevadm gnome-extensions; do
+            printf '#!/bin/sh\nexit 0\n' > "$tmp/stubs/$cmd"; chmod +x "$tmp/stubs/$cmd"
+          done
+          PATH="$tmp/stubs:$PATH" DECKD_HELPER_TEST_ROOT="$tmp/root" \
+            bash "$tree/install-system-integration.sh" --user "$(id -un)" --desktop gnome
+          test -x "$tmp/root/home/.local/opt/deckd/bin/deckd"
+          grep -q -- '--no-open' "$tmp/root/home/.config/systemd/user/deckd.service"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: deckd-linux-appimage-${{ matrix.arch }}
+          name: deckd-linux-${{ matrix.arch }}
           path: |
             dist/deckd-*.AppImage
+            dist/deckd-*.tar.gz
             dist/deckd-install-system-integration.sh
           if-no-files-found: error
 
-      - name: Attach the AppImage to the release
+      - name: Attach the AppImage and tarball to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release view "$RELEASE_TAG" >/dev/null 2>&1 \
             || gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes
           gh release upload "$RELEASE_TAG" \
-            dist/deckd-*.AppImage dist/deckd-install-system-integration.sh --clobber
+            dist/deckd-*.AppImage dist/deckd-*.tar.gz \
+            dist/deckd-install-system-integration.sh --clobber

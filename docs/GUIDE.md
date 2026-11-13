@@ -694,6 +694,13 @@ chmod +x deckd-<version>-x86_64.AppImage
 
 It seeds decks into `~/.local/share/deckd/decks` on first run and logs to `~/.local/share/deckd/deckd.log`. It stays localhost-only until you add `--bind 0.0.0.0`, exactly like the daemon.
 
+deckd has no window of its own — the daemon serves the surface and you use it in a browser. So how you launch the AppImage decides what you see:
+
+- **From the GUI** (double-click in a file manager, or the app-menu entry the install helper adds): it starts the daemon and opens `http://127.0.0.1:8765/` in your default browser once the daemon answers. If deckd is **already running** (autostarted at login, or a second click), it just opens the browser and exits instead of failing on the busy port.
+- **From a terminal**: it runs in the foreground like the plain daemon and opens nothing. The log says where it is listening.
+
+`--open` / `--no-open` override the guess either way (the autostart entry passes `--no-open`, so logging in never pops a browser). The guess is "no terminal on stdin and a graphical session (`WAYLAND_DISPLAY`/`DISPLAY`) present". The browser opens the loopback URL, so it is skipped when you bind only to a LAN address or interface (`--bind 192.168.1.5`, `--bind iface:wlan0`) — open the LAN URL yourself. Like the macOS menu-bar app, the first visit shows the password gate; the password is in `~/.config/deckd/password`.
+
 If `libfuse2` is missing (Ubuntu 22.04+/Debian 12 no longer ship it), run with `--appimage-extract-and-run` or set `APPIMAGE_EXTRACT_AND_RUN=1`.
 
 #### uinput, the focus watcher, and autostart
@@ -708,17 +715,43 @@ pkexec ./deckd-install-system-integration.sh ./deckd-<version>-x86_64.AppImage
 
 > **NixOS:** `pkexec` resets `PATH` to a distro default that has no system profile, so use `sudo`, or name the interpreter explicitly: `pkexec /run/current-system/sw/bin/bash ./deckd-install-system-integration.sh ./deckd-<version>-x86_64.AppImage` (the helper appends the profile to `PATH` for its own tools). Better yet, use the flake — see the [NixOS note](#nix-flake-nixos-and-home-manager) below.
 
-It installs the udev rule, the GNOME Shell extension or KWin script for the detected desktop (override with `--desktop gnome|kde`), the deckd mark into `~/.local/share/icons/hicolor` (`Icon=deckd` on the autostart entry resolves to it), and `~/.config/autostart/deckd.desktop` so deckd starts with your session. The rule carries `TAG+="uaccess"`, so the active session user gets `/dev/uinput` access — **no relogin needed**. For a linger/headless setup (a service that runs with no active session), pass `--add-group` to also add the user to `input`; that one does need a logout. The autostart entry points at the AppImage's path, so keep it where it is (or re-run the helper after moving it).
+It installs the udev rule, the GNOME Shell extension or KWin script for the detected desktop (override with `--desktop gnome|kde`), the deckd mark into `~/.local/share/icons/hicolor` (`Icon=deckd` on the menu and autostart entries resolves to it), an app-menu entry at `~/.local/share/applications/deckd.desktop` (launches with `--open`; skip it with `--no-menu`), and `~/.config/autostart/deckd.desktop` so deckd starts with your session (launches with `--no-open`). The rule carries `TAG+="uaccess"`, so the active session user gets `/dev/uinput` access — **no relogin needed**. For a linger/headless setup (a service that runs with no active session), pass `--add-group` to also add the user to `input`; that one does need a logout. The menu and autostart entries point at the AppImage's path, so keep it where it is (or re-run the helper after moving it).
 
 Re-run with `--uninstall` to undo the install. It removes exactly what the helper created — recorded per user in `/var/lib/deckd/system-integration.<user>.state` — so a pre-existing `input` membership or focus extension (say, from a NixOS/home-manager install) is left alone. If the AppImage runtime never sees `--appimage-extract` (a binfmt wrapper such as NixOS's `programs.appimage` runs the payload directly), the helper falls back to the bundled launcher's `--extract-integration` and still works.
 
 From a source checkout the same helper is `just install-system-integration` (it stages the assets and calls the script with `sudo`; pass `--desktop gnome`, `--uninstall`, etc. as extra args).
 
-#### Releasing an AppImage
+### Linux tarball
 
-Pushing a `v*` tag runs [`.github/workflows/release-linux.yml`](../.github/workflows/release-linux.yml): it builds **x86_64** on `ubuntu-24.04` and **aarch64** on `ubuntu-24.04-arm`, smoke-tests each payload (`--help`), and attaches both AppImages plus `deckd-install-system-integration.sh` to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag. aarch64 source-builds `python-evdev` (there is no `evdev-binary` wheel for it).
+The same frozen payload as the AppImage, as a plain directory: no FUSE, nothing mounted, and a fixed install path. Pick it over the AppImage for a headless or always-on deck host, on a distro without `libfuse2`, or if you'd rather deckd run as a systemd user service than an XDG autostart entry. Build it on Linux:
 
-The tag minus its leading `v` is the version, so `v2026.09.23` yields `deckd-2026.09.23-x86_64.AppImage` and `deckd-2026.09.23-aarch64.AppImage`. A local build without a tag falls back to `version` in `pyproject.toml`.
+```sh
+just build-linux-tarball   # -> dist/deckd-<version>-<arch>.tar.gz
+just build-linux           # both the AppImage and the tarball, one freeze
+```
+
+Install it with the helper that sits at the top of the extracted directory — no arguments needed, it installs the tree it is in:
+
+```sh
+tar xzf deckd-<version>-x86_64.tar.gz
+sudo ./deckd-<version>-x86_64/install-system-integration.sh
+# desktop password dialog: pkexec "$PWD/deckd-<version>-x86_64/install-system-integration.sh"
+```
+
+It does everything the AppImage install does (udev rule, focus watcher, icon, app-menu entry) with two differences:
+
+- The tree is **copied to `~/.local/opt/deckd`**, and everything points there, so the download can be deleted. Re-running the helper from a newer tarball swaps the tree in place and restarts the service — that is the upgrade.
+- Autostart is a **systemd user service**, `~/.config/systemd/user/deckd.service` (wanted by `graphical-session.target`, `Restart=on-failure`, `--no-open`), instead of an XDG entry. It is started immediately when the helper can reach your user session, otherwise at next login. Logs: `journalctl --user -u deckd -f`. To add flags such as `--bind 0.0.0.0`, use `systemctl --user edit deckd` (a drop-in with `ExecStart=` cleared, then your own `ExecStart=%h/.local/opt/deckd/bin/deckd --no-open --bind 0.0.0.0`); upgrades rewrite the unit but leave drop-ins alone.
+
+Switching between the AppImage and the tarball is safe: the helper removes the other channel's autostart so two daemons never race for the port. Uninstall with `sudo ~/.local/opt/deckd/install-system-integration.sh --uninstall`. To try it without installing, run `./deckd-<version>-x86_64/bin/deckd` (localhost-only, foreground).
+
+The helper's logic is tested without root: `DECKD_HELPER_TEST_ROOT=DIR` sandboxes its system paths and the user's home under `DIR` (sudo and pkexec scrub it from the environment, so a real install never sees it) — see `tests/test_install_helper.py`.
+
+#### Releasing the Linux artifacts
+
+Pushing a `v*` tag runs [`.github/workflows/release-linux.yml`](../.github/workflows/release-linux.yml): it runs `just build-linux` for **x86_64** on `ubuntu-24.04` and **aarch64** on `ubuntu-24.04-arm`, smoke-tests each AppImage (`--help`, integration extraction, the GUI open/attach path) and each tarball (boot, integration extraction, the helper installing the shipped tree in its sandbox), and attaches both AppImages, both tarballs, and `deckd-install-system-integration.sh` to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag. aarch64 source-builds `python-evdev` (there is no `evdev-binary` wheel for it).
+
+The tag minus its leading `v` is the version, so `v2026.09.23` yields `deckd-2026.09.23-x86_64.AppImage`, `deckd-2026.09.23-x86_64.tar.gz`, and their `aarch64` twins. A local build without a tag falls back to `version` in `pyproject.toml`.
 
 **NixOS** users can skip all of the above — the flake's home-manager module owns the same user service, and the NixOS module owns the udev rule and `input` group. See [Nix flake, NixOS, and home-manager](#nix-flake-nixos-and-home-manager).
 
