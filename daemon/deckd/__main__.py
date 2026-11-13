@@ -7,7 +7,7 @@ import os
 import signal
 import sys
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 from aiohttp import web
 
@@ -24,6 +24,9 @@ from .logging_setup import setup_logging
 from .platform import default_backend, default_sensor_manager
 from .media import MediaManager
 from .server import PortInUseError, Server
+
+if TYPE_CHECKING:
+    from .agents import AgentSource
 
 
 async def serve(
@@ -54,6 +57,8 @@ async def serve(
     # headless, macOS until its follow-up) — same shape as the windows
     # watcher above.
     server.start_session_state_watcher()
+    # Agent tiles (issue #180): no-op when ``--agents`` resolved to off.
+    server.start_agents_watcher()
 
     if on_started is not None:
         on_started(server_task)
@@ -221,8 +226,34 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Append logs to this path in addition to stderr (issue #70).",
     )
+    parser.add_argument(
+        "--agents",
+        choices=("auto", "paseo", "off"),
+        default="auto",
+        help=(
+            "Agent-tiles source (issue #180). ``auto`` subscribes to a local "
+            "Paseo daemon when $PASEO_HOME (~/.paseo) exists; ``paseo`` "
+            "always does; ``off`` disables the agents view."
+        ),
+    )
+    parser.add_argument(
+        "--paseo-url",
+        default=None,
+        help="Paseo daemon WebSocket URL for agent tiles (default ws://127.0.0.1:6767/ws).",
+    )
     parser.add_argument("-v", "--verbose", action="store_true")
     return parser
+
+
+def build_agent_source(args: argparse.Namespace) -> "AgentSource | None":
+    """Pick the agent-tiles source from ``--agents`` (issue #180)."""
+    from .agents import PASEO_DEFAULT_URL, PaseoAgentSource, paseo_home
+
+    if args.agents == "off":
+        return None
+    if args.agents == "auto" and not paseo_home().is_dir():
+        return None
+    return PaseoAgentSource(url=args.paseo_url or PASEO_DEFAULT_URL)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -350,6 +381,7 @@ def build_server(args: argparse.Namespace) -> Server:
         allow_while_locked=args.allow_while_locked,
         sensor_manager=default_sensor_manager(),
         media_manager=MediaManager(),
+        agent_source=build_agent_source(args),
     )
 
     if args.client_dist is not None:

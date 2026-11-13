@@ -41,6 +41,8 @@ import type {
   ServerDeck,
   ServerMediaError,
   ServerRunningWindows,
+  ServerAgents,
+  AgentEntry,
   ServerState,
   WindowListEntry,
 } from "./protocol";
@@ -198,6 +200,12 @@ export function App() {
   // platform" empty state in the meantime (issue #120 decision 8).
   const [runningWindows, setRunningWindows] = useState<WindowListEntry[] | undefined>(undefined);
   const onRunningWindows = useCallback((m: ServerRunningWindows) => setRunningWindows(m.windows), []);
+  // Agent tiles (issue #180). The daemon broadcasts the ``agents``
+  // snapshot globally; an ``agents`` widget in the focused deck (the
+  // Paseo deck) renders it. ``undefined`` until the first frame — a
+  // daemon with no agent source never sends one.
+  const [agents, setAgents] = useState<AgentEntry[] | undefined>(undefined);
+  const onAgents = useCallback((m: ServerAgents) => setAgents(m.agents), []);
   // Two-state session screen awareness (issue #160). ``null`` until the
   // first ``state`` frame arrives — both halves read false, which is
   // exactly what a daemon without lock detection ever pushes. ``locked``
@@ -254,6 +262,7 @@ export function App() {
     onRunningWindows,
     onSessionState,
     onMediaError,
+    onAgents,
     { enabled: !demoDeck && !isPlayground },
   );
   const playgroundSocket = usePlaygroundDaemon(
@@ -263,6 +272,7 @@ export function App() {
     onChromeMedia,
     onConfirmRequest,
     onRunningWindows,
+    onAgents,
     { enabled: isPlayground },
   );
   const {
@@ -972,6 +982,7 @@ export function App() {
               meterReadings={meter.readings ?? undefined}
               mediaStates={media.states}
               onMediaCommand={mediaCommand}
+              agents={agents}
               labelScale={labelScale.scale}
               showKeyHints={showKeyHints.enabled}
             />

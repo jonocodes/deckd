@@ -1,11 +1,12 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import type { Widget } from "./protocol";
+import type { AgentEntry, Widget } from "./protocol";
 import { Icon } from "./Icon";
 import { JogStrip } from "./JogStrip";
 import { MeterCell } from "./MeterCell";
 import { StatsCell } from "./StatsCell";
 import { MediaCell } from "./MediaCell";
+import { AgentTiles } from "./AgentTiles";
 import type { MediaReading } from "./media-store";
 import type { MeterReading } from "./meter-store";
 import { computeReflow } from "./reflow";
@@ -50,6 +51,9 @@ type Props = {
   /** When true, buttons whose action is a key combo show that combo as a
    * small caption under the label (e.g. ``Ctrl+A``). */
   showKeyHints?: boolean;
+  /** Latest agent-tiles snapshot (issue #180), rendered by an ``agents``
+   * widget. ``undefined`` = the daemon has no agent source. */
+  agents?: AgentEntry[];
 };
 
 /** Title-case each token of a key combo so ``ctrl+a`` reads as ``Ctrl+A``.
@@ -115,6 +119,7 @@ export function ButtonGrid({
   mediaStates,
   onMediaCommand,
   showKeyHints,
+  agents,
 }: Props) {
   const [gridRef, size] = useMeasuredSize();
 
@@ -171,106 +176,124 @@ export function ButtonGrid({
       rows * cellPx + Math.max(0, rows - 1) * GRID_GAP <= size.height ? "center" : "start",
   };
 
+  const renderCell = (w: Widget, style: CSSProperties) => {
+    if (w.kind === "agents") {
+      return (
+        <div key={w.id} className="cell cell-agents" style={style}>
+          <AgentTiles agents={agents} />
+        </div>
+      );
+    }
+    if (w.kind === "blank") {
+      // A deliberate gap in the flow: holds its span, renders nothing.
+      return <div key={w.id} className="cell cell-empty" style={style} aria-hidden="true" />;
+    }
+    if (w.kind === "jogstrip") {
+      return (
+        <JogStrip
+          key={w.id}
+          widget={w}
+          style={style}
+          scale={scrollScale}
+          invert={scrollInvert}
+          onJog={onJog}
+          onJogEnd={onJogEnd}
+        />
+      );
+    }
+    if (w.kind === "meter") {
+      return (
+        <MeterCell
+          key={w.id}
+          widget={w}
+          reading={(w.source ? meterReadings?.[w.source] : null) ?? null}
+          style={style}
+          labelScale={labelScale ?? 1}
+        />
+      );
+    }
+    if (w.kind === "media") {
+      return (
+        <MediaCell
+          key={w.id}
+          widget={w}
+          state={mediaStates?.[w.id] ?? null}
+          style={style}
+          onPress={onPress}
+          onCommand={onMediaCommand ?? (() => undefined)}
+        />
+      );
+    }
+    if (w.kind === "stats") {
+      return (
+        <StatsCell
+          key={w.id}
+          widget={w}
+          readings={meterReadings ?? {}}
+          style={style}
+          labelScale={labelScale ?? 1}
+        />
+      );
+    }
+    const buttonStyle: CSSProperties = w.color ? { ...style, backgroundColor: w.color } : style;
+    const hint = showKeyHints ? keyHint(w) : null;
+    // ``confirm: true`` widgets carry a persistent danger affordance
+    // (issue #69 / #109): red border + small ⚠ badge so a user can
+    // spot danger before pressing. The widget record the daemon
+    // relays on every deck push carries the field verbatim.
+    const isDangerous = w.confirm === true;
+    const cellClassName = isDangerous
+      ? "cell cell-button cell-danger"
+      : "cell cell-button";
+    return (
+      <button
+        key={w.id}
+        className={cellClassName}
+        style={buttonStyle}
+        aria-label={w.label ?? w.id}
+        data-confirm-dangerous={isDangerous ? "true" : undefined}
+        onPointerDown={() => onPress(w.id)}
+        onKeyDown={onActivate(() => onPress(w.id))}
+      >
+        {isDangerous ? (
+          <span className="cell-danger-badge" aria-hidden="true">
+            <Icon icon={{ source: "lucide", name: "alert-triangle" }} />
+          </span>
+        ) : null}
+        {w.icon ? <Icon icon={w.icon} className="icon" /> : null}
+        {/* Text is opt-in per button: a widget with a ``label`` shows it,
+            one without is icon-only. The id is only a last-resort
+            fallback so a widget with neither label nor icon isn't a
+            blank, unidentifiable button. */}
+        {w.label ? (
+          <span className="label">{w.label}</span>
+        ) : !w.icon ? (
+          <span className="label">{w.id}</span>
+        ) : null}
+        {hint ? <span className="key-hint">{hint}</span> : null}
+      </button>
+    );
+  };
+
+  // ADR-0010: a ``size: full`` widget takes the whole chrome-excluded area
+  // and does not participate in packing. The first one wins; anything else
+  // in the deck is hidden behind it (a full-surface deck is one surface).
+  const fullWidget = widgets.find((w) => w.size === "full");
+  if (fullWidget) {
+    return (
+      <div ref={gridRef} className="grid grid-full">
+        {renderCell(fullWidget, {})}
+      </div>
+    );
+  }
+
   return (
     <div ref={gridRef} className="grid" style={gridStyle}>
       {shown.map((w) => {
-        const full = w.size === "full";
         const [cw, ch] = spanOf(w);
         // Cap a span at the current column count so a too-wide widget doesn't
         // force horizontal overflow; strict order (no dense) wraps it down.
-        const style: CSSProperties = full
-          ? { gridColumn: "1 / -1" }
-          : { gridColumn: `span ${Math.min(cw, cols)}`, gridRow: `span ${ch}` };
-
-        if (w.kind === "blank") {
-          // A deliberate gap in the flow: holds its span, renders nothing.
-          return <div key={w.id} className="cell cell-empty" style={style} aria-hidden="true" />;
-        }
-        if (w.kind === "jogstrip") {
-          return (
-            <JogStrip
-              key={w.id}
-              widget={w}
-              style={style}
-              scale={scrollScale}
-              invert={scrollInvert}
-              onJog={onJog}
-              onJogEnd={onJogEnd}
-            />
-          );
-        }
-        if (w.kind === "meter") {
-          return (
-            <MeterCell
-              key={w.id}
-              widget={w}
-              reading={(w.source ? meterReadings?.[w.source] : null) ?? null}
-              style={style}
-              labelScale={labelScale ?? 1}
-            />
-          );
-        }
-        if (w.kind === "media") {
-          return (
-            <MediaCell
-              key={w.id}
-              widget={w}
-              state={mediaStates?.[w.id] ?? null}
-              style={style}
-              onPress={onPress}
-              onCommand={onMediaCommand ?? (() => undefined)}
-            />
-          );
-        }
-        if (w.kind === "stats") {
-          return (
-            <StatsCell
-              key={w.id}
-              widget={w}
-              readings={meterReadings ?? {}}
-              style={style}
-              labelScale={labelScale ?? 1}
-            />
-          );
-        }
-        const buttonStyle: CSSProperties = w.color ? { ...style, backgroundColor: w.color } : style;
-        const hint = showKeyHints ? keyHint(w) : null;
-        // ``confirm: true`` widgets carry a persistent danger affordance
-        // (issue #69 / #109): red border + small ⚠ badge so a user can
-        // spot danger before pressing. The widget record the daemon
-        // relays on every deck push carries the field verbatim.
-        const isDangerous = w.confirm === true;
-        const cellClassName = isDangerous
-          ? "cell cell-button cell-danger"
-          : "cell cell-button";
-        return (
-          <button
-            key={w.id}
-            className={cellClassName}
-            style={buttonStyle}
-            aria-label={w.label ?? w.id}
-            data-confirm-dangerous={isDangerous ? "true" : undefined}
-            onPointerDown={() => onPress(w.id)}
-            onKeyDown={onActivate(() => onPress(w.id))}
-          >
-            {isDangerous ? (
-              <span className="cell-danger-badge" aria-hidden="true">
-                <Icon icon={{ source: "lucide", name: "alert-triangle" }} />
-              </span>
-            ) : null}
-            {w.icon ? <Icon icon={w.icon} className="icon" /> : null}
-            {/* Text is opt-in per button: a widget with a ``label`` shows it,
-                one without is icon-only. The id is only a last-resort
-                fallback so a widget with neither label nor icon isn't a
-                blank, unidentifiable button. */}
-            {w.label ? (
-              <span className="label">{w.label}</span>
-            ) : !w.icon ? (
-              <span className="label">{w.id}</span>
-            ) : null}
-            {hint ? <span className="key-hint">{hint}</span> : null}
-          </button>
-        );
+        return renderCell(w, { gridColumn: `span ${Math.min(cw, cols)}`, gridRow: `span ${ch}` });
       })}
     </div>
   );
