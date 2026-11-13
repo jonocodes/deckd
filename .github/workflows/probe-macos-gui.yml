@@ -1,0 +1,145 @@
+name: Probe macOS GUI automation (throwaway)
+
+# One-off probe: can a GitHub-hosted macos-15 runner drive deckd's real
+# menu-bar item through System Events (Accessibility) and take screenshots
+# (Screen Recording)? Every step is continue-on-error so one run reports
+# everything. Runs only on pushes to its own branch.
+
+on:
+  push:
+    branches: [probe/macos-gui]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  probe:
+    runs-on: macos-15
+    env:
+      # Hard timeout wrapper: macOS has no GNU timeout.
+      TO: perl -e 'alarm shift; exec @ARGV' 30
+    steps:
+      - name: Runner facts
+        continue-on-error: true
+        run: |
+          sw_vers; whoami; uname -m
+          echo "--- console user"; stat -f %Su /dev/console
+          echo "--- user TCC.db"
+          sqlite3 "$HOME/Library/Application Support/com.apple.TCC/TCC.db" \
+            "select service, client, auth_value from access order by service" 2>&1 | head -60
+          echo "--- system TCC.db"
+          sudo sqlite3 "/Library/Application Support/com.apple.TCC/TCC.db" \
+            "select service, client, auth_value from access order by service" 2>&1 | head -80
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: deckd-macos-dmg
+          run-id: 43459937717
+          github-token: ${{ github.token }}
+          path: dmg
+
+      - name: Install from DMG and launch
+        continue-on-error: true
+        run: |
+          mnt="$(mktemp -d)"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" dmg/*.dmg
+          ls -la "$mnt"
+          ditto "$mnt/deckd.app" /Applications/deckd.app
+          hdiutil detach "$mnt"
+          codesign -dv --verbose=2 /Applications/deckd.app 2>&1 | head -12
+          echo "--- designated requirement"; codesign -d -r- /Applications/deckd.app 2>&1
+          open -a /Applications/deckd.app
+          for i in $(seq 60); do curl -fs http://127.0.0.1:8765/health && echo && echo "health up after ${i}x0.5s" && break; sleep 0.5; done
+          pgrep -fl deckd || true
+
+      - name: "AX: find the status item"
+        continue-on-error: true
+        run: |
+          $TO osascript -e '
+            tell application "System Events"
+              set p to first process whose bundle identifier is "com.deckd.daemon"
+              set out to "process: " & name of p & ", menu bars: " & (count of menu bars of p)
+              repeat with i from 1 to count of menu bars of p
+                set out to out & linefeed & "menu bar " & i & ": " & (count of menu bar items of menu bar i of p) & " items"
+              end repeat
+              return out
+            end tell'
+
+      - name: "AX: open the menu, screenshot, list items"
+        continue-on-error: true
+        run: |
+          mkdir -p shots
+          screencapture -x shots/0-desktop.png; echo "desktop screencapture exit $?"
+          $TO osascript -e '
+            tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
+              ignoring application responses
+                click menu bar item 1 of menu bar 2
+              end ignoring
+            end tell'
+          sleep 2
+          screencapture -x shots/1-menu-open.png; echo "menu screencapture exit $?"
+          $TO osascript -e '
+            tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
+              set m to menu 1 of menu bar item 1 of menu bar 2
+              set out to ""
+              repeat with mi in menu items of m
+                set out to out & (name of mi as text) & " | mark=" & (value of attribute "AXMenuItemMarkChar" of mi as text) & linefeed
+              end repeat
+              return out
+            end tell'
+          ls -la shots
+
+      - name: "AX: click Allow LAN access, check bind + checkmark"
+        continue-on-error: true
+        run: |
+          ip="$(ipconfig getifaddr en0 || ipconfig getifaddr en1 || true)"; echo "LAN ip: $ip"
+          echo "before:"; curl -fs -m 3 "http://$ip:8765/health" >/dev/null && echo "  LAN reachable" || echo "  LAN refused"
+          $TO osascript -e '
+            tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
+              click menu item "Allow LAN access" of menu 1 of menu bar item 1 of menu bar 2
+            end tell'
+          echo "click exit $?"
+          for i in $(seq 30); do curl -fs -m 2 "http://$ip:8765/health" >/dev/null && echo "after: LAN reachable (${i}x0.5s)" && break; sleep 0.5; done
+          $TO osascript -e '
+            tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
+              ignoring application responses
+                click menu bar item 1 of menu bar 2
+              end ignoring
+            end tell'
+          sleep 2; screencapture -x shots/2-lan-on.png
+          $TO osascript -e '
+            tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
+              return value of attribute "AXMenuItemMarkChar" of menu item "Allow LAN access" of menu 1 of menu bar item 1 of menu bar 2
+            end tell'
+          $TO osascript -e 'tell application "System Events" to key code 53'
+
+      - name: "AX: Quit deckd from the menu"
+        continue-on-error: true
+        run: |
+          $TO osascript -e '
+            tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
+              ignoring application responses
+                click menu bar item 1 of menu bar 2
+              end ignoring
+            end tell'
+          sleep 1
+          $TO osascript -e '
+            tell application "System Events" to tell (first process whose bundle identifier is "com.deckd.daemon")
+              click menu item "Quit deckd" of menu 1 of menu bar item 1 of menu bar 2
+            end tell'
+          sleep 3
+          pgrep -fl deckd && echo "STILL RUNNING" || echo "process gone"
+          curl -fs -m 2 http://127.0.0.1:8765/health >/dev/null && echo "port still answering" || echo "port freed"
+
+      - name: deckd log
+        if: always()
+        continue-on-error: true
+        run: find "$HOME/Library" -maxdepth 4 -name 'deckd*.log' -print -exec tail -40 {} \; 2>/dev/null
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: probe-shots
+          path: shots/
+          retention-days: 7
