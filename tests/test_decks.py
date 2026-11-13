@@ -909,6 +909,17 @@ def test_shipping_decks_load_and_resolve_default() -> None:
     assert default.widgets, "shipping default.yaml has no widgets"
 
 
+def test_shipping_gmail_deck_claims_a_gmail_tab() -> None:
+    # Gmail titles end "… - Gmail"; the site deck must beat the Firefox deck.
+    store = load_decks(REPO_DECKS_DIR)
+    app = AppInfo(
+        app_id="firefox",
+        wm_class="firefox",
+        title="Inbox (3) - you@gmail.com - Gmail — Mozilla Firefox",
+    )
+    assert resolve_deck(store, app).display_name == "Gmail"
+
+
 # ---------------------------------------------------------------------------
 # url: action primitive
 # ---------------------------------------------------------------------------

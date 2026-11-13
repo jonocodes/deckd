@@ -226,6 +226,30 @@ ladle:
 screenshots:
     cd client && node screenshots.mjs
 
+# Build the GitHub Pages site exactly as CI deploys it (homepage at /deckd/,
+# client at /deckd/app/, Ladle at /deckd/ladle/) and serve it on :5290.
+# SKIP_LADLE=1 just pages skips the slow Ladle build.
+pages:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    scripts/build_pages.sh _site/deckd
+    echo "Pages preview: http://127.0.0.1:5290/deckd/"
+    node scripts/serve_pages.mjs _site 5290
+
+# Preview the homepage mockups (docs/mockups/homepage) over http. The client's
+# Vite dev server on :5288 serves the demo decks the pages embed; a static
+# server on :5289 serves the pages themselves (browsers won't let a file://
+# page frame localhost, so opening the HTML files directly shows blank
+# phones). Ctrl+C stops both.
+mockups:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    trap 'kill 0' EXIT
+    (cd client && npx vite dev --port 5288 --strictPort --host 127.0.0.1) &
+    uv run --no-sync python -m http.server 5289 --bind 127.0.0.1 --directory . >/dev/null 2>&1 &
+    echo "homepage mockups: http://127.0.0.1:5289/docs/mockups/homepage/b-desk.html (also a-notebook.html, c-press.html)"
+    wait -n
+
 # Rasterises client/public/icon.svg (the source of truth) into the PWA any +
 # maskable PNGs, the apple-touch-icon, and packaging/macos/deckd.icns. Uses
 # the e2e Chromium, so client/node_modules must be installed; the .icns step

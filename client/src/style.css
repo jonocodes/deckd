@@ -170,8 +170,26 @@ button:focus-visible {
    for the status word, so the ``.connection-label`` collapses to sr-only —
    visually hidden, still announced. This is a viewport-width heuristic, not
    a per-badge measurement: a very long app name on a mid-width device can
-   still crowd the label. The dot remains the always-visible state carrier. */
+   still crowd the label. The dot remains the always-visible state carrier.
+   The app badge likewise collapses to its icon when it has one (the name
+   stays announced), rather than truncating to "Y…"; a badge with no icon
+   keeps its name. */
 @container (max-width: 430px) {
+  .app-badge:has(.app-badge-icon) {
+    padding-right: calc(4px * var(--bottom-scale, 1));
+  }
+  .app-badge:has(.app-badge-icon) .app-badge-name,
+  .app-badge:has(.app-badge-icon) .app-badge-webapp {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
   .connection-label {
     position: absolute;
     width: 1px;
@@ -517,6 +535,13 @@ button:focus-visible {
   width: calc(clamp(14px, 34cqmin, 44px) * var(--content-scale));
   height: calc(clamp(14px, 34cqmin, 44px) * var(--content-scale));
   color: currentColor;
+}
+
+/* Icon-only buttons (no label) let the glyph take about half the cell, so a
+   launcher tile reads at a glance. */
+.cell-button.cell-icon-only .icon {
+  width: calc(clamp(20px, 52cqmin, 112px) * var(--content-scale));
+  height: calc(clamp(20px, 52cqmin, 112px) * var(--content-scale));
 }
 
 /* Unresolved / unknown-source icon: a dashed placeholder box (a <span>, not an

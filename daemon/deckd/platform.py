@@ -362,6 +362,55 @@ class PsutilMemoryPercentSensorSource(SensorSource):
         return SensorReading(source=self.name, value=float(value), unit=self.unit)
 
 
+class PsutilSwapPercentSensorSource(SensorSource):
+    """Swap usage in percent, via ``psutil.swap_memory``.
+
+    A box with no swap configured reports ``0.0`` — a real reading,
+    not a missing one. Snapshot value, same 1s cadence as memory.
+    """
+
+    name = "swap_percent"
+    unit = "%"
+    interval_s = 1.0
+
+    def is_available(self) -> bool:
+        return True
+
+    def read(self) -> SensorReading | None:
+        try:
+            import psutil  # type: ignore[import-untyped]
+
+            value = psutil.swap_memory().percent
+        except Exception:
+            return None
+        return SensorReading(source=self.name, value=float(value), unit=self.unit)
+
+
+class PsutilDiskPercentSensorSource(SensorSource):
+    """Root filesystem usage in percent, via ``psutil.disk_usage("/")``.
+
+    ``/`` is the root on Linux and macOS alike. Disk use moves slowly,
+    but a 1s snapshot is a cheap ``statvfs`` and keeps every psutil
+    source on one cadence.
+    """
+
+    name = "disk_percent"
+    unit = "%"
+    interval_s = 1.0
+
+    def is_available(self) -> bool:
+        return True
+
+    def read(self) -> SensorReading | None:
+        try:
+            import psutil  # type: ignore[import-untyped]
+
+            value = psutil.disk_usage("/").percent
+        except Exception:
+            return None
+        return SensorReading(source=self.name, value=float(value), unit=self.unit)
+
+
 class PlatformBackend:
     # Latest error of an ongoing focus-query failure streak, None when the
     # last poll succeeded. Maintained by :meth:`watch_active_app`.
@@ -1340,6 +1389,8 @@ def default_sensor_manager() -> "SensorManager":
         [
             PsutilCpuPercentSensorSource(),
             PsutilMemoryPercentSensorSource(),
+            PsutilSwapPercentSensorSource(),
+            PsutilDiskPercentSensorSource(),
         ]
     )
 

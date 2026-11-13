@@ -115,6 +115,22 @@ describe("Editor — deck editor chrome view", () => {
     expect(trigger.textContent).toContain("YouTube");
   });
 
+  it("falls back to the first mock deck when the active deck isn't in the list", () => {
+    // Demo mode: the fixture's ``app`` ("Firefox (demo)") is not a mock
+    // deck id, which used to leave the canvas on "No deck selected".
+    render(
+      <Editor
+        deck={{ type: "deck", app: "Firefox (demo)", display_name: "Firefox", jogstrip_enabled: true, widgets: [] }}
+        send={send}
+        onExit={onExit}
+        mockDecks={MOCK_DECKS}
+      />,
+    );
+    const trigger = screen.getByRole("button", { name: "select deck to edit" });
+    expect(trigger.textContent).toContain("Firefox");
+    expect(screen.queryByText("No deck selected")).toBeNull();
+  });
+
   it("opens and closes the deck picker", async () => {
     render(<Editor deck={null} send={send} onExit={onExit} mockDecks={MOCK_DECKS} />);
     const trigger = screen.getByRole("button", { name: "select deck to edit" });

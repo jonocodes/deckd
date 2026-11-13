@@ -44,9 +44,11 @@ match:
 When the focused app is a browser, a `title:` match outranks a generic
 browser deck (so `youtube.yaml` wins over `firefox.yaml`), and falls back to
 the browser deck when no site matches. The buttons are ordinary actions —
-the shipped `decks/youtube.yaml` and `decks/netflix.yaml` drive each site's
-own keyboard shortcuts (`key: k`, `key: s`, …), so no special capability is
-needed beyond a deck file.
+the shipped `decks/youtube.yaml`, `decks/netflix.yaml`, `decks/google-meet.yaml`
+and `decks/gmail.yaml` drive each site's own keyboard shortcuts (`key: k`,
+`key: s`, …), so no special capability is needed beyond a deck file. (Gmail
+ships with its shortcuts off: turn on Settings → General → "Keyboard
+shortcuts on".)
 
 The same idea also turns a site into an **on-screen musical keyboard**:
 `decks/musicca.yaml` matches `title:*Musicca*` and fires the letter/number
@@ -216,11 +218,12 @@ The client can be viewed and design-iterated without a running daemon:
 
 ### Hosted demo (GitHub Pages)
 
-Every push to `main` builds the client and Ladle and publishes them to GitHub Pages, so the previews above can be browsed with no daemon and no local checkout:
+Every push to `main` builds the homepage, the client and Ladle and publishes them to GitHub Pages, so the previews above can be browsed with no daemon and no local checkout. `scripts/build_pages.sh` assembles the site, and `just pages` builds and serves the same thing locally on :5290.
 
-- **Live client (demo mode)** — `https://jonocodes.github.io/deckd/?demo=showcase` (also `?demo=firefox`, `?demo=default`). Without `?demo=` the client loads and shows "disconnected" since there's no daemon behind the Pages site; the param lets the fixture deck run.
-- **Responsive gallery** — `https://jonocodes.github.io/deckd/gallery.html`.
-- **Layout help** — `https://jonocodes.github.io/deckd/help.html`. The standalone build of the in-app explainer (below); no daemon, no icons.
+- **Homepage** — `https://jonocodes.github.io/deckd/`. Source in `site/`; its phones embed the client's showcase demo decks (`?demo=home`, `gmail`, `meet`, `media`, …).
+- **Live client (demo mode)** — `https://jonocodes.github.io/deckd/app/?demo=showcase` (also `?demo=firefox`, `?demo=home`). Without `?demo=` the client loads and shows "disconnected" since there's no daemon behind the Pages site; the param lets the fixture deck run. Deep links to a view (`app/trackpad`) work too: the site's `404.html` is the client.
+- **Responsive gallery** — `https://jonocodes.github.io/deckd/app/gallery.html`.
+- **Layout help** — `https://jonocodes.github.io/deckd/app/help.html`. The standalone build of the in-app explainer (below); no daemon, no icons.
 - **Ladle stories** — `https://jonocodes.github.io/deckd/ladle/`.
 
 Source: `.github/workflows/deploy-pages.yml`. The Vite build uses `VITE_BASE_PATH=/deckd/` and the Ladle build uses `--base /deckd/ladle/` so the Project-Pages sub-path resolves; local dev keeps base `/`. Reproduce the deploy bundle locally with `just build-pages` (output: `client/dist/`) and serve it with `npx serve client/dist`.
@@ -965,7 +968,9 @@ Built-in sensors (all psutil-backed — see "Why no CPU temperature?" below for 
 |----------------|--------------------------------|--------------------------------------------------|--------|
 | `cpu_percent`  | Whole-system CPU utilisation   | `psutil.cpu_percent(interval=None)` — delta since the last call. The first reading is `0.0` (no baseline); subsequent readings land in `[0, 100]`. | 1s     |
 | `mem_percent`  | Memory used / total            | `psutil.virtual_memory().percent`                 | 1s     |
-| *(more TBD)*   | CPU frequency, battery, swap   | `psutil.cpu_freq()`, `psutil.sensors_battery()`, `psutil.swap_memory()` — all the same API. Open to contributions. | varies |
+| `swap_percent` | Swap used / total (`0` with no swap) | `psutil.swap_memory().percent`              | 1s     |
+| `disk_percent` | Root filesystem (`/`) used / total | `psutil.disk_usage("/").percent`             | 1s     |
+| *(more TBD)*   | CPU frequency, battery         | `psutil.cpu_freq()`, `psutil.sensors_battery()` — all the same API. Open to contributions. | varies |
 
 #### Why no CPU temperature?
 

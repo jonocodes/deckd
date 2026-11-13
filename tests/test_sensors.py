@@ -16,7 +16,9 @@ import pytest
 
 from deckd.platform import (
     PsutilCpuPercentSensorSource,
+    PsutilDiskPercentSensorSource,
     PsutilMemoryPercentSensorSource,
+    PsutilSwapPercentSensorSource,
     SensorManager,
     SensorReading,
     SensorSource,
@@ -180,6 +182,22 @@ def test_psutil_memory_percent_source_returns_reading_in_zero_to_hundred() -> No
     assert 0.0 <= reading.value <= 100.0
 
 
+@pytest.mark.parametrize(
+    ("cls", "name"),
+    [(PsutilSwapPercentSensorSource, "swap_percent"), (PsutilDiskPercentSensorSource, "disk_percent")],
+)
+def test_psutil_swap_and_disk_sources_return_reading_in_zero_to_hundred(cls: type, name: str) -> None:
+    # Swap use and root-filesystem use, for the stats cell next to CPU/MEM.
+    # A box with no swap reports 0%, which is a valid reading.
+    src = cls()
+    assert src.is_available() is True
+    reading = src.read()
+    assert reading is not None
+    assert reading.source == name
+    assert reading.unit == "%"
+    assert 0.0 <= reading.value <= 100.0
+
+
 def test_psutil_sources_have_one_second_poll_interval() -> None:
     # The meter cell renders a smooth transition animation on every
     # push; faster than 1s looks jittery, slower than 1s feels
@@ -200,6 +218,8 @@ def test_default_sensor_manager_registers_psutil_sources() -> None:
     mgr = default_sensor_manager()
     assert "cpu_percent" in mgr.sources
     assert "mem_percent" in mgr.sources
+    assert "swap_percent" in mgr.sources
+    assert "disk_percent" in mgr.sources
 
 
 def test_default_sensor_manager_contains_no_legacy_temperature_sources() -> None:
