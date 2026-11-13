@@ -103,9 +103,7 @@ export function App() {
   // that chrome view; otherwise start on the deck grid.
   const [view, setView] = useState<View>(() => {
     const demoView = getDemoView();
-    return demoView === "deck" && window.location.pathname !== "/"
-      ? viewFromPath(window.location.pathname)
-      : demoView;
+    return demoView === "deck" ? viewFromPath(window.location.pathname) : demoView;
   });
   const navigate = useCallback((nextView: View) => {
     setView(nextView);
