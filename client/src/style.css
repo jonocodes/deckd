@@ -1978,6 +1978,71 @@ button:focus-visible {
   min-width: 0;
 }
 
+/* ---------------------------------------------------------------------------
+ * Playground app switcher (issue #152).
+ *
+ * A horizontal strip of app chips pinned to the top of the deck surface,
+ * rendered only in ``?playground`` mode. The browser has no OS focus, so
+ * this is how the visitor fakes a frontmost app; the active chip mirrors
+ * the focused deck's badge. Chips keep a 44px touch target like the rest
+ * of the client (issue #61), and scroll horizontally when the roster is
+ * wider than the surface.
+ * ------------------------------------------------------------------------- */
+.playground-switcher {
+  display: flex;
+  gap: 8px;
+  padding: 8px 4px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 0 0 auto;
+}
+
+.playground-switcher-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: #1b222a;
+  border: 1px solid #2a333d;
+  color: #c3ccd6;
+  font-size: calc(14px * var(--label-scale, 1));
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.playground-switcher-chip:focus-visible {
+  outline: 2px solid #3fb1d8;
+  outline-offset: 2px;
+}
+
+.playground-switcher-chip:active {
+  transform: scale(0.98);
+}
+
+.playground-switcher-chip-active {
+  background: #123240;
+  border-color: #3fb1d8;
+  color: #e6f6fd;
+}
+
+.playground-switcher-icon {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.playground-switcher-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /**
  * A stats cell reuses the plain-cell chrome
  * (background, border, radius, non-pressable) but stacks "LABEL value" rows
