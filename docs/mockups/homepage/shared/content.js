@@ -57,36 +57,40 @@ function compare(root) {
 }
 
 const TODAY = [
-  "Decks that follow the focused app — and website",
-  "Buttons, macros, launchers, live readouts",
-  "Trackpad, keyboard and scroll strip",
-  "Now playing for every media player",
-  "An in-browser deck editor with live reload",
-  "Password auth and lock awareness",
-  "Linux (GNOME, KDE, X11) and macOS",
+  "Decks that switch with the focused app",
+  "Decks for websites: YouTube, Netflix, Google Meet, Gmail",
+  "Buttons for keys, commands, URLs, terminals and D-Bus",
+  "Macros: several actions from one press",
+  "Brand logos, icons and colours on every button",
+  "A trackpad, a keyboard, and voice typing from your phone",
+  "A scroll strip with momentum",
+  "Now playing for every media player, with album art",
+  "Live CPU, memory, swap and disk readouts",
+  "A switcher for every open window",
+  "An in-browser deck editor; every screen updates as you save",
+  "Per-device tuning: scroll speed, sizes, keep-awake",
+  "Install to the home screen, full screen",
+  "Password sign-in, network scope, lock awareness",
+  "Keyboard, screen-reader, high-contrast and reduced-motion support",
+  "Linux (GNOME, KDE, X11) and macOS, plus a Nix flake",
 ];
 const NEXT = [
   ["Downloadable app for Linux and macOS", 168],
   ["A browser extension for exact website matching", 90],
-  ["Different decks on different devices", null],
-  ["Pick between several computers", 25],
-  ["Dim with the desktop's screensaver", null],
-  ["Soundboard", null],
   ["Windows", null],
 ];
 function roadmap(root) {
   root.append(el(`<div class="dk-roadmap">
-    <div><h3>Works today</h3><ul>${TODAY.map((t) => `<li>${t}</li>`).join("")}</ul></div>
-    <div><h3>Coming</h3><ul>${NEXT.map(([t, n]) => `<li>${n ? `<a href="${GH}/issues/${n}">${t}</a>` : t}</li>`).join("")}</ul></div>
+    <div class="today"><h3>Works today</h3><ul>${TODAY.map((t) => `<li>${t}</li>`).join("")}</ul></div>
+    <div class="next"><h3>Coming</h3><ul>${NEXT.map(([t, n]) => `<li>${n ? `<a href="${GH}/issues/${n}">${t}</a>` : t}</li>`).join("")}</ul></div>
   </div>`));
-  root.append(el(`<p class="dk-note">Pre-alpha, and used every day by the person writing it.</p>`));
 }
 
 const FAQ = [
   ["Do I need to install an app on my phone?",
     "No. Open the address in any browser. Add it to your home screen and it runs full screen, and keeps the screen awake while you use it."],
   ["Which websites work?",
-    "Any site with keyboard shortcuts. deckd ships decks for YouTube, Netflix, Google Meet and a piano site you play from the deck; adding another is a few buttons in the editor. It matches the browser's window title, so it's best-effort — a browser extension for exact matching is planned."],
+    "Any site with keyboard shortcuts. deckd ships decks for Gmail, YouTube, Netflix, Google Meet and a piano site you play from the deck; adding another is a few buttons in the editor. It matches the browser's window title, so it's best-effort — a browser extension for exact matching is planned."],
   ["Can more than one phone connect?",
     "Yes. Every connected screen shows the deck for the focused app, and edits reach all of them at once. Different decks per device is on the roadmap."],
   ["Does it work away from my Wi-Fi?",

@@ -174,12 +174,16 @@
 .dk-points dt { font-weight: 600; margin-bottom: 6px; }
 .dk-points dd { margin: 0; color: var(--dk-muted, #888); }
 
-.dk-roadmap { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; }
+/* a long "works today" list in two columns beside a short "coming" one */
+.dk-roadmap { display: grid; grid-template-columns: 3fr 1fr; gap: 48px; }
+.dk-roadmap .today ul { columns: 2; column-gap: 40px; }
+.dk-roadmap .today li { break-inside: avoid; }
 .dk-roadmap h3 { font: 500 12px var(--dk-mono, monospace); letter-spacing: .08em; text-transform: uppercase; color: var(--dk-muted, #888); margin: 0 0 8px; }
 .dk-roadmap ul { list-style: none; margin: 0; padding: 0; }
-.dk-roadmap li { padding: 9px 0; border-bottom: 1px dashed var(--dk-line, #ccc); }
-.dk-roadmap div:first-child li::before { content: "✓  "; color: var(--dk-yes, #16a34a); font-weight: 700; }
-.dk-roadmap div:last-child li::before { content: "→  "; color: var(--dk-accent, #fb923c); }
+.dk-roadmap li { position: relative; padding: 9px 0 9px 1.4em; border-bottom: 1px dashed var(--dk-line, #ccc); }
+.dk-roadmap li::before { position: absolute; left: 0; }
+.dk-roadmap .today li::before { content: "✓"; color: var(--dk-yes, #16a34a); font-weight: 700; }
+.dk-roadmap .next li::before { content: "→"; color: var(--dk-accent, #fb923c); }
 .dk-roadmap a { color: inherit; text-decoration-color: var(--dk-line, #ccc); text-underline-offset: 3px; }
 
 .dk-faq details { border-bottom: 1px solid var(--dk-line, #ccc); }
@@ -192,6 +196,7 @@
 
 @media (max-width: 720px) {
   .dk-points, .dk-roadmap { grid-template-columns: 1fr; gap: 20px; }
+  .dk-roadmap .today ul { columns: 1; }
   .dk-table th, .dk-table td { padding: 8px 6px; }
   /* scroll sideways rather than squeeze the row labels into one-word lines */
   .dk-table { min-width: 560px; }
