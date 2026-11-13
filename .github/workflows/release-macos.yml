@@ -8,7 +8,7 @@ name: Release macOS app
 # path can't drift. This job only supplies the runner, the toolchain, and the
 # publish step.
 #
-# arm64 only: macos-14 runners are Apple Silicon, so the DMG targets Apple
+# arm64 only: macos-15 runners are Apple Silicon, so the DMG targets Apple
 # Silicon Macs. An Intel / universal2 build is a documented follow-up
 # (issue #165, "Open questions").
 #
@@ -43,7 +43,7 @@ concurrency:
 
 jobs:
   dmg:
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       # A pushed tag, or the tag supplied to a manual run.
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}

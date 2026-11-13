@@ -671,11 +671,11 @@ Verified so far (macOS 26.6.2, Apple Silicon): the bundle builds, launches as a 
 
 #### Releasing a DMG
 
-Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workflows/release-macos.yml) on a `macos-14` runner: it builds the client, freezes the app, wraps it in a DMG (the same `just build-macos-dmg` recipe above), and attaches the DMG to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag.
+Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workflows/release-macos.yml) on a `macos-15` runner: it builds the client, freezes the app, wraps it in a DMG (the same `just build-macos-dmg` recipe above), and attaches the DMG to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag, or — with **publish** unticked — just build the DMG and upload it as a workflow artifact, for trying a build without making a release.
 
 The tag (minus a leading `v`) is the version for that release: it names the DMG (`deckd-<version>.dmg`), its volume, and the app's `CFBundleShortVersionString`. So a rough CalVer tag like `v2026.09.23` yields `deckd-2026.09.23.dmg`. No scheme is enforced — any `v*` string works. For a local build without a tag, `just build-macos-dmg` falls back to `version` in `pyproject.toml`.
 
-The DMG is **arm64 only** (Apple Silicon): `macos-14` runners are Apple Silicon. An Intel / `universal2` build is a follow-up ([#165](https://github.com/jonocodes/deckd/issues/165), "Open questions").
+The DMG is **arm64 only** (Apple Silicon): `macos-15` runners are Apple Silicon. An Intel / `universal2` build is a follow-up ([#165](https://github.com/jonocodes/deckd/issues/165), "Open questions").
 
 ### Linux AppImage (experimental, [#168](https://github.com/jonocodes/deckd/issues/168))
 
