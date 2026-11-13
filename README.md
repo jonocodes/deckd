@@ -59,7 +59,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Addressable client views** — the deck, manual control, now playing, settings, editor, and running-windows views have their own URL paths for deep links and browser history.
 - [x] **Keep screen awake** while the surface is in use.
 - [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
-- [x] **Password auth** — every client authenticates with a shared password (on by default; `--no-auth` disables it for local development). See [Client auth](docs/GUIDE.md#client-auth).
+- [x] **Password auth** — every client authenticates with a shared password (on by default; `--no-auth` disables it for local development). See [Client auth](docs/GUIDE.md#client-auth). The link itself is **not encrypted** on a plain LAN — use a Tailscale tailnet for that; see [Security model](docs/GUIDE.md#security-model).
 - [x] **LAN scope control** — bind the daemon to a specific network interface (`--bind iface:wlan0`) or literal address; defaults to localhost-only for safety.
 - [x] **Accessibility** — keyboard navigation, visible focus ring, screen-reader landmarks and live announcements, larger controls, high contrast, and reduced motion.
 - [x] **Runs on Linux: GNOME (Wayland), KDE Plasma (Wayland), X11**

@@ -16,6 +16,7 @@ endpoints see [REFERENCE.md](REFERENCE.md); for the system architecture see
 - Client features — [chrome](#client-chrome), [manual control](#manual-control-mode), [deck editor](#deck-editor), [app badge](#chrome-app-badge), [tuning](#client-tuning), [accessibility](#accessibility)
 - [uinput permissions](#uinput-permissions), [live reload](#live-reload), [focus watcher](#focus-watcher), [dev UX](#dev-ux-auto-ignore--deck-override), [smoke test](#smoke-test), [CLI](#cli)
 - [Running in production](#running-in-production)
+- [Security model](#security-model) — what the password gates, what isn't encrypted, where to expose the daemon
 - [Configuration](#configuration) — decks, actions, auth, bind scope, overlays, live widgets
 - [Under the hood](#under-the-hood), [why a venv](#why-a-venv-not-a-nix-shell)
 - Media surfaces — [VLC media widgets](#vlc-media-widgets), [now playing](#now-playing), [running programs list](#running-programs-list-stage-2-of-the-switcher-design)
@@ -310,7 +311,7 @@ The helper strip is a 4×2 keypad — the four arrows on the top row, and `esc` 
 - **Focus guard.** Injected keystrokes land on whatever window has desktop focus. If that's the deckd client itself (you opened the client on the same machine as the daemon), the daemon drops `type` / `key` messages rather than feed the client's own input back into itself.
 - **Physical keyboards.** A Bluetooth keyboard paired to the phone works through the `keydown` path with no extra setup.
 
-> ⚠️ **Security.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. Every client authenticates with a shared password (see [Client auth](#client-auth)) unless the daemon is started with `--no-auth`. The password is a single shared secret over a plaintext WebSocket, not per-user auth or transport encryption — still expose the daemon (`--bind 0.0.0.0`) only on a network you trust, ideally a Tailscale tailnet, and put TLS in front of it if the link isn't already private. (Auth is enforced from the `hello` message, so it holds up behind a proxy — a TLS terminator or the Vite dev proxy — without any `X-Forwarded-For` trust.)
+> ⚠️ **Security.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. Every client authenticates with a shared password (see [Client auth](#client-auth)) unless the daemon is started with `--no-auth`. The password is a single shared secret over a plaintext WebSocket, not per-user auth or transport encryption — still expose the daemon (`--bind 0.0.0.0`) only on a network you trust, ideally a Tailscale tailnet, and put TLS in front of it if the link isn't already private. See [Security model](#security-model). (Auth is enforced from the `hello` message, so it holds up behind a proxy — a TLS terminator or the Vite dev proxy — without any `X-Forwarded-For` trust.)
 
 
 
@@ -806,6 +807,44 @@ half; run the daemon and watcher the classic way above
   build the packages, evaluate the modules, and boot the packaged daemon
   on loopback.
 
+## Security model
+
+deckd is remote control of your desktop. This section says plainly what protects it and what doesn't, so you can choose where to expose it.
+
+**The password is the whole gate.** Anyone who has it can do everything a client can:
+
+- inject keystrokes, text, pointer, and scroll into the focused window — with a terminal focused, that is command execution;
+- press any deck button, including `shell` and `dbus` actions;
+- write decks through the editor's write API (`PUT /decks/{id}`, `POST /decks`) — so they can author a `shell` action and then press it.
+
+Treat the password like an SSH key to your user account. A `confirm: true` prompt and the screen-lock input gate are guards against accidents, not against someone holding the password.
+
+**The password does not encrypt anything.** The daemon speaks plain HTTP and `ws://`. On a LAN, the password (in the WebSocket `hello` frame, or the `X-Deckd-Password` header) and everything you send — including text typed in [manual control mode](#manual-control-mode) — cross the network in cleartext. Whoever can read that traffic can read your input and reuse the password: on WPA2-Personal Wi-Fi, anyone who knows the Wi-Fi password; on open Wi-Fi, anyone nearby; and on any network, an attacker who can redirect traffic (ARP spoofing).
+
+**A few read-only endpoints answer without the password:** `/health`, `/diag`, `/metrics`, `/actions/recent`, `/mpris/players`, `GET /decks` (summary only), and the album-art proxies. They never carry the password or action payloads (no shell strings, no typed text), but they do reveal the host's identity, the focused app **including its window title**, and what's playing, to anyone who can reach the port.
+
+### Choosing where to expose it
+
+| Phone/tablet is on… | Bind with | Encrypted on the wire? |
+|---|---|---|
+| The same machine | the default (`127.0.0.1` + `::1`) | n/a — traffic never leaves the host |
+| Your tailnet | `--bind iface:tailscale0` → `http://100.x.y.z:8765` | **Yes.** Tailscale is WireGuard; the link is encrypted end to end even though the URL says `http://` |
+| A home LAN you trust | `--bind iface:wlan0` (see [Bind scope](#bind-scope-issue-66)) | **No** |
+| A network you don't control (café, hotel, conference, shared office) | don't bind to it — use Tailscale | — |
+
+### HTTPS is a separate question
+
+Over Tailscale the link is already encrypted; HTTPS on top adds a browser **secure context**, which is what unlocks PWA install, Screen Wake Lock, and the clipboard. It isn't what keeps your input private. Today the daemon doesn't terminate TLS itself — put `tailscale serve` (or another TLS proxy) in front of it, or use the dev recipe in [PWA install over HTTPS](#pwa-install-over-https-tailscale). Native `--tls-cert` / `--tls-key` flags, a `--tls self-signed` mode for connecting by LAN IP, a production Tailscale HTTPS recipe, and a startup warning for plaintext LAN binds are tracked in [#181](https://github.com/jonocodes/deckd/issues/181); warning-free HTTPS on a plain LAN with your own domain name is [#184](https://github.com/jonocodes/deckd/issues/184).
+
+A bare LAN IP (`https://192.168.x.y`) can never get a publicly trusted certificate — certificate authorities don't issue them for private addresses — so connecting by IP means self-signed. Measured on desktop Chrome: after clicking through the warning, the page *is* a secure context (wake lock and clipboard work, unlike plain HTTP) but is **not installable** as a PWA. A self-signed certificate stops sniffing; it only stops an active attacker if you compare its fingerprint on first connect.
+
+### Deliberately not done
+
+- **No pairing / QR codes.** The shared password stays the only credential, so a brand-new phone can connect from another room by typing it — no trip to the desktop to scan or approve anything.
+- **No in-browser encryption over `ws://`.** The client's JavaScript is itself served over plain HTTP, so an attacker who can tamper with traffic could replace it; encrypting inside the page would only stop passive sniffing. Real protection comes from an encrypted link (Tailscale) or HTTPS with a certificate the phone trusts.
+- **No deckd certificate authority to install on phones.** Installing a root CA is unusual, and fetching one over plain HTTP risks trusting an attacker's CA for all your browsing.
+- **Why native apps (KDE Connect, Linksy) don't have this problem:** they pin each other's keys at pairing time. A web page can't — the browser's certificate store is its only source of trust. That's the price of "any browser, nothing to install on the phone".
+
 ## Configuration
 
 A directory of YAML files in `decks/` — one per app, plus a `default.yaml` fallback. Shipped decks today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), an optional `size: [w, h]` span (default `[1, 1]`; for non-square widgets like wide meters), an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. Widgets pack in list order (ADR-0010); there are no grid coordinates. The special `kind: blank` skips a cell slot for visual gaps. A deck's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the deck with `match: [default]` is the fallback. A deck may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `DeckMessage`. A deck may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:
@@ -864,7 +903,7 @@ Every client authenticates with a single shared password. There is **no** source
 - `/health` **stays open** even with auth on — it's a read-only diagnostic the Settings panel fetches, and `deckctl status` relies on it.
 - **Rotation** is out of scope: edit the file and restart the daemon.
 
-The password is a shared secret over a plaintext WebSocket — it gates access, it does not encrypt the link. Keep the daemon on a trusted network (see the security note above).
+The password is a shared secret over a plaintext WebSocket — it gates access, it does not encrypt the link. Keep the daemon on a trusted network or a tailnet — see [Security model](#security-model).
 
 ### Bind scope (issue #66)
 
