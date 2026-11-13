@@ -25,6 +25,11 @@ on:
         description: "Release tag to attach the DMG to (e.g. v0.1.0)"
         required: true
         type: string
+      publish:
+        description: "Attach the DMG to the release. Off = build + upload as a workflow artifact only (try-it builds)."
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: write
@@ -86,7 +91,10 @@ jobs:
           path: dist/deckd-*.dmg
           if-no-files-found: error
 
+      # Tag pushes always publish; a manual run can opt out to get a
+      # downloadable test build without creating a release.
       - name: Attach the DMG to the release
+        if: github.event_name != 'workflow_dispatch' || inputs.publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
