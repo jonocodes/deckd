@@ -40,7 +40,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 **Working today**
 
 - [x] **Automatic per-app decks** — focus a window on the desktop and the phone's browser flips to that app's buttons automatically.
-- [x] **Web-app decks** — treat a website as an app. A deck can claim a site by matching the browser's window title (e.g. YouTube and Netflix media controls), driving each site's own keyboard shortcuts. See [Web-app decks](docs/GUIDE.md#web-app-decks).
+- [x] **Web-app decks** — treat a website as an app. A deck can claim a site by matching the browser's window title (e.g. YouTube and Netflix media controls, Gmail's reply/archive), driving each site's own keyboard shortcuts. See [Web-app decks](docs/GUIDE.md#web-app-decks).
 - [x] **Buttons** that fire keystrokes, shell commands, launch a terminal, or call D-Bus methods.
 - [x] **Macros** — chain multiple actions in a single button press, with delays and optional continue-on-error.
 - [x] **Button styling** — bundled icons (Lucide glyphs + Simple Icons brand logos) and per-button background colours, set in YAML.

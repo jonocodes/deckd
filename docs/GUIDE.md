@@ -43,9 +43,11 @@ match:
 When the focused app is a browser, a `title:` match outranks a generic
 browser deck (so `youtube.yaml` wins over `firefox.yaml`), and falls back to
 the browser deck when no site matches. The buttons are ordinary actions —
-the shipped `decks/youtube.yaml` and `decks/netflix.yaml` drive each site's
-own keyboard shortcuts (`key: k`, `key: s`, …), so no special capability is
-needed beyond a deck file.
+the shipped `decks/youtube.yaml`, `decks/netflix.yaml`, `decks/google-meet.yaml`
+and `decks/gmail.yaml` drive each site's own keyboard shortcuts (`key: k`,
+`key: s`, …), so no special capability is needed beyond a deck file. (Gmail
+ships with its shortcuts off: turn on Settings → General → "Keyboard
+shortcuts on".)
 
 The same idea also turns a site into an **on-screen musical keyboard**:
 `decks/musicca.yaml` matches `title:*Musicca*` and fires the letter/number
