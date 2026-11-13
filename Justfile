@@ -226,6 +226,16 @@ ladle:
 screenshots:
     cd client && node screenshots.mjs
 
+# Build the GitHub Pages site exactly as CI deploys it (homepage at /deckd/,
+# client at /deckd/app/, Ladle at /deckd/ladle/) and serve it on :5290.
+# SKIP_LADLE=1 just pages skips the slow Ladle build.
+pages:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    scripts/build_pages.sh _site/deckd
+    echo "Pages preview: http://127.0.0.1:5290/deckd/"
+    node scripts/serve_pages.mjs _site 5290
+
 # Preview the homepage mockups (docs/mockups/homepage) over http. The client's
 # Vite dev server on :5288 serves the demo decks the pages embed; a static
 # server on :5289 serves the pages themselves (browsers won't let a file://

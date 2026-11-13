@@ -217,11 +217,12 @@ The client can be viewed and design-iterated without a running daemon:
 
 ### Hosted demo (GitHub Pages)
 
-Every push to `main` builds the client and Ladle and publishes them to GitHub Pages, so the previews above can be browsed with no daemon and no local checkout:
+Every push to `main` builds the homepage, the client and Ladle and publishes them to GitHub Pages, so the previews above can be browsed with no daemon and no local checkout. `scripts/build_pages.sh` assembles the site, and `just pages` builds and serves the same thing locally on :5290.
 
-- **Live client (demo mode)** — `https://jonocodes.github.io/deckd/?demo=showcase` (also `?demo=firefox`, `?demo=default`). Without `?demo=` the client loads and shows "disconnected" since there's no daemon behind the Pages site; the param lets the fixture deck run.
-- **Responsive gallery** — `https://jonocodes.github.io/deckd/gallery.html`.
-- **Layout help** — `https://jonocodes.github.io/deckd/help.html`. The standalone build of the in-app explainer (below); no daemon, no icons.
+- **Homepage** — `https://jonocodes.github.io/deckd/`. Source in `site/`; its phones embed the client's showcase demo decks (`?demo=home`, `gmail`, `meet`, `media`, …).
+- **Live client (demo mode)** — `https://jonocodes.github.io/deckd/app/?demo=showcase` (also `?demo=firefox`, `?demo=home`). Without `?demo=` the client loads and shows "disconnected" since there's no daemon behind the Pages site; the param lets the fixture deck run. Deep links to a view (`app/trackpad`) work too: the site's `404.html` is the client.
+- **Responsive gallery** — `https://jonocodes.github.io/deckd/app/gallery.html`.
+- **Layout help** — `https://jonocodes.github.io/deckd/app/help.html`. The standalone build of the in-app explainer (below); no daemon, no icons.
 - **Ladle stories** — `https://jonocodes.github.io/deckd/ladle/`.
 
 Source: `.github/workflows/deploy-pages.yml`. The Vite build uses `VITE_BASE_PATH=/deckd/` and the Ladle build uses `--base /deckd/ladle/` so the Project-Pages sub-path resolves; local dev keeps base `/`. Reproduce the deploy bundle locally with `just build-pages` (output: `client/dist/`) and serve it with `npx serve client/dist`.

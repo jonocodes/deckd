@@ -30,26 +30,16 @@ jobs:
       - run: npm ci
         working-directory: client
 
-      # Project Pages live at jonocodes.github.io/deckd/, so the client
-      # builds with base=/deckd/. Local dev keeps the default base=/.
-      # ``npm run build`` already runs ``tsc --noEmit`` so type errors
-      # fail the deploy before a broken bundle ships.
-      - run: npm run build
-        env:
-          VITE_BASE_PATH: /deckd/
-        working-directory: client
-
-      # Ladle is built on Vite too; give it its own base + output dir
-      # under the client bundle so the Pages site serves one tree. Ladle
-      # won't create the outDir, so mkdir first.
-      - run: mkdir -p dist/ladle
-        working-directory: client
-      - run: npm run ladle:build -- --base /deckd/ladle/ --outDir dist/ladle
-        working-directory: client
+      # Project Pages live at jonocodes.github.io/deckd/: the homepage
+      # (site/) at the root, the client at /deckd/app/, Ladle at
+      # /deckd/ladle/. The same script backs `just pages`, so a local
+      # preview is exactly what deploys; it type-checks the client first,
+      # so a type error fails the deploy before a broken bundle ships.
+      - run: scripts/build_pages.sh _site/deckd
 
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: client/dist
+          path: _site/deckd
 
   deploy:
     needs: build

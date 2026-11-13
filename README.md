@@ -1,5 +1,7 @@
 # deckd
 
+**[jonocodes.github.io/deckd](https://jonocodes.github.io/deckd/)** — homepage, with the client running live in demo mode.
+
 App-aware touch control surface for your desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a manual control mode (a single combined trackpad + keyboard passthrough), rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps decks automatically.
 
 ## Uses

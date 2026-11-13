@@ -9,7 +9,7 @@
 // Served locally (`just mockups`), default to the local client on :5288.
 const LOCAL = /^https?:$/.test(location.protocol) && ["127.0.0.1", "localhost"].includes(location.hostname);
 const APP = new URLSearchParams(location.search).get("app") || document.documentElement.dataset.app
-  || (LOCAL ? `${location.protocol}//${location.hostname}:5288/` : "https://jonocodes.github.io/deckd/");
+  || (LOCAL ? `${location.protocol}//${location.hostname}:5288/` : "https://jonocodes.github.io/deckd/app/");
 const LANDSCAPE = [700, 390]; // a 4x2 deck fills this edge to edge
 const PORTRAIT = [390, 760];
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
