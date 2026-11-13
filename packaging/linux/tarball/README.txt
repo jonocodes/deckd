@@ -5,6 +5,9 @@ A self-contained build: no Python, Node, or checkout needed. deckd is a
 daemon that serves a web surface; you use it from a browser on this machine
 or a phone/tablet on your network.
 
+Runs on any glibc 2.28+ distro: Debian 10+, Ubuntu 20.04+, RHEL/Alma/Rocky
+8+, current Fedora and Arch. Not Alpine or other musl distros.
+
 Install (once — installs to ~/.local/opt/deckd and starts it at login):
 
     sudo ./install-system-integration.sh

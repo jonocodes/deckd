@@ -635,6 +635,25 @@ build-linux-tarball: _linux-payload
 # Both Linux release artifacts from one freeze.
 build-linux: build-linux-appimage build-linux-tarball
 
+# The release build: both Linux artifacts frozen inside a manylinux_2_28
+# container (glibc 2.28), so they run on Debian 10+ / Ubuntu 20.04+ / RHEL 8+
+# rather than only on distros as new as the build host. Exactly what CI runs
+# (scripts/build_linux_manylinux.sh); needs podman or docker.
+build-linux-portable:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -f client/dist/index.html ] || just build-client
+    engine="$(command -v podman || command -v docker || true)"
+    [ -n "$engine" ] || { echo "build-linux-portable needs podman or docker" >&2; exit 1; }
+    "$engine" run --rm -v "$PWD:/src:Z" -w /src -e DECKD_VERSION \
+        "quay.io/pypa/manylinux_2_28_$(uname -m)" bash scripts/build_linux_manylinux.sh
+
+# Boot the newest local tarball on old and non-Debian distros in containers
+# (default: debian:10 ubuntu:22.04 debian:12 fedora:latest). A build frozen on
+# too new a glibc fails here. Needs podman or docker.
+test-linux-floor *images:
+    scripts/test_linux_floor.sh "$(ls -t dist/deckd-*-"$(uname -m)".tar.gz | head -n1)" {{images}}
+
 # Stage the integration assets from a checkout and run the privileged helper
 # for the current user (issue #168): udev rule + input group (root), plus the
 # focus watcher (user). Prompts for elevation. Useful for a source install and

@@ -13,6 +13,13 @@ name: Release Linux (AppImage + tarball)
 # are free for public repos). aarch64 has no evdev-binary wheel, so the recipe
 # source-builds python-evdev before freezing.
 #
+# The freeze runs inside a manylinux_2_28 container (glibc 2.28) via
+# `just build-linux-portable`, not on the runner itself: a PyInstaller bundle
+# needs a glibc at least as new as its build host, and the runner's 2.39 would
+# lock out Ubuntu 22.04 and Debian 12. `just test-linux-floor` then boots the
+# tarball on debian:10 / ubuntu:22.04 / debian:12 / fedora to prove it. Both
+# arches must pass before anything is published.
+#
 # The AppImage is unsigned; users run it directly (`chmod +x`, then execute).
 # The root-only uinput step rides along as an install helper bundled inside the
 # AppImage at usr/share/deckd/integration/install-system-integration.sh.
@@ -37,7 +44,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  appimage:
+  build:
     strategy:
       fail-fast: false
       matrix:
@@ -52,10 +59,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -63,17 +66,6 @@ jobs:
           cache-dependency-path: client/package-lock.json
 
       - uses: extractions/setup-just@v4
-
-      # build-essential provides the compiler evdev's source build needs on
-      # aarch64. Icons come from the committed PNGs (`just icons`), so no
-      # SVG rasterizer is required.
-      - name: Install build tools
-        run: sudo apt-get update && sudo apt-get install -y build-essential
-
-      # evdev (uinput) + dbus-fast ([dbus]) + PyInstaller. Installing these
-      # first also stops the recipe's `uv pip install` fallback from firing.
-      - name: Install Python deps
-        run: pip install -e ".[uinput,dbus,packaging]"
 
       # `npm run build` already runs `tsc --noEmit`, so a type error fails
       # the release before a broken bundle is frozen in.
@@ -86,8 +78,15 @@ jobs:
       - name: Resolve version from the tag
         run: echo "DECKD_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
 
-      - name: Build AppImage + tarball
-        run: just build-linux
+      # Python, PyInstaller, and the evdev source build all live inside the
+      # manylinux container (scripts/build_linux_manylinux.sh); the runner only
+      # needs Docker. Icons come from the committed PNGs (`just icons`).
+      - name: Build AppImage + tarball (manylinux_2_28)
+        run: just build-linux-portable
+
+      # The glibc floor, proven: boot the tarball on old and non-Debian distros.
+      - name: Test the distro floor
+        run: just test-linux-floor
 
       # Boot the frozen payload: --help parses args and exits before the
       # server starts, which proves the bundle's interpreter and imports work.
@@ -159,7 +158,23 @@ jobs:
             dist/deckd-install-system-integration.sh
           if-no-files-found: error
 
-      - name: Attach the AppImage and tarball to the release
+  # Publish only once every arch has built and passed its floor test, so a
+  # release never ships half a matrix.
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      # Both arches carry the same install helper; merging keeps one copy.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: deckd-linux-*
+          path: dist
+          merge-multiple: true
+
+      - name: Attach the AppImages and tarballs to the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -679,7 +679,7 @@ The DMG is **arm64 only** (Apple Silicon): `macos-14` runners are Apple Silicon.
 
 ### Linux AppImage (experimental, [#168](https://github.com/jonocodes/deckd/issues/168))
 
-Beyond the source-checkout + systemd user unit path above, deckd can be built as a self-contained AppImage: a private Python runtime, the built client, and the decks in one file. The target machine needs no Python, Node, or checkout. Build it **on Linux** (appimagetool wraps a PyInstaller tree in a squashfs):
+Beyond the source-checkout + systemd user unit path above, deckd can be built as a self-contained AppImage: a private Python runtime, the built client, and the decks in one file. The target machine needs no Python, Node, or checkout. Release builds run on any distro with **glibc 2.28 or newer** — Debian 10+, Ubuntu 20.04+, RHEL/Alma/Rocky 8+, current Fedora and Arch (x86_64 and aarch64; not musl distros such as Alpine). Build it **on Linux** (appimagetool wraps a PyInstaller tree in a squashfs):
 
 ```sh
 just build-linux-appimage   # -> dist/deckd-<version>-<arch>.AppImage
@@ -749,7 +749,16 @@ The helper's logic is tested without root: `DECKD_HELPER_TEST_ROOT=DIR` sandboxe
 
 #### Releasing the Linux artifacts
 
-Pushing a `v*` tag runs [`.github/workflows/release-linux.yml`](../.github/workflows/release-linux.yml): it runs `just build-linux` for **x86_64** on `ubuntu-24.04` and **aarch64** on `ubuntu-24.04-arm`, smoke-tests each AppImage (`--help`, integration extraction, the GUI open/attach path) and each tarball (boot, integration extraction, the helper installing the shipped tree in its sandbox), and attaches both AppImages, both tarballs, and `deckd-install-system-integration.sh` to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag. aarch64 source-builds `python-evdev` (there is no `evdev-binary` wheel for it).
+A local `just build-linux` freezes against **your** system's glibc, so its artifacts only run on distros at least as new as your machine — fine for trying things, wrong for a release. The release build freezes inside a `manylinux_2_28` container (AlmaLinux 8, glibc 2.28) instead, with Python from python-build-standalone (manylinux's own Pythons are static, and PyInstaller needs a shared libpython):
+
+```sh
+just build-linux-portable   # needs podman or docker; same script CI runs (scripts/build_linux_manylinux.sh)
+just test-linux-floor       # boots the newest tarball on debian:10, ubuntu:22.04, debian:12, fedora:latest
+```
+
+`test-linux-floor` is the proof: a tarball frozen on the GitHub runner's Ubuntu 24.04 (glibc 2.39) fails there with `GLIBC_2.38 not found (required by libpython3.12.so.1.0)` on all but Fedora; the manylinux build passes all four.
+
+Pushing a `v*` tag runs [`.github/workflows/release-linux.yml`](../.github/workflows/release-linux.yml): it runs `just build-linux-portable` and `just test-linux-floor` for **x86_64** on `ubuntu-24.04` and **aarch64** on `ubuntu-24.04-arm`, smoke-tests each AppImage (`--help`, integration extraction, the GUI open/attach path) and each tarball (boot, integration extraction, the helper installing the shipped tree in its sandbox), and — only once both architectures pass — attaches both AppImages, both tarballs, and `deckd-install-system-integration.sh` to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag. aarch64 source-builds `python-evdev` (there is no `evdev-binary` wheel for it).
 
 The tag minus its leading `v` is the version, so `v2026.09.23` yields `deckd-2026.09.23-x86_64.AppImage`, `deckd-2026.09.23-x86_64.tar.gz`, and their `aarch64` twins. A local build without a tag falls back to `version` in `pyproject.toml`.
 

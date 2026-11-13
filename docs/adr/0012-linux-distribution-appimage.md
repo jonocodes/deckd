@@ -176,6 +176,18 @@ come from one PyInstaller freeze (`just build-linux`) and one release
 workflow. deb/rpm remain deferred; they would wrap this same tree, now
 proven as a shipping layout.
 
+**The glibc floor is set by the build host, so the build host is chosen.**
+A PyInstaller bundle needs a glibc at least as new as the one it was frozen
+against. Freezing on the GitHub runner (Ubuntu 24.04, glibc 2.39) produced
+artifacts that failed on Ubuntu 22.04 and Debian 12 (`GLIBC_2.38 not
+found`). Both artifacts are now frozen inside `manylinux_2_28` (glibc 2.28),
+with Python from python-build-standalone (manylinux's Pythons are static;
+PyInstaller needs a shared libpython), and every release boots the tarball on
+debian:10 / ubuntu:22.04 / debian:12 / fedora before publishing. Supported:
+glibc ≥ 2.28 — Debian 10+, Ubuntu 20.04+, RHEL 8+. musl distros (Alpine) are
+out: a glibc build can't run there and a musl build couldn't run anywhere
+else; a separate musl artifact would be its own decision.
+
 The helper gained a test seam, `DECKD_HELPER_TEST_ROOT`, which relocates its
 system paths and the user's home into a sandbox so its logic is unit-tested
 without root (`tests/test_install_helper.py`). `sudo` and `pkexec` scrub the
