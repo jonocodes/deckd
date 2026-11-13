@@ -36,6 +36,27 @@ jobs:
           github-token: ${{ github.token }}
           path: dmg
 
+      # Pre-grant deckd's TCC permissions the way the runner image grants its
+      # own tools (bash holds Full Disk Access, so the DBs are writable).
+      # Without this, deckd's "control System Events" consent prompt sits on
+      # screen and every System Events call (ours and deckd's) times out.
+      - name: Pre-grant deckd permissions (TCC)
+        continue-on-error: true
+        run: |
+          udb="$HOME/Library/Application Support/com.apple.TCC/TCC.db"
+          sdb="/Library/Application Support/com.apple.TCC/TCC.db"
+          echo "--- schema"; sqlite3 "$udb" ".schema access"
+          cols="service, client, client_type, auth_value, auth_reason, auth_version, indirect_object_identifier_type, indirect_object_identifier, flags, last_modified"
+          now=$(date +%s)
+          sqlite3 "$udb" "INSERT OR REPLACE INTO access ($cols) VALUES ('kTCCServiceAppleEvents','com.deckd.daemon',0,2,4,1,0,'com.apple.systemevents',0,$now);"
+          for svc in kTCCServiceAccessibility kTCCServicePostEvent kTCCServiceListenEvent; do
+            sudo sqlite3 "$sdb" "INSERT OR REPLACE INTO access ($cols) VALUES ('$svc','com.deckd.daemon',0,2,4,1,0,'UNUSED',0,$now);"
+          done
+          sqlite3 "$udb" "select service, client, indirect_object_identifier, auth_value from access where client='com.deckd.daemon'"
+          sudo sqlite3 "$sdb" "select service, client, auth_value from access where client='com.deckd.daemon'"
+          # tccd caches decisions; both instances relaunch on demand.
+          pkill -x tccd || true; sudo pkill -x tccd || true
+
       - name: Install from DMG and launch
         continue-on-error: true
         run: |
