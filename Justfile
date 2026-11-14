@@ -520,6 +520,19 @@ build-macos-dmg: build-macos-app
         -ov -format UDZO "dist/deckd-${version}.dmg"
     echo "Built dist/deckd-${version}.dmg"
 
+# End-to-end test of a DMG on this Mac: install to /Applications, click through
+# the real menu-bar item (Accessibility), upgrade in place, capture the
+# first-run permission prompt. CI runs the same script on every release
+# (release-macos.yml `test-app`). Destructive: replaces /Applications/deckd.app
+# and resets deckd's System Events grant, hence --yes. Your terminal needs
+# Accessibility + Screen Recording, and deckd its System Events grant.
+test-macos-app dmg="" out="dist/test-app":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dmg="{{ dmg }}"
+    [ -n "$dmg" ] || dmg="$(ls -t dist/deckd-*.dmg | head -1)"
+    packaging/macos/test/test-app.sh --yes "$dmg" "{{ out }}"
+
 # Build the self-contained Linux AppImage (dist/deckd-<version>-<arch>.AppImage,
 # issue #168). Linux only: appimagetool wraps a PyInstaller onedir tree in a
 # squashfs. Installs the [uinput,dbus,packaging] extras on demand and builds
