@@ -178,8 +178,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # A suffixed tag (v1.2.0-rc1) is a prerelease, never "latest". The
+          # Linux and macOS workflows race to create the release; the loser
+          # just confirms it now exists.
+          pre=""; case "$RELEASE_TAG" in *-*) pre="--prerelease" ;; esac
           gh release view "$RELEASE_TAG" >/dev/null 2>&1 \
-            || gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes
+            || gh release create "$RELEASE_TAG" --title "$RELEASE_TAG" --generate-notes $pre \
+            || gh release view "$RELEASE_TAG" >/dev/null
           gh release upload "$RELEASE_TAG" \
             dist/deckd-*.AppImage dist/deckd-*.tar.gz \
             dist/deckd-install-system-integration.sh --clobber
