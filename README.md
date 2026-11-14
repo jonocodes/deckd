@@ -145,7 +145,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the component breakdown and
 
 ## Getting started
 
-deckd needs Python 3.11+ and Node 18+. CI tests the 3.11 floor and the 3.12 interpreter the Nix package ships. In brief:
+deckd needs Python 3.11+ and Node 22+ (CI and the flox environment use Node 24 LTS). CI tests the 3.11 floor and the 3.12 interpreter the Nix package ships. In brief:
 
 ```sh
 uv venv --python 3.11

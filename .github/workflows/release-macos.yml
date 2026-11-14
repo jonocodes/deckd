@@ -43,15 +43,15 @@ jobs:
       # A pushed tag, or the tag supplied to a manual run.
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: client/package-lock.json
 
@@ -80,7 +80,7 @@ jobs:
       - name: Verify the DMG
         run: hdiutil verify dist/deckd-*.dmg
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: deckd-macos-dmg
           path: dist/deckd-*.dmg

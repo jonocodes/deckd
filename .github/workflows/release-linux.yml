@@ -57,11 +57,11 @@ jobs:
     env:
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
           cache: npm
           cache-dependency-path: client/package-lock.json
 
@@ -149,7 +149,7 @@ jobs:
           test -x "$tmp/root/home/.local/opt/deckd/bin/deckd"
           grep -q -- '--no-open' "$tmp/root/home/.config/systemd/user/deckd.service"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: deckd-linux-${{ matrix.arch }}
           path: |
@@ -168,7 +168,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
     steps:
       # Both arches carry the same install helper; merging keeps one copy.
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: deckd-linux-*
           path: dist

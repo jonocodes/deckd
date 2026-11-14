@@ -70,7 +70,7 @@ Reliable URL/domain matching is planned via a browser extension
 
 ## Running deckd
 
-You need Python 3.11+ and Node 18+. Dependencies are managed with `[uv](https://docs.astral.sh/uv/)`:
+You need Python 3.11+ and Node 22+ (CI and the flox environment use Node 24 LTS). Dependencies are managed with `[uv](https://docs.astral.sh/uv/)`:
 
 ```sh
 # 1. Install uv (one-time)
