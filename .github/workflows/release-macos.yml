@@ -8,7 +8,14 @@ name: Release macOS app
 # path can't drift. This job only supplies the runner, the toolchain, and the
 # publish step.
 #
-# arm64 only: macos-14 runners are Apple Silicon, so the DMG targets Apple
+# Between build and publish, `test-app` installs the DMG on a fresh macos-15
+# runner and drives the real menu-bar item through Accessibility
+# (packaging/macos/test/test-app.sh): menu items, LAN toggle, restart, open
+# decks folder / surface, quit, upgrade-in-place, and a screenshot of the
+# first-run permission prompt. A release only publishes if that passes.
+# Pull requests touching the app run build + test (never publish).
+#
+# arm64 only: macos-15 runners are Apple Silicon, so the DMG targets Apple
 # Silicon Macs. An Intel / universal2 build is a documented follow-up
 # (issue #165, "Open questions").
 #
@@ -19,29 +26,43 @@ name: Release macOS app
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release-macos.yml"
+      - "packaging/macos/**"
+      - "daemon/deckd/macos_app.py"
+      - "daemon/deckd/app_bundle.py"
+      - "daemon/deckd/platform_macos.py"
   workflow_dispatch:
     inputs:
       tag:
         description: "Release tag to attach the DMG to (e.g. v0.1.0)"
         required: true
         type: string
+      publish:
+        description: "Attach the DMG to the release. Off = build + upload as a workflow artifact only (try-it builds)."
+        required: false
+        type: boolean
+        default: true
 
+# Read-only by default; only `publish` can write releases.
 permissions:
-  contents: write
+  contents: read
 
 # Serialise publishes per tag: a second run must not `--clobber` a DMG the
 # first is still uploading. In-flight runs are not cancelled (a release
 # publish is not safely interruptible).
 concurrency:
   group: release-macos-${{ github.event.inputs.tag || github.ref_name }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # A pushed tag, the tag supplied to a manual run, or a PR placeholder.
+  RELEASE_TAG: ${{ github.event.inputs.tag || (github.event_name == 'pull_request' && format('v0.0.0-pr{0}', github.event.number)) || github.ref_name }}
 
 jobs:
   dmg:
-    runs-on: macos-14
-    env:
-      # A pushed tag, or the tag supplied to a manual run.
-      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -85,6 +106,46 @@ jobs:
           name: deckd-macos-dmg
           path: dist/deckd-*.dmg
           if-no-files-found: error
+
+  # Install the DMG on a clean runner and click through the real menu. The
+  # runner image grants Accessibility / Screen Recording to bash and osascript;
+  # --pregrant writes deckd's own TCC grants so its System Events consent
+  # prompt doesn't block the run (the script captures that prompt at the end).
+  test-app:
+    needs: dmg
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: deckd-macos-dmg
+          path: dmg
+
+      - name: Install + drive the app
+        run: packaging/macos/test/test-app.sh --pregrant dmg/deckd-*.dmg test-app-out
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: deckd-macos-test-app
+          path: test-app-out/
+
+  # Tag pushes always publish; a manual run can opt out to get a tested,
+  # downloadable build without creating a release. PRs never publish.
+  publish:
+    needs: [dmg, test-app]
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: deckd-macos-dmg
+          path: dist
 
       - name: Attach the DMG to the release
         env:
