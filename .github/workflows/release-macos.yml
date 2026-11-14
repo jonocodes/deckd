@@ -115,9 +115,9 @@ jobs:
     needs: dmg
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: deckd-macos-dmg
           path: dmg
@@ -125,7 +125,7 @@ jobs:
       - name: Install + drive the app
         run: packaging/macos/test/test-app.sh --pregrant dmg/deckd-*.dmg test-app-out
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: deckd-macos-test-app
@@ -142,7 +142,7 @@ jobs:
     env:
       GH_REPO: ${{ github.repository }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: deckd-macos-dmg
           path: dist
