@@ -684,7 +684,7 @@ just test-macos-app                       # newest dist/deckd-*.dmg
 just test-macos-app path/to/deckd.dmg     # or a downloaded one
 ```
 
-The tag (minus a leading `v`) is the version for that release: it names the DMG (`deckd-<version>.dmg`), its volume, and the app's `CFBundleShortVersionString`. So a rough CalVer tag like `v2026.09.23` yields `deckd-2026.09.23.dmg`. No scheme is enforced — any `v*` string works. For a local build without a tag, `just build-macos-dmg` falls back to `version` in `pyproject.toml`.
+The tag (minus a leading `v`) is the version for that release: it names the DMG (`deckd-<version>.dmg`), its volume, and the app's `CFBundleShortVersionString`, so `v2026.11.0` yields `deckd-2026.11.0.dmg`. See [Versioning and cutting a release](#versioning-and-cutting-a-release). A local build without `DECKD_VERSION` is named by `just version` (from git).
 
 The DMG is **arm64 only** (Apple Silicon): `macos-15` runners are Apple Silicon. An Intel / `universal2` build is a follow-up ([#165](https://github.com/jonocodes/deckd/issues/165), "Open questions").
 
@@ -769,9 +769,23 @@ just test-linux-floor       # boots the newest tarball on debian:10, ubuntu:22.0
 
 `test-linux-floor` is the proof: a tarball frozen on the GitHub runner's Ubuntu 24.04 (glibc 2.39) fails there with `GLIBC_2.38 not found (required by libpython3.12.so.1.0)` on all but Fedora; the manylinux build passes all four.
 
-Pushing a `v*` tag runs [`.github/workflows/release-linux.yml`](../.github/workflows/release-linux.yml): it runs `just build-linux-portable` and `just test-linux-floor` for **x86_64** on `ubuntu-24.04` and **aarch64** on `ubuntu-24.04-arm`, smoke-tests each AppImage (`--help`, integration extraction, the GUI open/attach path) and each tarball (boot, integration extraction, the helper installing the shipped tree in its sandbox), and — only once both architectures pass — attaches both AppImages, both tarballs, and `deckd-install-system-integration.sh` to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag. aarch64 source-builds `python-evdev` (there is no `evdev-binary` wheel for it).
+Pushing a `v*` tag runs [`.github/workflows/release-linux.yml`](../.github/workflows/release-linux.yml): it runs `just build-linux-portable` and `just test-linux-floor` for **x86_64** on `ubuntu-24.04` and **aarch64** on `ubuntu-24.04-arm`, smoke-tests each AppImage (`--help`, integration extraction, the GUI open/attach path) and each tarball (boot, integration extraction, the helper installing the shipped tree in its sandbox), and — only once both architectures pass — attaches both AppImages, both tarballs, and `deckd-install-system-integration.sh` to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag, or — with **publish** unticked — just build and upload workflow artifacts. Pull requests that touch Linux packaging run the build, floor test, and smoke tests too (never publish), so a packaging break shows on the PR rather than at release time. aarch64 source-builds `python-evdev` (there is no `evdev-binary` wheel for it).
 
-The tag minus its leading `v` is the version, so `v2026.09.23` yields `deckd-2026.09.23-x86_64.AppImage`, `deckd-2026.09.23-x86_64.tar.gz`, and their `aarch64` twins. A local build without a tag falls back to `version` in `pyproject.toml`.
+The tag minus its leading `v` names the artifacts, so `v2026.11.0` yields `deckd-2026.11.0-x86_64.AppImage`, `deckd-2026.11.0-x86_64.tar.gz`, and their `aarch64` twins; the frozen app's own `deckd --version` reports the same (the release job checks). A local build without `DECKD_VERSION` is named by `just version` (from git).
+
+### Versioning and cutting a release
+
+Releases use CalVer, **`vYYYY.M.MICRO`** ([ADR-0013](adr/0013-calver-versioning.md)): the UTC year and unpadded month, and a counter from `0` for releases within that month — `v2026.11.0`, `v2026.11.1`, then `v2026.12.0`. A release candidate takes a suffix (`v2026.12.0-rc1`) and publishes as a GitHub prerelease without using up its number.
+
+The git tag is the only place a version lives. `setuptools-scm` derives the package version from it at install time — exactly `2026.11.0` on the tag, `2026.11.0.post1.dev3+g<sha>` after it — so there are no version files to bump. Ask any running daemon which release it is: `deckd --version`, `deckctl status`, `curl -s localhost:8765/health | jq .version`, or the client's **settings** diagnostics.
+
+To cut a release from an up-to-date, clean `main`:
+
+```sh
+just release   # shows the next tag + commit, asks, then tags and pushes
+```
+
+The pushed tag runs both release workflows; each publishes only after its builds and tests pass, and both attach to the same GitHub release. `just version` prints the current version (live from git when `setuptools-scm` is installed, which the `dev` extra provides).
 
 **NixOS** users can skip all of the above — the flake's home-manager module owns the same user service, and the NixOS module owns the udev rule and `input` group. See [Nix flake, NixOS, and home-manager](#nix-flake-nixos-and-home-manager).
 

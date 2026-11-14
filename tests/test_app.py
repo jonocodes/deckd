@@ -70,18 +70,19 @@ def test_seed_decks_first_run_then_noop(tmp_path: Path) -> None:
     assert "edited" in (dest / "default.yaml").read_text()
 
 
-def test_bundle_version_prefers_env_override(monkeypatch, tmp_path: Path) -> None:
-    # The release workflow passes the git tag (minus its `v`) this way, so a
-    # rough CalVer tag is fine — no PEP 440 normalisation applies here.
-    monkeypatch.setenv("DECKD_VERSION", "2026.09.23")
-    assert macos_app.bundle_version(tmp_path / "pyproject.toml") == "2026.09.23"
+def test_bundle_version_prefers_env_override(monkeypatch) -> None:
+    # The release workflow passes the git tag (minus its `v`) this way, so
+    # the artifact name is the tag verbatim — no PEP 440 normalisation.
+    monkeypatch.setenv("DECKD_VERSION", "2026.11.0")
+    assert macos_app.bundle_version() == "2026.11.0"
 
 
-def test_bundle_version_falls_back_to_pyproject(monkeypatch, tmp_path: Path) -> None:
+def test_bundle_version_falls_back_to_the_package_version(monkeypatch) -> None:
+    # No override (or a blank one): the installed package's scm version.
+    import deckd
+
     monkeypatch.setenv("DECKD_VERSION", "   ")
-    pyproject = tmp_path / "pyproject.toml"
-    _write(pyproject, '[project]\nname = "deckd"\nversion = "1.2.3"\n')
-    assert macos_app.bundle_version(pyproject) == "1.2.3"
+    assert macos_app.bundle_version() == deckd.__version__
 
 
 def test_bundle_info_plist_declares_tcc_usage() -> None:

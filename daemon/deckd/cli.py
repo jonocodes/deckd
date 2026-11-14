@@ -7,7 +7,7 @@ import sys
 import urllib.error
 import urllib.request
 
-from . import PASSWORD_HEADER
+from . import PASSWORD_HEADER, __version__
 
 # deckctl deliberately does NOT read ~/.config/deckd/password itself (that's
 # the daemon's file; reaching into it would be a layering violation) — a
@@ -16,6 +16,7 @@ from . import PASSWORD_HEADER
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="deckctl")
+    parser.add_argument("--version", action="version", version=f"deckctl {__version__}")
     parser.add_argument(
         "--host",
         default="127.0.0.1",
@@ -79,11 +80,15 @@ def _status(base: str, headers: dict[str, str]) -> None:
     with urllib.request.urlopen(req, timeout=3) as resp:
         body = json.loads(resp.read())
     url = body.get("url") or ""
+    version = body.get("version") or ""
+    if version:
+        print(f"version:      {version}")
     if url:
         print(f"listening on: {url}")
         addrs = body.get("addresses") or []
         if addrs:
             print(f"bound:        {', '.join(addrs)}")
+    if version or url:
         print()
     print(json.dumps(body, indent=2))
 

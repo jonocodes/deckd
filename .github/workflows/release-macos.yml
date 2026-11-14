@@ -33,6 +33,7 @@ on:
       - "daemon/deckd/macos_app.py"
       - "daemon/deckd/app_bundle.py"
       - "daemon/deckd/platform_macos.py"
+      - "pyproject.toml"
   workflow_dispatch:
     inputs:
       tag:
@@ -64,7 +65,11 @@ jobs:
   dmg:
     runs-on: macos-15
     steps:
+      # Full history + tags: setuptools-scm derives the bundled version from
+      # the nearest release tag (ADR-0013).
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v7
         with:
@@ -91,7 +96,8 @@ jobs:
 
       # The tag (minus a leading `v`) is the release version, so the DMG name,
       # its volume name, and the app's CFBundleShortVersionString all match
-      # the tag. Rough CalVer (v2026.09.23) or any other `v*` string works.
+      # the tag. ADR-0013's vYYYY.M.MICRO stays within the three integers
+      # macOS allows there.
       - name: Resolve version from the tag
         run: echo "DECKD_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
 

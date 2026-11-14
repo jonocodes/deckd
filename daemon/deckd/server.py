@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Awaitable, Callable, Sequence
 from aiohttp import WSMsgType, web
 from pydantic import ValidationError
 
+from . import __version__
 from . import protocol as p
 from .actions import ActionContext, MacroOutcome, execute as run_action
 from .input import ScrollController, parse_key_combo, text_to_combos
@@ -1985,6 +1986,9 @@ class Server:
         ]
         body = {
             "ok": True,
+            # Which release this is (ADR-0013) — the first thing a bug report
+            # needs, readable before the password like the rest of /health.
+            "version": __version__,
             "sessions": len(self._sessions),
             "app": self._current_app_id,
             "hostname": _hostname(),

@@ -282,6 +282,7 @@ def test_cli_status_prepends_pairing_line(monkeypatch, capsys) -> None:
         "bind": ["127.0.0.1", "::1"],
         "addresses": ["127.0.0.1:8765", "[::1]:8765"],
         "url": "http://127.0.0.1:8765/",
+        "version": "2026.11.0",
     }
 
     class _Resp:
@@ -303,6 +304,7 @@ def test_cli_status_prepends_pairing_line(monkeypatch, capsys) -> None:
     _status("http://127.0.0.1:8765", {})
     out = capsys.readouterr().out
     assert "listening on: http://127.0.0.1:8765/" in out
+    assert "version:      2026.11.0" in out
     assert "127.0.0.1:8765" in out
     # The full JSON body is still printed (so scripts can pipe through jq).
     assert '"url": "http://127.0.0.1:8765/"' in out
