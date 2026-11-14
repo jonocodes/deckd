@@ -8,7 +8,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v7
@@ -127,7 +127,7 @@ jobs:
   # daemon on loopback (health, bundled client, bundled decks). Mirrors
   # `just nix-check` locally; see nix/tests/.
   nix:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v7
@@ -142,7 +142,7 @@ jobs:
   # actually get on NixOS. The 3.11 floor is covered by the main `test`
   # job above; this job is the behavioural half of the 3.12 story.
   test-py312:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v7
