@@ -520,12 +520,11 @@ build-macos-dmg: build-macos-app
         -ov -format UDZO "dist/deckd-${version}.dmg"
     echo "Built dist/deckd-${version}.dmg"
 
-# End-to-end test of a DMG on this Mac: install to /Applications, click through
-# the real menu-bar item (Accessibility), upgrade in place, capture the
-# first-run permission prompt. CI runs the same script on every release
-# (release-macos.yml `test-app`). Destructive: replaces /Applications/deckd.app
-# and resets deckd's System Events grant, hence --yes. Your terminal needs
-# Accessibility + Screen Recording, and deckd its System Events grant.
+# Destructive (replaces /Applications/deckd.app, resets deckd's System Events
+# grant), hence --yes. Your terminal needs Accessibility + Screen Recording, and
+# deckd its System Events grant. CI runs the same script on every release
+# (release-macos.yml `test-app`).
+# End-to-end test of a DMG on this Mac: install, click through the real menu, upgrade, screenshot.
 test-macos-app dmg="" out="dist/test-app":
     #!/usr/bin/env bash
     set -euo pipefail
