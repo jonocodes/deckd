@@ -27,6 +27,8 @@ import socket
 import time
 from typing import TYPE_CHECKING, Any, Callable
 
+from . import __version__
+
 if TYPE_CHECKING:
     from .decks import Deck, DeckStore
     from .media import MediaState
@@ -493,7 +495,7 @@ async def build_diag_snapshot(
 
     return {
         "ok": True,
-        "version": "0.0.1",
+        "version": __version__,
         "uptime_s": round(time.time() - started_at, 3),
         "started_at": started_at,
         "pid": _safe_pid(),

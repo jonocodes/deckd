@@ -23,25 +23,53 @@ name: Release Linux (AppImage + tarball)
 # The AppImage is unsigned; users run it directly (`chmod +x`, then execute).
 # The root-only uinput step rides along as an install helper bundled inside the
 # AppImage at usr/share/deckd/integration/install-system-integration.sh.
+#
+# Pull requests touching Linux packaging run build + floor + smoke tests
+# (never publish), so a packaging break shows up on the PR, not at release
+# time. Releases are cut with `just release` (ADR-0013: CalVer tags).
 
 on:
   push:
     tags: ["v*"]
+  pull_request:
+    paths:
+      - ".github/workflows/release-linux.yml"
+      - "packaging/linux/**"
+      - "packaging/udev/**"
+      - "packaging/gnome-shell/**"
+      - "packaging/kwin-script/**"
+      - "scripts/build_linux_manylinux.sh"
+      - "scripts/test_linux_floor.sh"
+      - "daemon/deckd/linux_app.py"
+      - "daemon/deckd/app_bundle.py"
+      - "daemon/deckd/open_surface.py"
+      - "pyproject.toml"
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to attach the AppImage to (e.g. v0.1.0)"
+        description: "Release tag to attach the artifacts to (e.g. v2026.11.0)"
         required: true
         type: string
+      publish:
+        description: "Attach the artifacts to the release. Off = build + upload as a workflow artifact only (try-it builds)."
+        required: false
+        type: boolean
+        default: true
 
+# Read-only by default; only `publish` can write releases.
 permissions:
-  contents: write
+  contents: read
 
 # Serialise publishes per tag: a second run must not `--clobber` an AppImage
-# the first is still uploading. In-flight runs are not cancelled.
+# the first is still uploading. Release runs are not cancelled; a newer push
+# to the same PR supersedes its older build.
 concurrency:
   group: release-linux-${{ github.event.inputs.tag || github.ref_name }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # A pushed tag, the tag supplied to a manual run, or a PR placeholder.
+  RELEASE_TAG: ${{ github.event.inputs.tag || (github.event_name == 'pull_request' && format('v0.0.0-pr{0}', github.event.number)) || github.ref_name }}
 
 jobs:
   build:
@@ -54,10 +82,12 @@ jobs:
           - runner: ubuntu-24.04-arm
             arch: aarch64
     runs-on: ${{ matrix.runner }}
-    env:
-      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
+      # Full history + tags: setuptools-scm derives the bundled version from
+      # the nearest release tag (ADR-0013).
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v7
         with:
@@ -138,6 +168,13 @@ jobs:
           tar -C "$tmp" -xzf dist/deckd-*.tar.gz
           tree="$(ls -d "$tmp"/deckd-*/)"
           "$tree/bin/deckd" --help >/dev/null
+          # The frozen app reports the release it is (ADR-0013). On a tag,
+          # that must be the tag (PEP 440 drops an rc's dash: 2026.12.0rc1).
+          got="$("$tree/bin/deckd" --version)"
+          echo "$got"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            test "$got" = "deckd ${DECKD_VERSION/-/}"
+          fi
           "$tree/bin/deckd" --extract-integration "$tmp/ext"
           test -f "$tmp/ext/70-deckd-uinput.rules"
           mkdir "$tmp/stubs" "$tmp/root"
@@ -160,11 +197,15 @@ jobs:
 
   # Publish only once every arch has built and passed its floor test, so a
   # release never ships half a matrix.
+  # Tag pushes always publish; a manual run can opt out to get a tested,
+  # downloadable build without creating a release. PRs never publish.
   publish:
     needs: build
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.publish)
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     env:
-      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
       GH_REPO: ${{ github.repository }}
     steps:
       # Both arches carry the same install helper; merging keeps one copy.

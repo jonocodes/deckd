@@ -478,10 +478,32 @@ metrics:
     set -euo pipefail
     deckctl --port {{DECKD_PORT}} metrics
 
-# Print the version from pyproject.toml. The single source for artifact
-# names (the DMG) and the release tag guard, so they can't drift.
+# Print the version (ADR-0013: CalVer from the git tag). Live from git when
+# setuptools-scm is installed (the dev extra); otherwise what the installed
+# package recorded at its last install (`just setup`). Names local artifacts
+# when DECKD_VERSION isn't set.
 version:
-    @sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml | head -n1
+    @python -m setuptools_scm 2>/dev/null \
+        || python -c 'import sys; sys.path.insert(0, "daemon"); import deckd; print(deckd.__version__)'
+
+# Cut a release (ADR-0013): tag the up-to-date main as the next CalVer version
+# (vYYYY.M.MICRO, scripts/next_version.py) and push the tag, which runs both
+# release workflows. Shows the tag and commit and asks before pushing.
+release:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git fetch --quiet --tags origin main
+    [ -z "$(git status --porcelain)" ] || { echo "working tree is not clean" >&2; exit 1; }
+    [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
+        || { echo "HEAD is not origin/main; check out an up-to-date main first" >&2; exit 1; }
+    tag="$(python scripts/next_version.py)"
+    echo "Next release: $tag"
+    echo "At commit:    $(git log -1 --format='%h %s')"
+    read -r -p "Tag and push $tag? [y/N] " answer
+    case "$answer" in y|Y) ;; *) echo "aborted"; exit 1 ;; esac
+    git tag -a "$tag" -m "deckd $tag"
+    git push origin "$tag"
+    echo "Pushed $tag. Release runs: gh run list --branch $tag"
 
 # Build the self-contained macOS app bundle (dist/deckd.app, issue #165).
 # macOS only: a .app needs Apple tooling, so this refuses to run elsewhere.
@@ -657,7 +679,14 @@ build-linux-portable:
     [ -f client/dist/index.html ] || just build-client
     engine="$(command -v podman || command -v docker || true)"
     [ -n "$engine" ] || { echo "build-linux-portable needs podman or docker" >&2; exit 1; }
-    "$engine" run --rm -v "$PWD:/src:Z" -w /src -e DECKD_VERSION \
+    # setuptools-scm reads the version from git inside the container
+    # (ADR-0013). In a `git worktree` checkout, .git is a pointer into the main
+    # checkout's git dir, so mount that too, at the same absolute path, and
+    # the checkout at its own path so the pointer still resolves.
+    mounts=(-v "$PWD:$PWD:Z")
+    common="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
+    case "$common" in "$PWD"/*) ;; *) mounts+=(-v "$common:$common:z") ;; esac
+    "$engine" run --rm "${mounts[@]}" -w "$PWD" -e DECKD_VERSION \
         "quay.io/pypa/manylinux_2_28_$(uname -m)" bash scripts/build_linux_manylinux.sh
 
 # Boot the newest local tarball on old and non-Debian distros in containers

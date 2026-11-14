@@ -74,7 +74,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [ ] **Multi-daemon chooser** — pair and pick between several desktops.
 - [ ] **Reliable web-app detection** — a browser extension reporting the active tab's real URL, so sites match by domain/path instead of the current window-title heuristic ([#90](https://github.com/jonocodes/deckd/issues/90)).
 - [ ] **Windows support**
-- [ ] **Packing and deployment** — self-contained macOS DMG ([#165](https://github.com/jonocodes/deckd/issues/165)) and Linux AppImage + tarball ([#168](https://github.com/jonocodes/deckd/issues/168))
+- [ ] **Packing and deployment** — self-contained macOS DMG ([#165](https://github.com/jonocodes/deckd/issues/165)) and Linux AppImage + tarball ([#168](https://github.com/jonocodes/deckd/issues/168)), released as CalVer tags (`vYYYY.M.MICRO`, [ADR-0013](docs/adr/0013-calver-versioning.md)) with `just release`
 
 ## Inspiration and Comparison
 

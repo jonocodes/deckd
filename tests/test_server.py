@@ -44,6 +44,26 @@ async def test_health(srv: ServerHandle) -> None:
         assert isinstance(body[field], str) and body[field]
 
 
+async def test_health_reports_the_package_version(srv: ServerHandle) -> None:
+    # ADR-0013: the release a daemon is, readable before auth (bug reports).
+    import deckd
+
+    async with aiohttp.ClientSession() as http:
+        async with http.get(f"{srv.http_url}/health") as r:
+            body = await r.json()
+    assert body["version"] == deckd.__version__
+
+
+def test_cli_version_flag(capsys) -> None:
+    import deckd
+    from deckd.__main__ import parse_args
+
+    with pytest.raises(SystemExit) as exc:
+        parse_args(["--version"])
+    assert exc.value.code == 0
+    assert capsys.readouterr().out.strip() == f"deckd {deckd.__version__}"
+
+
 # ---------------------------------------------------------------------------
 # Deck push on connect
 # ---------------------------------------------------------------------------
