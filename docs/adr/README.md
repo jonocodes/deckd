@@ -87,4 +87,4 @@ _Supersedes: [0010](0010-grid-reflow.md) — keeps the ordered-list model, repla
 
 [0012-linux-distribution-appimage.md](0012-linux-distribution-appimage.md)
 
-AppImage is the primary Linux artifact (unsandboxed, distro-agnostic); the root-only uinput step is a first-run `pkexec`/`sudo` helper shared by all channels. Flatpak/Snap are rejected — a sandbox cannot write the udev rule, see `/dev/uinput`, reach the session bus unfiltered, or install the compositor plugin. deb/rpm remain a later thin wrap of the same relocatable tree.
+AppImage is the primary Linux artifact (unsandboxed, distro-agnostic); the root-only uinput step is a first-run `pkexec`/`sudo` helper shared by all channels. Flatpak/Snap are rejected — a sandbox cannot write the udev rule, see `/dev/uinput`, reach the session bus unfiltered, or install the compositor plugin. deb/rpm remain a later thin wrap of the same relocatable tree. Amended 2026-11-12: that tree also ships as a tarball (installed to `~/.local/opt/deckd`, run as a systemd user service), and a GUI launch opens the surface in the browser.

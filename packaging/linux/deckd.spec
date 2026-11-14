@@ -44,6 +44,7 @@ a = Analysis(
     # On aarch64 evdev has no wheel and is source-built before this runs.
     hiddenimports=[
         "deckd.linux_app",
+        "deckd.open_surface",
         "evdev",
         "dbus_fast",
         "dbus_fast.aio",

@@ -520,16 +520,16 @@ build-macos-dmg: build-macos-app
         -ov -format UDZO "dist/deckd-${version}.dmg"
     echo "Built dist/deckd-${version}.dmg"
 
-# Build the self-contained Linux AppImage (dist/deckd-<version>-<arch>.AppImage,
-# issue #168). Linux only: appimagetool wraps a PyInstaller onedir tree in a
-# squashfs. Installs the [uinput,dbus,packaging] extras on demand and builds
-# the client first if it's missing. The udev rule and focus-watcher sources ride
-# along under usr/share/deckd/integration for the install helper.
-build-linux-appimage:
+# Freeze the daemon + client into dist/deckd/ (a PyInstaller onedir tree) —
+# the payload both Linux artifacts wrap. Installs the [uinput,dbus,packaging]
+# extras on demand and builds the client first if it's missing. Shared by
+# build-linux-appimage and build-linux-tarball; `just` runs it once per
+# invocation even when both are asked for.
+_linux-payload:
     #!/usr/bin/env bash
     set -euo pipefail
     if [ "$(uname)" != "Linux" ]; then
-        echo "build-linux-appimage needs Linux; an AppImage can't be built on $(uname)." >&2
+        echo "the Linux artifacts need Linux; they can't be built on $(uname)." >&2
         exit 1
     fi
     arch="$(uname -m)"
@@ -548,34 +548,49 @@ build-linux-appimage:
     fi
     pyinstaller --noconfirm --clean packaging/linux/deckd.spec
 
+# Copy the system-integration assets into DEST: the udev rule, the GNOME/KWin
+# focus watchers, the app icon, and the install helper itself. The one layout
+# the helper reads, whether it comes from an AppImage, a tarball, or a checkout.
+_stage-linux-integration dest:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    d="{{dest}}"
+    [ -f client/public/icon-512.png ] \
+        || { echo "missing client/public/icon-512.png; run: just icons" >&2; exit 1; }
+    mkdir -p "$d/gnome-shell" "$d/kwin-script"
+    cp packaging/udev/70-deckd-uinput.rules "$d/"
+    cp -R packaging/gnome-shell/deckd-focus@local "$d/gnome-shell/"
+    cp -R packaging/kwin-script/deckd-focus "$d/kwin-script/"
+    cp packaging/linux/install-system-integration.sh "$d/"
+    cp client/public/icon-512.png "$d/deckd.png"
+
+# Build the self-contained Linux AppImage (dist/deckd-<version>-<arch>.AppImage,
+# issue #168). Linux only: appimagetool wraps the PyInstaller onedir tree in a
+# squashfs. The integration assets ride along under usr/share/deckd/integration
+# for the install helper.
+build-linux-appimage: _linux-payload
+    #!/usr/bin/env bash
+    set -euo pipefail
+    arch="$(uname -m)"
     version="${DECKD_VERSION:-$(just version)}"
     work="$(mktemp -d)"
     trap 'rm -rf "$work"' EXIT
     appdir="$work/deckd.AppDir"
-    mkdir -p "$appdir/usr/bin" "$appdir/usr/share/deckd/integration/gnome-shell" \
-             "$appdir/usr/share/deckd/integration/kwin-script"
+    mkdir -p "$appdir/usr/bin"
     cp -R dist/deckd/. "$appdir/usr/bin/"
-    cp packaging/udev/70-deckd-uinput.rules "$appdir/usr/share/deckd/integration/"
-    cp -R packaging/gnome-shell/deckd-focus@local "$appdir/usr/share/deckd/integration/gnome-shell/"
-    cp -R packaging/kwin-script/deckd-focus "$appdir/usr/share/deckd/integration/kwin-script/"
-    cp packaging/linux/install-system-integration.sh "$appdir/usr/share/deckd/integration/"
+    just _stage-linux-integration "$appdir/usr/share/deckd/integration"
     cp packaging/linux/appimage/AppRun "$appdir/AppRun"
     chmod +x "$appdir/AppRun"
     cp packaging/linux/appimage/deckd.desktop "$appdir/"
     # Icons: the committed PNGs are the single source of truth (regenerate with
     # `just icons`). appimagetool turns the root deckd.png into .DirIcon, and the
     # hicolor copies let desktop integration resolve the .desktop's Icon=deckd.
-    [ -f client/public/icon-512.png ] \
-        || { echo "missing client/public/icon-512.png; run: just icons" >&2; exit 1; }
     cp client/public/icon-512.png "$appdir/deckd.png"
     for size in 192 512; do
         mkdir -p "$appdir/usr/share/icons/hicolor/${size}x${size}/apps"
         cp "client/public/icon-${size}.png" \
             "$appdir/usr/share/icons/hicolor/${size}x${size}/apps/deckd.png"
     done
-    # The install helper copies the icon into the user's theme, so it rides
-    # along in the integration tree it extracts.
-    cp client/public/icon-512.png "$appdir/usr/share/deckd/integration/deckd.png"
 
     tooling="${XDG_CACHE_HOME:-$HOME/.cache}/deckd/appimagetool-${arch}.AppImage"
     if [ ! -x "$tooling" ]; then
@@ -590,21 +605,66 @@ build-linux-appimage:
     cp packaging/linux/install-system-integration.sh dist/deckd-install-system-integration.sh
     echo "Built dist/deckd-${version}-${arch}.AppImage (+ dist/deckd-install-system-integration.sh)"
 
+# Build the Linux tarball (dist/deckd-<version>-<arch>.tar.gz, issue #168):
+# the same frozen payload as the AppImage, as a plain directory — no FUSE, and
+# the install helper copies it to ~/.local/opt/deckd and runs it as a systemd
+# user service. Layout:
+#
+#   deckd-<version>-<arch>/
+#     bin/deckd                       frozen launcher (+ bin/_internal)
+#     share/deckd/integration/        udev rule, focus watchers, icon, helper
+#     install-system-integration.sh   run elevated, no args
+#     README.txt
+build-linux-tarball: _linux-payload
+    #!/usr/bin/env bash
+    set -euo pipefail
+    arch="$(uname -m)"
+    version="${DECKD_VERSION:-$(just version)}"
+    name="deckd-${version}-${arch}"
+    work="$(mktemp -d)"
+    trap 'rm -rf "$work"' EXIT
+    root="$work/$name"
+    mkdir -p "$root/bin"
+    cp -R dist/deckd/. "$root/bin/"
+    just _stage-linux-integration "$root/share/deckd/integration"
+    cp packaging/linux/install-system-integration.sh "$root/"
+    cp packaging/linux/tarball/README.txt "$root/"
+    tar -C "$work" -czf "dist/${name}.tar.gz" "$name"
+    echo "Built dist/${name}.tar.gz"
+
+# Both Linux release artifacts from one freeze.
+build-linux: build-linux-appimage build-linux-tarball
+
+# The release build: both Linux artifacts frozen inside a manylinux_2_28
+# container (glibc 2.28), so they run on Debian 10+ / Ubuntu 20.04+ / RHEL 8+
+# rather than only on distros as new as the build host. Exactly what CI runs
+# (scripts/build_linux_manylinux.sh); needs podman or docker.
+build-linux-portable:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    [ -f client/dist/index.html ] || just build-client
+    engine="$(command -v podman || command -v docker || true)"
+    [ -n "$engine" ] || { echo "build-linux-portable needs podman or docker" >&2; exit 1; }
+    "$engine" run --rm -v "$PWD:/src:Z" -w /src -e DECKD_VERSION \
+        "quay.io/pypa/manylinux_2_28_$(uname -m)" bash scripts/build_linux_manylinux.sh
+
+# Boot the newest local tarball on old and non-Debian distros in containers
+# (default: debian:10 ubuntu:22.04 debian:12 fedora:latest). A build frozen on
+# too new a glibc fails here. Needs podman or docker.
+test-linux-floor *images:
+    scripts/test_linux_floor.sh "$(ls -t dist/deckd-*-"$(uname -m)".tar.gz | head -n1)" {{images}}
+
 # Stage the integration assets from a checkout and run the privileged helper
 # for the current user (issue #168): udev rule + input group (root), plus the
-# focus watcher and an XDG autostart entry (user). Prompts for sudo. Useful for
-# a source install and for testing the helper without building an AppImage.
-# Extra args pass through (e.g. `--desktop gnome`, `--uninstall`).
+# focus watcher (user). Prompts for elevation. Useful for a source install and
+# for testing the helper without building an artifact. Extra args pass through
+# (e.g. `--desktop gnome`, `--uninstall`).
 install-system-integration *args:
     #!/usr/bin/env bash
     set -euo pipefail
     stage="$(mktemp -d)"
     trap 'rm -rf "$stage"' EXIT
-    mkdir -p "$stage/gnome-shell" "$stage/kwin-script"
-    cp packaging/udev/70-deckd-uinput.rules "$stage/"
-    cp -R packaging/gnome-shell/deckd-focus@local "$stage/gnome-shell/"
-    cp -R packaging/kwin-script/deckd-focus "$stage/kwin-script/"
-    cp client/public/icon-512.png "$stage/deckd.png"
+    just _stage-linux-integration "$stage"
     sudo packaging/linux/install-system-integration.sh --assets "$stage" {{args}}
 
 # Run the Nix flake checks: builds packages.deckd and the focus-watcher

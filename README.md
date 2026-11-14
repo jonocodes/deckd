@@ -74,7 +74,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [ ] **Multi-daemon chooser** — pair and pick between several desktops.
 - [ ] **Reliable web-app detection** — a browser extension reporting the active tab's real URL, so sites match by domain/path instead of the current window-title heuristic ([#90](https://github.com/jonocodes/deckd/issues/90)).
 - [ ] **Windows support**
-- [ ] **Packing and deployment** — self-contained macOS DMG ([#165](https://github.com/jonocodes/deckd/issues/165)) and Linux AppImage ([#168](https://github.com/jonocodes/deckd/issues/168))
+- [ ] **Packing and deployment** — self-contained macOS DMG ([#165](https://github.com/jonocodes/deckd/issues/165)) and Linux AppImage + tarball ([#168](https://github.com/jonocodes/deckd/issues/168))
 
 ## Inspiration and Comparison
 
@@ -145,7 +145,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the component breakdown and
 
 ## Getting started
 
-deckd needs Python 3.11+ and Node 18+. CI tests the 3.11 floor and the 3.12 interpreter the Nix package ships. In brief:
+deckd needs Python 3.11+ and Node 22+ (CI and the flox environment use Node 24 LTS). CI tests the 3.11 floor and the 3.12 interpreter the Nix package ships. In brief:
 
 ```sh
 uv venv --python 3.11
