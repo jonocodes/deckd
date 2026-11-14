@@ -216,9 +216,12 @@ step "Open deckd surface"
 click_item "Open deckd surface"
 browser_up() { osascript -e 'tell application "System Events" to get name of every process whose background only is false' | grep -q -E "Safari|Chrome|Firefox"; }
 if wait_for 20 browser_up; then pass "a browser launched"; else fail "no browser launched"; fi
-sleep 4
+# The surface's <title> is "deckd": a Safari window by that name means the page
+# was served and loaded (the runner's default browser is Safari).
+surface_loaded() { osascript -e 'tell application "System Events" to tell process "Safari" to get name of every window' 2>/dev/null | grep -q -w deckd; }
+if wait_for 30 surface_loaded; then pass "surface loaded in Safari (window title 'deckd')"; else fail "no Safari window titled deckd"; fi
+sleep 2  # let it paint before the screenshot
 shot 3-surface-in-browser
-osascript -e 'tell application "System Events" to tell process "Safari" to get name of every window' 2>/dev/null | sed 's/^/  Safari windows: /' || true
 osascript -e 'tell application "Safari" to quit' >/dev/null 2>&1 || true
 
 step "Quit, then upgrade in place"

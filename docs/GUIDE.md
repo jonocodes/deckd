@@ -673,6 +673,17 @@ Verified so far (macOS 26.6.2, Apple Silicon): the bundle builds, launches as a 
 
 Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workflows/release-macos.yml) on a `macos-15` runner: it builds the client, freezes the app, wraps it in a DMG (the same `just build-macos-dmg` recipe above), and attaches the DMG to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag, or — with **publish** unticked — just build the DMG and upload it as a workflow artifact, for trying a build without making a release.
 
+Before anything is published, a `test-app` job installs the DMG on a second, fresh runner and clicks through the real menu-bar item ([`packaging/macos/test/test-app.sh`](../packaging/macos/test/test-app.sh)). It checks the menu's items, that **Allow LAN access** opens and closes the LAN port and toggles its ✓, **Restart server**, **Open decks folder** (a Finder window), **Open deckd surface** (Safari loads it), **Quit**, and that an in-place upgrade keeps the password and decks. It uploads screenshots (`deckd-macos-test-app` artifact) of the open menu, the decks folder, the surface in Safari, and the first-run *"deckd wants access to control System Events"* prompt. Pull requests that touch the app run build + test (never publish).
+
+This works on GitHub's free hosted runners because they have a real logged-in desktop, and the image grants Accessibility and Screen Recording to `bash`/`osascript`. The script's `--pregrant` writes deckd's own TCC grants before launch (CI only: it needs Full Disk Access) — otherwise its System Events consent prompt sits on screen and blocks every System Events call. What CI can't cover: grants surviving an upgrade (they're pre-written), and Gatekeeper quarantine on a browser download (`spctl` output is logged, informational).
+
+To run the same test on your own Mac (it replaces `/Applications/deckd.app`; your terminal needs Accessibility + Screen Recording):
+
+```sh
+just test-macos-app                       # newest dist/deckd-*.dmg
+just test-macos-app path/to/deckd.dmg     # or a downloaded one
+```
+
 The tag (minus a leading `v`) is the version for that release: it names the DMG (`deckd-<version>.dmg`), its volume, and the app's `CFBundleShortVersionString`. So a rough CalVer tag like `v2026.09.23` yields `deckd-2026.09.23.dmg`. No scheme is enforced — any `v*` string works. For a local build without a tag, `just build-macos-dmg` falls back to `version` in `pyproject.toml`.
 
 The DMG is **arm64 only** (Apple Silicon): `macos-15` runners are Apple Silicon. An Intel / `universal2` build is a follow-up ([#165](https://github.com/jonocodes/deckd/issues/165), "Open questions").
