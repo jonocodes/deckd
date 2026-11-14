@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerDeck, ServerMediaError, ServerMessage, ServerRunningWindows, ServerState, ServerWidgetUpdate, MediaState } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerDeck, ServerMediaError, ServerMessage, ServerRunningWindows, ServerAgents, ServerState, ServerWidgetUpdate, MediaState } from "./protocol";
 import { wireDeckToServer, wireWindowsToServer } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
@@ -60,6 +60,7 @@ export function useDeckdSocket(
   onRunningWindows?: (m: ServerRunningWindows) => void,
   onSessionState?: (m: ServerState) => void,
   onMediaError?: (m: ServerMediaError) => void,
+  onAgents?: (m: ServerAgents) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -171,6 +172,9 @@ export function useDeckdSocket(
             const cast: ServerRunningWindows = { ...msg, windows: wireWindowsToServer(msg.windows) ?? [] };
             onRunningWindows(cast);
           }
+          // Issue #180: agent tiles snapshot — broadcast on change and
+          // replayed on connect, same shape as ``running_windows``.
+          else if (msg.type === "agents" && onAgents) onAgents(msg);
           // Issue #160: the two-state session screen awareness. Pushed
           // on every locked/blanked transition and replayed in the
           // connect snapshot, so a late joiner isn't stalled on a
@@ -253,7 +257,7 @@ export function useDeckdSocket(
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onDeck, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, onSessionState, onMediaError, enabled, gen]);
+  }, [onDeck, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, onSessionState, onMediaError, onAgents, enabled, gen]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;

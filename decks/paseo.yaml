@@ -1,0 +1,33 @@
+# Paseo agent tiles (issue #180): when Paseo is focused, the surface shows one
+# tile per live coding agent, coloured by state. View-only.
+#
+# Detection, most to least specific:
+#   - agent:paseo — the web app in a browser. Paseo sets document.title to the
+#     active agent's title and never names itself, so no fixed title glob can
+#     claim it. The daemon knows every live agent title from its Paseo
+#     subscription and matches the window title against them
+#     ("<agent title> — Mozilla Firefox").
+#   - title:Paseo… — Paseo's non-workspace pages (home, settings), which keep
+#     the static page title.
+#   - paseo — the Electron desktop app. WM_CLASS under XWayland
+#     (StartupWMClass=Paseo) and app_id on native Wayland (desktopName
+#     Paseo.desktop) are both "Paseo"; matching is case-insensitive.
+#
+# The tiles need the daemon's agent source (`--agents auto`, on whenever
+# ~/.paseo exists); without it this deck still matches but shows "agent
+# status: no source configured".
+match:
+  - paseo  # desktop app identity; first token is the deck id
+  - "agent:paseo"
+  - "title:Paseo"
+  - "title:Paseo — *"
+  - "title:Paseo - *"
+display_name: Paseo
+icon:
+  source: lucide
+  name: bot
+jogstrip: false
+widgets:
+  - id: agents
+    kind: agents
+    size: full

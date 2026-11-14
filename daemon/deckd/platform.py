@@ -55,10 +55,11 @@ class AppInfo:
     def is_browser(self) -> bool:
         """True if this app looks like a web browser.
 
-        Best-effort substring match against a maintained marker list. It only
-        gates the *web app* indicator (a browser-focused title match), never
-        deck resolution, so a miss just means no globe badge — never a wrong
-        deck.
+        Best-effort substring match against a maintained marker list. It
+        gates the *web app* indicator (a browser-focused title match) and
+        the ``<agent title> — <browser>`` form of an ``agent:`` deck token
+        (issue #180). A miss means no globe badge, or an agent web app
+        falling back to the browser's own deck — never a wrong site deck.
         """
         hay = f"{self.app_id or ''} {self.wm_class or ''}".casefold()
         return any(marker in hay for marker in _BROWSER_MARKERS)

@@ -291,6 +291,7 @@ def make_test_server(
     password: str | None = None,
     media_manager=None,
     mpris_backend=None,
+    agent_source=None,
 ) -> tuple[Server, FakeScrollSink, FakePointerSink, FakeDbusBusFactory]:
     """Build a ``Server`` with the same fake sinks used by the fixtures.
 
@@ -313,5 +314,6 @@ def make_test_server(
         password=password,
         media_manager=media_manager,
         mpris_backend=mpris_backend,
+        agent_source=agent_source,
     )
     return server, scroll_sink, key_sink, dbus_factory

@@ -31,6 +31,7 @@ import type {
   MacroResultMessage,
   ConfirmRequestMessage,
   RunningWindowsMessage,
+  AgentsMessage,
   HelloMessage,
   PressMessage,
   JogMessage,
@@ -66,6 +67,8 @@ export type {
   ConfirmRequestMessage,
   WindowListEntry,
   RunningWindowsMessage,
+  AgentEntry,
+  AgentsMessage,
   ServerMessage,
   HelloMessage,
   PressMessage,
@@ -112,7 +115,7 @@ export type NowPlayingEmptyState = "show" | "hide";
 export type WidgetSize = [number, number] | "full";
 export type Widget = {
   id: string;
-  kind: "button" | "blank" | "jogstrip" | "trackpad" | "meter" | "stats" | "media" | "nowplaying";
+  kind: "button" | "blank" | "jogstrip" | "trackpad" | "meter" | "stats" | "media" | "nowplaying" | "agents";
   label?: string | null;
   icon?: Icon | null;
   /** Reflow extent (ADR-0010). Absent means a ``[1, 1]`` single cell. */
@@ -211,6 +214,9 @@ export interface ServerWindowListEntry {
 export type ServerRunningWindows = Omit<RunningWindowsMessage, "windows"> & {
   windows: ServerWindowListEntry[];
 };
+// Issue #180: agent tiles are plain data (no opaque icon), so the wire
+// type is the server type.
+export type ServerAgents = AgentsMessage;
 export type MediaState = MediaStateMessage;
 
 export type ClientHello = HelloMessage;

@@ -78,7 +78,7 @@ function widgetIcon(w: Widget): string {
   return "⬛";
 }
 
-const UNSUPPORTED_KINDS = new Set(["media", "nowplaying"]);
+const UNSUPPORTED_KINDS = new Set(["media", "nowplaying", "agents"]);
 
 function adjustSpan(widget: Widget, dw: number, dh: number): Widget {
   const isFull = widget.size === "full";

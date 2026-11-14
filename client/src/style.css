@@ -3842,3 +3842,138 @@ select.prop-field-input {
 .settings-help-link:hover {
   border-color: #3a4a57;
 }
+
+/* -- Agent tiles (issue #180) ---------------------------------------------
+ * View-only fleet view: one tile per live coding agent. The accent colour
+ * is a left stripe + state label tint; the label text carries the state
+ * for anyone not reading colour. Wire order is urgency order, so the grid
+ * just flows. */
+.agents {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 8px 4px 0 4px;
+  min-height: 0;
+}
+
+.agents-empty {
+  padding: 14px 18px;
+  border-radius: 10px;
+  background: #1b222a;
+  border: 1px dashed #2a333d;
+  color: #8a96a3;
+  font-size: calc(14px * var(--label-scale, 1));
+  text-align: center;
+  margin: auto;
+}
+
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-auto-rows: minmax(96px, auto);
+  gap: 8px;
+  margin: 0;
+  padding: 0 0 8px 0;
+  list-style: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  align-content: start;
+}
+
+.agent-tile {
+  --agent-accent: #6b7785;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px 10px 14px;
+  background: #1b222a;
+  border: 1px solid #2a333d;
+  border-left: 4px solid var(--agent-accent);
+  border-radius: 10px;
+  min-width: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.agent-tile-needs_input { --agent-accent: #f5a524; background: #2a2416; animation: agent-needs-you 1.6s ease-in-out infinite; }
+.agent-tile-error       { --agent-accent: #ef4444; background: #2a1b1d; }
+.agent-tile-working     { --agent-accent: #3fb1d8; }
+.agent-tile-done        { --agent-accent: #22c55e; }
+.agent-tile-idle        { --agent-accent: #4a5663; }
+.agent-tile-offline     { --agent-accent: #2a333d; opacity: 0.55; }
+
+@keyframes agent-needs-you {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(245, 165, 36, 0.55); }
+  50% { box-shadow: 0 0 0 4px rgba(245, 165, 36, 0); }
+}
+
+.agent-tile-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.agent-tile-state {
+  font-size: calc(12px * var(--label-scale, 1));
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--agent-accent);
+}
+.agent-tile-idle .agent-tile-state,
+.agent-tile-offline .agent-tile-state { color: #8a96a3; }
+
+.agent-tile-age {
+  font-size: calc(12px * var(--label-scale, 1));
+  color: #8a96a3;
+  font-variant-numeric: tabular-nums;
+}
+
+.agent-tile-title {
+  font-size: calc(15px * var(--label-scale, 1));
+  font-weight: 500;
+  line-height: 1.25;
+  color: #e6e9ef;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.agent-tile-idle .agent-tile-title { color: #b4bcc6; }
+
+.agent-tile-foot {
+  margin-top: auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: calc(12px * var(--label-scale, 1));
+  color: #8a96a3;
+  min-width: 0;
+}
+.agent-tile-detail { color: #e6e9ef; }
+.agent-tile-project {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-tile-needs_input { animation: none; box-shadow: 0 0 0 2px rgba(245, 165, 36, 0.6); }
+}
+
+/* ADR-0010 full-surface widget: one cell filling the deck area. */
+.grid-full {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+.cell-agents {
+  min-width: 0;
+  min-height: 0;
+  background: none;
+  border: none;
+  padding: 0;
+}
