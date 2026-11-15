@@ -333,6 +333,31 @@ const MACRO: ServerDeck = {
   ],
 };
 
+// ``source: desktop`` (issue #187, opt-in): host app icons mixed with Lucide
+// glyphs and Simple Icons logos. With no daemon, the app icons come from the
+// fixture SVGs in ``public/demo-app-icons/``. The badge uses one too.
+const APPS: ServerDeck = {
+  type: "deck",
+  app: "apps (demo)",
+  display_name: "Tilix",
+  icon: { source: "desktop", name: "com.gexperts.Tilix" },
+  jogstrip_enabled: true,
+  widgets: [
+    { id: "tilix", kind: "button", label: "Tilix", icon: { source: "desktop", name: "com.gexperts.Tilix" } },
+    { id: "console", kind: "button", label: "Console", icon: { source: "desktop", name: "org.gnome.Console" } },
+    { id: "files", kind: "button", label: "Files", icon: { source: "desktop", name: "org.gnome.Nautilus" } },
+    { id: "gimp", kind: "button", label: "GIMP", icon: { source: "desktop", name: "org.gimp.GIMP" } },
+    { id: "github", kind: "button", label: "GitHub", icon: { source: "simple-icons", name: "github" } },
+    { id: "spotify", kind: "button", label: "Spotify", icon: { source: "desktop", name: "com.spotify.Client" }, color: "#14532d" },
+    { id: "slack", kind: "button", label: "Slack", icon: { source: "desktop", name: "com.slack.Slack" } },
+    { id: "youtube", kind: "button", label: "YouTube", icon: { source: "simple-icons", name: "youtube" }, color: "#7f1d1d" },
+    { id: "keepass", kind: "button", label: "KeePassXC", icon: { source: "desktop", name: "org.keepassxc.KeePassXC" }, color: "#1e3a8a" },
+    { id: "settings", kind: "button", label: "Settings", icon: { source: "desktop", name: "org.gnome.Settings" } },
+    { id: "screenshot", kind: "button", label: "Screenshot", icon: { source: "lucide", name: "camera" } },
+    { id: "lock", kind: "button", label: "Lock", icon: { source: "lucide", name: "lock" }, color: "#7f1d1d" },
+  ],
+};
+
 const DEMOS: Record<string, ServerDeck> = {
   firefox: FIREFOX,
   youtube: YOUTUBE,
@@ -342,6 +367,7 @@ const DEMOS: Record<string, ServerDeck> = {
   vlc: VLC,
   mpris: MPRIS,
   macro: MACRO,
+  apps: APPS,
 };
 
 type DemoView = "deck" | "trackpad" | "settings" | "nowplaying" | "editor";

@@ -94,3 +94,9 @@ AppImage is the primary Linux artifact (unsandboxed, distro-agnostic); the root-
 [0013-calver-versioning.md](0013-calver-versioning.md)
 
 Releases are tagged `vYYYY.M.MICRO` (UTC year and month, unpadded; MICRO counts releases within the month from 0; rcs take `-rcN` and publish as prereleases). `setuptools-scm` derives every version from the tag — no hard-coded copies, no bump commits; the Nix flake passes `0+git.<date>.g<rev>`. The version is visible in `/health`, `/diag`, `deckd --version`, `deckctl`, and the client settings. `just release` computes and pushes the next tag.
+
+## 0014 — Opt-in `desktop` icon source: the daemon serves host app icons
+
+[0014-desktop-app-icon-source.md](0014-desktop-app-icon-source.md)
+
+`icon: { source: desktop, name: <desktop-id> }` shows an app's own full-colour icon. The daemon resolves it from the host's `.desktop` file and `hicolor` theme (pure Python; Flatpak and Nix dirs included) and serves it at `/desktop-apps/<id>/icon`. It serves only indexed ids, with a sandboxing CSP. Opt-in only: the daemon never applies a host icon automatically. Partially reverses ADR-0007's no-`.desktop` stance and amends ADR-0006's monochrome rule.

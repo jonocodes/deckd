@@ -129,6 +129,8 @@ All are read-only and unauthenticated unless noted.
 | `POST /mpris/<row>/command` | **Auth.** Dispatch a play-pause/next/previous command to the named MPRIS row. |
 | `GET /media/<widget_id>/art` | Proxy VLC album art. |
 | `GET /mpris/<row_id>/art` | Proxy MPRIS album art. |
+| `GET /desktop-apps` | **Auth.** Installed host apps with a resolvable icon (`{ok, apps: [{id, name}]}`), for the editor's icon picker (issue #187). Empty on macOS/Windows. |
+| `GET /desktop-apps/<id>/icon` | A `source: desktop` icon: the app's own SVG/PNG from the host's `hicolor` theme or `pixmaps/`. Serves only ids the resolver indexed (unknown → `404`). Sent with a sandboxing CSP + `nosniff`. |
 
 ### Diagnostic workflow
 

@@ -61,7 +61,9 @@ The client bundles two complementary sets:
 - **Lucide** (`source: lucide`) — regular UI glyphs (arrows, search, media).
 - **Simple Icons** (`source: simple-icons`) — brand/app logos (Firefox, …).
 
-Both are monochrome and inherit the fixed foreground colour. Neither is
+Both are monochrome and inherit the fixed foreground colour. (Amended by
+[ADR-0014](0014-desktop-app-icon-source.md): a third, opt-in `desktop` source
+serves host app icons in full colour, from the daemon.) Neither is
 subset to referenced icons, so adding an icon to a deck is a YAML edit with
 no client rebuild — any name in either set resolves at runtime.
 
