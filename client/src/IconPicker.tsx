@@ -4,7 +4,8 @@ import type { LucideIcon } from "lucide-react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Icon as IconRef } from "./protocol";
 import { Icon as IconGlyph } from "./Icon";
-import { loadSimpleIcons } from "./icons";
+import { desktopIconUrl, fetchDesktopApps, loadSimpleIcons } from "./icons";
+import type { DesktopApp } from "./icons";
 
 const lucideByName = lucideIcons as Record<string, LucideIcon>;
 
@@ -22,23 +23,37 @@ const lucideEntries = Object.keys(lucideByName).map((pascal) => ({
 
 type SimpleIconEntry = { slug: string; path: string; title: string };
 
+type Tab = "lucide" | "simple-icons" | "desktop";
+
 type Props = {
   value: IconRef | null;
   onChange: (icon: IconRef | null) => void;
   open: boolean;
   onClose: () => void;
+  /** Installed host apps for the Apps tab (``source: desktop``, issue #187).
+   * Defaults to asking the daemon; injectable for tests. */
+  loadDesktopApps?: () => Promise<DesktopApp[]>;
+};
+
+const SEARCH_PLACEHOLDER: Record<Tab, string> = {
+  lucide: "Search Lucide icons…",
+  "simple-icons": "Search brand icons…",
+  desktop: "Search installed apps…",
 };
 
 const COLS = 5;
 const ROW_HEIGHT = 56;
 
-export function IconPicker({ value, onChange, open, onClose }: Props) {
-  const [activeTab, setActiveTab] = useState<"lucide" | "simple-icons">(
-    value?.source === "simple-icons" ? "simple-icons" : "lucide",
+export function IconPicker({ value, onChange, open, onClose, loadDesktopApps = fetchDesktopApps }: Props) {
+  const [activeTab, setActiveTab] = useState<Tab>(
+    value?.source === "simple-icons" || value?.source === "desktop" ? value.source : "lucide",
   );
   const [search, setSearch] = useState("");
   const [simpleIcons, setSimpleIcons] = useState<SimpleIconEntry[] | null>(null);
   const [loadingBrands, setLoadingBrands] = useState(false);
+  const [desktopApps, setDesktopApps] = useState<DesktopApp[] | null>(null);
+  const [desktopError, setDesktopError] = useState(false);
+  const [loadingApps, setLoadingApps] = useState(false);
   const parentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,18 +71,35 @@ export function IconPicker({ value, onChange, open, onClose }: Props) {
     }
   }, [activeTab, simpleIcons, loadingBrands]);
 
+  useEffect(() => {
+    if (activeTab === "desktop" && !desktopApps && !loadingApps && !desktopError) {
+      setLoadingApps(true);
+      loadDesktopApps()
+        .then((apps) => setDesktopApps(apps))
+        .catch(() => setDesktopError(true))
+        .finally(() => setLoadingApps(false));
+    }
+  }, [activeTab, desktopApps, loadingApps, desktopError, loadDesktopApps]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (activeTab === "lucide") {
       if (!q) return lucideEntries;
       return lucideEntries.filter((e) => e.kebab.includes(q));
     }
+    if (activeTab === "desktop") {
+      if (!desktopApps) return [];
+      if (!q) return desktopApps;
+      return desktopApps.filter(
+        (e) => e.id.toLowerCase().includes(q) || e.name.toLowerCase().includes(q),
+      );
+    }
     if (!simpleIcons) return [];
     if (!q) return simpleIcons;
     return simpleIcons.filter(
       (e) => e.slug.includes(q) || e.title.toLowerCase().includes(q),
     );
-  }, [activeTab, search, simpleIcons]);
+  }, [activeTab, search, simpleIcons, desktopApps]);
 
   const rowCount = Math.ceil(filtered.length / COLS);
 
@@ -83,9 +115,11 @@ export function IconPicker({ value, onChange, open, onClose }: Props) {
   });
 
   const handleSelect = useCallback(
-    (entry: { kebab: string } | SimpleIconEntry) => {
+    (entry: { kebab: string } | SimpleIconEntry | DesktopApp) => {
       if ("kebab" in entry) {
         onChange({ source: "lucide", name: entry.kebab });
+      } else if ("id" in entry) {
+        onChange({ source: "desktop", name: entry.id });
       } else {
         onChange({ source: "simple-icons", name: entry.slug });
       }
@@ -115,13 +149,19 @@ export function IconPicker({ value, onChange, open, onClose }: Props) {
           >
             Brands
           </button>
+          <button
+            className={`icon-picker-tab${activeTab === "desktop" ? " icon-picker-tab-active" : ""}`}
+            onClick={() => setActiveTab("desktop")}
+          >
+            Apps
+          </button>
         </div>
 
         <div className="icon-picker-search">
           <input
             className="icon-picker-search-input"
             type="text"
-            placeholder={`Search ${activeTab === "lucide" ? "Lucide" : "brand"} icons…`}
+            placeholder={SEARCH_PLACEHOLDER[activeTab]}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             autoFocus
@@ -131,6 +171,14 @@ export function IconPicker({ value, onChange, open, onClose }: Props) {
         <div ref={parentRef} className="icon-picker-grid">
           {activeTab === "simple-icons" && !simpleIcons ? (
             <div className="icon-picker-loading">Loading brand icons…</div>
+          ) : activeTab === "desktop" && desktopError ? (
+            <div className="icon-picker-empty">Couldn&apos;t load installed apps from the daemon.</div>
+          ) : activeTab === "desktop" && !desktopApps ? (
+            <div className="icon-picker-loading">Loading installed apps…</div>
+          ) : activeTab === "desktop" && desktopApps?.length === 0 ? (
+            <div className="icon-picker-empty">
+              No installed apps found. App icons come from the host&apos;s .desktop files (Linux).
+            </div>
           ) : filtered.length === 0 ? (
             <div className="icon-picker-empty">No icons match your search.</div>
           ) : (
@@ -158,7 +206,8 @@ export function IconPicker({ value, onChange, open, onClose }: Props) {
                     className="icon-picker-row"
                   >
                     {rowItems.map((item) => {
-                      const name = "kebab" in item ? item.kebab : item.slug;
+                      const name =
+                        "kebab" in item ? item.kebab : "id" in item ? item.id : item.slug;
                       const source = activeTab;
                       const isSelected =
                         value?.source === source && value?.name === name;
@@ -171,7 +220,9 @@ export function IconPicker({ value, onChange, open, onClose }: Props) {
                           aria-label={name}
                         >
                           <span className="icon-picker-item-glyph">
-                            {activeTab === "lucide" ? (
+                            {"id" in item ? (
+                              <img src={desktopIconUrl(item.id)} alt="" loading="lazy" draggable={false} />
+                            ) : activeTab === "lucide" ? (
                               (() => {
                                 const Glyph =
                                   lucideByName[
@@ -192,7 +243,7 @@ export function IconPicker({ value, onChange, open, onClose }: Props) {
                             )}
                           </span>
                           <span className="icon-picker-item-name">
-                            {name}
+                            {"id" in item ? item.name : name}
                           </span>
                         </button>
                       );

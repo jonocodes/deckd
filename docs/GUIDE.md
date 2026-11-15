@@ -13,7 +13,7 @@ endpoints see [REFERENCE.md](REFERENCE.md); for the system architecture see
 - [Web-app decks](#web-app-decks)
 - [Running deckd](#running-deckd) — install, macOS, KDE Plasma Wayland, phone/tablet testing
 - [Design tooling](#design-tooling-no-daemon-required), [hosted demo](#hosted-demo-github-pages), [PWA install](#pwa-install-over-https-tailscale)
-- Client features — [chrome](#client-chrome), [manual control](#manual-control-mode), [deck editor](#deck-editor), [app badge](#chrome-app-badge), [tuning](#client-tuning), [accessibility](#accessibility)
+- Client features — [chrome](#client-chrome), [manual control](#manual-control-mode), [deck editor](#deck-editor), [app badge](#chrome-app-badge), [app icons](#app-icons-source-desktop), [tuning](#client-tuning), [accessibility](#accessibility)
 - [uinput permissions](#uinput-permissions), [live reload](#live-reload), [focus watcher](#focus-watcher), [dev UX](#dev-ux-auto-ignore--deck-override), [smoke test](#smoke-test), [CLI](#cli)
 - [Running in production](#running-in-production)
 - [Security model](#security-model) — what the password gates, what isn't encrypted, where to expose the daemon
@@ -321,7 +321,7 @@ Open **settings** and tap the prominent **Edit deck** button at the top to build
 
 - **Palette** — pick a widget kind (button, jogstrip, meter, stats, media, blank, …) to append it to the deck.
 - **Reflow canvas** — widgets render exactly as the live deck does (ADR-0010, ordered-list reflow). Drag to reorder, adjust a widget's `size` span, and toggle the deck's `overflow` mode; the canvas repacks as you go.
-- **Properties panel** — edit the selected widget's `label`, `icon` (via a searchable Lucide / Simple Icons picker), `color`, and its `action` or `macro`. `color` offers a native colour swatch plus one-tap presets, alongside a free-text field that still accepts any CSS colour string; values the swatch can't hold (named colours, `hsl(...)`, `#RRGGBBAA`) show as a read-only preview and stay editable as text. Clearing the field unsets `color`. Fields the editor doesn't model yet are passed through opaquely, so editing a deck never drops hand-authored config.
+- **Properties panel** — edit the selected widget's `label`, `icon` (via a searchable picker with Lucide, Brands (Simple Icons) and Apps tabs; Apps lists the host's installed apps, see [App icons](#app-icons-source-desktop)), `color`, and its `action` or `macro`. `color` offers a native colour swatch plus one-tap presets, alongside a free-text field that still accepts any CSS colour string; values the swatch can't hold (named colours, `hsl(...)`, `#RRGGBBAA`) show as a read-only preview and stay editable as text. Clearing the field unsets `color`. Fields the editor doesn't model yet are passed through opaquely, so editing a deck never drops hand-authored config.
 - **New decks** — create a deck from scratch, setting its `match:` list; the filename is derived from the primary match token on first save.
 
 Saving writes back to disk over the authed write API (`PUT`/`POST /decks`, below), preserving YAML comments and widget identity; `watchfiles` then hot-reloads every connected client. The editor is in active development — most YAML is round-trippable today, but hand-editing remains the escape hatch for anything it doesn't yet surface.
@@ -334,7 +334,7 @@ The bottom strip's app badge carries the focused app's brand identity, sourced f
 - `theme: "#ff7139"` — any CSS colour string (hex, `hsl(...)`, named); tints the badge border and a thin accent stripe along the top edge of the bottom chrome, so the focused app reads at a glance from across the room.
 - `icon: { source: simple-icons, name: firefox }` — the same `{source, name}` dispatch widgets already use (ADR-0006); reuses the bundled Lucide + Simple Icons sets, so badging a new app is a YAML edit with no client/daemon rebuild.
 
-A deck with none of these keeps the chrome unchanged (the badge is just the bold app name). The daemon never resolves icons from `.desktop` files or the web — presentation stays in user-owned config, exactly like per-widget `color`. See ADR-0007 for the full rationale.
+A deck with none of these keeps the chrome unchanged (the badge is just the bold app name). The daemon never *derives* an icon on its own, from `.desktop` files or the web. Presentation stays in user-owned config, exactly like per-widget `color`. A deck can explicitly opt in to the app's own icon with `source: desktop` (see [App icons](#app-icons-source-desktop)). See ADR-0007 and ADR-0014 for the full rationale.
 
 ```yaml
 match:
@@ -349,6 +349,27 @@ widgets:
 ```
 
 
+
+### App icons (`source: desktop`)
+
+Besides the bundled Lucide glyphs and Simple Icons logos, any widget or badge `icon` can name an installed app's own full-colour icon, the one your dock shows:
+
+```yaml
+icon:
+  source: desktop
+  name: com.gexperts.Tilix   # the .desktop file's basename
+```
+
+**This is opt-in only.** deckd never swaps in a host icon by itself. The shipped decks and every default keep their bundled icons. In the deck editor, the icon picker's **Apps** tab lists installed apps so you don't need to know the id.
+
+How it resolves (ADR-0014): the daemon finds `<name>.desktop` under the XDG data dirs, then reads its `Icon=` key. It looks that up in the `hicolor` icon theme (`scalable` SVG first, then the largest PNG), then in `pixmaps/`. Besides `XDG_DATA_HOME` / `XDG_DATA_DIRS`, it always searches the Flatpak exports (`~/.local/share/flatpak/exports/share`, `/var/lib/flatpak/exports/share`) and the Nix profiles (`~/.nix-profile/share`, `/etc/profiles/per-user/$USER/share`, `/run/current-system/sw/share`). A newly installed app shows up within 30 seconds, no restart needed. The client loads the image from `GET /desktop-apps/<id>/icon`.
+
+Things to know:
+
+- **Portability.** A deck naming a `desktop` icon only renders it on hosts with that app installed. Elsewhere you get the usual missing-icon placeholder. macOS and Windows resolve nothing yet, so the Apps tab is empty there.
+- **Full colour.** These icons keep their own colours. They ignore the button's text colour, and in the badge they skip the themed circle. A few icons are dark (Tilix, for one) and are hard to see on the default dark button. Give that button a lighter `color` or pick a different icon.
+- **Your icon theme isn't used.** deckd shows the app's own `hicolor` icon, so a theme like Papirus that restyles your dock won't restyle deckd.
+- **Demo mode.** With no daemon (`?demo=` / `?playground`), a few bundled fixture icons in `client/public/demo-app-icons/` stand in. `?demo=apps` shows them mixed with the other sources.
 
 ### Client tuning
 
@@ -888,7 +909,7 @@ Treat the password like an SSH key to your user account. A `confirm: true` promp
 
 **The password does not encrypt anything.** The daemon speaks plain HTTP and `ws://`. On a LAN, the password (in the WebSocket `hello` frame, or the `X-Deckd-Password` header) and everything you send — including text typed in [manual control mode](#manual-control-mode) — cross the network in cleartext. Whoever can read that traffic can read your input and reuse the password: on WPA2-Personal Wi-Fi, anyone who knows the Wi-Fi password; on open Wi-Fi, anyone nearby; and on any network, an attacker who can redirect traffic (ARP spoofing).
 
-**A few read-only endpoints answer without the password:** `/health`, `/diag`, `/metrics`, `/actions/recent`, `/mpris/players`, `GET /decks` (summary only), and the album-art proxies. They never carry the password or action payloads (no shell strings, no typed text), but they do reveal the host's identity, the focused app **including its window title**, and what's playing, to anyone who can reach the port.
+**A few read-only endpoints answer without the password:** `/health`, `/diag`, `/metrics`, `/actions/recent`, `/mpris/players`, `GET /decks` (summary only), the album-art proxies, and `source: desktop` app icons (`/desktop-apps/<id>/icon`; the app *list* needs the password). They never carry the password or action payloads (no shell strings, no typed text), but they do reveal the host's identity, the focused app **including its window title**, and what's playing, to anyone who can reach the port.
 
 ### Choosing where to expose it
 
@@ -914,7 +935,7 @@ A bare LAN IP (`https://192.168.x.y`) can never get a publicly trusted certifica
 
 ## Configuration
 
-A directory of YAML files in `decks/` — one per app, plus a `default.yaml` fallback. Shipped decks today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), an optional `size: [w, h]` span (default `[1, 1]`; for non-square widgets like wide meters), an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. Widgets pack in list order (ADR-0010); there are no grid coordinates. The special `kind: blank` skips a cell slot for visual gaps. A deck's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the deck with `match: [default]` is the fallback. A deck may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `DeckMessage`. A deck may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:
+A directory of YAML files in `decks/` — one per app, plus a `default.yaml` fallback. Shipped decks today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), an optional `size: [w, h]` span (default `[1, 1]`; for non-square widgets like wide meters), an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names an icon set, `lucide` or `simple-icons` (bundled in the client) or `desktop` (an installed app's own icon, served by the daemon; see [App icons](#app-icons-source-desktop)), and `name` is the icon within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. Widgets pack in list order (ADR-0010); there are no grid coordinates. The special `kind: blank` skips a cell slot for visual gaps. A deck's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the deck with `match: [default]` is the fallback. A deck may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `DeckMessage`. A deck may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:
 
 - `shell: "..."` — launch a command, fire-and-forget. The child is detached (its own session) and runs independently; stdin/stdout/stderr are discarded and the daemon does not wait for it or observe its exit code. This is the way to launch a program (`shell: firefox`, `shell: code`, `shell: "xdg-open https://…"`), including a specific terminal (`shell: tilix`).
 - `terminal: true` — open the auto-detected terminal emulator, resolved via `$TERMINAL` then a candidate list (`foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`). This is the only accepted form: `terminal` takes no command string — for a specific program (terminal or otherwise) use `shell:`. A string value is rejected at deck-load time with a message pointing you at `shell:`.

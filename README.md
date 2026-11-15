@@ -43,7 +43,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Web-app decks** — treat a website as an app. A deck can claim a site by matching the browser's window title (e.g. YouTube and Netflix media controls), driving each site's own keyboard shortcuts. See [Web-app decks](docs/GUIDE.md#web-app-decks).
 - [x] **Buttons** that fire keystrokes, shell commands, launch a terminal, or call D-Bus methods.
 - [x] **Macros** — chain multiple actions in a single button press, with delays and optional continue-on-error.
-- [x] **Button styling** — bundled icons (Lucide glyphs + Simple Icons brand logos) and per-button background colours, set in YAML.
+- [x] **Button styling** — bundled icons (Lucide glyphs + Simple Icons brand logos) and per-button background colours, set in YAML. Optionally, a button or the app badge can use an installed app's own full-colour icon, read from the host's `.desktop` files (Linux, opt-in). See [App icons](docs/GUIDE.md#app-icons-source-desktop).
 - [x] **Scroll strip** — an always-on right-side jogstrip to scroll the focused window, with release momentum.
 - [x] **Manual control mode** — the phone becomes a trackpad (move, tap, right-click, drag-lock) and a keyboard, so you can type into and point at the focused app for the things decks don't cover (URL bars, chat boxes, ad-hoc commands).
 - [x] **App badge** — the focused app's name, icon, and accent color show in the bottom bar so you can tell at a glance what you're controlling.

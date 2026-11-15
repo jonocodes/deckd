@@ -43,6 +43,7 @@ from .mpris import (
     connect_mpris_backend,
 )
 from .mpris_art import resolve_mpris_art_async
+from .desktop_icons import CONTENT_TYPES as DESKTOP_ICON_CONTENT_TYPES, DesktopIconIndex
 from .diagnostics import (
     ActionRecord,
     MprisEventRecord,
@@ -596,6 +597,7 @@ class Server:
         media_manager: MediaManager | None = None,
         mpris_backend: MprisBackend | None = None,
         mpris_art_resolver: "Callable[[str | None], Awaitable[tuple[str, bytes] | None]] | None" = None,
+        desktop_icons: DesktopIconIndex | None = None,
     ) -> None:
         self.decks_dir = decks_dir
         self.overlay_dir = overlay_dir
@@ -630,6 +632,10 @@ class Server:
         self._mpris_art_resolver: Callable[[str | None], Awaitable[tuple[str, bytes] | None]] = (
             mpris_art_resolver or resolve_mpris_art_async
         )
+        # ``source: desktop`` icons (issue #187): the host's installed apps,
+        # indexed lazily from its XDG data dirs. Injectable so tests point it
+        # at a fixture tree instead of the real icon theme.
+        self.desktop_icons = desktop_icons or DesktopIconIndex()
         # Diagnostic surface (issue #70/71/72/73). Constructed before
         # ``_setup_routes`` so the route handlers can reference the
         # metrics / event bus / ring buffers they read from.
@@ -1950,6 +1956,13 @@ class Server:
         self.app.router.add_get("/mpris/players", self._mpris_players)
         self.app.router.add_get("/mpris/events/recent", self._mpris_events_recent)
         self.app.router.add_post("/mpris/{row_id}/command", self._mpris_command)
+        # ``source: desktop`` icons (issue #187). The list feeds the editor's
+        # icon picker and is authed like the editor's other reads (it names
+        # the host's installed apps). The icon itself is unauthenticated for
+        # the same reason as the art proxies — an ``<img>`` can't carry the
+        # password header — and serves only ids the resolver indexed.
+        self.app.router.add_get("/desktop-apps", self._desktop_apps)
+        self.app.router.add_get("/desktop-apps/{desktop_id}/icon", self._desktop_app_icon)
 
     async def _health(self, _req: web.Request) -> web.Response:
         # The one endpoint left open when auth is on: the web client's
@@ -2249,6 +2262,39 @@ class Server:
             body=data,
             content_type=content_type,
             headers={"Cache-Control": "public, max-age=31536000, immutable"},
+        )
+
+    async def _desktop_apps(self, req: web.Request) -> web.Response:
+        if not self._http_authorized(req):
+            return web.json_response({"ok": False, "error": "unauthorized"}, status=401)
+        # The (re)scan walks the XDG data dirs — tens of ms on a real host —
+        # so keep it off the event loop.
+        apps = await asyncio.to_thread(self.desktop_icons.apps)
+        body = {"ok": True, "apps": [{"id": a.id, "name": a.name} for a in apps]}
+        return web.json_response(body, headers={"Access-Control-Allow-Origin": "*"})
+
+    async def _desktop_app_icon(self, req: web.Request) -> web.Response:
+        # The id is only ever a key into the resolver's index; an unknown or
+        # path-like id simply misses and 404s.
+        path = await asyncio.to_thread(self.desktop_icons.icon_path, req.match_info["desktop_id"])
+        if path is None:
+            raise web.HTTPNotFound()
+        try:
+            data = await asyncio.to_thread(path.read_bytes)
+        except OSError:
+            raise web.HTTPNotFound()
+        return web.Response(
+            body=data,
+            content_type=DESKTOP_ICON_CONTENT_TYPES[path.suffix],
+            headers={
+                # Not immutable: an app update can replace its icon in place.
+                "Cache-Control": "public, max-age=86400",
+                # Icons come from whatever apps are installed. Inside an
+                # <img> an SVG can't run script, but opened top-level on the
+                # daemon origin it could — and reach the stored password.
+                "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+                "X-Content-Type-Options": "nosniff",
+            },
         )
 
     async def _reload(self, req: web.Request) -> web.Response:
