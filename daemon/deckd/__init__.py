@@ -1,6 +1,6 @@
 """deckd daemon — app-aware touch control surface for Linux."""
 
-# The version is the git release tag (ADR-0013: CalVer, vYYYY.M.MICRO).
+# The version is the git release tag (ADR-0013: CalVer, vYYYYMMDD.N).
 # setuptools-scm writes ``_version.py`` when the package is installed (pip /
 # uv / nix / the frozen app builds); a bare source tree that was never
 # installed reports ``0+unknown``. In an editable install it is as fresh as

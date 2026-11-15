@@ -73,8 +73,8 @@ def test_seed_decks_first_run_then_noop(tmp_path: Path) -> None:
 def test_bundle_version_prefers_env_override(monkeypatch) -> None:
     # The release workflow passes the git tag (minus its `v`) this way, so
     # the artifact name is the tag verbatim — no PEP 440 normalisation.
-    monkeypatch.setenv("DECKD_VERSION", "2026.11.0")
-    assert macos_app.bundle_version() == "2026.11.0"
+    monkeypatch.setenv("DECKD_VERSION", "20261114.0")
+    assert macos_app.bundle_version() == "20261114.0"
 
 
 def test_bundle_version_falls_back_to_the_package_version(monkeypatch) -> None:

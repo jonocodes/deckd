@@ -1,4 +1,4 @@
-# Versioning: CalVer `vYYYY.M.MICRO`, with the git tag as the only source
+# Versioning: CalVer `vYYYYMMDD.N`, with the git tag as the only source
 
 deckd had release mechanics (a `v*` tag runs the release workflows and
 names the artifacts) but no versioning scheme, three hard-coded `0.0.1`
@@ -23,20 +23,25 @@ the tag the single source, and makes the version visible.
 
 ## Decision
 
-### Scheme: `vYYYY.M.MICRO`
+### Scheme: `vYYYYMMDD.N`
 
-- `YYYY` and `M` are the release's UTC year and month, **not zero-padded**
-  (`v2027.1.0`, not `v2027.01.0`): leading zeros are invalid in SemVer-shaped
-  tooling and PEP 440 strips them, so the tag and the package version would
-  disagree.
-- `MICRO` counts releases within the month, starting at `0`.
-  `v2026.11.0`, `v2026.11.1`, … then `v2026.12.0`.
-- Release candidates take a suffix — `v2026.12.0-rc1` — and publish as a
+- `YYYYMMDD` is the release's UTC date as **one** zero-padded integer
+  (`v20261114.0`, `v20270105.0`): the exact day, readable at a glance, and
+  tags sort by date.
+- `N` counts releases made that day, starting at `0`: `v20261114.0`, then a
+  same-day fix is `v20261114.1`.
+- Release candidates take a suffix — `v20261201.0-rc1` — and publish as a
   GitHub prerelease. An rc doesn't use up its number.
 
-Rejected: `vYYYY.MM.DD`. It reads well, but a second release on the same day
-needs a fourth component, which breaks the macOS three-integer rule and
-special-cases the common "fix right after a release" path.
+Two integers: within macOS's three-integer limit, a valid PEP 440 version,
+and a SemVer-shaped tooling-friendly string.
+
+Rejected: `vYYYY.MM.DD`. It reads naturally, but a second release on the same
+day needs a fourth component, which breaks the macOS three-integer rule (or
+forbids same-day hotfixes).
+
+Rejected: `vYYYY.M.MICRO` (briefly adopted, never released). It fits the
+three integers, but hides the day — the version said "November", not when.
 
 Rejected: SemVer `0.x`. Its value is signalling breaking changes to
 independent consumers; deckd has none (see Context).
@@ -44,11 +49,13 @@ independent consumers; deckd has none (see Context).
 ### The tag is the only source of truth
 
 - `setuptools-scm` derives the package version from the nearest
-  `v[1-9][0-9][0-9][0-9].*` tag and writes `deckd/_version.py` at install
+  `v[1-9][0-9][0-9][0-9][0-1][0-9][0-3][0-9].*` tag (an
+  eight-digit date) and writes `deckd/_version.py` at install
   time (gitignored). The match skips non-release tags
-  (`verify/61-touch-targets`) and the pre-CalVer `v0.0.0-*` rehearsal tags.
-- On a tag: exactly the tag (`2026.11.0`). After it: `version_scheme =
-  "no-guess-dev"` gives `2026.11.0.post1.dev3+g<sha>` — "after this release",
+  (`verify/61-touch-targets`), the pre-CalVer `v0.0.0-*` rehearsal tags, and
+  any `vYYYY.M.MICRO`-shaped tag.
+- On a tag: exactly the tag (`20261114.0`). After it: `version_scheme =
+  "no-guess-dev"` gives `20261114.0.post1.dev3+g<sha>` — "after this release",
   without guessing the next name. No git (a sandboxed build without a
   pretend version): `0+unknown`.
 - The hard-coded copies are gone. `client/package.json` and the root
@@ -88,5 +95,5 @@ every platform's build and tests pass.
 - Until the first CalVer tag exists, dev builds report a placeholder
   (`0.post1.devN+unknown.g<sha>`).
 - The macOS DMG's `CFBundleShortVersionString` is the tag verbatim; release
-  tags fit the three-integer rule, and PR builds (`0.0.0-prN`) were already
-  tolerated.
+  tags are two integers, within the three-integer rule, and PR builds
+  (`0.0.0-prN`) were already tolerated.

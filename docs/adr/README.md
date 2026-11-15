@@ -89,11 +89,11 @@ _Supersedes: [0010](0010-grid-reflow.md) — keeps the ordered-list model, repla
 
 AppImage is the primary Linux artifact (unsandboxed, distro-agnostic); the root-only uinput step is a first-run `pkexec`/`sudo` helper shared by all channels. Flatpak/Snap are rejected — a sandbox cannot write the udev rule, see `/dev/uinput`, reach the session bus unfiltered, or install the compositor plugin. deb/rpm remain a later thin wrap of the same relocatable tree. Amended 2026-11-12: that tree also ships as a tarball (installed to `~/.local/opt/deckd`, run as a systemd user service), and a GUI launch opens the surface in the browser.
 
-## 0013 — Versioning: CalVer `vYYYY.M.MICRO`, git tag as the only source
+## 0013 — Versioning: CalVer `vYYYYMMDD.N`, git tag as the only source
 
 [0013-calver-versioning.md](0013-calver-versioning.md)
 
-Releases are tagged `vYYYY.M.MICRO` (UTC year and month, unpadded; MICRO counts releases within the month from 0; rcs take `-rcN` and publish as prereleases). `setuptools-scm` derives every version from the tag — no hard-coded copies, no bump commits; the Nix flake passes `0+git.<date>.g<rev>`. The version is visible in `/health`, `/diag`, `deckd --version`, `deckctl`, and the client settings. `just release` computes and pushes the next tag.
+Releases are tagged `vYYYYMMDD.N` (the UTC date as one integer; N counts releases that day from 0; rcs take `-rcN` and publish as prereleases). `setuptools-scm` derives every version from the tag — no hard-coded copies, no bump commits; the Nix flake passes `0+git.<date>.g<rev>`. The version is visible in `/health`, `/diag`, `deckd --version`, `deckctl`, and the client settings. `just release` computes and pushes the next tag.
 
 ## 0014 — Opt-in `desktop` icon source: the daemon serves host app icons
 
