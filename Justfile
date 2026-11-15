@@ -487,7 +487,7 @@ version:
         || python -c 'import sys; sys.path.insert(0, "daemon"); import deckd; print(deckd.__version__)'
 
 # Cut a release (ADR-0013): tag the up-to-date main as the next CalVer version
-# (vYYYY.M.MICRO, scripts/next_version.py) and push the tag, which runs both
+# (vYYYYMMDD.N, scripts/next_version.py) and push the tag, which runs both
 # release workflows. Shows the tag and commit and asks before pushing.
 release:
     #!/usr/bin/env bash

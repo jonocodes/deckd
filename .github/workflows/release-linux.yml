@@ -47,7 +47,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to attach the artifacts to (e.g. v2026.11.0)"
+        description: "Release tag to attach the artifacts to (e.g. v20261114.0)"
         required: true
         type: string
       publish:
@@ -169,7 +169,7 @@ jobs:
           tree="$(ls -d "$tmp"/deckd-*/)"
           "$tree/bin/deckd" --help >/dev/null
           # The frozen app reports the release it is (ADR-0013). On a tag,
-          # that must be the tag (PEP 440 drops an rc's dash: 2026.12.0rc1).
+          # that must be the tag (PEP 440 drops an rc's dash: 20261201.0rc1).
           got="$("$tree/bin/deckd" --version)"
           echo "$got"
           if [ "$GITHUB_REF_TYPE" = tag ]; then

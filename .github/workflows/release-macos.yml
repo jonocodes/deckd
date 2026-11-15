@@ -96,7 +96,7 @@ jobs:
 
       # The tag (minus a leading `v`) is the release version, so the DMG name,
       # its volume name, and the app's CFBundleShortVersionString all match
-      # the tag. ADR-0013's vYYYY.M.MICRO stays within the three integers
+      # the tag. ADR-0013's vYYYYMMDD.N is two integers, within the three
       # macOS allows there.
       - name: Resolve version from the tag
         run: echo "DECKD_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"

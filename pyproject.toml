@@ -18,7 +18,7 @@ license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 name = "deckd"
 requires-python = ">=3.11"
-# The version is the git tag (ADR-0013: CalVer, vYYYY.M.MICRO), via setuptools-scm.
+# The version is the git tag (ADR-0013: CalVer, vYYYYMMDD.N), via setuptools-scm.
 dynamic = ["version"]
 
 [project.optional-dependencies]
@@ -76,7 +76,7 @@ requires = ["setuptools>=68", "setuptools-scm>=8", "wheel"]
 # Written at install time and frozen into the app bundles; deckd.__version__
 # reads it. Gitignored — never committed.
 version_file = "daemon/deckd/_version.py"
-# On a release tag: exactly the tag (2026.11.0). After it: 2026.11.0.post3.dev0+g<sha>
+# On a release tag: exactly the tag (20261114.0). After it: 20261114.0.post1.dev3+g<sha>
 # — "after this release", without guessing what the next one will be called.
 version_scheme = "no-guess-dev"
 # A source tree with no git metadata (a tarball, a sandboxed build without a
@@ -84,10 +84,10 @@ version_scheme = "no-guess-dev"
 fallback_version = "0+unknown"
 
 [tool.setuptools_scm.scm.git]
-# CalVer release tags only (v2026.11.0, v2026.12.0-rc1): skips non-version tags
+# CalVer release tags only (v20261114.0, v20261201.0-rc1): skips non-version tags
 # such as verify/61-touch-targets and the old v0.0.0-* rehearsal tags, which
 # would otherwise be unparseable or sort as the "latest" release.
-describe_command = ["git", "describe", "--dirty", "--tags", "--long", "--match", "v[1-9][0-9][0-9][0-9].*"]
+describe_command = ["git", "describe", "--dirty", "--tags", "--long", "--match", "v[1-9][0-9][0-9][0-9][0-1][0-9][0-3][0-9].*"]
 
 [tool.setuptools.packages.find]
 include = ["deckd*"]

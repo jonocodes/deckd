@@ -1,10 +1,10 @@
-"""Print the next deckd release tag (ADR-0013: CalVer, ``vYYYY.M.MICRO``).
+"""Print the next deckd release tag (ADR-0013: CalVer, ``vYYYYMMDD.N``).
 
-    python scripts/next_version.py          # e.g. v2026.11.0, then v2026.11.1
+    python scripts/next_version.py          # e.g. v20261114.0, then v20261114.1
 
-The year and month are today's (UTC); MICRO counts releases within that
-month, starting at 0. Only final release tags count — a release candidate
-(``v2026.11.0-rc1``) doesn't use up its number. ``just release`` calls this.
+The date is today's (UTC); N counts releases made that day, starting at 0.
+Only final release tags count — a release candidate (``v20261114.0-rc1``)
+doesn't use up its number. ``just release`` calls this.
 """
 from __future__ import annotations
 
@@ -16,11 +16,12 @@ from datetime import date, datetime, timezone
 
 
 def next_tag(today: date, tags: Iterable[str]) -> str:
-    """The next ``vYYYY.M.MICRO`` tag for ``today``, given existing ``tags``."""
-    pattern = re.compile(rf"v{today.year}\.{today.month}\.(\d+)")
-    micros = [int(m.group(1)) for tag in tags if (m := pattern.fullmatch(tag))]
-    micro = max(micros) + 1 if micros else 0
-    return f"v{today.year}.{today.month}.{micro}"
+    """The next ``vYYYYMMDD.N`` tag for ``today``, given existing ``tags``."""
+    stamp = today.strftime("%Y%m%d")
+    pattern = re.compile(rf"v{stamp}\.(\d+)")
+    counts = [int(m.group(1)) for tag in tags if (m := pattern.fullmatch(tag))]
+    n = max(counts) + 1 if counts else 0
+    return f"v{stamp}.{n}"
 
 
 def main() -> int:
