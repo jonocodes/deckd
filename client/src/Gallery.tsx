@@ -7,10 +7,10 @@ import {
   CELL_SIZE_STEP,
 } from "./settings-store";
 
-/** Dev-only responsive gallery. Renders the real client (via ``?demo=``) in
+/** Responsive gallery. Renders the real client (via ``?demo=``) in
  * a set of device-sized iframes side by side, so a deck can be eyeballed
  * across phone / tablet sizes and orientations without a daemon. Not part of
- * the production build — served by ``vite dev`` at ``/gallery.html``. */
+ * the main app bundle — a separate Vite entry at ``/gallery.html`` (also on Pages). */
 
 type Device = { label: string; w: number; h: number };
 

@@ -12,7 +12,7 @@ endpoints see [REFERENCE.md](REFERENCE.md); for the system architecture see
 - [Repository layout](#repository-layout)
 - [Web-app decks](#web-app-decks)
 - [Running deckd](#running-deckd) — install, macOS, KDE Plasma Wayland, phone/tablet testing
-- [Design tooling](#design-tooling-no-daemon-required), [hosted demo](#hosted-demo-github-pages), [PWA install](#pwa-install-over-https-tailscale)
+- [Demos and previews](#demos-and-previews-no-daemon-required), [PWA install](#pwa-install-over-https-tailscale)
 - Client features — [chrome](#client-chrome), [manual control](#manual-control-mode), [deck editor](#deck-editor), [app badge](#chrome-app-badge), [app icons](#app-icons-source-desktop), [tuning](#client-tuning), [accessibility](#accessibility)
 - [uinput permissions](#uinput-permissions), [live reload](#live-reload), [focus watcher](#focus-watcher), [dev UX](#dev-ux-auto-ignore--deck-override), [smoke test](#smoke-test), [CLI](#cli)
 - [Running in production](#running-in-production)
@@ -203,30 +203,37 @@ hostname -I
 
 Open `http://<desktop-lan-ip>:8765` on the phone, for example `http://192.168.30.117:8765`. The client connects its WebSocket back to the same host automatically, so no separate `VITE_DECKD_WS` setting is needed for this built-client path.
 
-### Design tooling (no daemon required)
+### Demos and previews (no daemon required)
 
-The client can be viewed and design-iterated without a running daemon:
+This is every way to see deckd without a running daemon. Every push to `main` publishes them to GitHub Pages: the homepage at `https://jonocodes.github.io/deckd/`, the client under `app/`, Ladle under `ladle/`. Share a link and nobody needs a checkout or an install. Locally, the client pages run from `cd client && npm run dev` (Vite prints the port, and the client sits at the root there, so drop the `app/`).
 
-- **Demo mode** — append `?demo=<name>` to the client URL (`firefox`, `default`, or `showcase`) to render a fixture deck with the WebSocket disabled. The `showcase` fixture exercises every icon path (Lucide glyphs, Simple Icons brand logos, per-button colour, a no-icon button, and the unknown-icon placeholder). Dev-only; adds no cost when the param is absent. (For forcing a *real* daemon deck with a live backend, use the per-client `?deck=<name>` pin — see [Deck override](#dev-ux-auto-ignore--deck-override).)
-- **Responsive gallery** — `cd client && npm run dev`, then open `/gallery.html`. Renders the real client in phone / large-phone / 7" / 10"-tablet iframes at once, with deck, orientation, and **key hints** selectors — for checking how a deck reads across screen sizes (the key-hints toggle drives each frame's `?showKeyHints=1`). Dev-only entry, not in the production build.
-- **Screenshot page** — `cd client && npm run dev`, then open `/screenshots.html`. Renders curated demo views inside phone-framed iframes, one per configured shot — the source of truth for `just screenshots`. Curate the list by editing the `SHOTS` array in `client/src/Screenshots.tsx`.
-- **Layout explainer** — `cd client && npm run dev`, then open `/help`. The user-facing help page (also mounted standalone as `/help.html`, and from Settings via the **How layout and sizing work** link). It imports the real `client/src/reflow.ts`, so its diagrams cannot disagree with the app; a design mockup with chrome modelling and every settled-fork toggle lives at `docs/mockups/reflow-adr0011.html`.
-- **Ladle** (component workbench) — `cd client && npm run ladle`. Browse `ButtonGrid` / `Icon` / `JogStrip` stories in isolation with width/theme controls, plus `Surface → Device sizes` stories that render the grid in fixed phone/tablet frames (size + orientation) for a quick per-component resolution check. Stories live in `src/*.stories.tsx` (Storybook-compatible CSF).
-- **Lint** — `cd client && npm run lint` (ESLint flat config; `npm run build` still runs `tsc --noEmit`).
+| What | Use it to | Hosted | Local |
+|---|---|---|---|
+| **Homepage** | See what deckd is | [`/deckd/`](https://jonocodes.github.io/deckd/) | `just pages` → `:5290/deckd/` |
+| **Playground** | Click around a live, ticking session | [`app/?playground`](https://jonocodes.github.io/deckd/app/?playground) | `/?playground` |
+| **Demo fixtures** | Look at one deck or view, frozen | [`app/?demo=showcase`](https://jonocodes.github.io/deckd/app/?demo=showcase) | `/?demo=<name>` |
+| **Responsive gallery** | Compare a fixture across phone and tablet sizes | [`app/gallery.html`](https://jonocodes.github.io/deckd/app/gallery.html) | `/gallery.html` |
+| **Screenshot page** | Feed `just screenshots` | [`app/screenshots.html`](https://jonocodes.github.io/deckd/app/screenshots.html) | `/screenshots.html` |
+| **Layout help** | Read how layout and sizing work | [`app/help.html`](https://jonocodes.github.io/deckd/app/help.html) | `/help` (or `/help.html`) |
+| **Ladle** | Work on one component in isolation | [`ladle/`](https://jonocodes.github.io/deckd/ladle/) | `npm run ladle` |
 
+The hosted client with no flag (`app/`) shows "disconnected", because there's no daemon behind the Pages site. Deep links to a view such as `app/trackpad` work, because the site's `404.html` is the client. Old links from before the move (`/deckd/?demo=…`, `?playground`, `?deck=…`) forward to `app/`.
 
+- **Homepage** (`site/`) embeds the client's showcase fixtures (`home`, `gmail`, `meet`, `youtube`, `media`, …) as live phones. Design mockups for it live in `docs/mockups/homepage/` (`just mockups`).
+- **Playground** (`?playground`) is the only *interactive* demo. A mock daemon in the browser (`client/src/playground/`) runs virtual apps (Music, Lights, Firefox) on a clock and speaks the real wire protocol, so presses, media transport, meters and progress bars all go through the real client UI. A strip of chips above the deck stands in for OS focus, which a browser doesn't have. Tapping a chip sends the real `raise_window`, and the mock pushes that app's deck. Music keeps playing while another app is focused.
+- **Demo fixtures** (`?demo=<name>`) render one fixture from `client/src/demo.ts` with the WebSocket disabled. Nothing ticks and presses do nothing.
+  - Deck fixtures: `firefox`, `youtube`, `default`, `showcase`, `meter`, `vlc`, `mpris`, `macro`, `home`, `gmail`, `meet`, `apps`. `showcase` exercises every icon path (Lucide glyphs, Simple Icons brand logos, per-button colour, a no-icon button, the unknown-icon placeholder). `meter` shows seeded CPU%/MEM% values. `apps` shows host app icons (`source: desktop`).
+  - View fixtures open a chrome view over a base deck: `settings`, `trackpad`, `editor`, and `media` (now playing with several players).
+  - The homepage, the gallery, the screenshot page and the Ladle stories all draw from these fixtures, so change the fixture rather than the page.
+  - `?deck=<name>` is a different thing: it pins a client to a *real* deck on a running daemon (see [Deck override](#dev-ux-auto-ignore--deck-override)).
+- **Responsive gallery** (`gallery.html`) shows the real client, via `?demo=`, in phone, large-phone, 7" and 10" tablet iframes side by side. It has selectors for the fixture, orientation, **key hints** (`?showKeyHints=1`) and cell size. Use it to check how a deck reads across screen sizes.
+- **Screenshot page** (`screenshots.html`) shows curated fixtures in phone frames, one per shot. `just screenshots` captures it into `docs/screenshots/`. Curate the list in the `SHOTS` array in `client/src/Screenshots.tsx`.
+- **Layout help** (`help.html`) is the user-facing explainer, also linked from Settings as **How layout and sizing work**. It imports the real `client/src/reflow.ts`, so its diagrams can't disagree with the app. A design mockup with chrome modelling and every settled-fork toggle is at `docs/mockups/reflow-adr0011.html`.
+- **Ladle** is a component workbench. Its Storybook-compatible stories live in `client/src/*.stories.tsx`: `ButtonGrid`, `Editor`, `Icon`, `IconPicker`, `JogStrip`, `ManualControl`, `MediaCell`, `NowPlayingCell`, `ReflowHelp`, `RunningWindowsList`, `Settings`, and `Surface → device sizes` (the grid alone in fixed phone and tablet frames).
 
-### Hosted demo (GitHub Pages)
+**How the hosted site is built.** `scripts/build_pages.sh` assembles it, and `.github/workflows/deploy-pages.yml` runs that script on every push to `main`. The client builds with `VITE_BASE_PATH=/deckd/app/` and Ladle with `--base /deckd/ladle/` so the Project-Pages sub-paths resolve; local dev keeps base `/`. `just build-pages` assembles the same tree into `_site/deckd/`, and `just pages` builds it and serves it on `:5290` with Pages' 404 behaviour. Pull-request branches aren't deployed, so there are no preview links.
 
-Every push to `main` builds the homepage, the client and Ladle and publishes them to GitHub Pages, so the previews above can be browsed with no daemon and no local checkout. `scripts/build_pages.sh` assembles the site, and `just pages` builds and serves the same thing locally on :5290.
-
-- **Homepage** — `https://jonocodes.github.io/deckd/`. Source in `site/`; its phones embed the client's showcase demo decks (`?demo=home`, `gmail`, `meet`, `media`, …).
-- **Live client (demo mode)** — `https://jonocodes.github.io/deckd/app/?demo=showcase` (also `?demo=firefox`, `?demo=home`). Without `?demo=` the client loads and shows "disconnected" since there's no daemon behind the Pages site; the param lets the fixture deck run. Deep links to a view (`app/trackpad`) work too: the site's `404.html` is the client.
-- **Responsive gallery** — `https://jonocodes.github.io/deckd/app/gallery.html`.
-- **Layout help** — `https://jonocodes.github.io/deckd/app/help.html`. The standalone build of the in-app explainer (below); no daemon, no icons.
-- **Ladle stories** — `https://jonocodes.github.io/deckd/ladle/`.
-
-Source: `.github/workflows/deploy-pages.yml`. The client builds with `VITE_BASE_PATH=/deckd/app/` and Ladle with `--base /deckd/ladle/` so the Project-Pages sub-paths resolve; local dev keeps base `/`. `just build-pages` assembles the same tree into `_site/deckd/`; `just pages` builds and serves it.
+**Lint**: `cd client && npm run lint` (ESLint flat config; `npm run build` still runs `tsc --noEmit`).
 
 ### PWA install over HTTPS (Tailscale)
 
@@ -606,7 +613,7 @@ This hits `POST /deck/<name>` on the daemon. The override is **global** (every c
 
 **Deck save/create (write API).** The in-development deck editor writes decks back to disk over two authed HTTP endpoints (plural `/decks`, distinct from the runtime-override `POST /deck/<id>`): `PUT /decks/<id>` performs an idempotent full-snapshot save of an existing deck (URL `<id>` must equal `match[0]`; a `match[0]` change is a `409` rename, use create instead), and `POST /decks` creates a new file on first save, deriving the filename from slugified `match[0]` (`Slack` → `slack.yaml`) with a `409` on id collision. Both return sanitized structured `400`s (`loc`/`msg`/`type` only — no action payloads) and `200` echoing the canonical re-read; writes are atomic (temp + `os.replace`) so `watchfiles` hot-reloads the live deck. See [docs/REFERENCE.md](REFERENCE.md) for the full endpoint table.
 
-**Per-client pin (`?deck=<name>`).** For a demo device you want to park on one view, append `?deck=<name>` to the client URL (e.g. `?deck=tilix`). The client sends the name in its `hello` frame and the daemon pins **just that session** to the named deck, ignoring host focus and unaffected by other clients — so a window switch on the host won't move it. The name is matched case-insensitively against each deck's id, `display_name`, or any `match` token, so `?deck=tilix` finds the deck even though its id is the reverse-DNS token `com.gexperts.Tilix`. The pin lives in the URL (survives reload) and re-resolves from disk on `deckctl reload`; an unknown name is ignored and the client follows focus as normal. This is the backend-driven counterpart to the backend-free `?demo=<name>` fixtures (see [Design tooling](#design-tooling-no-daemon-required)) — `?deck=` serves the *real* daemon decks, so it never drifts.
+**Per-client pin (`?deck=<name>`).** For a demo device you want to park on one view, append `?deck=<name>` to the client URL (e.g. `?deck=tilix`). The client sends the name in its `hello` frame and the daemon pins **just that session** to the named deck, ignoring host focus and unaffected by other clients — so a window switch on the host won't move it. The name is matched case-insensitively against each deck's id, `display_name`, or any `match` token, so `?deck=tilix` finds the deck even though its id is the reverse-DNS token `com.gexperts.Tilix`. The pin lives in the URL (survives reload) and re-resolves from disk on `deckctl reload`; an unknown name is ignored and the client follows focus as normal. This is the backend-driven counterpart to the backend-free `?demo=<name>` fixtures (see [Demos and previews](#demos-and-previews-no-daemon-required)) — `?deck=` serves the *real* daemon decks, so it never drifts.
 
 ### Smoke test
 
@@ -1072,7 +1079,7 @@ Net result: a cross-platform `cpu_temp` source would either silently fail on mos
 
 The meter rendering is a regular cell in the grid (it picks up `--content-scale` and the user's Button-size preference like every other widget). When the daemon hasn't pushed a value yet, the cell renders "—" with the bar at 0% and a dashed border so you can see at a glance it's waiting.
 
-Try it without sensors: `?demo=meter` loads a backend-free demo with seeded CPU%/MEM% values so you can see the meter without a running daemon.
+Try it without sensors: `?demo=meter` loads a backend-free [demo fixture](#demos-and-previews-no-daemon-required) with seeded CPU%/MEM% values so you can see the meter without a running daemon.
 
 ## Under the hood
 
