@@ -78,6 +78,7 @@ type Props = {
 };
 
 type Health = {
+  version?: string;
   hostname?: string;
   os?: string;
   desktop?: string;
@@ -131,6 +132,7 @@ export function Settings({
   const health = useDaemonHealth();
 
   const rows: Array<[string, string]> = [
+    ["deckd version", health?.version ?? "…"],
     ["Host", health?.hostname ?? "…"],
     ["Host OS", health?.os ?? "…"],
     ["Desktop", health?.desktop ?? "…"],

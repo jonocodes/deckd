@@ -48,3 +48,4 @@ client/.tls/
 client/e2e/.daemon.log
 client/test-results/
 client/playwright-report/
+daemon/deckd/_version.py

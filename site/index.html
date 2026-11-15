@@ -2,6 +2,11 @@
 <html lang="en" data-app="app/">
 <head>
 <meta charset="utf-8">
+<script>
+  // The client used to live at the site root. Forward old shared links
+  // (/deckd/?demo=showcase, ?playground, ...) to app/, where it lives now.
+  if (/[?&](demo|playground|deck)\b/.test(location.search)) location.replace("app/" + location.search + location.hash);
+</script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>deckd — your phone becomes the buttons for whatever's on screen</title>
 <meta name="description" content="deckd turns any phone, tablet or browser into a touch deck that follows the focused app on your computer — including websites like Gmail, YouTube and Google Meet. Open source, for Linux and macOS.">

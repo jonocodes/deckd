@@ -11,6 +11,7 @@ from typing import Any, Callable
 
 from aiohttp import web
 
+from . import __version__
 from .auth import PasswordError, default_password_path, load_or_create_password
 from .input import (
     KeySink,
@@ -134,6 +135,7 @@ def _build_sinks() -> tuple[object | None, ScrollSink, KeySink]:
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="deckd")
+    parser.add_argument("--version", action="version", version=f"deckd {__version__}")
     parser.add_argument(
         "--bind",
         action="append",

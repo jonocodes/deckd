@@ -117,6 +117,7 @@ graph TB
 | **Wire protocol (Python)** | [daemon/deckd/protocol.py](../daemon/deckd/protocol.py) | Executable contract: all `ServerMessage` and `ClientMessage` types. |
 | **Wire protocol (TypeScript)** | [client/src/protocol.ts](../client/src/protocol.ts) | TypeScript mirror of the wire protocol. |
 | **Deck schema** | [daemon/deckd/decks.py](../daemon/deckd/decks.py) | Pydantic models for Deck, Widget, Action, Icon, MediaHttp. |
+| **Desktop app icons** | [daemon/deckd/desktop_icons.py](../daemon/deckd/desktop_icons.py) | `source: desktop` resolver: `.desktop` id → `Icon=` → hicolor/pixmaps file (ADR-0014). |
 | **HTTP/WS routes** | [daemon/deckd/server.py](../daemon/deckd/server.py) | All HTTP endpoints and WebSocket dispatch. |
 | **Platform backend** | [daemon/deckd/platform.py](../daemon/deckd/platform.py) | `PlatformBackend` Protocol: focus watching, input injection, sensor sources. |
 | **Daemon CLI** | [daemon/deckd/__main__.py](../daemon/deckd/__main__.py) | Argparse: --decks-dir, --client-dist, --bind, --no-auth, --verbose. |

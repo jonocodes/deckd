@@ -27,8 +27,8 @@ from deckd.macos_app import (  # noqa: E402
 )
 
 # ``DECKD_VERSION`` (set by the release workflow from the git tag) wins;
-# otherwise pyproject's ``version``.
-version = bundle_version(ROOT / "pyproject.toml")
+# otherwise the installed package's setuptools-scm version (ADR-0013).
+version = bundle_version()
 
 # App icon: the committed ``deckd.icns`` (built from client/public/icon.svg by
 # ``just icons``). ``DECKD_ICON`` overrides it; otherwise the default
@@ -57,6 +57,7 @@ a = Analysis(
     datas=datas,
     hiddenimports=[
         "deckd.macos_app",
+        "deckd._version",  # setuptools-scm, written at install (ADR-0013)
         "deckd.platform_macos",
         "objc",
         "AppKit",

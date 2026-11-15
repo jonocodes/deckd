@@ -7,6 +7,7 @@ import { EditorCanvas } from "./EditorCanvas";
 import { EditorPalette } from "./EditorPalette";
 import type { PaletteKind } from "./EditorPalette";
 import { PropertiesPanel } from "./PropertiesPanel";
+import { getAuthHeaders } from "./http-auth";
 
 /** Mint a collision-free id for a new widget: ``<kind>-<n>`` with the
  * lowest free ``n`` (#87: "``button-<n>`` minted by the palette"). The id
@@ -48,16 +49,6 @@ function resolveBaseUrl(): string {
     }
   }
   return window.location.origin;
-}
-
-function getAuthHeaders(): Record<string, string> {
-  try {
-    const pw = window.localStorage.getItem("deckd.password") ?? "";
-    if (!pw) return {};
-    return { "X-Deckd-Password": pw };
-  } catch {
-    return {};
-  }
 }
 
 interface EditorProps {

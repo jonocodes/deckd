@@ -263,6 +263,14 @@ button:focus-visible {
   color: #fff;
 }
 
+/* A full-colour app icon (``source: desktop``) already carries its own
+   colours and shape, so it skips the disc. */
+.app-badge-themed img.app-badge-icon[data-icon-source="desktop"] {
+  padding: 0;
+  border-radius: 0;
+  background: none;
+}
+
 .app-badge-name {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -542,6 +550,13 @@ button:focus-visible {
 .cell-button.cell-icon-only .icon {
   width: calc(clamp(20px, 52cqmin, 112px) * var(--content-scale));
   height: calc(clamp(20px, 52cqmin, 112px) * var(--content-scale));
+}
+
+/* ``source: desktop`` (issue #187): the host app's own full-colour icon, an
+   <img> rather than an svg glyph. It ignores ``currentColor`` by design; keep
+   its aspect ratio inside whatever box the surface sizes icons to. */
+img[data-icon-source="desktop"] {
+  object-fit: contain;
 }
 
 /* Unresolved / unknown-source icon: a dashed placeholder box (a <span>, not an
@@ -3536,9 +3551,14 @@ select.prop-field-input {
   flex-shrink: 0;
 }
 
-.icon-picker-item-glyph svg {
+.icon-picker-item-glyph svg,
+.icon-picker-item-glyph img {
   width: 100%;
   height: 100%;
+}
+
+.icon-picker-item-glyph img {
+  object-fit: contain;
 }
 
 .icon-picker-item-name {

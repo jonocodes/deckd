@@ -87,4 +87,16 @@ _Supersedes: [0010](0010-grid-reflow.md) — keeps the ordered-list model, repla
 
 [0012-linux-distribution-appimage.md](0012-linux-distribution-appimage.md)
 
-AppImage is the primary Linux artifact (unsandboxed, distro-agnostic); the root-only uinput step is a first-run `pkexec`/`sudo` helper shared by all channels. Flatpak/Snap are rejected — a sandbox cannot write the udev rule, see `/dev/uinput`, reach the session bus unfiltered, or install the compositor plugin. deb/rpm remain a later thin wrap of the same relocatable tree.
+AppImage is the primary Linux artifact (unsandboxed, distro-agnostic); the root-only uinput step is a first-run `pkexec`/`sudo` helper shared by all channels. Flatpak/Snap are rejected — a sandbox cannot write the udev rule, see `/dev/uinput`, reach the session bus unfiltered, or install the compositor plugin. deb/rpm remain a later thin wrap of the same relocatable tree. Amended 2026-11-12: that tree also ships as a tarball (installed to `~/.local/opt/deckd`, run as a systemd user service), and a GUI launch opens the surface in the browser.
+
+## 0013 — Versioning: CalVer `vYYYYMMDD.N`, git tag as the only source
+
+[0013-calver-versioning.md](0013-calver-versioning.md)
+
+Releases are tagged `vYYYYMMDD.N` (the UTC date as one integer; N counts releases that day from 0; rcs take `-rcN` and publish as prereleases). `setuptools-scm` derives every version from the tag — no hard-coded copies, no bump commits; the Nix flake passes `0+git.<date>.g<rev>`. The version is visible in `/health`, `/diag`, `deckd --version`, `deckctl`, and the client settings. `just release` computes and pushes the next tag.
+
+## 0014 — Opt-in `desktop` icon source: the daemon serves host app icons
+
+[0014-desktop-app-icon-source.md](0014-desktop-app-icon-source.md)
+
+`icon: { source: desktop, name: <desktop-id> }` shows an app's own full-colour icon. The daemon resolves it from the host's `.desktop` file and `hicolor` theme (pure Python; Flatpak and Nix dirs included) and serves it at `/desktop-apps/<id>/icon`. It serves only indexed ids, with a sandboxing CSP. Opt-in only: the daemon never applies a host icon automatically. Partially reverses ADR-0007's no-`.desktop` stance and amends ADR-0006's monochrome rule.

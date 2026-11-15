@@ -8,22 +8,22 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Single Python version (not a matrix) — CI runs the declared floor,
       # 3.11 (pyproject requires-python >=3.11), so the minimum-supported
       # version is the one actually tested. The code uses no version-specific
       # features, so testing the floor covers the pinned dev version too.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
-          node-version: "20"
+          node-version: "24"
 
       # Match `just setup-linux` (.[dev,uinput,dbus]) so the pyright typecheck
       # resolves the daemon's optional-backend imports (dbus_fast, evdev).
@@ -110,9 +110,9 @@ jobs:
     runs-on: macos-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
 
@@ -127,10 +127,10 @@ jobs:
   # daemon on loopback (health, bundled client, bundled decks). Mirrors
   # `just nix-check` locally; see nix/tests/.
   nix:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: cachix/install-nix-action@v31
 
@@ -142,12 +142,12 @@ jobs:
   # actually get on NixOS. The 3.11 floor is covered by the main `test`
   # job above; this job is the behavioural half of the 3.12 story.
   test-py312:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 

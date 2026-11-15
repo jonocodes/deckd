@@ -54,6 +54,9 @@ export default defineConfig({
       // serves is the row's current ``Metadata.mpris:artUrl`` —
       // never a client-supplied path.
       "/mpris": daemonUpstream,
+      // ``source: desktop`` app icons + the picker's installed-app list
+      // (issue #187).
+      "/desktop-apps": daemonUpstream,
     },
   },
   build: {
