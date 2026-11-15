@@ -7,12 +7,12 @@
  * the running-windows list, the meter / media stores) is the real UI.
  *
  * Several virtual apps run at once, each ticking on one clock. Switching
- * between them reuses the *production* affordance: the running-programs
- * chrome list. Tapping a row sends ``raise_window`` (as a real client does),
- * and the mock — like the daemon's focus watcher — resolves the newly
- * focused app and pushes its deck. Background apps keep ticking, so the
- * music plays on (and the chrome media dot stays lit) while you're on
- * another deck.
+ * between them sends ``raise_window`` (as a real client does) — from the
+ * running-programs chrome list, or from the Playground app-switcher strip
+ * (#152) that stands in for OS focus — and the mock, like the daemon's
+ * focus watcher, resolves the newly focused app and pushes its deck.
+ * Background apps keep ticking, so the music plays on (and the chrome
+ * media dot stays lit) while you're on another deck.
  *
  * Determinism is kept where it's cheap (fixed tick dt, no wall-clock / RNG)
  * so this can later double as a test fixture (epic #157, foundation #150).

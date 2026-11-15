@@ -145,6 +145,18 @@ The original inspiration was the Stream Deck, and I like all these projects. I w
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the component breakdown and key flows.
 
+## Try it in the browser
+
+Nothing to install for these. They run in the browser with no daemon behind them:
+
+- **[Homepage](https://jonocodes.github.io/deckd/)**: what deckd is, with live phones running the demo decks.
+- **[Playground](https://jonocodes.github.io/deckd/app/?playground)**: a live session with virtual apps (music, lights, a browser) on a ticking clock, and a strip of chips that switches the focused app. Presses and media controls go through the real client UI.
+- **[Demo fixtures](https://jonocodes.github.io/deckd/app/?demo=showcase)**: one deck or view, frozen (`?demo=showcase`, `gmail`, `youtube`, `trackpad`, ...).
+- **[Responsive gallery](https://jonocodes.github.io/deckd/app/gallery.html)**: a fixture in phone and tablet frames side by side.
+- **[Ladle](https://jonocodes.github.io/deckd/ladle/)**: individual components, for development.
+
+The client pages also run locally from `cd client && npm run dev`, and `just pages` serves the whole site. The full list, with every fixture name, is in the guide under [Demos and previews](docs/GUIDE.md#demos-and-previews-no-daemon-required).
+
 ## Getting started
 
 deckd needs Python 3.11+ and Node 22+ (CI and the flox environment use Node 24 LTS). CI tests the 3.11 floor and the 3.12 interpreter the Nix package ships. In brief:

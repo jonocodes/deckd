@@ -46,7 +46,9 @@ This document is the primary navigation map for AI agents (and human developers)
 │       └── server.py       # aiohttp HTTP + WebSocket server, main app assembly
 ├── client/                 # TypeScript/React web frontend
 │   ├── index.html          # SPA entry point
-│   ├── gallery.html        # Responsive device gallery
+│   ├── gallery.html        # Responsive device gallery (see GUIDE § Demos and previews)
+│   ├── screenshots.html    # Phone-framed shots for `just screenshots`
+│   ├── help.html           # Standalone layout-help page
 │   ├── vite.config.ts      # Vite config: HTTPS, proxy, multi-page, chunks
 │   └── src/
 │       ├── main.tsx        # React root
@@ -66,7 +68,9 @@ This document is the primary navigation map for AI agents (and human developers)
 │       ├── PasswordGate.tsx  # Auth password entry screen
 │       ├── Icon.tsx        # Icon component: Lucide + Simple Icons
 │       ├── Tooltip.tsx     # Tooltip component
-│       ├── demo.ts         # Demo/fixture decks (backend-free mode)
+│       ├── demo.ts         # Demo/fixture decks (`?demo=`, backend-free)
+│       ├── playground/     # `?playground`: in-browser MockDaemon, virtual apps, app-switcher strip
+│       ├── *.stories.tsx   # Ladle component stories
 │       ├── settings-store.ts  # Per-device settings in localStorage
 │       ├── media-store.ts  # VLC media state store
 │       ├── meter-store.ts  # Live meter sensor state store
