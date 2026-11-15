@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { icons as lucideIcons } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Icon as IconRef } from "./protocol";
-import { loadSimpleIcons } from "./icons";
+import { desktopIconUrl, loadSimpleIcons } from "./icons";
 
 /** Renders a widget ``{source, name}`` icon reference by dispatching on
  * ``source`` to a bundled icon set (ADR-0006). The registry of known
@@ -13,7 +13,10 @@ import { loadSimpleIcons } from "./icons";
  * it renders synchronously. Simple Icons (brand logos, ~3450 icons, only
  * occasionally used) is loaded lazily as a single on-demand chunk the first
  * time a deck references one — so its weight is never paid unless a brand
- * logo is actually used. */
+ * logo is actually used.
+ *
+ * ``desktop`` (issue #187, opt-in) is the host app's own full-colour icon,
+ * served by the daemon as an image — it does not inherit ``currentColor``. */
 
 const lucideByName = lucideIcons as Record<string, LucideIcon>;
 
@@ -75,6 +78,25 @@ function SimpleBrandIcon({ icon, className }: { icon: IconRef; className?: strin
   return <MissingIcon icon={icon} className={className} />;
 }
 
+/** A host app's own icon (``source: desktop``), served by the daemon from the
+ * host's icon theme. Falls back to the miss placeholder when the id doesn't
+ * resolve — e.g. a deck copied to a machine without that app installed. */
+function DesktopAppIcon({ icon, className }: { icon: IconRef; className?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return <MissingIcon icon={icon} className={className} />;
+  return (
+    <img
+      className={className}
+      data-icon-source="desktop"
+      src={desktopIconUrl(icon.name)}
+      alt=""
+      aria-hidden
+      draggable={false}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export function Icon({ icon, className }: { icon: IconRef; className?: string }) {
   if (icon.source === "lucide") {
     const Glyph = lucideByName[toPascal(icon.name)];
@@ -83,6 +105,10 @@ export function Icon({ icon, className }: { icon: IconRef; className?: string })
   }
   if (icon.source === "simple-icons") {
     return <SimpleBrandIcon icon={icon} className={className} />;
+  }
+  if (icon.source === "desktop") {
+    // Keyed by name so a changed id retries rather than staying "failed".
+    return <DesktopAppIcon key={icon.name} icon={icon} className={className} />;
   }
   return <MissingIcon icon={icon} className={className} />;
 }

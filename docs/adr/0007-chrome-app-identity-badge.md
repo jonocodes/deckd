@@ -46,6 +46,8 @@ shape to destructure.
 
 ### The daemon does not resolve app icons from `.desktop` files
 
+> **Partially reversed by [ADR-0014](0014-desktop-app-icon-source.md)** (2026-11-14): a deck author may now *opt in* to `icon: { source: desktop, … }`, which the daemon resolves and serves. The daemon still never derives or applies an icon automatically.
+
 Issue #41's "Further Notes" floated daemon-side `.desktop` parsing to extract
 the focused app's icon. **Out of scope.** It would make the daemon an asset
 resolver, would require either serving the icon bytes or shipping a path the
