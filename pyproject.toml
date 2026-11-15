@@ -18,7 +18,8 @@ license = "GPL-3.0-or-later"
 license-files = ["LICENSE"]
 name = "deckd"
 requires-python = ">=3.11"
-version = "0.0.1"
+# The version is the git tag (ADR-0013: CalVer, vYYYYMMDD.N), via setuptools-scm.
+dynamic = ["version"]
 
 [project.optional-dependencies]
 dbus = [
@@ -32,6 +33,8 @@ dbus = [
 ]
 dev = [
   "websockets>=13",
+  # `just version` reads the version live from git (ADR-0013).
+  "setuptools-scm>=8",
   "pytest>=8",
   "pytest-asyncio>=0.23", # Step 1 of the verification ladder (`just test-all`). Declared so the  # typecheck is reproducible from a fresh `just setup` on either platform
   # rather than depending on an ad-hoc global install.
@@ -67,7 +70,24 @@ deckd-dev = "deckd.dev:main"
 
 [build-system]
 build-backend = "setuptools.build_meta"
-requires = ["setuptools>=68", "wheel"]
+requires = ["setuptools>=68", "setuptools-scm>=8", "wheel"]
+
+[tool.setuptools_scm]
+# Written at install time and frozen into the app bundles; deckd.__version__
+# reads it. Gitignored — never committed.
+version_file = "daemon/deckd/_version.py"
+# On a release tag: exactly the tag (20261114.0). After it: 20261114.0.post1.dev3+g<sha>
+# — "after this release", without guessing what the next one will be called.
+version_scheme = "no-guess-dev"
+# A source tree with no git metadata (a tarball, a sandboxed build without a
+# pretend version) still installs.
+fallback_version = "0+unknown"
+
+[tool.setuptools_scm.scm.git]
+# CalVer release tags only (v20261114.0, v20261201.0-rc1): skips non-version tags
+# such as verify/61-touch-targets and the old v0.0.0-* rehearsal tags, which
+# would otherwise be unparseable or sort as the "latest" release.
+describe_command = ["git", "describe", "--dirty", "--tags", "--long", "--match", "v[1-9][0-9][0-9][0-9][0-1][0-9][0-3][0-9].*"]
 
 [tool.setuptools.packages.find]
 include = ["deckd*"]

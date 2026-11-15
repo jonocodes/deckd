@@ -452,6 +452,91 @@ def test_build_diag_snapshot_omits_secrets(monkeypatch: pytest.MonkeyPatch) -> N
     assert "password" not in snap["auth"]
 
 
+def _focus_diag(
+    *, backend: object | None, task_alive: bool | None, started_ok: bool | None
+) -> dict:
+    """Build a ``/diag`` focus block against a minimal fake server.
+
+    ``task_alive`` None means the watcher task was never created."""
+
+    class _FakeServer:
+        host = "127.0.0.1"
+        port = 8765
+        decks_dir = "/decks"
+        overlay_dir = None
+        password = None
+        decks = type("S", (), {"decks": []})()
+        _current_app_id = "default"
+        _current_deck = None
+        _current_error = None
+        _sessions: set = set()
+        _subscribed_sources: set = set()
+        sensors = None
+        scroll = None
+        mpris = None
+        _decks_task = None
+        _sensor_task = None
+        _media_task = None
+        _focus_platform = None
+        _last_focus = None
+        key_sink = None
+
+    server = _FakeServer()
+    server.focus_backend = backend
+    server._focus_started_ok = started_ok
+
+    async def run() -> dict:
+        task = None
+        if task_alive is not None:
+            task = asyncio.create_task(asyncio.sleep(3600 if task_alive else 0))
+            if not task_alive:
+                await task
+        server._focus_task = task
+        try:
+            return await build_diag_snapshot(server=server, started_at=0.0)
+        finally:
+            if task is not None:
+                task.cancel()
+
+    return asyncio.run(run())["focus"]
+
+
+class _Backend:
+    _focus_query_error: str | None = None
+
+
+def test_diag_focus_unhealthy_when_watcher_task_died() -> None:
+    """Regression: a dead focus task used to leave ``started_ok: true``
+    as the only focus signal, hiding that context switching had stopped."""
+    focus = _focus_diag(backend=_Backend(), task_alive=False, started_ok=True)
+    assert focus["healthy"] is False
+
+
+def test_diag_focus_unhealthy_while_queries_fail() -> None:
+    backend = _Backend()
+    backend._focus_query_error = "ServiceUnknown: The name is not activatable"
+    focus = _focus_diag(backend=backend, task_alive=True, started_ok=True)
+    assert focus["healthy"] is False
+    assert focus["query_error"] == "ServiceUnknown: The name is not activatable"
+
+
+def test_diag_focus_unhealthy_when_backend_failed_to_start() -> None:
+    focus = _focus_diag(backend=_Backend(), task_alive=False, started_ok=False)
+    assert focus["healthy"] is False
+
+
+def test_diag_focus_healthy_when_watcher_running_cleanly() -> None:
+    focus = _focus_diag(backend=_Backend(), task_alive=True, started_ok=True)
+    assert focus["healthy"] is True
+    assert focus["query_error"] is None
+
+
+def test_diag_focus_health_is_null_when_focus_disabled() -> None:
+    """``--no-focus``: there is nothing to be unhealthy."""
+    focus = _focus_diag(backend=None, task_alive=None, started_ok=None)
+    assert focus["healthy"] is None
+
+
 # ---------------------------------------------------------------------------
 # JSON logging formatter
 # ---------------------------------------------------------------------------

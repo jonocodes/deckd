@@ -7,6 +7,7 @@ import { EditorCanvas } from "./EditorCanvas";
 import { EditorPalette } from "./EditorPalette";
 import type { PaletteKind } from "./EditorPalette";
 import { PropertiesPanel } from "./PropertiesPanel";
+import { getAuthHeaders } from "./http-auth";
 
 /** Mint a collision-free id for a new widget: ``<kind>-<n>`` with the
  * lowest free ``n`` (#87: "``button-<n>`` minted by the palette"). The id
@@ -48,16 +49,6 @@ function resolveBaseUrl(): string {
     }
   }
   return window.location.origin;
-}
-
-function getAuthHeaders(): Record<string, string> {
-  try {
-    const pw = window.localStorage.getItem("deckd.password") ?? "";
-    if (!pw) return {};
-    return { "X-Deckd-Password": pw };
-  } catch {
-    return {};
-  }
 }
 
 interface EditorProps {
@@ -130,10 +121,15 @@ function buildCreationForm(
 }
 
 export function Editor({ deck: activeDeck, send, onExit, mockDecks }: EditorProps) {
-  const initialSelectedId =
-    (activeDeck && activeDeck.app !== EDITOR_VIEW_ID)
-      ? activeDeck.app
-      : (mockDecks ? (mockDecks.find((entry) => entry.id !== EDITOR_VIEW_ID)?.id ?? mockDecks[0]?.id ?? null) : null);
+  const activeId = activeDeck && activeDeck.app !== EDITOR_VIEW_ID ? activeDeck.app : null;
+  // With mock decks (demo mode) the active deck's ``app`` may not be one of
+  // the entries (``"Firefox (demo)"``); fall back to the first real deck so
+  // the canvas isn't left on "No deck selected".
+  const initialSelectedId = mockDecks
+    ? (mockDecks.some((entry) => entry.id === activeId)
+      ? activeId
+      : (mockDecks.find((entry) => entry.id !== EDITOR_VIEW_ID)?.id ?? mockDecks[0]?.id ?? null))
+    : activeId;
   const [decks, setDecks] = useState<DeckEntry[]>(mockDecks ?? []);
   // ``initialSelectedId``'s ternary resolves to ``string | null | undefined``
   // (the ``mockDecks?.find(...)?.id`` branch is ``undefined`` when no

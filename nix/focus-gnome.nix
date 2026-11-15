@@ -1,7 +1,7 @@
 {
   lib,
   stdenv,
-  version ? "0.0.1",
+  version ? "0+unknown",
 }:
 stdenv.mkDerivation {
   pname = "deckd-focus-gnome";

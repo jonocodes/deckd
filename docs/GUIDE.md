@@ -13,9 +13,10 @@ endpoints see [REFERENCE.md](REFERENCE.md); for the system architecture see
 - [Web-app decks](#web-app-decks)
 - [Running deckd](#running-deckd) — install, macOS, KDE Plasma Wayland, phone/tablet testing
 - [Design tooling](#design-tooling-no-daemon-required), [hosted demo](#hosted-demo-github-pages), [PWA install](#pwa-install-over-https-tailscale)
-- Client features — [chrome](#client-chrome), [manual control](#manual-control-mode), [deck editor](#deck-editor), [app badge](#chrome-app-badge), [tuning](#client-tuning), [accessibility](#accessibility)
+- Client features — [chrome](#client-chrome), [manual control](#manual-control-mode), [deck editor](#deck-editor), [app badge](#chrome-app-badge), [app icons](#app-icons-source-desktop), [tuning](#client-tuning), [accessibility](#accessibility)
 - [uinput permissions](#uinput-permissions), [live reload](#live-reload), [focus watcher](#focus-watcher), [dev UX](#dev-ux-auto-ignore--deck-override), [smoke test](#smoke-test), [CLI](#cli)
 - [Running in production](#running-in-production)
+- [Security model](#security-model) — what the password gates, what isn't encrypted, where to expose the daemon
 - [Configuration](#configuration) — decks, actions, auth, bind scope, overlays, live widgets
 - [Under the hood](#under-the-hood), [why a venv](#why-a-venv-not-a-nix-shell)
 - Media surfaces — [VLC media widgets](#vlc-media-widgets), [now playing](#now-playing), [running programs list](#running-programs-list-stage-2-of-the-switcher-design)
@@ -43,9 +44,11 @@ match:
 When the focused app is a browser, a `title:` match outranks a generic
 browser deck (so `youtube.yaml` wins over `firefox.yaml`), and falls back to
 the browser deck when no site matches. The buttons are ordinary actions —
-the shipped `decks/youtube.yaml` and `decks/netflix.yaml` drive each site's
-own keyboard shortcuts (`key: k`, `key: s`, …), so no special capability is
-needed beyond a deck file.
+the shipped `decks/youtube.yaml`, `decks/netflix.yaml`, `decks/google-meet.yaml`
+and `decks/gmail.yaml` drive each site's own keyboard shortcuts (`key: k`,
+`key: s`, …), so no special capability is needed beyond a deck file. (Gmail
+ships with its shortcuts off: turn on Settings → General → "Keyboard
+shortcuts on".)
 
 The same idea also turns a site into an **on-screen musical keyboard**:
 `decks/musicca.yaml` matches `title:*Musicca*` and fires the letter/number
@@ -69,7 +72,7 @@ Reliable URL/domain matching is planned via a browser extension
 
 ## Running deckd
 
-You need Python 3.11+ and Node 18+. Dependencies are managed with `[uv](https://docs.astral.sh/uv/)`:
+You need Python 3.11+ and Node 22+ (CI and the flox environment use Node 24 LTS). Dependencies are managed with `[uv](https://docs.astral.sh/uv/)`:
 
 ```sh
 # 1. Install uv (one-time)
@@ -215,14 +218,15 @@ The client can be viewed and design-iterated without a running daemon:
 
 ### Hosted demo (GitHub Pages)
 
-Every push to `main` builds the client and Ladle and publishes them to GitHub Pages, so the previews above can be browsed with no daemon and no local checkout:
+Every push to `main` builds the homepage, the client and Ladle and publishes them to GitHub Pages, so the previews above can be browsed with no daemon and no local checkout. `scripts/build_pages.sh` assembles the site, and `just pages` builds and serves the same thing locally on :5290.
 
-- **Live client (demo mode)** — `https://jonocodes.github.io/deckd/?demo=showcase` (also `?demo=firefox`, `?demo=default`). Without `?demo=` the client loads and shows "disconnected" since there's no daemon behind the Pages site; the param lets the fixture deck run.
-- **Responsive gallery** — `https://jonocodes.github.io/deckd/gallery.html`.
-- **Layout help** — `https://jonocodes.github.io/deckd/help.html`. The standalone build of the in-app explainer (below); no daemon, no icons.
+- **Homepage** — `https://jonocodes.github.io/deckd/`. Source in `site/`; its phones embed the client's showcase demo decks (`?demo=home`, `gmail`, `meet`, `media`, …).
+- **Live client (demo mode)** — `https://jonocodes.github.io/deckd/app/?demo=showcase` (also `?demo=firefox`, `?demo=home`). Without `?demo=` the client loads and shows "disconnected" since there's no daemon behind the Pages site; the param lets the fixture deck run. Deep links to a view (`app/trackpad`) work too: the site's `404.html` is the client.
+- **Responsive gallery** — `https://jonocodes.github.io/deckd/app/gallery.html`.
+- **Layout help** — `https://jonocodes.github.io/deckd/app/help.html`. The standalone build of the in-app explainer (below); no daemon, no icons.
 - **Ladle stories** — `https://jonocodes.github.io/deckd/ladle/`.
 
-Source: `.github/workflows/deploy-pages.yml`. The Vite build uses `VITE_BASE_PATH=/deckd/` and the Ladle build uses `--base /deckd/ladle/` so the Project-Pages sub-path resolves; local dev keeps base `/`. Reproduce the deploy bundle locally with `just build-pages` (output: `client/dist/`) and serve it with `npx serve client/dist`.
+Source: `.github/workflows/deploy-pages.yml`. The client builds with `VITE_BASE_PATH=/deckd/app/` and Ladle with `--base /deckd/ladle/` so the Project-Pages sub-paths resolve; local dev keeps base `/`. `just build-pages` assembles the same tree into `_site/deckd/`; `just pages` builds and serves it.
 
 ### PWA install over HTTPS (Tailscale)
 
@@ -310,7 +314,7 @@ The helper strip is a 4×2 keypad — the four arrows on the top row, and `esc` 
 - **Focus guard.** Injected keystrokes land on whatever window has desktop focus. If that's the deckd client itself (you opened the client on the same machine as the daemon), the daemon drops `type` / `key` messages rather than feed the client's own input back into itself.
 - **Physical keyboards.** A Bluetooth keyboard paired to the phone works through the `keydown` path with no extra setup.
 
-> ⚠️ **Security.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. Every client authenticates with a shared password (see [Client auth](#client-auth)) unless the daemon is started with `--no-auth`. The password is a single shared secret over a plaintext WebSocket, not per-user auth or transport encryption — still expose the daemon (`--bind 0.0.0.0`) only on a network you trust, ideally a Tailscale tailnet, and put TLS in front of it if the link isn't already private. (Auth is enforced from the `hello` message, so it holds up behind a proxy — a TLS terminator or the Vite dev proxy — without any `X-Forwarded-For` trust.)
+> ⚠️ **Security.** The keyboard passthrough is a remote text-injection primitive — with a terminal focused it is arbitrary command execution. Every client authenticates with a shared password (see [Client auth](#client-auth)) unless the daemon is started with `--no-auth`. The password is a single shared secret over a plaintext WebSocket, not per-user auth or transport encryption — still expose the daemon (`--bind 0.0.0.0`) only on a network you trust, ideally a Tailscale tailnet, and put TLS in front of it if the link isn't already private. See [Security model](#security-model). (Auth is enforced from the `hello` message, so it holds up behind a proxy — a TLS terminator or the Vite dev proxy — without any `X-Forwarded-For` trust.)
 
 
 
@@ -320,7 +324,7 @@ Open **settings** and tap the prominent **Edit deck** button at the top to build
 
 - **Palette** — pick a widget kind (button, jogstrip, meter, stats, media, blank, …) to append it to the deck.
 - **Reflow canvas** — widgets render exactly as the live deck does (ADR-0010, ordered-list reflow). Drag to reorder, adjust a widget's `size` span, and toggle the deck's `overflow` mode; the canvas repacks as you go.
-- **Properties panel** — edit the selected widget's `label`, `icon` (via a searchable Lucide / Simple Icons picker), `color`, and its `action` or `macro`. `color` offers a native colour swatch plus one-tap presets, alongside a free-text field that still accepts any CSS colour string; values the swatch can't hold (named colours, `hsl(...)`, `#RRGGBBAA`) show as a read-only preview and stay editable as text. Clearing the field unsets `color`. Fields the editor doesn't model yet are passed through opaquely, so editing a deck never drops hand-authored config.
+- **Properties panel** — edit the selected widget's `label`, `icon` (via a searchable picker with Lucide, Brands (Simple Icons) and Apps tabs; Apps lists the host's installed apps, see [App icons](#app-icons-source-desktop)), `color`, and its `action` or `macro`. `color` offers a native colour swatch plus one-tap presets, alongside a free-text field that still accepts any CSS colour string; values the swatch can't hold (named colours, `hsl(...)`, `#RRGGBBAA`) show as a read-only preview and stay editable as text. Clearing the field unsets `color`. Fields the editor doesn't model yet are passed through opaquely, so editing a deck never drops hand-authored config.
 - **New decks** — create a deck from scratch, setting its `match:` list; the filename is derived from the primary match token on first save.
 
 Saving writes back to disk over the authed write API (`PUT`/`POST /decks`, below), preserving YAML comments and widget identity; `watchfiles` then hot-reloads every connected client. The editor is in active development — most YAML is round-trippable today, but hand-editing remains the escape hatch for anything it doesn't yet surface.
@@ -333,7 +337,7 @@ The bottom strip's app badge carries the focused app's brand identity, sourced f
 - `theme: "#ff7139"` — any CSS colour string (hex, `hsl(...)`, named); tints the badge border and a thin accent stripe along the top edge of the bottom chrome, so the focused app reads at a glance from across the room.
 - `icon: { source: simple-icons, name: firefox }` — the same `{source, name}` dispatch widgets already use (ADR-0006); reuses the bundled Lucide + Simple Icons sets, so badging a new app is a YAML edit with no client/daemon rebuild.
 
-A deck with none of these keeps the chrome unchanged (the badge is just the bold app name). The daemon never resolves icons from `.desktop` files or the web — presentation stays in user-owned config, exactly like per-widget `color`. See ADR-0007 for the full rationale.
+A deck with none of these keeps the chrome unchanged (the badge is just the bold app name). The daemon never *derives* an icon on its own, from `.desktop` files or the web. Presentation stays in user-owned config, exactly like per-widget `color`. A deck can explicitly opt in to the app's own icon with `source: desktop` (see [App icons](#app-icons-source-desktop)). See ADR-0007 and ADR-0014 for the full rationale.
 
 ```yaml
 match:
@@ -348,6 +352,27 @@ widgets:
 ```
 
 
+
+### App icons (`source: desktop`)
+
+Besides the bundled Lucide glyphs and Simple Icons logos, any widget or badge `icon` can name an installed app's own full-colour icon, the one your dock shows:
+
+```yaml
+icon:
+  source: desktop
+  name: com.gexperts.Tilix   # the .desktop file's basename
+```
+
+**This is opt-in only.** deckd never swaps in a host icon by itself. The shipped decks and every default keep their bundled icons. In the deck editor, the icon picker's **Apps** tab lists installed apps so you don't need to know the id.
+
+How it resolves (ADR-0014): the daemon finds `<name>.desktop` under the XDG data dirs, then reads its `Icon=` key. It looks that up in the `hicolor` icon theme (`scalable` SVG first, then the largest PNG), then in `pixmaps/`. Besides `XDG_DATA_HOME` / `XDG_DATA_DIRS`, it always searches the Flatpak exports (`~/.local/share/flatpak/exports/share`, `/var/lib/flatpak/exports/share`) and the Nix profiles (`~/.nix-profile/share`, `/etc/profiles/per-user/$USER/share`, `/run/current-system/sw/share`). A newly installed app shows up within 30 seconds, no restart needed. The client loads the image from `GET /desktop-apps/<id>/icon`.
+
+Things to know:
+
+- **Portability.** A deck naming a `desktop` icon only renders it on hosts with that app installed. Elsewhere you get the usual missing-icon placeholder. macOS and Windows resolve nothing yet, so the Apps tab is empty there.
+- **Full colour.** These icons keep their own colours. They ignore the button's text colour, and in the badge they skip the themed circle. A few icons are dark (Tilix, for one) and are hard to see on the default dark button. Give that button a lighter `color` or pick a different icon.
+- **Your icon theme isn't used.** deckd shows the app's own `hicolor` icon, so a theme like Papirus that restyles your dock won't restyle deckd.
+- **Demo mode.** With no daemon (`?demo=` / `?playground`), a few bundled fixture icons in `client/public/demo-app-icons/` stand in. `?demo=apps` shows them mixed with the other sources.
 
 ### Client tuning
 
@@ -497,6 +522,7 @@ app_id='org.gnome.Console' wm_class='org.gnome.Console' pid=1234 title='Terminal
 app_id=None wm_class='firefox' pid=188566 title='YouTube — Mozilla Firefox'
 ```
 
+**Deck stuck on Home?** Check `deckctl diag` → `focus.healthy`. It is `true` only when the backend started, the watcher task is alive, and the latest focus poll succeeded; `focus.query_error` carries the current failure (e.g. `ServiceUnknown … not activatable` while the extension isn't loaded yet). The watcher retries every poll, so a daemon started at login before the extension is ready catches up on its own once the bus name appears.
 
 
 #### X11 sessions (any desktop environment)
@@ -669,15 +695,26 @@ Verified so far (macOS 26.6.2, Apple Silicon): the bundle builds, launches as a 
 
 #### Releasing a DMG
 
-Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workflows/release-macos.yml) on a `macos-14` runner: it builds the client, freezes the app, wraps it in a DMG (the same `just build-macos-dmg` recipe above), and attaches the DMG to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag.
+Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workflows/release-macos.yml) on a `macos-15` runner: it builds the client, freezes the app, wraps it in a DMG (the same `just build-macos-dmg` recipe above), and attaches the DMG to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag, or — with **publish** unticked — just build the DMG and upload it as a workflow artifact, for trying a build without making a release.
 
-The tag (minus a leading `v`) is the version for that release: it names the DMG (`deckd-<version>.dmg`), its volume, and the app's `CFBundleShortVersionString`. So a rough CalVer tag like `v2026.09.23` yields `deckd-2026.09.23.dmg`. No scheme is enforced — any `v*` string works. For a local build without a tag, `just build-macos-dmg` falls back to `version` in `pyproject.toml`.
+Before anything is published, a `test-app` job installs the DMG on a second, fresh runner and clicks through the real menu-bar item ([`packaging/macos/test/test-app.sh`](../packaging/macos/test/test-app.sh)). It checks the menu's items, that **Allow LAN access** opens and closes the LAN port and toggles its ✓, **Restart server**, **Open decks folder** (a Finder window), **Open deckd surface** (Safari loads it), **Quit**, and that an in-place upgrade keeps the password and decks. It uploads screenshots (`deckd-macos-test-app` artifact) of the open menu, the decks folder, the surface in Safari, and the first-run *"deckd wants access to control System Events"* prompt. Pull requests that touch the app run build + test (never publish).
 
-The DMG is **arm64 only** (Apple Silicon): `macos-14` runners are Apple Silicon. An Intel / `universal2` build is a follow-up ([#165](https://github.com/jonocodes/deckd/issues/165), "Open questions").
+This works on GitHub's free hosted runners because they have a real logged-in desktop, and the image grants Accessibility and Screen Recording to `bash`/`osascript`. The script's `--pregrant` writes deckd's own TCC grants before launch (CI only: it needs Full Disk Access) — otherwise its System Events consent prompt sits on screen and blocks every System Events call. What CI can't cover: grants surviving an upgrade (they're pre-written), and Gatekeeper quarantine on a browser download (`spctl` output is logged, informational).
+
+To run the same test on your own Mac (it replaces `/Applications/deckd.app`; your terminal needs Accessibility + Screen Recording):
+
+```sh
+just test-macos-app                       # newest dist/deckd-*.dmg
+just test-macos-app path/to/deckd.dmg     # or a downloaded one
+```
+
+The tag (minus a leading `v`) is the version for that release: it names the DMG (`deckd-<version>.dmg`), its volume, and the app's `CFBundleShortVersionString`, so `v20261114.0` yields `deckd-20261114.0.dmg`. See [Versioning and cutting a release](#versioning-and-cutting-a-release). A local build without `DECKD_VERSION` is named by `just version` (from git).
+
+The DMG is **arm64 only** (Apple Silicon): `macos-15` runners are Apple Silicon. An Intel / `universal2` build is a follow-up ([#165](https://github.com/jonocodes/deckd/issues/165), "Open questions").
 
 ### Linux AppImage (experimental, [#168](https://github.com/jonocodes/deckd/issues/168))
 
-Beyond the source-checkout + systemd user unit path above, deckd can be built as a self-contained AppImage: a private Python runtime, the built client, and the decks in one file. The target machine needs no Python, Node, or checkout. Build it **on Linux** (appimagetool wraps a PyInstaller tree in a squashfs):
+Beyond the source-checkout + systemd user unit path above, deckd can be built as a self-contained AppImage: a private Python runtime, the built client, and the decks in one file. The target machine needs no Python, Node, or checkout. Release builds run on any distro with **glibc 2.28 or newer** — Debian 10+, Ubuntu 20.04+, RHEL/Alma/Rocky 8+, current Fedora and Arch (x86_64 and aarch64; not musl distros such as Alpine). Build it **on Linux** (appimagetool wraps a PyInstaller tree in a squashfs):
 
 ```sh
 just build-linux-appimage   # -> dist/deckd-<version>-<arch>.AppImage
@@ -691,6 +728,13 @@ chmod +x deckd-<version>-x86_64.AppImage
 ```
 
 It seeds decks into `~/.local/share/deckd/decks` on first run and logs to `~/.local/share/deckd/deckd.log`. It stays localhost-only until you add `--bind 0.0.0.0`, exactly like the daemon.
+
+deckd has no window of its own — the daemon serves the surface and you use it in a browser. So how you launch the AppImage decides what you see:
+
+- **From the GUI** (double-click in a file manager, or the app-menu entry the install helper adds): it starts the daemon and opens `http://127.0.0.1:8765/` in your default browser once the daemon answers. If deckd is **already running** (autostarted at login, or a second click), it just opens the browser and exits instead of failing on the busy port.
+- **From a terminal**: it runs in the foreground like the plain daemon and opens nothing. The log says where it is listening.
+
+`--open` / `--no-open` override the guess either way (the autostart entry passes `--no-open`, so logging in never pops a browser). The guess is "no terminal on stdin and a graphical session (`WAYLAND_DISPLAY`/`DISPLAY`) present". The browser opens the loopback URL, so it is skipped when you bind only to a LAN address or interface (`--bind 192.168.1.5`, `--bind iface:wlan0`) — open the LAN URL yourself. Like the macOS menu-bar app, the first visit shows the password gate; the password is in `~/.config/deckd/password`.
 
 If `libfuse2` is missing (Ubuntu 22.04+/Debian 12 no longer ship it), run with `--appimage-extract-and-run` or set `APPIMAGE_EXTRACT_AND_RUN=1`.
 
@@ -706,17 +750,66 @@ pkexec ./deckd-install-system-integration.sh ./deckd-<version>-x86_64.AppImage
 
 > **NixOS:** `pkexec` resets `PATH` to a distro default that has no system profile, so use `sudo`, or name the interpreter explicitly: `pkexec /run/current-system/sw/bin/bash ./deckd-install-system-integration.sh ./deckd-<version>-x86_64.AppImage` (the helper appends the profile to `PATH` for its own tools). Better yet, use the flake — see the [NixOS note](#nix-flake-nixos-and-home-manager) below.
 
-It installs the udev rule, the GNOME Shell extension or KWin script for the detected desktop (override with `--desktop gnome|kde`), the deckd mark into `~/.local/share/icons/hicolor` (`Icon=deckd` on the autostart entry resolves to it), and `~/.config/autostart/deckd.desktop` so deckd starts with your session. The rule carries `TAG+="uaccess"`, so the active session user gets `/dev/uinput` access — **no relogin needed**. For a linger/headless setup (a service that runs with no active session), pass `--add-group` to also add the user to `input`; that one does need a logout. The autostart entry points at the AppImage's path, so keep it where it is (or re-run the helper after moving it).
+It installs the udev rule, the GNOME Shell extension or KWin script for the detected desktop (override with `--desktop gnome|kde`), the deckd mark into `~/.local/share/icons/hicolor` (`Icon=deckd` on the menu and autostart entries resolves to it), an app-menu entry at `~/.local/share/applications/deckd.desktop` (launches with `--open`; skip it with `--no-menu`), and `~/.config/autostart/deckd.desktop` so deckd starts with your session (launches with `--no-open`). The rule carries `TAG+="uaccess"`, so the active session user gets `/dev/uinput` access — **no relogin needed**. For a linger/headless setup (a service that runs with no active session), pass `--add-group` to also add the user to `input`; that one does need a logout. The menu and autostart entries point at the AppImage's path, so keep it where it is (or re-run the helper after moving it).
 
 Re-run with `--uninstall` to undo the install. It removes exactly what the helper created — recorded per user in `/var/lib/deckd/system-integration.<user>.state` — so a pre-existing `input` membership or focus extension (say, from a NixOS/home-manager install) is left alone. If the AppImage runtime never sees `--appimage-extract` (a binfmt wrapper such as NixOS's `programs.appimage` runs the payload directly), the helper falls back to the bundled launcher's `--extract-integration` and still works.
 
 From a source checkout the same helper is `just install-system-integration` (it stages the assets and calls the script with `sudo`; pass `--desktop gnome`, `--uninstall`, etc. as extra args).
 
-#### Releasing an AppImage
+### Linux tarball
 
-Pushing a `v*` tag runs [`.github/workflows/release-linux.yml`](../.github/workflows/release-linux.yml): it builds **x86_64** on `ubuntu-24.04` and **aarch64** on `ubuntu-24.04-arm`, smoke-tests each payload (`--help`), and attaches both AppImages plus `deckd-install-system-integration.sh` to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag. aarch64 source-builds `python-evdev` (there is no `evdev-binary` wheel for it).
+The same frozen payload as the AppImage, as a plain directory: no FUSE, nothing mounted, and a fixed install path. Pick it over the AppImage for a headless or always-on deck host, on a distro without `libfuse2`, or if you'd rather deckd run as a systemd user service than an XDG autostart entry. Build it on Linux:
 
-The tag minus its leading `v` is the version, so `v2026.09.23` yields `deckd-2026.09.23-x86_64.AppImage` and `deckd-2026.09.23-aarch64.AppImage`. A local build without a tag falls back to `version` in `pyproject.toml`.
+```sh
+just build-linux-tarball   # -> dist/deckd-<version>-<arch>.tar.gz
+just build-linux           # both the AppImage and the tarball, one freeze
+```
+
+Install it with the helper that sits at the top of the extracted directory — no arguments needed, it installs the tree it is in:
+
+```sh
+tar xzf deckd-<version>-x86_64.tar.gz
+sudo ./deckd-<version>-x86_64/install-system-integration.sh
+# desktop password dialog: pkexec "$PWD/deckd-<version>-x86_64/install-system-integration.sh"
+```
+
+It does everything the AppImage install does (udev rule, focus watcher, icon, app-menu entry) with two differences:
+
+- The tree is **copied to `~/.local/opt/deckd`**, and everything points there, so the download can be deleted. Re-running the helper from a newer tarball swaps the tree in place and restarts the service — that is the upgrade.
+- Autostart is a **systemd user service**, `~/.config/systemd/user/deckd.service` (wanted by `graphical-session.target`, `Restart=on-failure`, `--no-open`), instead of an XDG entry. It is started immediately when the helper can reach your user session, otherwise at next login. Logs: `journalctl --user -u deckd -f`. To add flags such as `--bind 0.0.0.0`, use `systemctl --user edit deckd` (a drop-in with `ExecStart=` cleared, then your own `ExecStart=%h/.local/opt/deckd/bin/deckd --no-open --bind 0.0.0.0`); upgrades rewrite the unit but leave drop-ins alone.
+
+Switching between the AppImage and the tarball is safe: the helper removes the other channel's autostart so two daemons never race for the port. Uninstall with `sudo ~/.local/opt/deckd/install-system-integration.sh --uninstall`. To try it without installing, run `./deckd-<version>-x86_64/bin/deckd` (localhost-only, foreground).
+
+The helper's logic is tested without root: `DECKD_HELPER_TEST_ROOT=DIR` sandboxes its system paths and the user's home under `DIR` (sudo and pkexec scrub it from the environment, so a real install never sees it) — see `tests/test_install_helper.py`.
+
+#### Releasing the Linux artifacts
+
+A local `just build-linux` freezes against **your** system's glibc, so its artifacts only run on distros at least as new as your machine — fine for trying things, wrong for a release. The release build freezes inside a `manylinux_2_28` container (AlmaLinux 8, glibc 2.28) instead, with Python from python-build-standalone (manylinux's own Pythons are static, and PyInstaller needs a shared libpython):
+
+```sh
+just build-linux-portable   # needs podman or docker; same script CI runs (scripts/build_linux_manylinux.sh)
+just test-linux-floor       # boots the newest tarball on debian:10, ubuntu:22.04, debian:12, fedora:latest
+```
+
+`test-linux-floor` is the proof: a tarball frozen on the GitHub runner's Ubuntu 24.04 (glibc 2.39) fails there with `GLIBC_2.38 not found (required by libpython3.12.so.1.0)` on all but Fedora; the manylinux build passes all four.
+
+Pushing a `v*` tag runs [`.github/workflows/release-linux.yml`](../.github/workflows/release-linux.yml): it runs `just build-linux-portable` and `just test-linux-floor` for **x86_64** on `ubuntu-24.04` and **aarch64** on `ubuntu-24.04-arm`, smoke-tests each AppImage (`--help`, integration extraction, the GUI open/attach path) and each tarball (boot, integration extraction, the helper installing the shipped tree in its sandbox), and — only once both architectures pass — attaches both AppImages, both tarballs, and `deckd-install-system-integration.sh` to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag, or — with **publish** unticked — just build and upload workflow artifacts. Pull requests that touch Linux packaging run the build, floor test, and smoke tests too (never publish), so a packaging break shows on the PR rather than at release time. aarch64 source-builds `python-evdev` (there is no `evdev-binary` wheel for it).
+
+The tag minus its leading `v` names the artifacts, so `v20261114.0` yields `deckd-20261114.0-x86_64.AppImage`, `deckd-20261114.0-x86_64.tar.gz`, and their `aarch64` twins; the frozen app's own `deckd --version` reports the same (the release job checks). A local build without `DECKD_VERSION` is named by `just version` (from git).
+
+### Versioning and cutting a release
+
+Releases use CalVer, **`vYYYYMMDD.N`** ([ADR-0013](adr/0013-calver-versioning.md)): the UTC date as one number, then a counter from `0` for releases made that day — `v20261114.0`, a same-day fix `v20261114.1`, then `v20261115.0`. A release candidate takes a suffix (`v20261201.0-rc1`) and publishes as a GitHub prerelease without using up its number.
+
+The git tag is the only place a version lives. `setuptools-scm` derives the package version from it at install time — exactly `20261114.0` on the tag, `20261114.0.post1.dev3+g<sha>` after it — so there are no version files to bump. Ask any running daemon which release it is: `deckd --version`, `deckctl status`, `curl -s localhost:8765/health | jq .version`, or the client's **settings** diagnostics.
+
+To cut a release from an up-to-date, clean `main`:
+
+```sh
+just release   # shows the next tag + commit, asks, then tags and pushes
+```
+
+The pushed tag runs both release workflows; each publishes only after its builds and tests pass, and both attach to the same GitHub release. `just version` prints the current version (live from git when `setuptools-scm` is installed, which the `dev` extra provides).
 
 **NixOS** users can skip all of the above — the flake's home-manager module owns the same user service, and the NixOS module owns the udev rule and `input` group. See [Nix flake, NixOS, and home-manager](#nix-flake-nixos-and-home-manager).
 
@@ -805,9 +898,47 @@ half; run the daemon and watcher the classic way above
   build the packages, evaluate the modules, and boot the packaged daemon
   on loopback.
 
+## Security model
+
+deckd is remote control of your desktop. This section says plainly what protects it and what doesn't, so you can choose where to expose it.
+
+**The password is the whole gate.** Anyone who has it can do everything a client can:
+
+- inject keystrokes, text, pointer, and scroll into the focused window — with a terminal focused, that is command execution;
+- press any deck button, including `shell` and `dbus` actions;
+- write decks through the editor's write API (`PUT /decks/{id}`, `POST /decks`) — so they can author a `shell` action and then press it.
+
+Treat the password like an SSH key to your user account. A `confirm: true` prompt and the screen-lock input gate are guards against accidents, not against someone holding the password.
+
+**The password does not encrypt anything.** The daemon speaks plain HTTP and `ws://`. On a LAN, the password (in the WebSocket `hello` frame, or the `X-Deckd-Password` header) and everything you send — including text typed in [manual control mode](#manual-control-mode) — cross the network in cleartext. Whoever can read that traffic can read your input and reuse the password: on WPA2-Personal Wi-Fi, anyone who knows the Wi-Fi password; on open Wi-Fi, anyone nearby; and on any network, an attacker who can redirect traffic (ARP spoofing).
+
+**A few read-only endpoints answer without the password:** `/health`, `/diag`, `/metrics`, `/actions/recent`, `/mpris/players`, `GET /decks` (summary only), the album-art proxies, and `source: desktop` app icons (`/desktop-apps/<id>/icon`; the app *list* needs the password). They never carry the password or action payloads (no shell strings, no typed text), but they do reveal the host's identity, the focused app **including its window title**, and what's playing, to anyone who can reach the port.
+
+### Choosing where to expose it
+
+| Phone/tablet is on… | Bind with | Encrypted on the wire? |
+|---|---|---|
+| The same machine | the default (`127.0.0.1` + `::1`) | n/a — traffic never leaves the host |
+| Your tailnet | `--bind iface:tailscale0` → `http://100.x.y.z:8765` | **Yes.** Tailscale is WireGuard; the link is encrypted end to end even though the URL says `http://` |
+| A home LAN you trust | `--bind iface:wlan0` (see [Bind scope](#bind-scope-issue-66)) | **No** |
+| A network you don't control (café, hotel, conference, shared office) | don't bind to it — use Tailscale | — |
+
+### HTTPS is a separate question
+
+Over Tailscale the link is already encrypted; HTTPS on top adds a browser **secure context**, which is what unlocks PWA install, Screen Wake Lock, and the clipboard. It isn't what keeps your input private. Today the daemon doesn't terminate TLS itself — put `tailscale serve` (or another TLS proxy) in front of it, or use the dev recipe in [PWA install over HTTPS](#pwa-install-over-https-tailscale). Native `--tls-cert` / `--tls-key` flags, a `--tls self-signed` mode for connecting by LAN IP, a production Tailscale HTTPS recipe, and a startup warning for plaintext LAN binds are tracked in [#181](https://github.com/jonocodes/deckd/issues/181); warning-free HTTPS on a plain LAN with your own domain name is [#184](https://github.com/jonocodes/deckd/issues/184).
+
+A bare LAN IP (`https://192.168.x.y`) can never get a publicly trusted certificate — certificate authorities don't issue them for private addresses — so connecting by IP means self-signed. Measured on desktop Chrome: after clicking through the warning, the page *is* a secure context (wake lock and clipboard work, unlike plain HTTP) but is **not installable** as a PWA. A self-signed certificate stops sniffing; it only stops an active attacker if you compare its fingerprint on first connect.
+
+### Deliberately not done
+
+- **No pairing / QR codes.** The shared password stays the only credential, so a brand-new phone can connect from another room by typing it — no trip to the desktop to scan or approve anything.
+- **No in-browser encryption over `ws://`.** The client's JavaScript is itself served over plain HTTP, so an attacker who can tamper with traffic could replace it; encrypting inside the page would only stop passive sniffing. Real protection comes from an encrypted link (Tailscale) or HTTPS with a certificate the phone trusts.
+- **No deckd certificate authority to install on phones.** Installing a root CA is unusual, and fetching one over plain HTTP risks trusting an attacker's CA for all your browsing.
+- **Why native apps (KDE Connect, Linksy) don't have this problem:** they pin each other's keys at pairing time. A web page can't — the browser's certificate store is its only source of trust. That's the price of "any browser, nothing to install on the phone".
+
 ## Configuration
 
-A directory of YAML files in `decks/` — one per app, plus a `default.yaml` fallback. Shipped decks today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), an optional `size: [w, h]` span (default `[1, 1]`; for non-square widgets like wide meters), an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names a client-side icon set, e.g. `lucide` or `simple-icons`, and `name` is the glyph within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. Widgets pack in list order (ADR-0010); there are no grid coordinates. The special `kind: blank` skips a cell slot for visual gaps. A deck's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the deck with `match: [default]` is the fallback. A deck may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `DeckMessage`. A deck may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:
+A directory of YAML files in `decks/` — one per app, plus a `default.yaml` fallback. Shipped decks today: `default`, `firefox`, terminals (`org.gnome.Console`, `foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`), `com.gexperts.Tilix`. Each widget has an `id`, `kind` (`button` or `jogstrip` — the trackpad is a chrome mode, not a widget kind), an optional `size: [w, h]` span (default `[1, 1]`; for non-square widgets like wide meters), an optional `label`, an optional `icon:` (a `{source, name}` pair — `source` names an icon set, `lucide` or `simple-icons` (bundled in the client) or `desktop` (an installed app's own icon, served by the daemon; see [App icons](#app-icons-source-desktop)), and `name` is the icon within it; the daemon relays it opaquely), an optional `color:` (any CSS colour string — hex, `hsl(...)`, named — applied as the button background; buttons only, ignored on jogstrips), and an optional `action`. Widgets pack in list order (ADR-0010); there are no grid coordinates. The special `kind: blank` skips a cell slot for visual gaps. A deck's top-level `match:` list says which apps it covers (matched by `app_id` or `wm_class`); the deck with `match: [default]` is the fallback. A deck may set `jogstrip: false` at the top level to suppress the client's persistent right-side chrome jogstrip (defaults to `true`); the daemon echoes this to the client as `jogstrip_enabled` on every `DeckMessage`. A deck may also set three optional top-level chrome-identity fields the daemon relays verbatim — `display_name` (human-readable app name shown in the bottom badge), `theme` (a CSS colour the badge + chrome accent is tinted with), and `icon` (a `{source, name}` pair rendered next to the app name) — see the [Chrome app badge](#chrome-app-badge) section and ADR-0007. Action primitives:
 
 - `shell: "..."` — launch a command, fire-and-forget. The child is detached (its own session) and runs independently; stdin/stdout/stderr are discarded and the daemon does not wait for it or observe its exit code. This is the way to launch a program (`shell: firefox`, `shell: code`, `shell: "xdg-open https://…"`), including a specific terminal (`shell: tilix`).
 - `terminal: true` — open the auto-detected terminal emulator, resolved via `$TERMINAL` then a candidate list (`foot`, `kitty`, `gnome-terminal`, `konsole`, `alacritty`). This is the only accepted form: `terminal` takes no command string — for a specific program (terminal or otherwise) use `shell:`. A string value is rejected at deck-load time with a message pointing you at `shell:`.
@@ -863,7 +994,7 @@ Every client authenticates with a single shared password. There is **no** source
 - `/health` **stays open** even with auth on — it's a read-only diagnostic the Settings panel fetches, and `deckctl status` relies on it.
 - **Rotation** is out of scope: edit the file and restart the daemon.
 
-The password is a shared secret over a plaintext WebSocket — it gates access, it does not encrypt the link. Keep the daemon on a trusted network (see the security note above).
+The password is a shared secret over a plaintext WebSocket — it gates access, it does not encrypt the link. Keep the daemon on a trusted network or a tailnet — see [Security model](#security-model).
 
 ### Bind scope (issue #66)
 
@@ -925,7 +1056,9 @@ Built-in sensors (all psutil-backed — see "Why no CPU temperature?" below for 
 |----------------|--------------------------------|--------------------------------------------------|--------|
 | `cpu_percent`  | Whole-system CPU utilisation   | `psutil.cpu_percent(interval=None)` — delta since the last call. The first reading is `0.0` (no baseline); subsequent readings land in `[0, 100]`. | 1s     |
 | `mem_percent`  | Memory used / total            | `psutil.virtual_memory().percent`                 | 1s     |
-| *(more TBD)*   | CPU frequency, battery, swap   | `psutil.cpu_freq()`, `psutil.sensors_battery()`, `psutil.swap_memory()` — all the same API. Open to contributions. | varies |
+| `swap_percent` | Swap used / total (`0` with no swap) | `psutil.swap_memory().percent`              | 1s     |
+| `disk_percent` | Root filesystem (`/`) used / total | `psutil.disk_usage("/").percent`             | 1s     |
+| *(more TBD)*   | CPU frequency, battery         | `psutil.cpu_freq()`, `psutil.sensors_battery()` — all the same API. Open to contributions. | varies |
 
 #### Why no CPU temperature?
 

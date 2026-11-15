@@ -14,15 +14,22 @@ tree to DIR and exits. ``install-system-integration.sh`` uses it as a fallback
 when the AppImage runtime can't be asked to extract itself (a binfmt wrapper
 like NixOS's ``programs.appimage`` runs the payload directly, so the runtime's
 ``--appimage-extract`` never sees the flag).
+
+A GUI launch (app menu, file-manager double-click) opens the surface in the
+default browser once the daemon is up; if a daemon is already running it just
+opens the browser and exits. ``--open`` / ``--no-open`` force either way (the
+autostart entry passes ``--no-open``). See ``deckd.open_surface``.
 """
 from __future__ import annotations
 
+import os
 import sys
+import threading
 from pathlib import Path
 
 
 def main() -> None:
-    from deckd import linux_app
+    from deckd import linux_app, open_surface
     from deckd.__main__ import main as deckd_main
 
     extra = sys.argv[1:]
@@ -35,7 +42,25 @@ def main() -> None:
             raise SystemExit(f"error: {exc}") from exc
         return
 
-    sys.argv = ["deckd", *linux_app.build_argv(extra)]
+    stdin_isatty = bool(sys.stdin and sys.stdin.isatty())
+    want_open, extra = open_surface.resolve_open(
+        extra, stdin_isatty=stdin_isatty, environ=os.environ
+    )
+    argv = linux_app.build_argv(extra)
+    if want_open:
+        url = open_surface.surface_url(argv)
+        if url is None:
+            print(
+                "deckd: not listening on loopback; open the surface from its LAN URL",
+                file=sys.stderr,
+            )
+        elif open_surface.launch_or_attach(
+            url,
+            spawn=lambda job: threading.Thread(target=job, daemon=True).start(),
+        ):
+            return
+
+    sys.argv = ["deckd", *argv]
     deckd_main()
 
 

@@ -34,6 +34,10 @@ async def test_diag_open_auth(srv: ServerHandle) -> None:
             assert r.status == 200
             body = await r.json()
     assert body["ok"] is True
+    # The real package version (ADR-0013), not a hard-coded placeholder.
+    import deckd
+
+    assert body["version"] == deckd.__version__
     for field in (
         "version",
         "uptime_s",

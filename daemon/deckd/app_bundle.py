@@ -46,22 +46,20 @@ def overlay_src(root: Path, suffix: str) -> Path:
     return root / f"decks.{suffix}"
 
 
-def bundle_version(pyproject: Path | None = None) -> str:
-    """The version stamped into the artifact.
+def bundle_version() -> str:
+    """The version stamped into an artifact's name and the macOS bundle.
 
-    ``DECKD_VERSION`` wins when set — release CI passes the git tag (minus a
-    leading ``v``), so the tag is the single source for a release and the
-    artifact name matches. Local builds fall back to ``version`` in
-    ``pyproject.toml``.
+    ``DECKD_VERSION`` wins when set: release CI passes the git tag (minus
+    its ``v``), so a release's artifact names match the tag exactly. Without
+    it, the installed package's own version (``deckd.__version__``, which
+    setuptools-scm derives from the same tag — ADR-0013).
     """
     override = os.environ.get("DECKD_VERSION", "").strip()
     if override:
         return override
-    path = pyproject or Path(__file__).resolve().parents[2] / "pyproject.toml"
-    for line in path.read_text().splitlines():
-        if line.startswith("version = "):
-            return line.split("=", 1)[1].strip().strip('"')
-    raise ValueError(f"no version found in {path}")
+    from . import __version__
+
+    return __version__
 
 
 def seed_decks(

@@ -507,3 +507,31 @@ def test_window_info_from_payload_non_int_workspace_is_none() -> None:
     parser does for missing keys."""
     info = plat._window_info_from_payload({"workspace": "primary"})
     assert info.workspace is None
+
+
+@pytest.mark.asyncio
+async def test_watch_active_app_survives_transient_backend_errors() -> None:
+    """Regression: a daemon started before the GNOME extension owns
+    ``org.deckd.Focus`` got ``ServiceUnknown`` on its first poll, the
+    exception escaped the generator, and the focus watcher task died
+    silently — every client stuck on the Home deck until a restart.
+    The base poll loop must sleep through query errors and pick up the
+    focused app once the backend recovers."""
+
+    class FlakyBackend(plat.PlatformBackend):
+        def __init__(self) -> None:
+            self.calls = 0
+
+        async def get_active_app(self) -> AppInfo:
+            self.calls += 1
+            if self.calls <= 3:
+                raise FocusBackendUnavailable("The name is not activatable")
+            return AppInfo(app_id=None, wm_class="firefox", title="x", pid=None)
+
+    backend = FlakyBackend()
+    gen = backend.watch_active_app(interval_s=0)
+    first = await gen.__anext__()
+    await gen.aclose()
+    assert first.wm_class == "firefox"
+    assert backend.calls == 4
+    assert backend._focus_query_error is None  # cleared on recovery

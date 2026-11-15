@@ -85,6 +85,7 @@ export function MediaCell({ widget, state, style, onPress, onCommand }: Props) {
               ) : null}
               <button
                 className="media-play"
+                data-autofocus
                 aria-label={state?.playing ? "Pause" : "Play"}
                 aria-pressed={Boolean(state?.playing)}
                 onClick={() => onPress(widget.id)}

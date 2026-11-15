@@ -116,7 +116,7 @@ All are read-only and unauthenticated unless noted.
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Host identity (`hostname`, `os`, `desktop`), sessions, current app, bind surface (`bind`, `addresses`, `url`). Used by `deckctl status` and the client Settings panel. |
-| `GET /diag` | Full snapshot: focus watcher status, input sink, deck store, sessions, tasks, MPRIS state (if active). Machine-readable for AI-assisted debugging. |
+| `GET /diag` | Full snapshot: focus watcher status (`focus.healthy` = context switching is working right now; `focus.query_error` = current poll failure), input sink, deck store, sessions, tasks, MPRIS state (if active). Machine-readable for AI-assisted debugging. |
 | `GET /metrics` | Prometheus text-format scrape target. Counters: `deckd_actions_total{primitive,outcome}`, `deckd_dbus_calls*`, `deckd_deck_reloads*`, `deckd_ws_sessions_active`, `deckd_mpris_*`, etc. |
 | `GET /decks` | Enumeration of every loaded deck with safe widget summaries (id, kind, label, grid, `has_action`; no raw shell/dbus/url/text command bodies). |
 | `GET /actions/recent?limit=N` | Bounded ring buffer of recent action attempts (id, outcome, timestamp; no command text). Default 64. |
@@ -129,6 +129,8 @@ All are read-only and unauthenticated unless noted.
 | `POST /mpris/<row>/command` | **Auth.** Dispatch a play-pause/next/previous command to the named MPRIS row. |
 | `GET /media/<widget_id>/art` | Proxy VLC album art. |
 | `GET /mpris/<row_id>/art` | Proxy MPRIS album art. |
+| `GET /desktop-apps` | **Auth.** Installed host apps with a resolvable icon (`{ok, apps: [{id, name}]}`), for the editor's icon picker (issue #187). Empty on macOS/Windows. |
+| `GET /desktop-apps/<id>/icon` | A `source: desktop` icon: the app's own SVG/PNG from the host's `hicolor` theme or `pixmaps/`. Serves only ids the resolver indexed (unknown → `404`). Sent with a sandboxing CSP + `nosniff`. |
 
 ### Diagnostic workflow
 
@@ -193,7 +195,7 @@ Primary development operations. Run `just` (no args) to list all available recip
 - Manual control mode: combined trackpad + keyboard passthrough (IME → evdev).
 - Now playing (chrome view with per-player transport, album art proxy, passive playback indicator).
 - VLC media widget (HTTP-backed live state, album art proxy).
-- Live `meter` / `stats` widgets (`cpu_percent`, `mem_percent` sensors).
+- Live `meter` / `stats` widgets (`cpu_percent`, `mem_percent`, `swap_percent`, `disk_percent` sensors).
 - Deck hot-reload (watches `decks/` directory; bad YAML surfaces as diagnostic on client).
 - Platform overlay (`decks.macos/`, `decks.linux/`).
 - Bind-scope control (`--bind 127.0.0.1`, `--bind iface:wlan0`, `--bind 0.0.0.0`).

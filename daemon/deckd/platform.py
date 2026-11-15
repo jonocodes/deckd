@@ -362,7 +362,60 @@ class PsutilMemoryPercentSensorSource(SensorSource):
         return SensorReading(source=self.name, value=float(value), unit=self.unit)
 
 
+class PsutilSwapPercentSensorSource(SensorSource):
+    """Swap usage in percent, via ``psutil.swap_memory``.
+
+    A box with no swap configured reports ``0.0`` — a real reading,
+    not a missing one. Snapshot value, same 1s cadence as memory.
+    """
+
+    name = "swap_percent"
+    unit = "%"
+    interval_s = 1.0
+
+    def is_available(self) -> bool:
+        return True
+
+    def read(self) -> SensorReading | None:
+        try:
+            import psutil  # type: ignore[import-untyped]
+
+            value = psutil.swap_memory().percent
+        except Exception:
+            return None
+        return SensorReading(source=self.name, value=float(value), unit=self.unit)
+
+
+class PsutilDiskPercentSensorSource(SensorSource):
+    """Root filesystem usage in percent, via ``psutil.disk_usage("/")``.
+
+    ``/`` is the root on Linux and macOS alike. Disk use moves slowly,
+    but a 1s snapshot is a cheap ``statvfs`` and keeps every psutil
+    source on one cadence.
+    """
+
+    name = "disk_percent"
+    unit = "%"
+    interval_s = 1.0
+
+    def is_available(self) -> bool:
+        return True
+
+    def read(self) -> SensorReading | None:
+        try:
+            import psutil  # type: ignore[import-untyped]
+
+            value = psutil.disk_usage("/").percent
+        except Exception:
+            return None
+        return SensorReading(source=self.name, value=float(value), unit=self.unit)
+
+
 class PlatformBackend:
+    # Latest error of an ongoing focus-query failure streak, None when the
+    # last poll succeeded. Maintained by :meth:`watch_active_app`.
+    _focus_query_error: str | None = None
+
     def capabilities(self) -> frozenset[str]:
         """Backend capability flags consumed by the server (issue #121).
 
@@ -415,9 +468,26 @@ class PlatformBackend:
         raise NotImplementedError
 
     async def watch_active_app(self, *, interval_s: float = 0.1) -> AsyncIterator[AppInfo]:
+        # Query errors (extension not yet owning the bus name at login,
+        # gnome-shell restart, a gdbus timeout) must not escape: an
+        # exception here ends the generator and with it the server's
+        # focus task, silently pinning every client to the default deck.
+        # Log the first failure of a streak, sleep through it, and resume.
+        # The streak's latest error is kept on ``_focus_query_error`` so
+        # ``/diag`` can report a watcher that is alive but not working.
         last: AppInfo | None = None
         while True:
-            current = await self.get_active_app()
+            try:
+                current = await self.get_active_app()
+            except Exception as exc:
+                if self._focus_query_error is None:
+                    log.warning("focus query failed (will keep retrying): %s", exc)
+                self._focus_query_error = str(exc) or type(exc).__name__
+                await asyncio.sleep(interval_s)
+                continue
+            if self._focus_query_error is not None:
+                log.info("focus query recovered")
+                self._focus_query_error = None
             if current != last:
                 last = current
                 yield current
@@ -538,7 +608,7 @@ class GnomeShellFocusBackend(PlatformBackend):
 
         Errors from the gdbus shell-out (extension not installed,
         session bus unreachable) are logged once and the loop sleeps
-        through them — mirrors the focus watcher's behaviour so a
+        through them — same as :meth:`watch_active_app`, so a
         daemon started before the extension is enabled survives and
         the windows list catches up the moment the bus replies.
         """
@@ -1319,6 +1389,8 @@ def default_sensor_manager() -> "SensorManager":
         [
             PsutilCpuPercentSensorSource(),
             PsutilMemoryPercentSensorSource(),
+            PsutilSwapPercentSensorSource(),
+            PsutilDiskPercentSensorSource(),
         ]
     )
 

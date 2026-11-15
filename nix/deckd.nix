@@ -9,14 +9,18 @@
   makeWrapper,
   glib,
   xdotool,
-  version ? "0.0.1",
+  # The flake passes its own (ADR-0013); a bare callPackage is unversioned.
+  version ? "0+unknown",
 }:
 
 let
   # The Vite/React client, built once and served by the daemon at /.
   client = buildNpmPackage {
     pname = "deckd-client";
-    inherit version;
+    # Constant on purpose: this only names store paths, and the daemon carries
+    # the real version (ADR-0013). A per-commit version here would rename the
+    # npm-deps fetch every commit and re-download every dependency.
+    version = "0";
 
     src = lib.fileset.toSource {
       root = ../client;
@@ -35,7 +39,7 @@ let
       ];
     };
 
-    npmDepsHash = "sha256-/UG8KBaM6gUAzHHGKGTMPqHgYunmc8JzRfkrNhJtfF4=";
+    npmDepsHash = "sha256-r7S5A2osk2iAgGy6XTq1loOseAKRLdNYBmIoCNeM2uY=";
     npmBuildScript = "build";
 
     installPhase = ''
@@ -62,7 +66,12 @@ python.pkgs.buildPythonApplication {
     ];
   };
 
-  build-system = [ python.pkgs.setuptools ];
+  build-system = with python.pkgs; [
+    setuptools
+    setuptools-scm
+  ];
+  # No .git in the store source: hand setuptools-scm the version instead.
+  env.SETUPTOOLS_SCM_PRETEND_VERSION = version;
 
   dependencies = with python.pkgs; [
     aiohttp

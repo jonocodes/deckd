@@ -246,4 +246,107 @@ describe("IconPicker", () => {
     fireEvent.click(screen.getByText("Brands"));
     expect(screen.getByText("Loading brand icons…")).toBeTruthy();
   });
+
+  describe("Apps tab (source: desktop, issue #187)", () => {
+    const APPS = [
+      { id: "com.gexperts.Tilix", name: "Tilix" },
+      { id: "org.videolan.VLC", name: "VLC media player" },
+    ];
+
+    it("lists installed apps from the loader with their icons", async () => {
+      const loader = vi.fn().mockResolvedValue(APPS);
+      render(
+        <IconPicker value={null} onChange={vi.fn()} open={true} onClose={vi.fn()} loadDesktopApps={loader} />,
+      );
+      expect(loader).not.toHaveBeenCalled(); // lazy: only when the tab opens
+      fireEvent.click(screen.getByText("Apps"));
+
+      const tilix = await screen.findByLabelText("com.gexperts.Tilix");
+      expect(tilix.querySelector("img")!.getAttribute("src")).toBe(
+        "/desktop-apps/com.gexperts.Tilix/icon",
+      );
+      expect(screen.getByText("VLC media player")).toBeTruthy();
+      expect(loader).toHaveBeenCalledTimes(1);
+    });
+
+    it("selects a desktop icon", async () => {
+      const onChange = vi.fn();
+      render(
+        <IconPicker
+          value={null}
+          onChange={onChange}
+          open={true}
+          onClose={vi.fn()}
+          loadDesktopApps={() => Promise.resolve(APPS)}
+        />,
+      );
+      fireEvent.click(screen.getByText("Apps"));
+      fireEvent.click(await screen.findByLabelText("org.videolan.VLC"));
+      expect(onChange).toHaveBeenCalledWith({ source: "desktop", name: "org.videolan.VLC" });
+    });
+
+    it("searches by display name and id", async () => {
+      render(
+        <IconPicker
+          value={null}
+          onChange={vi.fn()}
+          open={true}
+          onClose={vi.fn()}
+          loadDesktopApps={() => Promise.resolve(APPS)}
+        />,
+      );
+      fireEvent.click(screen.getByText("Apps"));
+      await screen.findByLabelText("com.gexperts.Tilix");
+      const search = screen.getByPlaceholderText("Search installed apps…");
+
+      fireEvent.change(search, { target: { value: "media" } });
+      expect(screen.queryByLabelText("com.gexperts.Tilix")).toBeNull();
+      expect(screen.getByLabelText("org.videolan.VLC")).toBeTruthy();
+
+      fireEvent.change(search, { target: { value: "gexperts" } });
+      expect(screen.getByLabelText("com.gexperts.Tilix")).toBeTruthy();
+    });
+
+    it("opens on the Apps tab when a desktop icon is preselected", async () => {
+      render(
+        <IconPicker
+          value={{ source: "desktop", name: "com.gexperts.Tilix" }}
+          onChange={vi.fn()}
+          open={true}
+          onClose={vi.fn()}
+          loadDesktopApps={() => Promise.resolve(APPS)}
+        />,
+      );
+      const item = await screen.findByLabelText("com.gexperts.Tilix");
+      expect(item.className).toContain("icon-picker-item-selected");
+    });
+
+    it("explains an empty app list", async () => {
+      render(
+        <IconPicker
+          value={null}
+          onChange={vi.fn()}
+          open={true}
+          onClose={vi.fn()}
+          loadDesktopApps={() => Promise.resolve([])}
+        />,
+      );
+      fireEvent.click(screen.getByText("Apps"));
+      expect(await screen.findByText(/No installed apps found/)).toBeTruthy();
+    });
+
+    it("shows an error when the app list cannot be loaded", async () => {
+      render(
+        <IconPicker
+          value={null}
+          onChange={vi.fn()}
+          open={true}
+          onClose={vi.fn()}
+          loadDesktopApps={() => Promise.reject(new Error("HTTP 401"))}
+        />,
+      );
+      fireEvent.click(screen.getByText("Apps"));
+      expect(await screen.findByText(/Couldn't load installed apps/)).toBeTruthy();
+    });
+  });
 });

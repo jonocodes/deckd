@@ -1,5 +1,7 @@
 # deckd
 
+**[jonocodes.github.io/deckd](https://jonocodes.github.io/deckd/)** — homepage, with the client running live in demo mode.
+
 App-aware touch control surface for your desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a manual control mode (a single combined trackpad + keyboard passthrough), rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps decks automatically.
 
 ## Uses
@@ -40,10 +42,10 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 **Working today**
 
 - [x] **Automatic per-app decks** — focus a window on the desktop and the phone's browser flips to that app's buttons automatically.
-- [x] **Web-app decks** — treat a website as an app. A deck can claim a site by matching the browser's window title (e.g. YouTube and Netflix media controls), driving each site's own keyboard shortcuts. See [Web-app decks](docs/GUIDE.md#web-app-decks).
+- [x] **Web-app decks** — treat a website as an app. A deck can claim a site by matching the browser's window title (e.g. YouTube and Netflix media controls, Gmail's reply/archive), driving each site's own keyboard shortcuts. See [Web-app decks](docs/GUIDE.md#web-app-decks).
 - [x] **Buttons** that fire keystrokes, shell commands, launch a terminal, or call D-Bus methods.
 - [x] **Macros** — chain multiple actions in a single button press, with delays and optional continue-on-error.
-- [x] **Button styling** — bundled icons (Lucide glyphs + Simple Icons brand logos) and per-button background colours, set in YAML.
+- [x] **Button styling** — bundled icons (Lucide glyphs + Simple Icons brand logos) and per-button background colours, set in YAML. Optionally, a button or the app badge can use an installed app's own full-colour icon, read from the host's `.desktop` files (Linux, opt-in). See [App icons](docs/GUIDE.md#app-icons-source-desktop).
 - [x] **Scroll strip** — an always-on right-side jogstrip to scroll the focused window, with release momentum.
 - [x] **Manual control mode** — the phone becomes a trackpad (move, tap, right-click, drag-lock) and a keyboard, so you can type into and point at the focused app for the things decks don't cover (URL bars, chat boxes, ad-hoc commands).
 - [x] **App badge** — the focused app's name, icon, and accent color show in the bottom bar so you can tell at a glance what you're controlling.
@@ -52,14 +54,14 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [x] **Session lock awareness** — when the desktop session locks, the phone swaps to a "Screen locked" takeover and the daemon refuses presses / injection / trackpad / window raising (`--allow-while-locked` opts out); a plain screen blank keeps input live so a press wakes the machine.
 - [x] **Running programs list** — tap a deck-grid icon in the bottom chrome to open a list of every open window on the host, labeled by the deck the window would match. Tap a row to raise (focus) that window and close the list. Enumeration and raise are GNOME-only today (via the focus extension); other backends show the list's "unsupported on this platform" empty state.
 - [x] **VLC media widgets** — full VLC control surface with play/pause, seek, volume, album art. Configurable art sources (VLC embedded art + iTunes fallback).
-- [x] **Live sensor widgets** — meter and stats widgets pushed to the client in real time (CPU %, memory %, etc.), bound to daemon-side sensor sources.
+- [x] **Live sensor widgets** — meter and stats widgets pushed to the client in real time (CPU %, memory %, swap %, root disk %), bound to daemon-side sensor sources.
 - [x] **GUI deck editor** — build and edit decks from the browser without hand-editing YAML: a widget palette, a drag-to-reorder reflow canvas with span and overflow controls, a properties panel (labels, icons via a searchable picker, colours, actions and macros), and new-deck creation — saved back to disk over the write API. In development, but usable today. See [Deck editor](docs/GUIDE.md#deck-editor).
 - [x] **Live deck editing** — edit a deck file on the desktop (by hand or via the GUI editor) and every connected phone/tablet re-renders instantly; a bad edit shows an error in place instead of crashing.
 - [x] **Per-device tuning** — a settings panel for scroll speed/direction, trackpad sensitivity, content and text size, bar sizes, and keep-screen-awake, all saved on the device.
 - [x] **Addressable client views** — the deck, manual control, now playing, settings, editor, and running-windows views have their own URL paths for deep links and browser history.
 - [x] **Keep screen awake** while the surface is in use.
 - [x] **Install to home screen** (PWA) for a fullscreen, app-like surface.
-- [x] **Password auth** — every client authenticates with a shared password (on by default; `--no-auth` disables it for local development). See [Client auth](docs/GUIDE.md#client-auth).
+- [x] **Password auth** — every client authenticates with a shared password (on by default; `--no-auth` disables it for local development). See [Client auth](docs/GUIDE.md#client-auth). The link itself is **not encrypted** on a plain LAN — use a Tailscale tailnet for that; see [Security model](docs/GUIDE.md#security-model).
 - [x] **LAN scope control** — bind the daemon to a specific network interface (`--bind iface:wlan0`) or literal address; defaults to localhost-only for safety.
 - [x] **Accessibility** — keyboard navigation, visible focus ring, screen-reader landmarks and live announcements, larger controls, high contrast, and reduced motion.
 - [x] **Runs on Linux: GNOME (Wayland), KDE Plasma (Wayland), X11**
@@ -74,7 +76,7 @@ Pre-alpha, but usable day-to-day. Here's what deckd can do today and what's stil
 - [ ] **Multi-daemon chooser** — pair and pick between several desktops.
 - [ ] **Reliable web-app detection** — a browser extension reporting the active tab's real URL, so sites match by domain/path instead of the current window-title heuristic ([#90](https://github.com/jonocodes/deckd/issues/90)).
 - [ ] **Windows support**
-- [ ] **Packing and deployment** — self-contained macOS DMG ([#165](https://github.com/jonocodes/deckd/issues/165)) and Linux AppImage ([#168](https://github.com/jonocodes/deckd/issues/168))
+- [ ] **Packing and deployment** — self-contained macOS DMG ([#165](https://github.com/jonocodes/deckd/issues/165)) and Linux AppImage + tarball ([#168](https://github.com/jonocodes/deckd/issues/168)), released as CalVer tags (`vYYYYMMDD.N`, [ADR-0013](docs/adr/0013-calver-versioning.md)) with `just release`
 
 ## Inspiration and Comparison
 
@@ -145,7 +147,7 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the component breakdown and
 
 ## Getting started
 
-deckd needs Python 3.11+ and Node 18+. CI tests the 3.11 floor and the 3.12 interpreter the Nix package ships. In brief:
+deckd needs Python 3.11+ and Node 22+ (CI and the flox environment use Node 24 LTS). CI tests the 3.11 floor and the 3.12 interpreter the Nix package ships. In brief:
 
 ```sh
 uv venv --python 3.11

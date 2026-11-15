@@ -3,6 +3,7 @@ import { Disc, Pause, Play, SkipBack, SkipForward } from "lucide-react";
 import { Icon } from "./Icon";
 import type { MediaReading } from "./media-store";
 import type { NowPlayingEmptyState, Widget } from "./protocol";
+import { DESKTOP_ICONS } from "./nowplaying-icons";
 
 type Props = {
   widget: Widget;
@@ -18,19 +19,6 @@ type Row = {
   reading: MediaReading;
 };
 
-/** MPRIS bus suffixes that have a client-side icon mapping (issue #53).
- * Add entries here as new players are tested; an unknown ``desktop_entry``
- * falls back to the Lucide ``Disc`` glyph so the row still reads as "a
- * media player". The mapping is the desktop file basename → the Simple
- * Icons slug the client can render. Empty / unknown entries fall through. */
-const DESKTOP_ICONS: Record<string, { source: "simple-icons"; name: string }> = {
-  vlc: { source: "simple-icons", name: "vlcmediaplayer" },
-  spotify: { source: "simple-icons", name: "spotify" },
-  firefox: { source: "simple-icons", name: "firefox" },
-  mpv: { source: "simple-icons", name: "mpv" },
-  rhythmbox: { source: "simple-icons", name: "rhythmbox" },
-  audacity: { source: "simple-icons", name: "audacity" },
-};
 
 /** The art slot for a single row. When the daemon reported an
  * ``art_token`` we render a real ``<img>`` pointing at the daemon's
@@ -119,6 +107,7 @@ export function NowPlayingCell({ widget, states, onCommand }: Props) {
             <button
               type="button"
               className="nowplaying-play"
+              data-autofocus
               aria-label={reading.playing ? "Pause" : "Play"}
               aria-pressed={Boolean(reading.playing)}
               onClick={() => onCommand(id, "play-pause")}
