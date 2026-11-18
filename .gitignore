@@ -11,6 +11,8 @@ build/
 # Vite/Node
 client/node_modules/
 client/dist/
+# Assembled GitHub Pages site (scripts/build_pages.sh, `just pages`)
+_site/
 .vite/
 client/.env
 client/.env.local

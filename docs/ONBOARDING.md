@@ -81,7 +81,8 @@ This document is the primary navigation map for AI agents (and human developers)
 │   ├── nixos/              # retired spike module (points at the flake modules)
 │   ├── kwin-script/        # KWin focus script (KDE Plasma Wayland)
 │   └── gnome-shell/        # GNOME Shell focus extension
-├── scripts/                # Diagnostic and testing utilities
+├── scripts/                # Diagnostic and testing utilities; build_pages.sh assembles the Pages site
+├── site/                   # GitHub Pages homepage (jonocodes.github.io/deckd/); the client deploys under app/
 ├── tests/                  # Python test suite (pytest + pytest-asyncio)
 └── docs/                   # Documentation (see below)
     ├── GUIDE.md            # User & setup guide: install, per-platform setup, config walkthrough, client features, dev loop

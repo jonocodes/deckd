@@ -204,17 +204,11 @@ dev-client-tailscale:
 build-client:
     cd client && npm run build
 
-# Build the client and Ladle with the GitHub Pages base paths
-# (jonocodes.github.io/deckd/) so the deploy-pages workflow can be
-# repro'd locally. Output: client/dist/ (index.html, gallery.html,
-# ladle/). Use `npx serve client/dist` to browse before pushing.
+# Assemble the GitHub Pages site exactly as the deploy workflow does: the
+# homepage at the root, the client under app/, Ladle under ladle/.
+# Output: _site/deckd/. `just pages` builds and serves it.
 build-pages:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    cd client
-    VITE_BASE_PATH=/deckd/ npm run build
-    mkdir -p dist/ladle
-    npm run ladle:build -- --base /deckd/ladle/ --outDir dist/ladle
+    scripts/build_pages.sh _site/deckd
 
 ladle:
     cd client && npm run ladle
@@ -225,6 +219,30 @@ ladle:
 # to docs/screenshots/. Edit client/src/Screenshots.tsx to curate the list.
 screenshots:
     cd client && node screenshots.mjs
+
+# Build the GitHub Pages site exactly as CI deploys it (homepage at /deckd/,
+# client at /deckd/app/, Ladle at /deckd/ladle/) and serve it on :5290.
+# SKIP_LADLE=1 just pages skips the slow Ladle build.
+pages:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    scripts/build_pages.sh _site/deckd
+    echo "Pages preview: http://127.0.0.1:5290/deckd/"
+    node scripts/serve_pages.mjs _site 5290
+
+# Preview the homepage mockups (docs/mockups/homepage) over http. The client's
+# Vite dev server on :5288 serves the demo decks the pages embed; a static
+# server on :5289 serves the pages themselves (browsers won't let a file://
+# page frame localhost, so opening the HTML files directly shows blank
+# phones). Ctrl+C stops both.
+mockups:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    trap 'kill 0' EXIT
+    (cd client && npx vite dev --port 5288 --strictPort --host 127.0.0.1) &
+    uv run --no-sync python -m http.server 5289 --bind 127.0.0.1 --directory . >/dev/null 2>&1 &
+    echo "homepage mockups: http://127.0.0.1:5289/docs/mockups/homepage/b-desk.html (also a-notebook.html, c-press.html)"
+    wait -n
 
 # Rasterises client/public/icon.svg (the source of truth) into the PWA any +
 # maskable PNGs, the apple-touch-icon, and packaging/macos/deckd.icns. Uses

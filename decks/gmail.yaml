@@ -1,0 +1,81 @@
+# Web-app deck: claim Gmail by matching the browser window title, which ends
+# "… - Gmail" (e.g. "Inbox (3) - you@gmail.com - Gmail"). Title-based, so
+# best-effort; the browser-extension path (#90) would match the real URL.
+#
+# The buttons are Gmail's own keyboard shortcuts. Gmail ships with them OFF:
+# turn on Settings → See all settings → General → "Keyboard shortcuts on".
+# Delete is "#", sent here as shift+3 (US layout — adjust for others).
+match:
+  - "title:*- Gmail*"
+display_name: Gmail
+theme: "#ea4335"
+icon:
+  source: simple-icons
+  name: gmail
+widgets:
+  - id: compose
+    kind: button
+    label: Compose
+    icon:
+      source: lucide
+      name: square-pen
+    color: "#a5281b"
+    action:
+      key: "c"
+  - id: reply
+    kind: button
+    label: Reply
+    icon:
+      source: lucide
+      name: reply
+    action:
+      key: "r"
+  - id: reply-all
+    kind: button
+    label: Reply all
+    icon:
+      source: lucide
+      name: reply-all
+    action:
+      key: "a"
+  - id: forward
+    kind: button
+    label: Forward
+    icon:
+      source: lucide
+      name: forward
+    action:
+      key: "f"
+  - id: archive
+    kind: button
+    label: Archive
+    icon:
+      source: lucide
+      name: archive
+    color: "#1e3a8a"
+    action:
+      key: "e"
+  - id: delete
+    kind: button
+    label: Delete
+    icon:
+      source: lucide
+      name: trash-2
+    action:
+      key: "shift+3"
+  - id: newer
+    kind: button
+    label: Newer
+    icon:
+      source: lucide
+      name: chevron-up
+    action:
+      key: "k"
+  - id: older
+    kind: button
+    label: Older
+    icon:
+      source: lucide
+      name: chevron-down
+    action:
+      key: "j"

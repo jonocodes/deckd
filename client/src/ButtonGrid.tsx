@@ -240,9 +240,14 @@ export function ButtonGrid({
         // spot danger before pressing. The widget record the daemon
         // relays on every deck push carries the field verbatim.
         const isDangerous = w.confirm === true;
-        const cellClassName = isDangerous
-          ? "cell cell-button cell-danger"
-          : "cell cell-button";
+        // Icon-only buttons (a launcher tile) get a bigger glyph: no label
+        // competes for the cell.
+        const isIconOnly = !!w.icon && !w.label;
+        const cellClassName = [
+          "cell cell-button",
+          isDangerous ? "cell-danger" : null,
+          isIconOnly ? "cell-icon-only" : null,
+        ].filter(Boolean).join(" ");
         return (
           <button
             key={w.id}
