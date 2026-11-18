@@ -45,6 +45,14 @@
   .hero { padding: 64px 0 40px; display: grid; grid-template-columns: 1fr; gap: 12px; }
   .label { font: 500 12px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--orange); }
   h1 { font-size: 52px; line-height: 1.05; font-weight: 600; letter-spacing: -0.02em; margin: 0; max-width: 13em; }
+  /* "Your phone / tablet / laptop becomes…": the words share one grid cell
+     and the box eases to the current word's width, so "becomes" follows it
+     without a gap. Without JS (or with reduced motion) it just says phone. */
+  h1 .swap { display: inline-grid; color: var(--orange); transition: width .35s ease; }
+  h1 .swap > span { grid-area: 1 / 1; justify-self: start; opacity: 0; transform: translateY(.25em); transition: opacity .35s, transform .35s; }
+  h1 .swap:not(.js) > span:first-child, h1 .swap > span.on { opacity: 1; transform: none; }
+  h1 .swap > span.out { transform: translateY(-.25em); }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
   .hero p { color: var(--muted); font-size: 18px; max-width: 36em; margin: 8px 0 0; }
 
   /* The stage: a fake desktop window strip driving a live phone. */
@@ -157,7 +165,7 @@
 
   <section class="hero">
     <div class="label">Context-aware controller</div>
-    <h1>Your phone becomes the buttons for whatever's on screen.</h1>
+    <h1>Your <span class="sr">phone, tablet or laptop</span><span class="swap" aria-hidden="true"><span>phone</span><span>tablet</span><span>laptop</span></span> becomes the buttons for whatever's on screen.</h1>
     <p>deckd watches which app — or website — is focused on your computer and hands the right buttons to any browser on your network.</p>
   </section>
 
@@ -271,5 +279,23 @@
     <div><h4>License</h4><span>GPL-3.0</span><span>No account, no cloud</span></div>
   </footer>
 </div>
+<script>
+  // Cycle the hero's "Your phone / tablet / laptop".
+  (() => {
+    const box = document.querySelector("h1 .swap");
+    if (!box || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const words = [...box.children];
+    let k = 0;
+    const show = (next) => {
+      words.forEach((w, j) => { w.classList.toggle("on", j === next); w.classList.toggle("out", j === k && j !== next); });
+      box.style.width = words[next].offsetWidth + "px";
+      k = next;
+    };
+    box.classList.add("js");
+    show(0);
+    document.fonts.ready.then(() => show(k)); // re-measure once the webfont lands
+    setInterval(() => show((k + 1) % words.length), 2400);
+  })();
+</script>
 </body>
 </html>
