@@ -16,6 +16,7 @@ from pathlib import Path
 
 from deckd.macos_app import (
     DEFAULT_PORT,
+    LanAccess,
     ServerRunner,
     app_argv,
     app_support_dir,
@@ -29,6 +30,7 @@ from deckd.macos_app import (
 )
 
 log = logging.getLogger("deckd.menubar")
+
 
 
 def _surface_url(port: int = DEFAULT_PORT) -> str:
@@ -89,6 +91,7 @@ def main() -> None:
         NSMenuItem,
         NSStatusBar,
         NSURL,
+        NSUserDefaults,
         NSVariableStatusItemLength,
         NSWorkspace,
     )
@@ -105,13 +108,13 @@ def main() -> None:
             if self is None:
                 return None
             self._decks_dir = decks
-            self._lan = lan
+            self._lan = lan  # LanAccess: the remembered "Allow LAN access"
             self._runner = None
             self._start_runner()
             return self
 
         def _start_runner(self):
-            bind = ["0.0.0.0"] if self._lan else None
+            bind = self._lan.bind()
             argv = app_argv(
                 decks_dir=self._decks_dir,
                 client_dist=web,
@@ -135,9 +138,15 @@ def main() -> None:
             self._start_runner()
 
         def toggleLan_(self, sender):
-            self._lan = not self._lan
-            sender.setState_(1 if self._lan else 0)
+            sender.setState_(1 if self._lan.toggle() else 0)
             self.restartServer_(sender)
+
+        # NSApplicationDelegate: opening deckd.app again while it's running
+        # (Finder, Spotlight, `open -a deckd`) opens the surface — a way in
+        # even when macOS hides the menu-bar icon.
+        def applicationShouldHandleReopen_hasVisibleWindows_(self, _app, _flag):
+            self.openSurface_(None)
+            return False
 
         def quit_(self, _sender):
             if self._runner is not None:
@@ -154,7 +163,9 @@ def main() -> None:
     # in Info.plist so the Dock icon never appears even for a moment).
     app.setActivationPolicy_(1)
 
-    target = MenuTarget.alloc().initWithDecks_lan_(decks_dir, False)
+    lan = LanAccess(NSUserDefaults.standardUserDefaults())
+    target = MenuTarget.alloc().initWithDecks_lan_(decks_dir, lan)
+    app.setDelegate_(target)
 
     status_item = NSStatusBar.systemStatusBar().statusItemWithLength_(
         NSVariableStatusItemLength
@@ -180,7 +191,8 @@ def main() -> None:
     add_item(menu, target, "Open deckd surface", "openSurface:")
     add_item(menu, target, "Open decks folder", "openDecks:")
     add_item(menu, target, "Restart server", "restartServer:")
-    add_item(menu, target, "Allow LAN access", "toggleLan:")
+    lan_item = add_item(menu, target, "Allow LAN access", "toggleLan:")
+    lan_item.setState_(1 if lan.enabled else 0)
     menu.addItem_(NSMenuItem.separatorItem())
     add_item(menu, target, "Quit deckd", "quit:", "q")
     status_item.setMenu_(menu)

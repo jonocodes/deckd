@@ -687,7 +687,14 @@ The bundle is **ad-hoc signed, not notarized** (no paid Apple Developer Program)
 xattr -dr com.apple.quarantine /Applications/deckd.app
 ```
 
-Then grant the TCC permissions as for the source build (see [macOS](#macos) above): Accessibility, System Events, and — for window titles — Screen Recording. The app seeds decks into `~/Library/Application Support/deckd/decks` on first run and logs to `~/Library/Logs/deckd.log`. The menu offers Open surface / Open decks folder / Restart server / Allow LAN access / Quit; it stays localhost-only until you enable LAN access.
+Then grant the TCC permissions as for the source build (see [macOS](#macos) above): Accessibility, System Events, and — for window titles — Screen Recording. The app seeds decks into `~/Library/Application Support/deckd/decks` on first run and logs to `~/Library/Logs/deckd.log`. The menu offers Open surface / Open decks folder / Restart server / Allow LAN access / Quit; it stays localhost-only until you enable LAN access. The **Allow LAN access** choice is remembered across quits, reboots, and upgrades. You can also set it without the menu bar, which helps if macOS isn't showing the icon:
+
+```sh
+defaults write com.deckd.daemon AllowLAN -bool true    # LAN on (false or `defaults delete com.deckd.daemon AllowLAN` for localhost-only)
+osascript -e 'quit app id "com.deckd.daemon"'; open -a deckd   # relaunch to apply
+```
+
+Opening deckd.app again while it's already running (Finder, Spotlight, `open -a deckd`) opens the surface in your browser, so the app stays reachable even with no menu-bar icon.
 
 Because the bundle is ad-hoc signed, its code identity is its content hash: **every rebuild changes it, so macOS may ask you to re-grant Accessibility / System Events after an upgrade.** Remove the stale `deckd` entry from System Settings → Privacy & Security and re-add the app if a grant stops working.
 
@@ -697,7 +704,7 @@ Verified so far (macOS 26.6.2, Apple Silicon): the bundle builds, launches as a 
 
 Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workflows/release-macos.yml) on a `macos-15` runner: it builds the client, freezes the app, wraps it in a DMG (the same `just build-macos-dmg` recipe above), and attaches the DMG to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag, or — with **publish** unticked — just build the DMG and upload it as a workflow artifact, for trying a build without making a release.
 
-Before anything is published, a `test-app` job installs the DMG on a second, fresh runner and clicks through the real menu-bar item ([`packaging/macos/test/test-app.sh`](../packaging/macos/test/test-app.sh)). It checks the menu's items, that **Allow LAN access** opens and closes the LAN port and toggles its ✓, **Restart server**, **Open decks folder** (a Finder window), **Open deckd surface** (Safari loads it), **Quit**, and that an in-place upgrade keeps the password and decks. It uploads screenshots (`deckd-macos-test-app` artifact) of the open menu, the decks folder, the surface in Safari, and the first-run *"deckd wants access to control System Events"* prompt. Pull requests that touch the app run build + test (never publish).
+Before anything is published, a `test-app` job installs the DMG on a second, fresh runner and clicks through the real menu-bar item ([`packaging/macos/test/test-app.sh`](../packaging/macos/test/test-app.sh)). It checks the menu's items, that **Allow LAN access** opens and closes the LAN port, toggles its ✓, and stays on across a relaunch, **Restart server**, **Open decks folder** (a Finder window), **Open deckd surface** (Safari loads it), **Quit**, and that an in-place upgrade keeps the password and decks. It uploads screenshots (`deckd-macos-test-app` artifact) of the open menu, the decks folder, the surface in Safari, and the first-run *"deckd wants access to control System Events"* prompt. Pull requests that touch the app run build + test (never publish).
 
 This works on GitHub's free hosted runners because they have a real logged-in desktop, and the image grants Accessibility and Screen Recording to `bash`/`osascript`. The script's `--pregrant` writes deckd's own TCC grants before launch (CI only: it needs Full Disk Access) — otherwise its System Events consent prompt sits on screen and blocks every System Events call. What CI can't cover: grants surviving an upgrade (they're pre-written), and Gatekeeper quarantine on a browser download (`spctl` output is logged, informational).
 
