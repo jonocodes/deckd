@@ -154,10 +154,12 @@ uv venv --python 3.11
 uv pip install -e ".[dev,uinput,dbus]"
 cd client && npm install && cd ..
 just build-client
-just run-daemon        # serves the client at http://127.0.0.1:8765
+just run-daemon        # serves the client at http://127.0.0.1:8865
 ```
 
-Then open `http://127.0.0.1:8765` in any browser. The full install story —
+Then open `http://127.0.0.1:8865` in any browser. (Running from a checkout
+uses the dev port :8865; installed deckd — the packages, `nix run`, the
+service modules — listens on :8765, so the two can run side by side.) The full install story —
 per-platform setup (macOS, KDE Plasma Wayland, X11), phone/tablet pairing,
 `/dev/uinput` permissions, and running deckd as a login service — is in the
 [user & setup guide](docs/GUIDE.md#running-deckd).

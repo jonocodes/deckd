@@ -1973,7 +1973,7 @@ class Server:
         # the bind surface (issue #66) so a phone pairing in via the
         # same machine can read the URL it should hit.
         #
-        # On the Vite dev path (:5173 -> :8765) that fetch is cross-origin,
+        # On the Vite dev path (:5173 -> :8865) that fetch is cross-origin,
         # so the browser needs an explicit allow header or it drops the
         # response; ``*`` is fine for a read-only diagnostic.
         from .bind import ResolvedBind, url_for as _bind_url_for

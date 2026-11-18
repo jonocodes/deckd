@@ -89,7 +89,7 @@ cd client && npm install && cd ..
 # 4. Build the client so the daemon can serve it
 just build-client
 
-# 5. Run the daemon (serves the built client at http://127.0.0.1:8765)
+# 5. Run the daemon (serves the built client at http://127.0.0.1:8865)
 just run-daemon
 ```
 
@@ -108,7 +108,7 @@ Setup (no `uv`/uinput bits):
 ```sh
 just setup            # auto-picks setup-macos on Mac, setup-linux elsewhere
 just build-client
-just dev-daemon       # listens on http://127.0.0.1:8765, auto-restarts on Python edits
+just dev-daemon       # listens on http://127.0.0.1:8865, auto-restarts on Python edits
 ```
 
 `just dev-daemon` wraps the daemon in the `deckd-dev` supervisor so Python edits hot-reload (YAML hot-reloads either way). For a one-shot `deckd` invocation use `just run-daemon`. Running multiple `git worktree`s side-by-side? Run `just worktree-adopt` once inside each new checkout — it assigns non-colliding ports, wires the toolchain to the primary checkout's env, and installs dependencies (see [docs/ONBOARDING.md](ONBOARDING.md#worktrees-git-worktree)).
@@ -181,13 +181,13 @@ sudo pacman -S base-devel linux-api-headers
 **3. Run the daemon**, then install the focus KWin script:
 
 ```sh
-just run-daemon                 # owns org.deckd.Focus; serves the client at :8765
+just run-daemon                 # owns org.deckd.Focus; serves the client at :8865
 just install-focus-kwin         # installs + enables + hot-starts the KWin focus script
 ```
 
 Order matters slightly: the script pushes focus to the *running* daemon, so start the daemon first (or just re-run `install-focus-kwin` afterwards — see [Cold-start ordering](#kde-plasma-wayland-sessions)). Details and verification are in [KDE Plasma Wayland sessions](#kde-plasma-wayland-sessions) under the focus watcher.
 
-**4. Verify.** Open `http://127.0.0.1:8765`, focus different apps and watch the deck follow (`just watch-focus`), and press a browser button — it should fire the keystroke in the focused window. If buttons do nothing, it's almost always step 2 (`just check-uinput`).
+**4. Verify.** Open `http://127.0.0.1:8865`, focus different apps and watch the deck follow (`just watch-focus`), and press a browser button — it should fire the keystroke in the focused window. If buttons do nothing, it's almost always step 2 (`just check-uinput`).
 
 ### Phone/tablet testing
 
@@ -201,7 +201,7 @@ just run-daemon-lan
 hostname -I
 ```
 
-Open `http://<desktop-lan-ip>:8765` on the phone, for example `http://192.168.30.117:8765`. The client connects its WebSocket back to the same host automatically, so no separate `VITE_DECKD_WS` setting is needed for this built-client path.
+Open `http://<desktop-lan-ip>:8865` on the phone, for example `http://192.168.30.117:8865` (an installed deckd uses `:8765` instead). The client connects its WebSocket back to the same host automatically, so no separate `VITE_DECKD_WS` setting is needed for this built-client path.
 
 ### Design tooling (no daemon required)
 
@@ -236,13 +236,13 @@ If both devices are on a [Tailscale](https://tailscale.com/) tailnet, deckd has 
 
 1. Uses `tailscale cert` to provision (or reuse) a Let's-Encrypt cert for your tailnet hostname.
 2. Runs Vite's dev server on `:5173` with HTTPS backed by that cert.
-3. Configures Vite to proxy `/ws` and `/health` to the local daemon on `:8765`, so the whole app is same-origin — no extra `VITE_DECKD_WS` config, HMR still works, PWA install still eligible.
+3. Configures Vite to proxy `/ws` and `/health` to the local dev daemon on `:8865`, so the whole app is same-origin — no extra `VITE_DECKD_WS` config, HMR still works, PWA install still eligible.
 
 ```sh
 # One-time: enable HTTPS certs for your tailnet
 # https://login.tailscale.com/admin/dns  →  "Enable HTTPS"
 
-# Terminal 1 — daemon on localhost (the recipe expects it at 127.0.0.1:8765):
+# Terminal 1 — daemon on localhost (the recipe expects it at 127.0.0.1:8865):
 just dev-daemon
 
 # Terminal 2 — Vite HTTPS backed by tailscale cert:
@@ -259,13 +259,13 @@ Cert files last ~3 months (Let's Encrypt); delete `client/.tls/*` and rerun the 
 2. **Routing.** The phone (on the tailnet) can reach that IP.
 3. **The cert.** `tailscale cert` mints a Let's Encrypt cert for the hostname and drops the `.crt` / `.key` files where Vite reads them.
 
-Tailscale is **not** running an application proxy — `tailscale serve status` will show nothing when this is set up, and that's correct. Vite binds `0.0.0.0:5173` directly with HTTPS, terminates TLS with the cert itself, and proxies `/ws` internally to the daemon at `127.0.0.1:8765`. The phone's connection lands on Vite; the daemon only ever sees localhost traffic.
+Tailscale is **not** running an application proxy — `tailscale serve status` will show nothing when this is set up, and that's correct. Vite binds `0.0.0.0:5173` directly with HTTPS, terminates TLS with the cert itself, and proxies `/ws` internally to the daemon at `127.0.0.1:8865`. The phone's connection lands on Vite; the daemon only ever sees localhost traffic.
 
-That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws` (Vite's port), not `:8765` (daemon's port).
+That's why the URL you see in devtools is `wss://<host>.<tailnet>.ts.net:5173/ws` (Vite's port), not `:8865` (daemon's port).
 
-**Troubleshooting — page loads but `wss://…:5173/ws` won't connect and no password prompt appears.** This is almost always the daemon being down, not a cert problem: the page loads over HTTPS (so the cert is fine, and `wss://` reuses it), but Vite's `/ws` proxy has no upstream to forward to, so the socket is dropped mid-handshake. Because the auth exchange never completes, the client never receives the `unauthorized` frame and the password gate never renders — it just loops on reconnect. Check `curl -s http://127.0.0.1:8765/health`; if it fails, (re)start the daemon. Note the password lives in per-origin `localStorage`, so entering it once at `localhost:5173` does **not** carry over to the `<host>.ts.net:5173` origin — enter it again there. If the daemon itself won't start, it now fails fast with `cannot bind 127.0.0.1:8765 — another process is already listening there` (usually a stale `deckd`); clear it with `pkill -f bin/deckd` and relaunch.
+**Troubleshooting — page loads but `wss://…:5173/ws` won't connect and no password prompt appears.** This is almost always the daemon being down, not a cert problem: the page loads over HTTPS (so the cert is fine, and `wss://` reuses it), but Vite's `/ws` proxy has no upstream to forward to, so the socket is dropped mid-handshake. Because the auth exchange never completes, the client never receives the `unauthorized` frame and the password gate never renders — it just loops on reconnect. Check `curl -s http://127.0.0.1:8865/health`; if it fails, (re)start the daemon. Note the password lives in per-origin `localStorage`, so entering it once at `localhost:5173` does **not** carry over to the `<host>.ts.net:5173` origin — enter it again there. If the daemon itself won't start, it now fails fast with `cannot bind 127.0.0.1:8865 — another process is already listening there` (usually a stale `deckd`); clear it with `pkill -f bin/deckd` and relaunch.
 
-**Contrast:** `tailscale serve` **(persistent URL, no dev server).** If you want an installable PWA at `https://<host>.<tailnet>.ts.net/` (no port, works without any process running on the desktop besides the daemon), that's a different setup — `just build-client` + `just run-daemon` + `tailscale serve --bg 8765`. Tailscale proxies `:443 → 127.0.0.1:8765`, the daemon serves the built `client/dist/`. You lose HMR but gain a URL that survives closing your dev terminals. Not covered by any `just` recipe yet — file an issue if you want one.
+**Contrast:** `tailscale serve` **(persistent URL, no dev server).** If you want an installable PWA at `https://<host>.<tailnet>.ts.net/` (no port, works without any process running on the desktop besides the daemon), that's a different setup — `just build-client` + `just run-daemon` + `tailscale serve --bg 8865`. Tailscale proxies `:443 → 127.0.0.1:8865`, the daemon serves the built `client/dist/`. You lose HMR but gain a URL that survives closing your dev terminals. Not covered by any `just` recipe yet — file an issue if you want one.
 
 ### Client chrome
 
@@ -494,7 +494,7 @@ just dev-daemon           # daemon under a Python-file-restart supervisor
 just dev-client-lan
 ```
 
-Open `http://lute:5173` on the phone when hostname resolution is available, or use the Network URL printed by Vite. `lute` is listed in Vite's `server.allowedHosts`. `dev-client-lan` sets `VITE_DECKD_WS=ws://lute:8765/ws` automatically, so the Vite page still talks to the daemon.
+Open `http://lute:5173` on the phone when hostname resolution is available, or use the Network URL printed by Vite. `lute` is listed in Vite's `server.allowedHosts`. Vite proxies `/ws` to the dev daemon on `127.0.0.1:8865`, so the page talks to it with no `VITE_DECKD_WS` setting — and an installed deckd service on lute's `:8765` is left alone.
 
 ### Focus watcher
 

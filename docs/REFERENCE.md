@@ -84,7 +84,7 @@ deckctl [--host HOST] [--port PORT] [--password PASSWORD] <command>
 |----------|---------|
 | `DECKD_PASSWORD` | Passed by `vite.config.ts` proxy to the daemon. Also consumed by local scripts. |
 | `VITE_BASE_PATH` | Base URL when deploying to a subdirectory (e.g. GitHub Pages). |
-| `DECKD_UPSTREAM` | Daemon origin the Vite dev-server proxy forwards `/ws` and `/health` to (default `http://127.0.0.1:8765`). |
+| `DECKD_UPSTREAM` | Daemon origin the Vite dev-server proxy forwards `/ws` and `/health` to (default `http://127.0.0.1:8865`, the dev daemon port). |
 
 ### Development ports
 
@@ -92,7 +92,7 @@ Read by the Justfile, and written per-worktree into a gitignored `./.env` by `ju
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `DECKD_PORT` | `8765` | Daemon port for every `dev-*` / `run-*` recipe, `deckctl` in `status` / `diag` / `decks` / `metrics`, and the pair `just kill` frees. |
+| `DECKD_PORT` | `8865` | Daemon port for every `dev-*` / `run-*` recipe, `deckctl` in `status` / `diag` / `decks` / `metrics`, and the pair `just kill` frees. |
 | `VITE_PORT` | `5173` | Vite dev-server port. When overridden, `--strictPort` is dropped so Vite can fall through. |
 | `DECKD_E2E_PORT` | `8975` | Playwright fixture daemon, so two worktrees can run `just test-all` at once. |
 | `DECKD_SMOKE_PORT` | `18765` | In-process `just smoke` server, so two worktrees can smoke-test at once. |
@@ -166,7 +166,7 @@ Primary development operations. Run `just` (no args) to list all available recip
 | `just run-daemon-lan` | Start the daemon bound to `0.0.0.0` (LAN-visible). |
 | `just dev` | Dev stack: daemon (LAN, restart-on-edit) + Vite client (Tailscale HTTPS). |
 | `just dev-lan` | Dev stack: daemon + Vite client on plain HTTP LAN. |
-| `just kill` | Kill whatever is on `:8765` and `:5173`. |
+| `just kill` | Kill whatever is on `:8865` and `:5173` (or this checkout's `DECKD_PORT` / `VITE_PORT`). |
 | `just build-client` | Build the client to `client/dist/`. |
 | `just test` | Run the Python test suite (`pytest`). |
 | `just test-client` | Run the client tests (Vitest unit + Playwright e2e). |

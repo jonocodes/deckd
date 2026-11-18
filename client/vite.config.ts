@@ -18,7 +18,7 @@ function readTlsConfig() {
   return { cert: fs.readFileSync(crt), key: fs.readFileSync(key) };
 }
 
-const daemonUpstream = process.env.DECKD_UPSTREAM ?? "http://127.0.0.1:8765";
+const daemonUpstream = process.env.DECKD_UPSTREAM ?? "http://127.0.0.1:8865";
 const https = readTlsConfig();
 
 export default defineConfig({

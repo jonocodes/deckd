@@ -82,12 +82,12 @@ run-daemon-lan:
 # writes all four into a per-checkout ./.env (loaded above); set them by hand
 # for a one-off. DECKD_E2E_PORT and DECKD_SMOKE_PORT move the two throwaway
 # test daemons, so two worktrees can run `just test-all` at the same time.
-DECKD_PORT := env_var_or_default("DECKD_PORT", "8765")
+DECKD_PORT := env_var_or_default("DECKD_PORT", "8865")
 VITE_PORT := env_var_or_default("VITE_PORT", "5173")
 DECKD_E2E_PORT := env_var_or_default("DECKD_E2E_PORT", "8975")
 DECKD_SMOKE_PORT := env_var_or_default("DECKD_SMOKE_PORT", "18765")
 
-# Kill whatever is bound to the two ports we use: the daemon (default :8765)
+# Kill whatever is bound to the two ports we use: the daemon (default :8865)
 # and the Vite dev server (default :5173). Handy when a stale daemon still
 # holds the port (deckd now fails fast on that) or a dev server outlived its
 # terminal, leaving the client with no backend. Honours DECKD_PORT /
@@ -464,11 +464,11 @@ watch-focus-once:
 
 # Hit /health.
 #
-# These four all target DECKD_PORT — i.e. *this* checkout's daemon. Without
-# that, deckctl's own default (:8765) would answer from whatever holds the
-# default port, which on a machine running an installed deckd service is the
-# prod daemon rather than the dev one you just started. To aim at another
-# instance deliberately: `DECKD_PORT=8765 just status`.
+# These four all target DECKD_PORT — i.e. *this* checkout's daemon (:8865 by
+# default). Without that, deckctl's own default (:8765) is the port an
+# installed deckd service uses, so it would answer from the prod daemon rather
+# than the dev one you just started. To aim at the installed one deliberately:
+# `DECKD_PORT=8765 just status`.
 status:
     deckctl --port {{DECKD_PORT}} status
 
