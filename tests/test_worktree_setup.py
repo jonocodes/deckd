@@ -20,7 +20,12 @@ import pytest
 REPO_ROOT = Path(__file__).parent.parent
 SCRIPT = REPO_ROOT / "scripts" / "worktree.sh"
 
-BASE_DECKD = 8765
+BASE_DECKD = 8865
+# Where an installed (prod) deckd listens. Dev bases deliberately avoid it.
+PROD_PORT = 8765
+# The dev daemon base before it moved off the prod port; .env files written
+# then still say DECKD_PORT=8766 etc. and must keep their offset.
+LEGACY_BASE_DECKD = 8765
 BASE_VITE = 5173
 BASE_E2E = 8975
 BASE_SMOKE = 18765
@@ -39,7 +44,7 @@ def _run(
 
     Without ``DECKD_WORKTREE_BUSY_PORTS`` the allocator probes real sockets,
     so results would depend on what happens to be listening on the machine
-    running the suite — a developer with a deckd on :8765 would see different
+    running the suite — a developer with a deckd on :8865 would see different
     offsets than CI. Default to "nothing is busy" and let individual tests
     declare otherwise.
     """
@@ -84,18 +89,28 @@ def _add_worktree(primary: Path, name: str) -> Path:
 
 def test_primary_keeps_the_default_ports(primary: Path) -> None:
     """The main checkout must behave exactly as it did before worktree support:
-    no .env, no renumbering, :8765/:5173 as always."""
+    no .env, no renumbering, :8865/:5173 as always."""
     result = _run(primary, "adopt", "--no-install")
     assert result.returncode == 0, result.stderr
     assert not (primary / ".env").exists()
     assert "primary checkout" in result.stdout
 
 
+def test_primary_ignores_an_installed_deckd_on_the_prod_port(primary: Path) -> None:
+    """An installed deckd (NixOS/home-manager service, the macOS app) holds
+    :8765. The dev bases sit off that port on purpose, so running prod and dev
+    on one machine leaves the primary checkout on its defaults."""
+    result = _run(primary, "adopt", "--no-install", busy=str(PROD_PORT))
+    assert result.returncode == 0, result.stderr
+    assert not (primary / ".env").exists()
+    doctor = _run(primary, "doctor", busy=str(PROD_PORT))
+    assert "already in use" not in doctor.stdout
+
+
 def test_primary_moves_off_an_occupied_default_port(primary: Path) -> None:
-    """The primary prefers offset 0 but doesn't own it. On a machine that also
-    runs an installed deckd service, :8765 is already taken before any dev
-    daemon starts, and the main checkout has to move like anyone else —
-    otherwise `just dev` there just fails on address-in-use forever."""
+    """The primary prefers offset 0 but doesn't own it. If something else
+    already holds the dev daemon port, the main checkout has to move like
+    anyone else — otherwise `just dev` there fails on address-in-use forever."""
     result = _run(primary, "adopt", "--no-install", busy=str(BASE_DECKD))
     assert result.returncode == 0, result.stderr
 
@@ -280,3 +295,54 @@ def test_no_envrc_when_the_primary_does_not_use_direnv(primary: Path) -> None:
     wt = _add_worktree(primary, "feature-a")
     _run(wt, "adopt", "--no-install")
     assert not (wt / ".envrc").exists()
+
+
+def test_legacy_env_keeps_its_offset_and_moves_to_the_new_base(primary: Path) -> None:
+    """Worktrees adopted before the dev base moved have DECKD_PORT=8766 etc.
+    Re-adopting must keep their offset (Vite bookmarks, e2e ports) and only
+    move the daemon onto the new base — not decode 8766 as a negative offset."""
+    wt = _add_worktree(primary, "feature-a")
+    (wt / ".env").write_text(
+        f"DECKD_PORT={LEGACY_BASE_DECKD + 2}\nVITE_PORT={BASE_VITE + 2}\n"
+        f"DECKD_E2E_PORT={BASE_E2E + 2}\nDECKD_SMOKE_PORT={BASE_SMOKE + 2}\n"
+    )
+    result = _run(wt, "adopt", "--no-install")
+    assert result.returncode == 0, result.stderr
+    env = _dotenv(wt / ".env")
+    assert env["DECKD_PORT"] == str(BASE_DECKD + 2)
+    assert env["VITE_PORT"] == str(BASE_VITE + 2)
+
+
+def test_legacy_env_still_reserves_its_offset(primary: Path) -> None:
+    """A sibling not yet re-adopted still holds its old offset; new worktrees
+    must route around it."""
+    old = _add_worktree(primary, "feature-old")
+    (old / ".env").write_text(
+        f"DECKD_PORT={LEGACY_BASE_DECKD + 1}\nVITE_PORT={BASE_VITE + 1}\n"
+    )
+    new = _add_worktree(primary, "feature-new")
+    assert _run(new, "adopt", "--no-install").returncode == 0
+    assert _dotenv(new / ".env")["DECKD_PORT"] == str(BASE_DECKD + 2)
+
+
+def test_doctor_flags_a_legacy_env(primary: Path) -> None:
+    wt = _add_worktree(primary, "feature-a")
+    (wt / ".env").write_text(
+        f"DECKD_PORT={LEGACY_BASE_DECKD + 1}\nVITE_PORT={BASE_VITE + 1}\n"
+    )
+    result = _run(wt, "doctor")
+    assert result.returncode == 1
+    assert "prod port range" in result.stdout
+    assert "just worktree-adopt" in result.stdout
+
+
+def test_primary_drops_a_legacy_env_and_reclaims_the_defaults(primary: Path) -> None:
+    """A primary displaced to 8766 by an installed deckd (the old behaviour)
+    goes back to the bare defaults once dev no longer shares the prod port."""
+    (primary / ".env").write_text(
+        f"DECKD_PORT={LEGACY_BASE_DECKD + 1}\nVITE_PORT={BASE_VITE + 1}\n"
+    )
+    result = _run(primary, "adopt", "--no-install", busy=str(PROD_PORT))
+    assert result.returncode == 0, result.stderr
+    assert not (primary / ".env").exists()
+    assert "legacy .env" in result.stdout

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -70,7 +71,9 @@ def main() -> None:
     parser.add_argument(
         "--port",
         type=int,
-        default=8765,
+        # The checkout's dev daemon: $DECKD_PORT (a worktree's .env), else
+        # the dev default. Pass --port 8765 to check an installed deckd.
+        default=int(os.environ.get("DECKD_PORT", "8865")),
         help="daemon port (matched against the focused window's title by the auto-ignore check)",
     )
     parser.add_argument(

@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 
 import websockets
 
@@ -29,7 +30,9 @@ async def send_scroll(url: str, *, delta: int, frames: int, delay: float, veloci
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="send_scroll.py")
-    parser.add_argument("--url", default="ws://127.0.0.1:8765/ws")
+    # The checkout's dev daemon by default ($DECKD_PORT, else :8865).
+    port = os.environ.get("DECKD_PORT", "8865")
+    parser.add_argument("--url", default=f"ws://127.0.0.1:{port}/ws")
     parser.add_argument("--delta", type=int, default=30)
     parser.add_argument("--frames", type=int, default=20)
     parser.add_argument("--delay", type=float, default=0.016)
