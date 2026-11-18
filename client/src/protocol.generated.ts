@@ -461,7 +461,55 @@ export type RunningWindowsMessage = {
   windows: WindowListEntry[];
 };
 
-export type ServerMessage = DeckMessage | StateMessage | BrightnessMessage | WidgetUpdateMessage | MediaStateMessage | MediaErrorMessage | ChromeMediaMessage | EventMessage | MacroResultMessage | ConfirmRequestMessage | RunningWindowsMessage | ErrorMessage;
+/**
+ * One thing the daemon knows is broken on this host (issue #195).
+ *
+ *     Platform-neutral: a backend mints these from whatever it can probe
+ *     (macOS Accessibility trust today; Automation, Linux ``uinput`` access
+ *     are follow-ups). ``id`` is a stable machine key (``accessibility_missing``)
+ *     the client can dedupe and dismiss by. ``fix_steps`` are complete,
+ *     user-facing sentences that name the exact app to grant and the
+ *     Settings path. ``affects`` lists the input primitives that silently
+ *     fail while the issue stands (``pointer``, ``scroll``, ``key``,
+ *     ``raise_window``, ...).
+ *     
+ */
+export type HealthIssue = {
+  /**
+   * constraint: min_length=1
+   */
+  id: string;
+
+  severity: "error" | "warning";
+  /**
+   * constraint: min_length=1
+   */
+  title: string;
+
+  detail: string;
+
+  fix_steps: string[];
+
+  affects: string[];
+};
+
+/**
+ * Daemon -> client push: the full list of active health issues (#195).
+ *
+ *     Full snapshot, pushed only when the list changes; an empty list is
+ *     what clears the client's banner. Replayed on connect only when the
+ *     list is non-empty — a client that never receives ``health`` reads as
+ *     healthy, which is the truth.
+ *     
+ */
+export type HealthMessage = {
+
+  type: "health";
+
+  issues: HealthIssue[];
+};
+
+export type ServerMessage = DeckMessage | StateMessage | BrightnessMessage | WidgetUpdateMessage | MediaStateMessage | MediaErrorMessage | ChromeMediaMessage | EventMessage | MacroResultMessage | ConfirmRequestMessage | RunningWindowsMessage | HealthMessage | ErrorMessage;
 
 export type HelloMessage = {
 

@@ -106,6 +106,19 @@ describe("useDeckdSocket — reconnect feedback (issue #64)", () => {
     );
   });
 
+  it("routes a health frame to onHealth (issue #195)", async () => {
+    const onHealth = vi.fn();
+    renderHook(() =>
+      useDeckdSocket(noop, noop, noop, undefined, undefined, undefined, undefined, undefined, onHealth),
+    );
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1));
+    const ws = FakeWebSocket.instances[0];
+    act(() => ws.open());
+    const frame = { type: "health", issues: [] };
+    act(() => ws.onmessage?.({ data: JSON.stringify(frame) }));
+    expect(onHealth).toHaveBeenCalledWith(frame);
+  });
+
   it("cancel stops the retry loop; retry resumes it", async () => {
     const { result } = renderHook(() => useDeckdSocket(...hookArgs()));
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1));

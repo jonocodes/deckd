@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerDeck, ServerMediaError, ServerMessage, ServerRunningWindows, ServerState, ServerWidgetUpdate, MediaState } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerDeck, ServerHealth, ServerMediaError, ServerMessage, ServerRunningWindows, ServerState, ServerWidgetUpdate, MediaState } from "./protocol";
 import { wireDeckToServer, wireWindowsToServer } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
@@ -60,6 +60,7 @@ export function useDeckdSocket(
   onRunningWindows?: (m: ServerRunningWindows) => void,
   onSessionState?: (m: ServerState) => void,
   onMediaError?: (m: ServerMediaError) => void,
+  onHealth?: (m: ServerHealth) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -184,6 +185,11 @@ export function useDeckdSocket(
           else if (msg.type === "media_error" && onMediaError) {
             onMediaError(msg);
           }
+          // Issue #195: the daemon's active health issues (missing OS
+          // permissions). Full list per push; an empty list clears.
+          else if (msg.type === "health" && onHealth) {
+            onHealth(msg);
+          }
           else if (msg.type === "error" && msg.reason === "unauthorized") {
             // Wrong/absent password: stop reconnecting and prompt the user.
             unauthorizedRef.current = true;
@@ -253,7 +259,7 @@ export function useDeckdSocket(
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onDeck, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, onSessionState, onMediaError, enabled, gen]);
+  }, [onDeck, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, onSessionState, onMediaError, onHealth, enabled, gen]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;

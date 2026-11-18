@@ -43,12 +43,14 @@ import asyncio
 import logging
 import os
 import subprocess
+import sys
 from collections.abc import AsyncIterator, Sequence
 from types import ModuleType
 from typing import Any
 
 from .input import MODIFIER_MAP, KeySink, ScrollSink, name_from_keycode
 from .platform import AppInfo, PlatformBackend, RaiseWindowFailed, WindowInfo, _run
+from .protocol import HealthIssue
 
 log = logging.getLogger("deckd.platform_macos")
 
@@ -95,6 +97,45 @@ def _terminal_name() -> str:
     return env or "your terminal"
 
 
+def _responsible_app_name() -> str:
+    """The app macOS charges this process's permissions to.
+
+    TCC grants follow the *responsible* process: inside the packaged app
+    that is ``deckd.app`` itself (its parent is launchd, which is no help
+    to a user hunting through Settings); from a checkout it is whatever
+    terminal / editor launched the daemon.
+    """
+    if getattr(sys, "frozen", False):
+        return "deckd.app"
+    return _terminal_name()
+
+
+def _accessibility_missing_issue(app: str) -> HealthIssue:
+    """The ``accessibility_missing`` health issue, naming ``app`` (#195).
+
+    The remove-and-re-add step is there because an ad-hoc-signed build
+    gets a new code identity on every upgrade: Settings keeps showing the
+    old entry switched on while the grant no longer applies (#194).
+    """
+    return HealthIssue(
+        id="accessibility_missing",
+        severity="error",
+        title="Accessibility permission missing",
+        detail=(
+            f"macOS isn't letting {app} control the mouse and keyboard. "
+            "Buttons that open apps still work."
+        ),
+        fix_steps=[
+            "On the Mac, open System Settings → Privacy & Security → Accessibility.",
+            f"Turn on {app}. If it is already listed and on, select it, remove it "
+            "with the − button, then add it again with +.",
+            "This warning clears by itself a few seconds after the grant. If "
+            f"buttons still do nothing after that, quit and reopen {app}.",
+        ],
+        affects=["pointer", "scroll", "key", "raise_window"],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Focus
 # ---------------------------------------------------------------------------
@@ -130,8 +171,25 @@ class MacFocusBackend(PlatformBackend):
             title=title.strip() or None,
         )
 
+    # Resolved once: ``_terminal_name`` shells out to ``ps`` and the
+    # health poller asks every few seconds.
+    _app_name: str | None = None
+
     def capabilities(self) -> frozenset[str]:
         return frozenset({"watch_active_app", "watch_windows", "raise_window"})
+
+    def health_issues(self) -> list[HealthIssue]:
+        """Report a missing Accessibility grant (issue #195).
+
+        ``AXIsProcessTrusted`` is re-read on every call, so a grant made
+        while the daemon runs clears the issue on the next poll. ``None``
+        (no PyObjC, so no way to tell) reports nothing.
+        """
+        if _ax_trusted() is not False:
+            return []
+        if self._app_name is None:
+            self._app_name = _responsible_app_name()
+        return [_accessibility_missing_issue(self._app_name)]
 
     async def watch_windows(
         self, *, interval_s: float = 0.1
@@ -461,7 +519,7 @@ class MacKeySink(KeySink):
             "raise_window will fail (kAXErrorAPIDisabled).\n"
             "  Grant it in System Settings > Privacy & Security > "
             "Accessibility, then restart that app.",
-            _terminal_name(),
+            _responsible_app_name(),
         )
 
     def emit_key(self, keycodes: list[int]) -> None:

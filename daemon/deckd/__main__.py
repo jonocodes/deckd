@@ -55,6 +55,9 @@ async def serve(
     # headless, macOS until its follow-up) — same shape as the windows
     # watcher above.
     server.start_session_state_watcher()
+    # Missing OS permissions (issue #195): polled so a grant made while
+    # the daemon runs clears the client's banner without a restart.
+    server.start_health_watcher()
 
     if on_started is not None:
         on_started(server_task)

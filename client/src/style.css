@@ -970,6 +970,74 @@ img[data-icon-source="desktop"] {
   margin: 8px auto 0 auto;
 }
 
+/* Daemon health issues (issue #195): a missing OS permission that makes
+   input fail silently. In-flow above the grid (not a toast) so it can't
+   cover the buttons it explains; capped so a phone keeps most of the deck. */
+.health-banners {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 60vh;
+  overflow: auto;
+  margin-bottom: 8px;
+}
+
+.health-banner {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: #2a1b1b;
+  border: 1px solid #7f1d1d;
+  color: #fecaca;
+  font-size: calc(13px * var(--label-scale, 1));
+  line-height: 1.4;
+}
+
+.health-banner--warning {
+  background: #2a241b;
+  border-color: #78501d;
+  color: #fde68a;
+}
+
+.health-banner-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.health-banner-glyph {
+  flex-shrink: 0;
+}
+
+.health-banner-title {
+  flex: 1;
+  font-weight: 700;
+}
+
+.health-banner-dismiss {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.health-banner-detail,
+.health-banner-affects {
+  margin: 6px 0 0 0;
+}
+
+.health-banner-affects {
+  font-weight: 600;
+}
+
+.health-banner-steps {
+  margin: 6px 0 0 0;
+  padding-left: 20px;
+}
+
 /* ---------------------------------------------------------------------------
  * Settings / diagnostics view: read-only key/value list shown in place of
  * the grid when the chrome settings button is toggled on.

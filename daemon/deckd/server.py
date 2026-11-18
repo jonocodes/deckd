@@ -744,6 +744,11 @@ class Server:
         self._media_task: asyncio.Task[None] | None = None
         self._windows_task: asyncio.Task[None] | None = None
         self._session_state_task: asyncio.Task[None] | None = None
+        self._health_task: asyncio.Task[None] | None = None
+        # Active health issues (issue #195): missing OS permissions etc.
+        # that make input fail silently. Starts empty ("nothing known to
+        # be wrong"); the poller fills it within one interval.
+        self._health_issues: list[p.HealthIssue] = []
         # Session screen awareness (issue #160). The backend may take a
         # couple of seconds to answer the first poll, so the daemon
         # opens on "nothing wrong" — which is also what the client's
@@ -1348,6 +1353,66 @@ class Server:
             self.run_session_state_watcher()
         )
         return self._session_state_task
+
+    # -- health issues (issue #195) -----------------------------------------
+    #
+    # Polled rather than event-driven: macOS has no notification for a
+    # TCC grant, and a poll is what lets the banner clear on its own once
+    # the user flips the switch. One cheap probe every few seconds.
+
+    HEALTH_POLL_INTERVAL_S = 3.0
+
+    async def run_health_watcher(self, *, interval_s: float | None = None) -> None:
+        """Poll the backend's health issues and broadcast on change."""
+        backend = self.focus_backend
+        if backend is None:
+            return
+        interval = self.HEALTH_POLL_INTERVAL_S if interval_s is None else interval_s
+        failing = False
+        while True:
+            try:
+                issues = list(backend.health_issues())
+            except Exception as exc:  # a broken probe must not end the poller
+                if not failing:
+                    log.warning("health probe failed (will keep retrying): %s", exc)
+                failing = True
+            else:
+                failing = False
+                await self._on_health_issues(issues)
+            await asyncio.sleep(interval)
+
+    async def _on_health_issues(self, issues: "list[p.HealthIssue]") -> None:
+        """Record the latest list and broadcast it, only when it changed."""
+        if issues == self._health_issues:
+            return
+        before = {i.id for i in self._health_issues}
+        after = {i.id for i in issues}
+        for issue_id in sorted(after - before):
+            log.warning("health issue raised: %s", issue_id)
+        for issue_id in sorted(before - after):
+            log.info("health issue cleared: %s", issue_id)
+        self._health_issues = issues
+        await self._broadcast_message(p.HealthMessage(type="health", issues=issues))
+
+    async def push_health_snapshot(self, session: Session) -> None:
+        """Replay active issues to a just-connected client.
+
+        Skipped when healthy: the client's default is "no issues", so an
+        empty frame would say nothing new.
+        """
+        if not self._health_issues:
+            return
+        await session.send(p.HealthMessage(type="health", issues=self._health_issues))
+
+    def start_health_watcher(
+        self, *, interval_s: float | None = None
+    ) -> asyncio.Task[None] | None:
+        if self._health_task is not None or self.focus_backend is None:
+            return None
+        self._health_task = asyncio.create_task(
+            self.run_health_watcher(interval_s=interval_s)
+        )
+        return self._health_task
 
     async def run_decks_watcher(self) -> None:
         """Long-running task: reload decks when a YAML file in the decks
@@ -2552,6 +2617,9 @@ class Server:
             # unobserving backend answers all-false — the honest
             # "no session-state surface here".
             await self.push_session_state_snapshot(session)
+            # Issue #195: a client connecting while a permission is missing
+            # must show the banner straight away, not after the next change.
+            await self.push_health_snapshot(session)
             async for raw in ws:
                 if raw.type != WSMsgType.TEXT:
                     continue
@@ -3221,7 +3289,7 @@ class Server:
             await asyncio.sleep(3600)
 
     async def stop(self) -> None:
-        for task in (self._focus_task, self._windows_task, self._session_state_task, self._decks_task, self._sensor_task, self._media_task):
+        for task in (self._focus_task, self._windows_task, self._session_state_task, self._health_task, self._decks_task, self._sensor_task, self._media_task):
             if task is not None:
                 task.cancel()
                 try:
