@@ -129,6 +129,50 @@ def test_app_argv_lan_and_extras(tmp_path: Path) -> None:
     assert "--verbose" in argv
 
 
+class _FakeDefaults:
+    """Dict-backed stand-in for ``NSUserDefaults`` (only the calls we use)."""
+
+    def __init__(self, values: dict[str, bool] | None = None) -> None:
+        self.values = dict(values or {})
+
+    def boolForKey_(self, key: str) -> bool:
+        return self.values.get(key, False)
+
+    def setBool_forKey_(self, value: bool, key: str) -> None:
+        self.values[key] = value
+
+
+def test_lan_access_defaults_to_off() -> None:
+    lan = macos_app.LanAccess(_FakeDefaults())
+    assert lan.enabled is False
+    assert lan.bind() is None
+
+
+def test_lan_access_reads_the_saved_choice() -> None:
+    # What `defaults write com.deckd.daemon AllowLAN -bool true` leaves behind.
+    lan = macos_app.LanAccess(_FakeDefaults({macos_app.LAN_DEFAULTS_KEY: True}))
+    assert lan.enabled is True
+    assert lan.bind() == ["0.0.0.0"]
+
+
+def test_lan_access_toggle_persists() -> None:
+    defaults = _FakeDefaults()
+    assert macos_app.LanAccess(defaults).toggle() is True
+    assert defaults.values[macos_app.LAN_DEFAULTS_KEY] is True
+    # A fresh launch over the same store picks the choice back up.
+    relaunched = macos_app.LanAccess(defaults)
+    assert relaunched.enabled is True
+    assert relaunched.toggle() is False
+    assert macos_app.LanAccess(defaults).enabled is False
+
+
+def test_lan_defaults_key_is_stable() -> None:
+    # Documented as `defaults write com.deckd.daemon AllowLAN -bool true`;
+    # renaming it silently drops every user's saved choice.
+    assert macos_app.LAN_DEFAULTS_KEY == "AllowLAN"
+    assert macos_app.BUNDLE_ID == "com.deckd.daemon"
+
+
 class _FakeServer:
     """Minimal ``Server`` stand-in for exercising ``ServerRunner``."""
 

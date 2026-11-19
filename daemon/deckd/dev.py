@@ -29,7 +29,7 @@ log = logging.getLogger("deckd.dev")
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DAEMON_DIR = REPO_ROOT / "daemon"
 DECKS_DIR = REPO_ROOT / "decks"
-DEFAULT_PORT = 8765
+DEFAULT_PORT = 8865
 
 
 async def _start_daemon(port: int, child_args: list[str]) -> asyncio.subprocess.Process:

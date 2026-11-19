@@ -21,6 +21,7 @@ import logging
 import sys
 import threading
 from pathlib import Path
+from typing import Protocol
 
 from .app_bundle import (
     DEFAULT_PORT,
@@ -36,6 +37,8 @@ __all__ = [
     "BUNDLE_ID",
     "DEFAULT_PORT",
     "APP_SUPPORT_DIRNAME",
+    "LAN_DEFAULTS_KEY",
+    "LanAccess",
     "ServerRunner",
     "app_argv",
     "app_support_dir",
@@ -59,12 +62,53 @@ BUNDLE_ID = "com.deckd.daemon"
 # read-only, so they are seeded into Application Support on first run.
 APP_SUPPORT_DIRNAME = "deckd"
 
+# User-defaults key for the menu's "Allow LAN access" choice. Documented
+# (`defaults write com.deckd.daemon AllowLAN -bool true`), so don't rename.
+LAN_DEFAULTS_KEY = "AllowLAN"
+
 
 def overlay_src(root: Path) -> Path:
     """Bundled macOS overlay decks (``decks.macos``)."""
     from .app_bundle import overlay_src as _overlay_src
 
     return _overlay_src(root, "macos")
+
+
+class _BoolDefaults(Protocol):
+    """The slice of ``NSUserDefaults`` that ``LanAccess`` uses."""
+
+    def boolForKey_(self, key: str) -> bool: ...
+    def setBool_forKey_(self, value: bool, key: str) -> None: ...
+
+
+class LanAccess:
+    """The app's "Allow LAN access" choice, remembered across launches.
+
+    Backed by the app's user defaults (``NSUserDefaults`` in the
+    ``com.deckd.daemon`` domain), so it survives quits, reboots, and in-place
+    upgrades, and can be set without the menu bar at all:
+
+        defaults write com.deckd.daemon AllowLAN -bool true
+
+    (then relaunch). Off by default: a fresh install stays localhost-only.
+    """
+
+    def __init__(self, defaults: _BoolDefaults) -> None:
+        self._defaults = defaults
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self._defaults.boolForKey_(LAN_DEFAULTS_KEY))
+
+    def toggle(self) -> bool:
+        """Flip and persist the choice; return the new state."""
+        new = not self.enabled
+        self._defaults.setBool_forKey_(new, LAN_DEFAULTS_KEY)
+        return new
+
+    def bind(self) -> list[str] | None:
+        """``--bind`` addresses for the daemon: all interfaces, or default."""
+        return ["0.0.0.0"] if self.enabled else None
 
 
 def menubar_icon_paths(root: Path) -> tuple[Path, Path] | None:

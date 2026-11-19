@@ -13,8 +13,9 @@
 #               System Events grant, deckd's consent prompt blocks System
 #               Events and every menu check below times out.
 #   --yes       required outside CI: this replaces /Applications/deckd.app,
-#               quits any running deckd, and resets deckd's System Events
-#               grant at the end (to capture the prompt).
+#               quits any running deckd, clears its saved AllowLAN choice,
+#               and resets deckd's System Events grant at the end (to capture
+#               the prompt).
 #
 # Runs in CI as the `test-app` job of .github/workflows/release-macos.yml;
 # locally via `just test-macos-app`.
@@ -129,6 +130,9 @@ fi
 
 step "Install from DMG and launch"
 quit_deckd
+# Start from a fresh install's choice (localhost-only); a dev Mac may have
+# AllowLAN saved from earlier use.
+defaults delete "$BID" AllowLAN >/dev/null 2>&1 || true
 install_dmg
 codesign --verify --deep "$APP" && pass "code signature valid" || fail "code signature invalid"
 codesign -d -r- "$APP" 2>&1 | sed -n 's/^# designated => /  designated requirement: /p'
@@ -179,6 +183,16 @@ if [ -z "$LAN_IP" ]; then
 elif wait_for 15 healthy "$LAN_IP"; then pass "LAN address $LAN_IP answers"
 else fail "LAN address $LAN_IP never answered"; fi
 [ "$(mark_of "Allow LAN access")" = "✓" ] && pass "menu shows ✓" || fail "no ✓ on Allow LAN access"
+[ "$(defaults read "$BID" AllowLAN 2>/dev/null)" = 1 ] && pass "choice saved (AllowLAN = 1)" || fail "AllowLAN not saved"
+
+step "Allow LAN access survives a relaunch"
+quit_deckd
+if launch; then pass "relaunched"; else fail "no /health after relaunch"; fi
+if [ -z "$LAN_IP" ]; then
+    echo "  skipped reachability: no LAN address"
+elif wait_for 15 healthy "$LAN_IP"; then pass "LAN address $LAN_IP answers after relaunch"
+else fail "LAN address $LAN_IP not answering after relaunch"; fi
+[ "$(mark_of "Allow LAN access")" = "✓" ] && pass "menu shows ✓ after relaunch" || fail "no ✓ after relaunch"
 
 step "Allow LAN access (off)"
 click_item "Allow LAN access"
@@ -189,6 +203,7 @@ if [ -n "$LAN_IP" ]; then
 fi
 healthy 127.0.0.1 && pass "localhost still answers" || fail "localhost stopped answering"
 [ "$(mark_of "Allow LAN access")" != "✓" ] && pass "✓ cleared" || fail "✓ still shown"
+[ "$(defaults read "$BID" AllowLAN 2>/dev/null)" = 0 ] && pass "choice saved (AllowLAN = 0)" || fail "AllowLAN not cleared"
 
 step "Restart server"
 before="$(grep -c "deckd.server INFO listening on" "$LOG" || true)"

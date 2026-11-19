@@ -194,16 +194,26 @@ grouped:
 
 | offset | `DECKD_PORT` | `VITE_PORT` | `DECKD_E2E_PORT` | `DECKD_SMOKE_PORT` | who |
 | --- | --- | --- | --- | --- | --- |
-| 0 | 8765 | 5173 | 8975 | 18765 | the primary checkout, *if the defaults are free* |
-| 1 | 8766 | 5174 | 8976 | 18766 | first adopted checkout |
-| 2 | 8767 | 5175 | 8977 | 18767 | second, and so on |
+| 0 | 8865 | 5173 | 8975 | 18765 | the primary checkout, *if the defaults are free* |
+| 1 | 8866 | 5174 | 8976 | 18766 | first adopted checkout |
+| 2 | 8867 | 5175 | 8977 | 18767 | second, and so on |
 
-The primary prefers offset 0 and normally needs no `.env` at all, so on a
-machine with no installed deckd nothing about the main checkout changes. It
-does **not** own offset 0 though: if something already holds `:8765` — almost
-always an installed deckd service — `worktree-adopt` moves the primary to a
-free offset like any other checkout, and says so. Delete its `.env` and
-re-adopt to move back once the port frees up.
+**`:8765` is reserved for an installed deckd** — the NixOS/home-manager
+service, the macOS app, the Linux tarball. Dev daemons start at `:8865`
+(prod + 100) so a machine running deckd for real can develop on it too
+without either side moving.
+
+The primary prefers offset 0 and normally needs no `.env` at all. It does
+**not** own offset 0 though: if something already holds one of its ports,
+`worktree-adopt` moves the primary to a free offset like any other checkout,
+and says so. Delete its `.env` and re-adopt to move back once the port frees
+up.
+
+Worktrees adopted before the dev base moved have `DECKD_PORT` in the prod
+range (`8766`, …). They keep their offset; `just worktree-doctor` flags them
+and `just worktree-adopt` rewrites the daemon port onto the new base (and
+drops a primary's `.env` entirely, since the installed deckd was the only
+reason it moved).
 
 An offset is only free when *all four* of its ports are, so a stray process on
 one port pushes the whole group along rather than producing a half-working
