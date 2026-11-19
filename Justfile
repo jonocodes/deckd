@@ -534,15 +534,24 @@ build-macos-app:
         echo "build-macos-app needs macOS; a .app can't be built on $(uname)." >&2
         exit 1
     fi
-    if ! command -v pyinstaller >/dev/null 2>&1; then
-        echo "installing PyInstaller ([packaging] extra)..."
-        uv pip install -e ".[packaging]"
+    # `uv pip install` targets $VIRTUAL_ENV, else ./.venv, and that env's bin
+    # dir isn't necessarily on PATH (e.g. a shell without direnv), so run
+    # PyInstaller from there rather than trusting PATH.
+    venv_bin="${VIRTUAL_ENV:-$PWD/.venv}/bin"
+    if command -v pyinstaller >/dev/null 2>&1; then
+        pyinstaller="$(command -v pyinstaller)"
+    else
+        if [ ! -x "$venv_bin/pyinstaller" ]; then
+            echo "installing PyInstaller ([packaging] extra)..."
+            uv pip install -e ".[packaging]"
+        fi
+        pyinstaller="$venv_bin/pyinstaller"
     fi
     if [ ! -f client/dist/index.html ]; then
         echo "client/dist missing; building client..."
         just build-client
     fi
-    pyinstaller --noconfirm --clean packaging/macos/deckd.spec
+    "$pyinstaller" --noconfirm --clean packaging/macos/deckd.spec
     # Re-sign with the stable certificate when DECKD_CODESIGN_IDENTITY is set
     # (#194), so permission grants survive upgrades; otherwise stay ad-hoc.
     packaging/macos/signing/sign-app.sh dist/deckd.app
