@@ -1,11 +1,11 @@
 <!doctype html>
-<html lang="en" data-app="app/">
+<html lang="en" data-app="demo/client/">
 <head>
 <meta charset="utf-8">
 <script>
   // The client used to live at the site root. Forward old shared links
-  // (/deckd/?demo=showcase, ?playground, ...) to app/, where it lives now.
-  if (/[?&](demo|playground|deck)\b/.test(location.search)) location.replace("app/" + location.search + location.hash);
+  // (/deckd/?demo=showcase, ?playground, ...) to demo/client/, where it lives now.
+  if (/[?&](demo|playground|deck)\b/.test(location.search)) location.replace("demo/client/" + location.search + location.hash);
 </script>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>deckd — your phone becomes the buttons for whatever's on screen</title>
@@ -41,6 +41,8 @@
   header nav { margin-left: auto; display: flex; gap: 22px; color: var(--muted); }
   header nav a { text-decoration: none; }
   header nav a:hover { color: var(--text); }
+  /* narrow screens: drop the in-page jumps so the header stays on one line */
+  @media (max-width: 560px) { header nav { gap: 16px; } header nav .wide { display: none; } }
 
   .hero { padding: 64px 0 40px; display: grid; grid-template-columns: 1fr; gap: 12px; }
   .label { font: 500 12px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--orange); }
@@ -117,6 +119,8 @@
   .feature.stack .copy .label { grid-column: 1 / -1; }
   .feature.stack .copy h2 { margin-bottom: 0; }
   .feature.stack .copy p { max-width: 34em; margin: 0; }
+  .feature.stack .copy p + p { margin-top: 10px; }
+  .feature p b { color: var(--text); font-weight: 500; }
   @media (max-width: 860px) { .feature.stack .copy { grid-template-columns: 1fr; } .feature.stack .copy p { margin-top: 10px; } }
   .feature h2 { font-size: 30px; line-height: 1.15; letter-spacing: -0.015em; margin: 10px 0 12px; }
   .feature p { color: var(--muted); margin: 0 0 12px; }
@@ -156,9 +160,10 @@
     <img src="deckd-mark.svg" alt="">
     <span>deckd</span>
     <nav>
-      <a href="#webapps">Web apps</a>
+      <a href="#webapps" class="wide">Web apps</a>
+      <a href="demo/">Demo</a>
       <a href="#install">Install</a>
-      <a href="#faq">FAQ</a>
+      <a href="#faq" class="wide">FAQ</a>
       <a href="https://github.com/jonocodes/deckd">GitHub</a>
     </nav>
   </header>
@@ -186,6 +191,7 @@
 
   <div class="cta">
     <a class="btn primary" href="#install">Install</a>
+    <a class="btn" href="demo/">Try the demo</a>
     <a class="btn" href="https://github.com/jonocodes/deckd">Source</a>
   </div>
 
@@ -210,9 +216,10 @@
 
   <section class="feature stack">
     <div class="copy">
-      <div class="label">Trackpad</div>
-      <h2>The phone is the mouse.</h2>
-      <p>For whatever a deck doesn't cover: drag to move, tap to click, and a keyboard for typing a URL from the couch.</p>
+      <div class="label">Trackpad and keyboard</div>
+      <h2>The phone is the mouse. And the keyboard.</h2>
+      <div><p>For whatever a deck doesn't cover: drag to move, tap to click. Type on your phone and the words land in whatever's focused on the computer as you go.</p>
+      <p><b>Or just talk.</b> Tap the mic on your phone's keyboard and dictate a search, a message or a URL from the couch. Your phone does the voice typing; deckd types it out on your desktop.</p></div>
     </div>
     <div data-dk="trackpad"></div>
   </section>

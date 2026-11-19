@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en" data-app="client/">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>deckd — demo</title>
+<meta name="description" content="Try deckd in your browser: pick an app on a pretend desktop and the real client switches to its deck.">
+<meta property="og:title" content="deckd — demo">
+<meta property="og:description" content="Pick an app; the real deckd client follows.">
+<meta name="theme-color" content="#101317">
+<link rel="icon" type="image/svg+xml" href="../deckd-mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #101317; --panel: #171b21; --line: #262c35; --text: #e6e8eb; --muted: #8a929e; --orange: #fb923c;
+    --sans: "IBM Plex Sans", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, monospace;
+    --dk-ink: var(--text); --dk-muted: var(--muted); --dk-line: var(--line); --dk-accent: var(--orange); --dk-mono: var(--mono);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 var(--sans); }
+  a { color: inherit; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 28px 64px; }
+
+  header { display: flex; align-items: center; gap: 10px; height: 64px; font: 14px var(--mono); }
+  header a.home { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+  header img { width: 24px; }
+  header nav { margin-left: auto; display: flex; gap: 22px; color: var(--muted); }
+  header nav a { text-decoration: none; }
+  header nav a:hover { color: var(--text); }
+
+  .intro { padding: 28px 0 24px; }
+  .label { font: 500 12px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--orange); }
+  h1 { font-size: 40px; line-height: 1.1; font-weight: 600; letter-spacing: -0.02em; margin: 8px 0 10px; }
+  .intro p { color: var(--muted); font-size: 17px; max-width: 42em; margin: 0; }
+
+  .stage { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); padding: 26px; display: grid; grid-template-columns: 290px 1fr; gap: 32px; align-items: start; }
+  .stage > * { min-width: 0; }
+  .cap { display: flex; justify-content: space-between; font: 13px var(--mono); color: var(--muted); margin-bottom: 10px; }
+  .list { list-style: none; margin: 0; padding: 0; }
+  .win {
+    display: flex; align-items: center; gap: 10px; width: 100%; margin-bottom: 8px; padding: 10px 12px;
+    background: #0d1014; border: 1px solid var(--line); border-radius: 8px; color: var(--muted);
+    font: 13px var(--mono); text-align: left; cursor: pointer; transition: color .15s, border-color .15s;
+  }
+  .win i { width: 9px; height: 9px; border-radius: 50%; background: var(--c); flex: none; opacity: .5; }
+  .win em { margin-left: auto; font-style: normal; font-size: 11px; border: 1px solid currentColor; border-radius: 99px; padding: 0 7px; opacity: .7; white-space: nowrap; }
+  .win:hover { color: var(--text); }
+  .win[aria-pressed="true"] { color: var(--text); border-color: var(--c); box-shadow: 0 0 0 1px var(--c) inset; }
+  .win[aria-pressed="true"] i { opacity: 1; }
+  .win:focus-visible { outline: 2px solid var(--orange); outline-offset: 2px; }
+
+  .orient { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 18px; font: 12px var(--mono); }
+  .orient span { color: var(--muted); width: 100%; }
+  .orient button { font: inherit; color: var(--muted); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
+  .orient button[aria-pressed="true"] { color: var(--text); border-color: var(--orange); }
+
+  .tips { margin: 22px 0 0; padding: 0; list-style: none; font: 13px/1.5 var(--mono); color: var(--muted); }
+  .tips li { padding: 7px 0; border-top: 1px dashed var(--line); }
+  .tips li::before { content: "→ "; color: var(--orange); }
+  .tips b { color: var(--text); font-weight: 500; }
+
+  .dk-picker-phone .dk-phone { max-width: 780px; margin: 0 auto; }
+  .dk-picker-phone .dk-phone.portrait { max-width: 320px; }
+
+  .after { margin-top: 26px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; color: var(--muted); }
+  .btn { font: 500 14px var(--mono); padding: 11px 16px; border-radius: 8px; text-decoration: none; border: 1px solid var(--line); color: var(--text); }
+  .btn.primary { background: var(--orange); color: #1a0d03; border-color: var(--orange); }
+
+  @media (max-width: 860px) {
+    h1 { font-size: 30px; }
+    .stage { grid-template-columns: 1fr; padding: 16px; gap: 18px; }
+    /* the window list becomes a row of chips above the phone */
+    .list { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+    .win { width: auto; margin: 0; flex: none; white-space: nowrap; }
+    .tips { display: none; }
+  }
+</style>
+<link rel="stylesheet" href="../shared/scenes.css">
+<script src="../shared/scenes.js" defer></script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="home" href="../"><img src="../deckd-mark.svg" alt=""><span>deckd</span></a>
+    <nav>
+      <a href="../">Home</a>
+      <a href="../#install">Install</a>
+      <a href="https://github.com/jonocodes/deckd">GitHub</a>
+    </nav>
+  </header>
+
+  <section class="intro">
+    <div class="label">Live demo</div>
+    <h1>Pick an app.</h1>
+    <p>Click a window on the pretend desktop and the phone switches to that app's deck, the way deckd follows your focus. The phone is the real client: its bottom bar opens the trackpad, now playing and settings. With no computer attached, deck buttons don't send anything.</p>
+  </section>
+
+  <section class="stage" data-dk="picker">
+    <div>
+      <div class="cap"><span>your desktop</span><span>focus →</span></div>
+      <ul class="list">
+        <li><button class="win" style="--c:#8b93a1" data-q="demo=home"><i></i>Desktop</button></li>
+        <li><button class="win" style="--c:#ff7139" data-q="demo=firefox"><i></i>Firefox</button></li>
+        <li><button class="win" style="--c:#ea4335" data-q="demo=gmail"><i></i>Inbox (3) - Gmail<em>web app</em></button></li>
+        <li><button class="win" style="--c:#ff3b30" data-q="demo=youtube"><i></i>Lo-fi beats - YouTube<em>web app</em></button></li>
+        <li><button class="win" style="--c:#00a884" data-q="demo=meet"><i></i>Standup - Google Meet<em>web app</em></button></li>
+        <li><button class="win" style="--c:#1db954" data-q="demo=media"><i></i>Music playing<em>now playing</em></button></li>
+        <li><button class="win" style="--c:#a78bfa" data-q="demo=trackpad"><i></i>Anything else<em>trackpad</em></button></li>
+      </ul>
+      <div class="orient"><span>orientation</span>
+        <button data-orient-mode="landscape" aria-pressed="true">landscape</button>
+        <button data-orient-mode="portrait" aria-pressed="false">portrait</button>
+      </div>
+      <ul class="tips">
+        <li><b>♫</b> in the bottom bar: now playing, from any deck</li>
+        <li><b>✋</b>: trackpad and keyboard</li>
+        <li><b>⚙</b>: per-device settings</li>
+      </ul>
+    </div>
+    <div class="dk-picker-phone"></div>
+  </section>
+
+  <div class="after">
+    <a class="btn primary" href="../#install">Install deckd</a>
+    <a class="btn" href="../">Back to the homepage</a>
+  </div>
+</div>
+</body>
+</html>

@@ -2,7 +2,8 @@
 // static files, `dir/` → `dir/index.html`, and the site's 404.html (with a
 // 404 status) for anything else — which is what makes app deep links work.
 //
-// Usage: node scripts/serve_pages.mjs <root> [port]   (default port 5290)
+// Usage: node scripts/serve_pages.mjs <root> [port] [host]
+// (default port 5290, host 127.0.0.1; 0.0.0.0 to reach it from another device)
 // <root> is the directory holding the site under its base, e.g. _site for
 // _site/deckd/.
 import { createServer } from "node:http";
@@ -11,6 +12,7 @@ import { extname, join, normalize, resolve } from "node:path";
 
 const root = resolve(process.argv[2] ?? "_site");
 const port = Number(process.argv[3] ?? 5290);
+const host = process.argv[4] ?? "127.0.0.1";
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript",
   ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png",
@@ -40,4 +42,4 @@ createServer(async (req, res) => {
   if (!path) return res.writeHead(404).end("not found");
   res.writeHead(status, { "content-type": TYPES[extname(path)] ?? "application/octet-stream" });
   res.end(await readFile(path));
-}).listen(port, "127.0.0.1", () => console.log(`serving ${root} on http://127.0.0.1:${port}/`));
+}).listen(port, host, () => console.log(`serving ${root} on http://${host}:${port}/`));

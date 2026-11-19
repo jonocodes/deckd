@@ -24,7 +24,7 @@ const VIEW_BY_PATH: Record<string, View> = Object.fromEntries(
 ) as Record<string, View>;
 
 // Views live under the app's base path: "/" when the daemon serves the
-// client, "/deckd/app/" on GitHub Pages (Vite's ``base``, from
+// client, "/deckd/demo/client/" on GitHub Pages (Vite's ``base``, from
 // VITE_BASE_PATH). The trailing slash is dropped so "/" joins as "".
 const prefix = (base: string) => base.replace(/\/+$/, "");
 

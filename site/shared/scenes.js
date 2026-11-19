@@ -9,7 +9,7 @@
 // Served locally (`just mockups`), default to the local client on :5288.
 const LOCAL = /^https?:$/.test(location.protocol) && ["127.0.0.1", "localhost"].includes(location.hostname);
 const APP = new URLSearchParams(location.search).get("app") || document.documentElement.dataset.app
-  || (LOCAL ? `${location.protocol}//${location.hostname}:5288/` : "https://jonocodes.github.io/deckd/app/");
+  || (LOCAL ? `${location.protocol}//${location.hostname}:5288/` : "https://jonocodes.github.io/deckd/demo/client/");
 const LANDSCAPE = [700, 390]; // a 4x2 deck fills this edge to edge
 const PORTRAIT = [390, 760];
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -208,6 +208,49 @@ function webapps(root) {
 // ---------------------------------------------------------------- now playing
 function nowplaying(root) { root.append(phone("demo=media", { size: PORTRAIT }).el); }
 
+// ---------------------------------------------------------------- picker
+// The demo page: click a "window" ([data-q] buttons inside the mount) to
+// focus it, and one large, tappable phone switches to that deck. The phone
+// starts landscape and stays in whichever orientation a [data-orient-mode]
+// button (landscape | portrait) last picked. One iframe per item, loaded up front and
+// kept alive, so switching back keeps whatever view you'd opened there.
+function picker(root) {
+  const items = [...root.querySelectorAll("[data-q]")];
+  const modes = [...root.querySelectorAll("[data-orient-mode]")];
+  const el = h('<div class="dk-phone"><div class="dk-screen"><div class="dk-stage"></div></div></div>');
+  const screen = el.querySelector(".dk-screen"), stage = el.querySelector(".dk-stage");
+  const frames = items.map((it) => {
+    const f = h(`<iframe src="${APP}?${it.dataset.q}" title="deckd client: ${it.textContent.trim()}"></iframe>`);
+    f.hidden = true;
+    stage.append(f);
+    return f;
+  });
+  let size = LANDSCAPE, current = 0;
+  const fit = () => {
+    stage.style.width = size[0] + "px";
+    stage.style.height = size[1] + "px";
+    screen.style.aspectRatio = `${size[0]} / ${size[1]}`;
+    el.classList.toggle("portrait", size[1] > size[0]);
+    stage.style.transform = `scale(${screen.clientWidth / size[0]})`;
+  };
+  new ResizeObserver(fit).observe(screen);
+  const select = (k) => {
+    current = k;
+    items.forEach((it, j) => it.setAttribute("aria-pressed", j === k));
+    frames.forEach((f, j) => (f.hidden = j !== k));
+    fit();
+  };
+  items.forEach((it, k) => it.addEventListener("click", () => select(k)));
+  modes.forEach((b) => b.addEventListener("click", () => {
+    // The orientation sticks across apps until switched here.
+    size = b.dataset.orientMode === "portrait" ? PORTRAIT : LANDSCAPE;
+    modes.forEach((o) => o.setAttribute("aria-pressed", o === b));
+    fit();
+  }));
+  (root.querySelector(".dk-picker-phone") || root).append(el);
+  select(0);
+}
+
 // A single passive phone: <div data-dk="phone" data-q="demo=youtube">.
 function single(root) { root.append(phone(root.dataset.q).el); }
 
@@ -264,7 +307,7 @@ addEventListener("scroll", () => {
   lastActive = a; lastY = scrollY;
 }, { passive: true });
 
-const MOUNTS = { cycle, trackpad, scroll, focus, webapps, nowplaying, install, phone: single, ...(window.DK_CONTENT || {}) };
+const MOUNTS = { cycle, trackpad, scroll, focus, webapps, nowplaying, install, picker, phone: single, ...(window.DK_CONTENT || {}) };
 document.querySelectorAll("[data-dk]").forEach((el) => MOUNTS[el.dataset.dk]?.(el));
 
 // For pages that mount scenes on demand (design C's readout).

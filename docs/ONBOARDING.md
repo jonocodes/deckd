@@ -82,7 +82,7 @@ This document is the primary navigation map for AI agents (and human developers)
 │   ├── kwin-script/        # KWin focus script (KDE Plasma Wayland)
 │   └── gnome-shell/        # GNOME Shell focus extension
 ├── scripts/                # Diagnostic and testing utilities; build_pages.sh assembles the Pages site
-├── site/                   # GitHub Pages homepage (jonocodes.github.io/deckd/); the client deploys under app/
+├── site/                   # GitHub Pages homepage (jonocodes.github.io/deckd/); the client deploys under demo/client/ (embedded by the homepage and demo page)
 ├── tests/                  # Python test suite (pytest + pytest-asyncio)
 └── docs/                   # Documentation (see below)
     ├── GUIDE.md            # User & setup guide: install, per-platform setup, config walkthrough, client features, dev loop

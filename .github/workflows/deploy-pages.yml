@@ -31,7 +31,7 @@ jobs:
         working-directory: client
 
       # Project Pages live at jonocodes.github.io/deckd/: the homepage
-      # (site/) at the root, the client at /deckd/app/, Ladle at
+      # (site/) at the root, the client at /deckd/demo/client/, Ladle at
       # /deckd/ladle/. The same script backs `just pages`, so a local
       # preview is exactly what deploys; it type-checks the client first,
       # so a type error fails the deploy before a broken bundle ships.
