@@ -130,20 +130,35 @@ def test_app_argv_lan_and_extras(tmp_path: Path) -> None:
 
 
 class _FakeDefaults:
-    """Dict-backed stand-in for ``NSUserDefaults`` (only the calls we use)."""
+    """Dict-backed stand-in for ``NSUserDefaults`` (only the calls we use).
+
+    ``objectForKey_`` answers ``None`` for a key that was never written, as
+    the real one does; that's how a fresh install is told apart from an
+    explicit "off".
+    """
 
     def __init__(self, values: dict[str, bool] | None = None) -> None:
         self.values = dict(values or {})
 
-    def boolForKey_(self, key: str) -> bool:
-        return self.values.get(key, False)
+    def objectForKey_(self, key: str) -> bool | None:
+        return self.values.get(key)
 
     def setBool_forKey_(self, value: bool, key: str) -> None:
         self.values[key] = value
 
 
-def test_lan_access_defaults_to_off() -> None:
+def test_lan_access_defaults_to_on() -> None:
+    """A fresh install is reachable from the phone straight away; the
+    shared password still gates every non-localhost client."""
     lan = macos_app.LanAccess(_FakeDefaults())
+    assert lan.enabled is True
+    assert lan.bind() == ["0.0.0.0"]
+
+
+def test_lan_access_respects_an_explicit_off() -> None:
+    # What `defaults write com.deckd.daemon AllowLAN -bool false` (or
+    # unticking the menu item) leaves behind.
+    lan = macos_app.LanAccess(_FakeDefaults({macos_app.LAN_DEFAULTS_KEY: False}))
     assert lan.enabled is False
     assert lan.bind() is None
 
@@ -157,13 +172,14 @@ def test_lan_access_reads_the_saved_choice() -> None:
 
 def test_lan_access_toggle_persists() -> None:
     defaults = _FakeDefaults()
-    assert macos_app.LanAccess(defaults).toggle() is True
-    assert defaults.values[macos_app.LAN_DEFAULTS_KEY] is True
+    # Fresh install: on, so the first toggle turns it off and saves that.
+    assert macos_app.LanAccess(defaults).toggle() is False
+    assert defaults.values[macos_app.LAN_DEFAULTS_KEY] is False
     # A fresh launch over the same store picks the choice back up.
     relaunched = macos_app.LanAccess(defaults)
-    assert relaunched.enabled is True
-    assert relaunched.toggle() is False
-    assert macos_app.LanAccess(defaults).enabled is False
+    assert relaunched.enabled is False
+    assert relaunched.toggle() is True
+    assert macos_app.LanAccess(defaults).enabled is True
 
 
 def test_lan_defaults_key_is_stable() -> None:

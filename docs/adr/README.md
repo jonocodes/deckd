@@ -64,7 +64,7 @@ _Amends: [0003](0003-persistent-chrome.md) — chrome knowledge now includes pay
 
 [0009-bind-scope-control.md](0009-bind-scope-control.md)
 
-Replace `--host` with repeatable `--bind` supporting literal IPs and `iface:<name>`. Default `127.0.0.1` + `::1`. Localhost-only by default; LAN reachability is opt-in.
+Replace `--host` with repeatable `--bind` supporting literal IPs and `iface:<name>`. Default `127.0.0.1` + `::1`. Localhost-only by default; LAN reachability is opt-in. Amended 2026-11-18: the packaged macOS app defaults to LAN on (the daemon's own default is unchanged).
 
 ## 0010 — Grid layout: ordered-list reflow with a banded cell size
 

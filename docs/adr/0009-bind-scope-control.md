@@ -163,3 +163,17 @@ unchanged; only its declarative home moved:
 
 The "one explicit flag to opt in" property still holds: set
 `services.deckd.bind = [ "0.0.0.0" ]` in the home-manager module.
+
+## Amendment (2026-11-18): the macOS app defaults to LAN on
+
+The packaged `deckd.app` exists to be driven from a phone or tablet, and a
+fresh install that only answered on localhost looked broken from the device
+it was installed for. Its **Allow LAN access** setting (`AllowLAN` in the
+`com.deckd.daemon` user defaults) is therefore **on until the user turns it
+off**: a never-written key reads as on, an explicit off is remembered.
+
+The daemon itself is unchanged. `deckd` with no `--bind` still listens on
+localhost only, as do the Linux AppImage and tarball, the home-manager
+module, and every dev recipe. Only the macOS app passes `--bind 0.0.0.0` by
+default. What makes that acceptable is the shared-password gate, which is on
+by default and covers every non-localhost client.
