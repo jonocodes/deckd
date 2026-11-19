@@ -19,7 +19,7 @@ import ipaddress
 import logging
 import socket
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Callable, Iterable
 
 log = logging.getLogger("deckd.bind")
 
@@ -181,24 +181,113 @@ def _iface_addresses(name: str) -> list[tuple[str, int]]:
     return results
 
 
-def url_for(binds: Iterable[ResolvedBind], port: int, scheme: str = "http") -> str:
+def url_for(
+    binds: Iterable[ResolvedBind],
+    port: int,
+    scheme: str = "http",
+    *,
+    lan_host: Callable[[], str | None] | None = None,
+) -> str:
     """Build a pairing URL from the first resolved bind.
 
     Prefers IPv4 over IPv6 because phones on the same LAN more often
     have working v4 than a clean v6 path. The port is the
     actually-listening port (``self.port`` after ``start()``
     resolved any ``port=0`` sentinel).
+
+    A wildcard bind (``0.0.0.0`` / ``::``) is replaced with an address
+    the phone can actually open, because ``http://0.0.0.0:8765/`` is
+    not reachable from another device (issue #206). ``lan_host`` is
+    the discovery hook — callers leave it unset; tests inject a stub
+    so no real network is touched.
     """
     family_priority: dict[int, int] = {socket.AF_INET: 0, socket.AF_INET6: 1}
     sorted_binds = sorted(binds, key=lambda b: family_priority.get(b.family, 99))
     if not sorted_binds:
         return ""
-    host = _url_host(sorted_binds[0])
+    host = _url_host(sorted_binds[0], lan_host or local_lan_ipv4)
     return f"{scheme}://{host}:{port}/"
 
 
-def _url_host(bind: ResolvedBind) -> str:
-    """Wrap an IPv6 literal in brackets for use inside a URL."""
+def _url_host(bind: ResolvedBind, lan_host: Callable[[], str | None]) -> str:
+    """Host part of the pairing URL, substituting wildcard binds.
+
+    IPv6 literals are wrapped in brackets so ``http://[::1]:8765/``
+    reads as one URL. The wildcard substitution happens first so a
+    ``::`` bind with a reachable IPv4 gets no brackets (issue #206).
+    """
+    if _is_wildcard(bind.host):
+        return lan_host() or "127.0.0.1"
     if bind.is_ipv6:
         return f"[{bind.host}]"
     return bind.host
+
+
+def local_lan_ipv4() -> str | None:
+    """Best-effort IPv4 address another device on the LAN can reach.
+
+    The default-route trick asks the kernel which source address it
+    would use without sending a packet; hosts with no default route
+    fall back to the addresses the host name resolves to. Returns
+    ``None`` when only loopback / link-local addresses exist, so the
+    caller can fall back to ``127.0.0.1`` (issue #206).
+    """
+    host = _default_route_ipv4()
+    if host is not None:
+        return host
+    candidates = _hostname_ipv4_addresses()
+    return candidates[0] if candidates else None
+
+
+def _default_route_ipv4() -> str | None:
+    """Source address of the default route via a connected UDP socket."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # ``connect`` on UDP only selects a route; nothing is sent.
+        sock.connect(("8.8.8.8", 80))
+        host = sock.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        sock.close()
+    return host if _usable_lan_ipv4(host) else None
+
+
+def _hostname_ipv4_addresses() -> list[str]:
+    """Every usable IPv4 address the host name resolves to, in order."""
+    try:
+        infos = socket.getaddrinfo(
+            socket.gethostname(), None, socket.AF_INET, socket.SOCK_STREAM
+        )
+    except OSError:
+        return []
+    hosts: list[str] = []
+    for info in infos:
+        host = info[4][0]
+        if not isinstance(host, str):
+            continue
+        if _usable_lan_ipv4(host) and host not in hosts:
+            hosts.append(host)
+    return hosts
+
+
+def _usable_lan_ipv4(host: str) -> bool:
+    """True for an IPv4 address a LAN peer could connect to."""
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return (
+        ip.version == 4
+        and not ip.is_unspecified
+        and not ip.is_loopback
+        and not ip.is_link_local
+    )
+
+
+def _is_wildcard(host: str) -> bool:
+    """True for the IPv4/IPv6 any-address (``0.0.0.0`` / ``::``)."""
+    try:
+        return ipaddress.ip_address(host).is_unspecified
+    except ValueError:
+        return False

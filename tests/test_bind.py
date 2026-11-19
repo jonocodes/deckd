@@ -200,6 +200,54 @@ def test_url_for_respects_scheme() -> None:
     assert url_for(binds, 443, scheme="https") == "https://127.0.0.1:443/"
 
 
+def test_url_for_replaces_wildcard_with_lan_address() -> None:
+    """``0.0.0.0`` is a listen address, not something a phone can
+    type into its browser (issue #206)."""
+    binds = [ResolvedBind(host="0.0.0.0", family=socket.AF_INET, original="0.0.0.0")]
+    assert (
+        url_for(binds, 8765, lan_host=lambda: "192.168.1.20")
+        == "http://192.168.1.20:8765/"
+    )
+
+
+def test_url_for_ipv6_wildcard_prefers_reachable_ipv4() -> None:
+    """``::`` behaves like ``0.0.0.0``: the substitution is IPv4, so
+    the host must not be bracketed as an IPv6 literal."""
+    binds = [ResolvedBind(host="::", family=socket.AF_INET6, original="::")]
+    assert (
+        url_for(binds, 8765, lan_host=lambda: "192.168.1.20")
+        == "http://192.168.1.20:8765/"
+    )
+
+
+def test_url_for_wildcard_falls_back_to_loopback() -> None:
+    """With no LAN address discoverable, the URL stays usable on the
+    host itself instead of returning the wildcard."""
+    binds = [ResolvedBind(host="0.0.0.0", family=socket.AF_INET, original="0.0.0.0")]
+    assert url_for(binds, 8765, lan_host=lambda: None) == "http://127.0.0.1:8765/"
+
+
+def test_url_for_concrete_bind_skips_lan_discovery() -> None:
+    """Literal and ``iface:`` binds are already reachable — discovery
+    must not run (or override what the operator asked for)."""
+
+    def fail() -> str | None:
+        raise AssertionError("LAN discovery must not run for a concrete bind")
+
+    binds = [
+        ResolvedBind(host="192.168.1.20", family=socket.AF_INET, original="iface:wlan0")
+    ]
+    assert url_for(binds, 8765, lan_host=fail) == "http://192.168.1.20:8765/"
+
+
+def test_url_for_uses_lan_discovery_by_default(monkeypatch) -> None:
+    """Callers leave ``lan_host`` unset; the module-level discovery
+    is used and must stay monkeypatchable for the endpoint tests."""
+    monkeypatch.setattr("deckd.bind.local_lan_ipv4", lambda: "10.0.0.7")
+    binds = [ResolvedBind(host="0.0.0.0", family=socket.AF_INET, original="0.0.0.0")]
+    assert url_for(binds, 8765) == "http://10.0.0.7:8765/"
+
+
 def test_iface_prefix_constant_matches_documented_shape() -> None:
     """The CLI / NixOS surface is documented as ``iface:<name>`` —
     changing the prefix is a breaking change."""

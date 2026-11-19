@@ -81,7 +81,7 @@ The set of network addresses the daemon's HTTP/WS surface listens on. Configured
 _Avoid_: host, listen address, exposed interface
 
 **Pairing URL**:
-The single `http://<bind-host>:<port>/` URL a phone types into its browser to reach the daemon. Surfaced as the `url` field on `/health` and `/diag`, and prepended above the JSON body of `deckctl status`. Prefers IPv4 over IPv6 so a phone on a typical home LAN doesn't get a `http://[::1]:.../` link it can't resolve. The password gate still has to be cleared by every non-localhost client; the pairing URL is a convenience, not a bypass.
+The single `http://<bind-host>:<port>/` URL a phone types into its browser to reach the daemon. Surfaced as the `url` field on `/health` and `/diag`, and prepended above the JSON body of `deckctl status`. Prefers IPv4 over IPv6 so a phone on a typical home LAN doesn't get a `http://[::1]:.../` link it can't resolve. A wildcard bind (`0.0.0.0` or `::`) is shown as the host's LAN IPv4 — the wildcard itself is not reachable from a phone — falling back to `127.0.0.1` when no LAN address is found. The password gate still has to be cleared by every non-localhost client; the pairing URL is a convenience, not a bypass.
 _Avoid_: connection URL, daemon URL
 
 **Health issue**:

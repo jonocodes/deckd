@@ -115,7 +115,7 @@ All are read-only and unauthenticated unless noted.
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /health` | Host identity (`hostname`, `os`, `desktop`), sessions, current app, bind surface (`bind`, `addresses`, `url`). Used by `deckctl status` and the client Settings panel. |
+| `GET /health` | Host identity (`hostname`, `os`, `desktop`), sessions, current app, bind surface (`bind`, `addresses`, `url`). A wildcard bind (`0.0.0.0` / `::`) is reported in `url` as the host's LAN IPv4, falling back to `127.0.0.1` (#206). Used by `deckctl status` and the client Settings panel. |
 | `GET /diag` | Full snapshot: focus watcher status (`focus.healthy` = context switching is working right now; `focus.query_error` = current poll failure), input sink, deck store, active health issues (`health.issues`, the same list the client banner shows, #195), sessions, tasks, MPRIS state (if active). Machine-readable for AI-assisted debugging. |
 | `GET /metrics` | Prometheus text-format scrape target. Counters: `deckd_actions_total{primitive,outcome}`, `deckd_dbus_calls*`, `deckd_deck_reloads*`, `deckd_ws_sessions_active`, `deckd_mpris_*`, etc. |
 | `GET /decks` | Enumeration of every loaded deck with safe widget summaries (id, kind, label, grid, `has_action`; no raw shell/dbus/url/text command bodies). |

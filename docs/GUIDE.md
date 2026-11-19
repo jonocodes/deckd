@@ -1108,7 +1108,7 @@ Each spec is either a literal IPv4/IPv6 address or `iface:<name>` (every usable 
 
 The active bind surface is exposed for tooling:
 
-- `GET /health` returns `bind`, `addresses`, and `url` (the preferred pairing URL — IPv4 wins, IPv6 only when nothing else is bound).
+- `GET /health` returns `bind`, `addresses`, and `url` (the preferred pairing URL — IPv4 wins, IPv6 only when nothing else is bound; a wildcard bind is reported as the host's LAN IPv4, falling back to `127.0.0.1`).
 - `GET /diag` mirrors the same fields for AI-assisted debugging.
 - `deckctl status` prints the pairing URL above the JSON.
 
