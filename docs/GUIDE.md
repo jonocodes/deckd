@@ -699,8 +699,16 @@ Opening deckd.app again while it's already running (Finder, Spotlight, `open -a 
 
 **Permission grants and upgrades.** macOS records each Accessibility / System Events grant against the app's code identity ("designated requirement"). Release builds are signed with one long-lived certificate, so that identity stays the same from version to version and **your grants carry over when you upgrade** ([#194](https://github.com/jonocodes/deckd/issues/194)). Two exceptions:
 
-- **Moving from an older ad-hoc build to the first signed one** changes the identity once. Remove the stale `deckd` entry from System Settings → Privacy & Security → Accessibility (and Automation), add the app again, and quit and reopen it. Later upgrades keep the grant.
-- **Local builds without the certificate** are ad-hoc signed: their identity is the build's content hash, so every rebuild looks like a new app and needs the same remove-and-re-add.
+- **Moving from an older ad-hoc build to the first signed one** changes the identity once. Settings keeps showing `deckd` switched on, but the grant no longer applies, and macOS 26's Settings has no reliable way to remove the entry. These commands quit deckd, clear its grants, and reopen it. Then add `/Applications/deckd.app` again with **+** under Accessibility, and allow the System Events prompt when it appears. Later upgrades keep the grant.
+
+  ```sh
+  osascript -e 'quit app id "com.deckd.daemon"'
+  tccutil reset Accessibility com.deckd.daemon
+  tccutil reset AppleEvents com.deckd.daemon
+  open -a /Applications/deckd.app
+  ```
+
+- **Local builds without the certificate** are ad-hoc signed: their identity is the build's content hash, so every rebuild looks like a new app and needs the same reset and re-add.
 
 If a grant is missing, the phone shows a banner naming the permission and these steps (see [Feedback and recovery](#feedback-and-recovery)). `codesign -d -r- /Applications/deckd.app` prints the identity: `certificate leaf = H"…"` is a signed build, `cdhash H"…"` an ad-hoc one.
 

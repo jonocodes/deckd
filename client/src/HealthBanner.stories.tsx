@@ -15,7 +15,7 @@ const AX: HealthIssue = {
     "macOS isn't letting deckd.app control the mouse and keyboard. Buttons that open apps still work.",
   fix_steps: [
     "On the Mac, open System Settings → Privacy & Security → Accessibility.",
-    "Turn on deckd.app. If it is already listed and on, select it, remove it with the − button, then add it again with +.",
+    "Turn on deckd.app. If it is already listed and on, run `tccutil reset Accessibility com.deckd.daemon` in Terminal, then add deckd.app again with +.",
     "This warning clears by itself a few seconds after the grant. If buttons still do nothing after that, quit and reopen deckd.app.",
   ],
   affects: ["pointer", "scroll", "key", "raise_window"],

@@ -54,7 +54,7 @@ def test_mac_backend_reports_missing_accessibility(monkeypatch) -> None:
     import deckd.platform_macos as mac
 
     monkeypatch.setattr(mac, "_ax_trusted", lambda: False)
-    monkeypatch.setattr(mac, "_responsible_app_name", lambda: "deckd.app")
+    monkeypatch.setattr(sys, "frozen", True, raising=False)  # the packaged app
 
     issues = mac.MacFocusBackend().health_issues()
 
@@ -66,10 +66,42 @@ def test_mac_backend_reports_missing_accessibility(monkeypatch) -> None:
     assert "deckd.app" in text
     assert "Privacy & Security" in text
     assert "Accessibility" in text
-    # The grant is per-build until #194 lands: an already-listed entry can
-    # be stale, so the steps say to remove and re-add it.
-    assert any("remove" in step.lower() for step in issue.fix_steps)
+    # An already-listed entry can be a stale grant for an older (ad-hoc)
+    # build. macOS 26 offers no reliable way to remove it in Settings, so
+    # the packaged app's steps give the command that clears it.
+    assert any(
+        "tccutil reset Accessibility com.deckd.daemon" in step for step in issue.fix_steps
+    )
     assert set(issue.affects) == {"pointer", "scroll", "key", "raise_window"}
+
+
+def test_mac_backend_from_a_checkout_names_the_terminal(monkeypatch) -> None:
+    """From a source checkout the grant belongs to the terminal, whose
+    bundle id deckd doesn't know, so no tccutil command is offered."""
+    import deckd.platform_macos as mac
+
+    monkeypatch.setattr(mac, "_ax_trusted", lambda: False)
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.setattr(mac, "_terminal_name", lambda: "iTerm.app")
+
+    (issue,) = mac.MacFocusBackend().health_issues()
+    assert "iTerm.app" in " ".join(issue.fix_steps)
+    assert not any("tccutil" in step for step in issue.fix_steps)
+
+
+def test_input_monitoring_hint_names_the_bundle_when_frozen(monkeypatch, caplog) -> None:
+    """The startup hints named /sbin/launchd (the app's parent) instead of
+    deckd.app, found on real hardware during #194 / #195 verification."""
+    import logging
+
+    import deckd.platform_macos as mac
+
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(mac, "_terminal_name", lambda: "/sbin/launchd")
+    with caplog.at_level(logging.INFO, logger="deckd.platform_macos"):
+        mac._log_input_monitoring_hint("[mac scroll]")
+    assert "deckd.app" in caplog.text
+    assert "/sbin/launchd" not in caplog.text
 
 
 @pytest.mark.parametrize("trusted", [True, None])

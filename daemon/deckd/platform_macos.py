@@ -48,6 +48,7 @@ from collections.abc import AsyncIterator, Sequence
 from types import ModuleType
 from typing import Any
 
+from .macos_app import BUNDLE_ID
 from .input import MODIFIER_MAP, KeySink, ScrollSink, name_from_keycode
 from .platform import AppInfo, PlatformBackend, RaiseWindowFailed, WindowInfo, _run
 from .protocol import HealthIssue
@@ -110,13 +111,37 @@ def _responsible_app_name() -> str:
     return _terminal_name()
 
 
-def _accessibility_missing_issue(app: str) -> HealthIssue:
+def _log_input_monitoring_hint(prefix: str) -> None:
+    log.info(
+        "%s macOS 15+ may require Input Monitoring permission for %s "
+        "(System Settings > Privacy & Security > Input Monitoring)",
+        prefix,
+        _responsible_app_name(),
+    )
+
+
+def _accessibility_missing_issue(app: str, bundle_id: str | None) -> HealthIssue:
     """The ``accessibility_missing`` health issue, naming ``app`` (#195).
 
-    The remove-and-re-add step is there because an ad-hoc-signed build
-    gets a new code identity on every upgrade: Settings keeps showing the
-    old entry switched on while the grant no longer applies (#194).
+    The re-add step is for a stale grant: an ad-hoc build gets a new code
+    identity on every rebuild, and the first certificate-signed build
+    changes it once (#194), so Settings can show deckd switched on while the
+    grant no longer applies. macOS 26's Settings gives no reliable way to
+    remove that entry, so when the bundle id is known (the packaged app)
+    the step gives the ``tccutil`` command that clears it. From a checkout
+    the grant is the terminal's, whose bundle id we don't know.
     """
+    if bundle_id is not None:
+        stale = (
+            f"Turn on {app}. If it is already listed and on, run "
+            f"`tccutil reset Accessibility {bundle_id}` in Terminal, then add "
+            f"{app} again with +."
+        )
+    else:
+        stale = (
+            f"Turn on {app}. If it is already listed and on, switch it off "
+            "and on again, or remove it and add it back with +."
+        )
     return HealthIssue(
         id="accessibility_missing",
         severity="error",
@@ -127,8 +152,7 @@ def _accessibility_missing_issue(app: str) -> HealthIssue:
         ),
         fix_steps=[
             "On the Mac, open System Settings → Privacy & Security → Accessibility.",
-            f"Turn on {app}. If it is already listed and on, select it, remove it "
-            "with the − button, then add it again with +.",
+            stale,
             "This warning clears by itself a few seconds after the grant. If "
             f"buttons still do nothing after that, quit and reopen {app}.",
         ],
@@ -189,7 +213,8 @@ class MacFocusBackend(PlatformBackend):
             return []
         if self._app_name is None:
             self._app_name = _responsible_app_name()
-        return [_accessibility_missing_issue(self._app_name)]
+        bundle_id = BUNDLE_ID if getattr(sys, "frozen", False) else None
+        return [_accessibility_missing_issue(self._app_name, bundle_id)]
 
     async def watch_windows(
         self, *, interval_s: float = 0.1
@@ -454,11 +479,7 @@ class MacKeySink(KeySink):
                 "(install with: pip install pyobjc-framework-Quartz)"
             )
         else:
-            log.info(
-                "[mac key] macOS 15+ may require Input Monitoring permission "
-                "for %s (System Settings > Privacy & Security > Input Monitoring)",
-                _terminal_name(),
-            )
+            _log_input_monitoring_hint("[mac key]")
         # Track the held-button state so emit_pointer emits
         # ``LeftMouseDragged`` (not ``MouseMoved``) while the user is
         # mid-drag. The server drives this via pad_drag start/end.
@@ -638,11 +659,7 @@ class MacScrollSink(ScrollSink):
         self._Quartz, self._available = _load_quartz()
         if self._available:
             log.info("[mac scroll] Quartz loaded; wheel events will be injected")
-            log.info(
-                "[mac scroll] macOS 15+ may require Input Monitoring permission "
-                "for %s (System Settings > Privacy & Security > Input Monitoring)",
-                _terminal_name(),
-            )
+            _log_input_monitoring_hint("[mac scroll]")
         else:
             log.warning(
                 "[mac scroll] PyObjC Quartz not available; "
