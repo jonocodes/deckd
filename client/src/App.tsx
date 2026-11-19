@@ -222,6 +222,13 @@ export function App() {
   // the latest frame is the whole truth; empty means healthy.
   const [healthIssues, setHealthIssues] = useState<HealthIssue[]>([]);
   const onHealth = useCallback((m: ServerHealth) => setHealthIssues(m.issues), []);
+  // Dismissed issue ids, for the page session. Held here rather than in the
+  // banner so a lock takeover (which unmounts it) doesn't bring them back.
+  const [dismissedHealth, setDismissedHealth] = useState<ReadonlySet<string>>(() => new Set());
+  const dismissHealth = useCallback(
+    (id: string) => setDismissedHealth((prev) => new Set(prev).add(id)),
+    [],
+  );
   // Demo mode has no socket, so seed the media store once on mount with the
   // fixture readings — otherwise a media widget renders as "unavailable".
   const isDemo = demoDeck !== null;
@@ -818,7 +825,11 @@ export function App() {
             </div>
           ) : (
             <>
-              <HealthBanner issues={healthIssues} />
+              <HealthBanner
+                issues={healthIssues}
+                dismissed={dismissedHealth}
+                onDismiss={dismissHealth}
+              />
               {renderBlankBanner && (
                 <div className="lock-banner" role="status" aria-live="polite">
                   <MoonIcon size={16} aria-hidden />

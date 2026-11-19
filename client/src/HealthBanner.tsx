@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { TriangleAlert as AlertIcon } from "lucide-react";
 import type { HealthIssue } from "./protocol";
 
@@ -8,7 +7,7 @@ const AFFECTS_LABELS: Record<string, string> = {
   pointer: "trackpad & clicks",
   scroll: "scrolling",
   key: "key presses",
-  raise_window: "window switching",
+  raise_window: "raising windows from the list",
 };
 
 function describeAffects(affects: string[]): string {
@@ -18,19 +17,19 @@ function describeAffects(affects: string[]): string {
 /** Banner for each active daemon health issue (issue #195).
  *
  * The daemon pushes the full list whenever it changes; an empty list takes
- * every banner down. Dismissal lasts for the page session and is per issue
- * id. An issue that clears and later comes back shows again, because it is
- * news again.
+ * every banner down. Dismissal is per issue id and lasts for the page
+ * session. The caller owns the dismissed set, so it survives this banner
+ * unmounting (the lock takeover replaces the surface it lives in).
  */
-export function HealthBanner({ issues }: { issues: HealthIssue[] }) {
-  const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
-  // Forget dismissals for issues the daemon no longer reports, so a
-  // recurrence isn't silently swallowed. Adjusting state during render
-  // (rather than in an effect) avoids a flash of the stale banner.
-  const live = new Set(issues.map((i) => i.id));
-  const pruned = [...dismissed].filter((id) => live.has(id));
-  if (pruned.length !== dismissed.size) setDismissed(new Set(pruned));
-
+export function HealthBanner({
+  issues,
+  dismissed,
+  onDismiss,
+}: {
+  issues: HealthIssue[];
+  dismissed: ReadonlySet<string>;
+  onDismiss: (id: string) => void;
+}) {
   const visible = issues.filter((i) => !dismissed.has(i.id));
   if (visible.length === 0) return null;
   return (
@@ -47,7 +46,7 @@ export function HealthBanner({ issues }: { issues: HealthIssue[] }) {
             <button
               className="health-banner-dismiss"
               aria-label={`Dismiss: ${issue.title}`}
-              onClick={() => setDismissed((prev) => new Set(prev).add(issue.id))}
+              onClick={() => onDismiss(issue.id)}
             >
               Dismiss
             </button>

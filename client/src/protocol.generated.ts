@@ -498,8 +498,8 @@ export type HealthIssue = {
  *
  *     Full snapshot, pushed only when the list changes; an empty list is
  *     what clears the client's banner. Replayed on connect only when the
- *     list is non-empty — a client that never receives ``health`` reads as
- *     healthy, which is the truth.
+ *     list is non-empty, so the client resets to "no issues" on every new
+ *     connection before that replay can arrive.
  *     
  */
 export type HealthMessage = {

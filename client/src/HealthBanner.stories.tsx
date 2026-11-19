@@ -4,8 +4,9 @@ import type { HealthIssue } from "./protocol";
 
 export default { title: "HealthBanner" };
 
-/** The macOS Accessibility issue exactly as the daemon words it for the
- * packaged app (``deckd.platform_macos._accessibility_missing_issue``). */
+/** The macOS Accessibility issue, worded like the daemon's
+ * (``deckd.platform_macos._accessibility_missing_issue``) for the packaged
+ * app. A hand copy for layout review; the daemon's text is the source. */
 const AX: HealthIssue = {
   id: "accessibility_missing",
   severity: "error",
@@ -25,7 +26,7 @@ const frame = { width: 420 };
 /** Phone-width: the banner sits above the grid. */
 export const AccessibilityMissing: Story = () => (
   <div style={frame}>
-    <HealthBanner issues={[AX]} />
+    <HealthBanner issues={[AX]} dismissed={new Set()} onDismiss={() => {}} />
   </div>
 );
 
@@ -34,6 +35,8 @@ export const Warning: Story = () => (
   <div style={frame}>
     <HealthBanner
       issues={[{ ...AX, id: "example_warning", severity: "warning", title: "Example warning", affects: ["key"] }]}
+      dismissed={new Set()}
+      onDismiss={() => {}}
     />
   </div>
 );

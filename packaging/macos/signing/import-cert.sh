@@ -54,7 +54,8 @@ while IFS= read -r line; do
     line="${line#"${line%%[![:space:]]*}"}"; line="${line#\"}"; line="${line%\"}"
     [ -n "$line" ] && existing+=("$line")
 done < <(security list-keychains -d user)
-security list-keychains -d user -s "$KC" "${existing[@]}"
+# ${a[@]+...}: an empty array is "unbound" to bash 3.2's set -u.
+security list-keychains -d user -s "$KC" ${existing[@]+"${existing[@]}"}
 
 # A self-signed cert shows as CSSMERR_TP_NOT_TRUSTED here; codesign signs
 # with it anyway, and TCC only compares the requirement, not trust.

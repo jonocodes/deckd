@@ -237,10 +237,10 @@ For the full wire shape, the authoritative source is `daemon/deckd/protocol.py` 
 
 ### Health issues (`health`, #195)
 
-When the daemon knows input will fail silently because an OS permission is missing, it tells the client instead of only logging it. The platform backend reports a list of `HealthIssue` objects (`id`, `severity` = `error`|`warning`, `title`, `detail`, `fix_steps[]`, `affects[]`), and the server polls that list every 3 s:
+When the daemon knows input will fail silently because an OS permission is missing, it tells the client instead of only logging it. The platform backend reports a list of `HealthIssue` objects (fields in `daemon/deckd/protocol.py`), and the server polls that list every few seconds (`Server.HEALTH_POLL_INTERVAL_S`):
 
 - **On change**, every session gets `{"type": "health", "issues": [...]}` with the full list. An empty list clears the banner.
-- **On connect**, the current list is replayed only when it isn't empty. A client that never receives `health` is healthy.
+- **On connect**, the current list is replayed only when it isn't empty; the client resets to "no issues" on every new connection, so a healthy daemon needs no frame.
 - `affects` names the primitives that won't work (`pointer`, `scroll`, `key`, `raise_window`). Unknown values render as-is, so a newer daemon can add one without a client release.
 - `GET /diag` carries the same list under `health.issues`.
 

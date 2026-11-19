@@ -1392,7 +1392,22 @@ class Server:
         for issue_id in sorted(before - after):
             log.info("health issue cleared: %s", issue_id)
         self._health_issues = issues
-        await self._broadcast_message(p.HealthMessage(type="health", issues=issues))
+        try:
+            await self.events.emit(
+                DiagnosticEvent(
+                    name="health_issues",
+                    ts=time.time(),
+                    data={"ids": sorted(after)},
+                    correlation_id=current_correlation_id(),
+                )
+            )
+        except Exception as exc:  # diagnostics must never gate the push
+            log.debug("health_issues event emit failed: %s", exc)
+        # Broadcast is a task, as for session state: one slow client can't
+        # stall the poller.
+        asyncio.create_task(
+            self._broadcast_message(p.HealthMessage(type="health", issues=issues))
+        )
 
     async def push_health_snapshot(self, session: Session) -> None:
         """Replay active issues to a just-connected client.

@@ -129,6 +129,12 @@ export function useDeckdSocket(
       setStatus("connecting");
 
       ws.onopen = () => {
+        // Issue #195: a healthy daemon sends no ``health`` frame on connect,
+        // so each connection starts healthy and the daemon's replay (sent
+        // only when issues are active) fills it back in. Without this, an
+        // issue that cleared while we were away (e.g. deckd.app quit and
+        // reopened after the grant) would leave a stale banner up.
+        onHealth?.({ type: "health", issues: [] });
         setStatus("open");
         setRetrying(false);
         backoffRef.current = 500;

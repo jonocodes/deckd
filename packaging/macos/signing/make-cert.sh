@@ -18,6 +18,10 @@
 # somewhere durable (a password manager): they are the only way to cut a
 # signed release by hand, and losing them means a new certificate.
 #
+# Environment overrides:
+#   DECKD_CODESIGN_P12_PASSWORD  use this .p12 password instead of a random one
+#   DECKD_CERT_DAYS              validity in days (default 7300, 20 years)
+#
 # Needs only openssl, so it runs on Linux as well as macOS.
 set -euo pipefail
 

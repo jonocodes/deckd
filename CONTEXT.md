@@ -84,6 +84,10 @@ _Avoid_: host, listen address, exposed interface
 The single `http://<bind-host>:<port>/` URL a phone types into its browser to reach the daemon. Surfaced as the `url` field on `/health` and `/diag`, and prepended above the JSON body of `deckctl status`. Prefers IPv4 over IPv6 so a phone on a typical home LAN doesn't get a `http://[::1]:.../` link it can't resolve. The password gate still has to be cleared by every non-localhost client; the pairing URL is a convenience, not a bypass.
 _Avoid_: connection URL, daemon URL
 
+**Health issue**:
+Something the daemon knows is wrong on the host that makes input fail silently, today a missing OS permission (macOS Accessibility). Reported by the platform backend, pushed to every client as a `health` frame (full list on change; an empty list means healthy), shown as a banner above the grid, and listed under `/diag`'s `health` block. Not the same as `GET /health` (host identity) or `focus.healthy` (is context switching working). See issue #195.
+_Avoid_: warning, alert, permission error
+
 ### Session screen state (issue #160)
 
 **Screen locked**:
