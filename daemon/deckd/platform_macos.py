@@ -78,6 +78,11 @@ def _terminal_name() -> str:
     which app to add in System Settings (e.g. iTerm.app, Code, cmux,
     Terminal).
     """
+    # Inside a .app bundle (the DMG install) the parent is launchd, and
+    # the TCC grant belongs to the bundle itself, so name that instead.
+    bundle, sep, _ = sys.executable.partition(".app/Contents/MacOS/")
+    if sep:
+        return os.path.basename(bundle) + ".app"
     env = os.environ.get("TERM_PROGRAM", "")
     if env == "iTerm.app":
         return "iTerm.app"

@@ -372,3 +372,21 @@ def test_cg_window_options_helper_combines_flags() -> None:
     from deckd.platform_macos import _cg_window_list_options
 
     assert _cg_window_list_options(_FakeQuartz) == 5
+
+
+# ---------------------------------------------------------------------------
+# Permission hints name the app that needs the grant
+# ---------------------------------------------------------------------------
+
+
+def test_terminal_name_names_the_enclosing_app_bundle(monkeypatch) -> None:
+    """Launched from Finder/the DMG, deckd's parent is launchd, so the
+    parent-process name would tell the user to grant ``/sbin/launchd``.
+    The grant belongs to the .app the executable lives in."""
+    import deckd.platform_macos as pm
+
+    monkeypatch.delenv("TERM_PROGRAM", raising=False)
+    monkeypatch.setattr(
+        pm.sys, "executable", "/Applications/deckd.app/Contents/MacOS/deckd"
+    )
+    assert pm._terminal_name() == "deckd.app"

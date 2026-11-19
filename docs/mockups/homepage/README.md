@@ -27,7 +27,7 @@ just mockups
 # → http://127.0.0.1:5289/docs/mockups/homepage/a-notebook.html (and c-press.html)
 # → http://127.0.0.1:5289/site/index.html?app=http://127.0.0.1:5288/  (B, live dev client)
 just pages
-# → http://127.0.0.1:5290/deckd/  (B exactly as deployed: built site, client at app/)
+# → http://127.0.0.1:5290/deckd/  (B exactly as deployed: built site, client at demo/client/)
 ```
 
 The phones show the showcase demo decks (`?demo=home`, `gmail`, `meet`,
@@ -38,6 +38,6 @@ directly: a `file://` page can't frame localhost in current browsers, so the
 phones stay blank.
 
 `?app=<url>` points the phones at another client. The homepage defaults to the
-client beside it (`app/`); A and C fall back to the public build at
-`https://jonocodes.github.io/deckd/app/`. Add `?eager` to load every phone
+client beside it (`demo/client/`); A and C fall back to the public build at
+`https://jonocodes.github.io/deckd/demo/client/`. Add `?eager` to load every phone
 up front (for full-page screenshots).

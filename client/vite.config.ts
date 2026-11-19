@@ -22,9 +22,9 @@ const daemonUpstream = process.env.DECKD_UPSTREAM ?? "http://127.0.0.1:8865";
 const https = readTlsConfig();
 
 export default defineConfig({
-  // On Pages the client lives at jonocodes.github.io/deckd/app/ (the
+  // On Pages the client lives at jonocodes.github.io/deckd/demo/client/ (the
   // homepage has /deckd/): scripts/build_pages.sh sets
-  // ``VITE_BASE_PATH=/deckd/app/``. Local dev and the daemon-served build
+  // ``VITE_BASE_PATH=/deckd/demo/client/``. Local dev and the daemon-served build
   // leave ``base`` at the default ``/``.
   base: process.env.VITE_BASE_PATH ?? "/",
   plugins: [react()],

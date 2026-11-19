@@ -73,10 +73,12 @@ const TODAY = [
   "Password sign-in, network scope, lock awareness",
   "Keyboard, screen-reader, high-contrast and reduced-motion support",
   "Linux (GNOME, KDE, X11) and macOS, plus a Nix flake",
+  "Downloads: an AppImage for Linux, a DMG for macOS",
 ];
 const NEXT = [
-  ["Downloadable app for Linux and macOS", 168],
   ["A browser extension for exact website matching", 90],
+  ["Different decks on different devices", null],
+  ["Pick between several computers", 25],
   ["Windows", null],
 ];
 function roadmap(root) {
@@ -99,8 +101,8 @@ const FAQ = [
     "With the editor in the app: pick widgets, set icons and colours, drag to reorder, save. Every screen updates as you go. Decks are plain text files too, if you'd rather."],
   ["What can a button do?",
     "Press a key combination, run a command, open a URL, start a terminal, call D-Bus — or chain several into a macro."],
-  ["Is it free?",
-    `Yes — open source under GPL-3.0. Issues and ideas are welcome on <a href="${GH}/issues">GitHub</a>.`],
+  ["On my Mac the decks switch, but buttons and the trackpad do nothing. Why?",
+    `deckd is missing the Accessibility permission, or still has it from an older version: macOS treats every upgrade as a new app until deckd is properly signed (<a href="${GH}/issues/194">#194</a>). Re-add deckd under System Settings → Privacy &amp; Security → Accessibility and reopen it. The <a href="${GH}/blob/main/docs/GUIDE.md#grant-permissions">guide</a> has the steps.`],
 ];
 function faq(root) {
   root.append(el(`<div class="dk-faq">${FAQ.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join("")}</div>`));

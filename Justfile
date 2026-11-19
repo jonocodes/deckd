@@ -205,7 +205,7 @@ build-client:
     cd client && npm run build
 
 # Assemble the GitHub Pages site exactly as the deploy workflow does: the
-# homepage at the root, the client under app/, Ladle under ladle/.
+# homepage at the root, the client under demo/client/, Ladle under ladle/.
 # Output: _site/deckd/. `just pages` builds and serves it.
 build-pages:
     scripts/build_pages.sh _site/deckd
@@ -221,14 +221,17 @@ screenshots:
     cd client && node screenshots.mjs
 
 # Build the GitHub Pages site exactly as CI deploys it (homepage at /deckd/,
-# client at /deckd/app/, Ladle at /deckd/ladle/) and serve it on :5290.
-# SKIP_LADLE=1 just pages skips the slow Ladle build.
+# client at /deckd/demo/client/, Ladle at /deckd/ladle/) and serve it on :5290.
+# SKIP_LADLE=1 just pages skips the slow Ladle build; PAGES_HOST=0.0.0.0
+# serves it to other devices too (e.g. over Tailscale).
 pages:
     #!/usr/bin/env bash
     set -euo pipefail
     scripts/build_pages.sh _site/deckd
-    echo "Pages preview: http://127.0.0.1:5290/deckd/"
-    node scripts/serve_pages.mjs _site 5290
+    host="${PAGES_HOST:-127.0.0.1}"
+    [ "$host" = 0.0.0.0 ] && shown="$(hostname)" || shown="$host"
+    echo "Pages preview: http://$shown:5290/deckd/  (demo: /deckd/demo/)"
+    node scripts/serve_pages.mjs _site 5290 "$host"
 
 # Preview the homepage mockups (docs/mockups/homepage) over http. The client's
 # Vite dev server on :5288 serves the demo decks the pages embed; a static

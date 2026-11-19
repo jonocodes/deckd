@@ -1,6 +1,6 @@
 # deckd
 
-**[jonocodes.github.io/deckd](https://jonocodes.github.io/deckd/)** — homepage, with the client running live in demo mode.
+**[jonocodes.github.io/deckd](https://jonocodes.github.io/deckd/)** — homepage · **[live demo](https://jonocodes.github.io/deckd/demo/)**: pick an app, see its deck.
 
 App-aware touch control surface for your desktop. A Stream Deck-like deck of buttons, sliders, scroll strips, and a manual control mode (a single combined trackpad + keyboard passthrough), rendered in any browser on any touchscreen device, driven by a local daemon that watches the focused application and swaps decks automatically.
 
@@ -148,7 +148,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the component breakdown and
 
 ## Getting started
 
-deckd needs Python 3.11+ and Node 22+ (CI and the flox environment use Node 24 LTS). CI tests the 3.11 floor and the 3.12 interpreter the Nix package ships. In brief:
+**On a Mac, without a toolchain:** download the DMG from the [releases](https://github.com/jonocodes/deckd/releases) and follow [macOS app: install](docs/GUIDE.md#macos-app-bundle-experimental-165). It needs **Accessibility** and **Automation → System Events** granted to `deckd.app` (otherwise the trackpad, scrolling, and shortcut buttons silently do nothing), and the grants need redoing after each upgrade until [#194](https://github.com/jonocodes/deckd/issues/194) lands.
+
+**From a checkout:** deckd needs Python 3.11+ and Node 22+ (CI and the flox environment use Node 24 LTS). CI tests the 3.11 floor and the 3.12 interpreter the Nix package ships. In brief:
 
 ```sh
 uv venv --python 3.11

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Assemble the GitHub Pages site: the homepage (site/) at the root, the client
-# under app/, Ladle under ladle/. CI (.github/workflows/deploy-pages.yml) and
+# under demo/client/ (it only exists to be embedded by the homepage and the
+# demo page), Ladle under ladle/. CI (.github/workflows/deploy-pages.yml) and
 # `just pages` both run this, so a local preview is exactly what deploys.
 #
 # Usage: scripts/build_pages.sh [OUT_DIR]    (default: _site)
@@ -20,12 +21,14 @@ cp -rL "$root/site/." "$out/"
 
 cd "$root/client"
 # `npm run build` type-checks first, so a type error fails the deploy.
-VITE_BASE_PATH="${base}app/" npm run build -- --outDir "$out/app" --emptyOutDir
+# VITE_DEMO_PAGE: with no daemon here, a visit with no demo to show forwards to
+# the demo page (client/src/demo-landing.ts) instead of "Reconnecting…".
+VITE_BASE_PATH="${base}demo/client/" VITE_DEMO_PAGE="${base}demo/" npm run build -- --outDir "$out/demo/client" --emptyOutDir
 
 # Pages serves the site's 404.html for any unknown path. Make it the client,
-# so a deep link like app/trackpad boots the app (its asset URLs are
+# so a deep link like demo/client/trackpad boots the app (its asset URLs are
 # absolute, so they resolve from any path) instead of a bare 404.
-cp "$out/app/index.html" "$out/404.html"
+cp "$out/demo/client/index.html" "$out/404.html"
 
 if [ -z "${SKIP_LADLE:-}" ]; then
   # Ladle won't create its outDir, and joins even an absolute --outDir onto
