@@ -259,7 +259,8 @@ async def test_wildcard_bind_reports_lan_pairing_url(
     bound socket because that one is accurate."""
     import deckd.bind as bind_mod
 
-    monkeypatch.setattr(bind_mod, "primary_lan_ipv4", lambda: "192.168.1.20")
+    lan = {socket.AF_INET: "192.168.1.20", socket.AF_INET6: "2001:db8:1::20"}
+    monkeypatch.setattr(bind_mod, "lan_address", lambda family: lan[family])
     (tmp_path / "default.yaml").write_text(
         "match:\n  - default\nwidgets: []\n"
     )
@@ -280,10 +281,13 @@ async def test_wildcard_bind_reports_lan_pairing_url(
                 health = await r.json()
             async with http.get(f"http://127.0.0.1:{port}/diag") as r:
                 diag = await r.json()
-        raw = f"[{wildcard}]" if ":" in wildcard else wildcard
+        is_v6 = ":" in wildcard
+        raw = f"[{wildcard}]" if is_v6 else wildcard
+        # ``::`` is V6ONLY, so its URL must be v6 too.
+        lan_host = "[2001:db8:1::20]" if is_v6 else "192.168.1.20"
         assert health["addresses"] == [f"{raw}:{port}"]
-        assert health["url"] == f"http://192.168.1.20:{port}/"
-        assert diag["url"] == f"http://192.168.1.20:{port}/"
+        assert health["url"] == f"http://{lan_host}:{port}/"
+        assert diag["url"] == f"http://{lan_host}:{port}/"
     finally:
         await test_server.close()
         await server.scroll.close()

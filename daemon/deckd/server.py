@@ -2092,7 +2092,8 @@ class Server:
             # they asked for, not what got resolved. ``addresses`` is
             # the post-resolution ``[host:port, …]`` list. ``url`` is
             # a single pairing URL pointing at the preferred bind
-            # (IPv4 wins; IPv6 only when nothing else is bound).
+            # (LAN over loopback, then IPv4 over IPv6; a wildcard is
+            # swapped for a LAN address — see ``bind.url_for``).
             "bind": list(self._bind_specs),
             "addresses": [f"{_url_host_for_log(b)}:{port}" for b in resolved_for_url],
             "url": _bind_url_for(resolved_for_url, port),
