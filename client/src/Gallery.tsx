@@ -16,9 +16,7 @@ type Device = { label: string; w: number; h: number };
 
 // Portrait base dimensions (CSS px); landscape swaps w/h.
 const DEVICES: Device[] = [
-  { label: "Phone", w: 390, h: 844 },
   { label: "Large phone", w: 430, h: 932 },
-  { label: '7" tablet', w: 600, h: 1024 },
   { label: '10" tablet', w: 834, h: 1194 },
 ];
 
@@ -29,7 +27,8 @@ const MAX_H = 360;
 
 type Orientation = "landscape" | "portrait";
 
-const DEMO_LABELS: Record<string, string> = { mpris: "Media" };
+// ``media`` is the showcase now-playing deck; ``mpris`` is the test fixture.
+const DEMO_LABELS: Record<string, string> = { mpris: "MPRIS" };
 
 function Frame({
   device,

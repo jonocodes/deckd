@@ -220,13 +220,14 @@ The client can be viewed and design-iterated without a running daemon:
 
 Every push to `main` builds the homepage, the client and Ladle and publishes them to GitHub Pages, so the previews above can be browsed with no daemon and no local checkout. `scripts/build_pages.sh` assembles the site, and `just pages` builds and serves the same thing locally on :5290.
 
-- **Homepage** — `https://jonocodes.github.io/deckd/`. Source in `site/`; its phones embed the client's showcase demo decks (`?demo=home`, `gmail`, `meet`, `media`, …).
-- **Live client (demo mode)** — `https://jonocodes.github.io/deckd/app/?demo=showcase` (also `?demo=firefox`, `?demo=home`). Without `?demo=` the client loads and shows "disconnected" since there's no daemon behind the Pages site; the param lets the fixture deck run. Deep links to a view (`app/trackpad`) work too: the site's `404.html` is the client.
-- **Responsive gallery** — `https://jonocodes.github.io/deckd/app/gallery.html`.
-- **Layout help** — `https://jonocodes.github.io/deckd/app/help.html`. The standalone build of the in-app explainer (below); no daemon, no icons.
-- **Ladle stories** — `https://jonocodes.github.io/deckd/ladle/`.
+- **Homepage** — [jonocodes.github.io/deckd/](https://jonocodes.github.io/deckd/). Source in `site/`; its phones embed the client's showcase demo decks (`?demo=home`, `gmail`, `meet`, `media`, …).
+- **Live demo** — [jonocodes.github.io/deckd/demo/](https://jonocodes.github.io/deckd/demo/). Pick an app on a pretend desktop and the client (below) switches to its deck. Source in `site/demo/`.
+- **Demo client** — `demo/client/` is the real client running on pretend data. It's there only for the homepage and the demo page to embed (`demo/client/?demo=gmail`, …), so nothing links to it; a visit without `?demo=` (or `?playground`) forwards to the demo page (`VITE_DEMO_PAGE`, set by `scripts/build_pages.sh`). A daemon-served client never redirects. Deep links to a view (`demo/client/trackpad?demo=firefox`) work because the site's `404.html` is the client.
+- **Responsive gallery** — [jonocodes.github.io/deckd/demo/client/gallery.html](https://jonocodes.github.io/deckd/demo/client/gallery.html).
+- **Layout help** — [jonocodes.github.io/deckd/demo/client/help.html](https://jonocodes.github.io/deckd/demo/client/help.html). The standalone build of the in-app explainer (below); no daemon, no icons.
+- **Ladle stories** — [jonocodes.github.io/deckd/ladle/](https://jonocodes.github.io/deckd/ladle/).
 
-Source: `.github/workflows/deploy-pages.yml`. The client builds with `VITE_BASE_PATH=/deckd/app/` and Ladle with `--base /deckd/ladle/` so the Project-Pages sub-paths resolve; local dev keeps base `/`. `just build-pages` assembles the same tree into `_site/deckd/`; `just pages` builds and serves it.
+Source: `.github/workflows/deploy-pages.yml`. The client builds with `VITE_BASE_PATH=/deckd/demo/client/` and Ladle with `--base /deckd/ladle/` so the Project-Pages sub-paths resolve; local dev keeps base `/`. `just build-pages` assembles the same tree into `_site/deckd/`; `just pages` builds and serves it (`PAGES_HOST=0.0.0.0 just pages` to reach it from another device, e.g. over Tailscale).
 
 ### PWA install over HTTPS (Tailscale)
 
