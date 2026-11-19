@@ -520,6 +520,61 @@ async def test_press_text_paste_writes_clipboard_and_sends_ctrl_v(
     assert len(ctrlv) == 1
 
 
+async def test_press_text_paste_refused_still_restores_clipboard(
+    monkeypatch: pytest.MonkeyPatch, as_linux: None,
+) -> None:
+    """Issue #196: when the OS refuses the paste keystroke, the user's
+    clipboard is put back (without the restore delay, which only exists to
+    let a paste that happened finish) before the refusal propagates."""
+    import deckd.actions as actions_mod
+    from unittest.mock import AsyncMock
+
+    from deckd.input import PermissionDenied
+
+    written: list[bytes] = []
+
+    async def fake_exec(*args, stdin=None, stdout=None, stderr=None,
+                         start_new_session=False):
+        mock = AsyncMock()
+        mock.stdout = None
+        mock.stdin = None
+        if stdout is not None:  # the clipboard read
+            mock.stdout = AsyncMock()
+            mock.communicate = AsyncMock(return_value=(b"previous clipboard", None))
+        if stdin is not None:  # a clipboard write
+            mock.stdin = AsyncMock()
+            mock.stdin.write = lambda data: written.append(data)
+        mock.wait = AsyncMock()
+        return mock
+
+    monkeypatch.setattr(actions_mod.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(
+        actions_mod.shutil, "which",
+        lambda name: {"wl-copy": "/usr/bin/wl-copy", "wl-paste": "/usr/bin/wl-paste"}.get(name),
+    )
+    slept: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        slept.append(seconds)
+
+    monkeypatch.setattr(actions_mod.asyncio, "sleep", fake_sleep)
+
+    class Refusing(FakePointerSink):
+        def emit_key(self, keycodes: list[int]) -> None:
+            raise PermissionDenied("accessibility_missing", "Key press blocked")
+
+    widget = Widget(
+        id="text-btn",
+        kind="button",
+        action=Action(text="secret", text_mode="paste", restore_clipboard=True),
+    )
+    with pytest.raises(PermissionDenied):
+        await run_action(widget, _ctx_key_sink(Refusing()))
+
+    assert written == [b"secret", b"previous clipboard"]
+    assert slept == []
+
+
 async def test_press_text_paste_no_clipboard_tool_falls_back_to_simulate(
     monkeypatch: pytest.MonkeyPatch, as_linux: None,
 ) -> None:

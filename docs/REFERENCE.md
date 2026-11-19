@@ -255,7 +255,7 @@ The proactive checks can be unavailable or wrong, so the osascript calls also re
 
 ### Action errors (`action_error`, #196)
 
-When the OS refuses an action for want of a permission (today: a macOS key press, `key:` / `text:` / macro key steps / manual-control keys and typing), the daemon sends the *requesting* session `{"type": "action_error", "id": <widget id or null>, "reason": "permission_denied", "issue_id": <health issue id>, "message": "Key press blocked: …"}` and re-polls health at once, so the toast and the banner with the fix steps arrive together. A macro stops at the refused step, even with `continue_on_error`. The attempt is recorded with `outcome="permission_denied"` in `/actions/recent` and `deckd_action_outcome_total` on `/metrics`.
+When the OS refuses an action for want of a permission (today: a macOS key press, `key:` / `text:` / macro key steps / manual-control keys and typing), the daemon sends the *requesting* session `{"type": "action_error", "id": <widget id or null>, "reason": "permission_denied", "issue_id": <health issue id>, "message": "Key press blocked: …"}` and re-polls health at once, so the toast and the banner with the fix steps arrive together. A macro stops at the refused step, even with `continue_on_error`. The attempt is recorded with `outcome="permission_denied"` in `/actions/recent` and `deckd_action_outcome_total` on `/metrics`. For a widget press it follows the usual `ok` (dispatched) record, the same pairing a failed macro gets (`ok` then `failed-at-step`). With `--no-focus` there is no platform backend to report health, so the toast still arrives but no banner does.
 
 ## Where to read next
 

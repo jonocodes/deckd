@@ -351,5 +351,5 @@ def test_startup_probe_feeds_the_ledger(monkeypatch) -> None:
 
     monkeypatch.setattr(mac.subprocess, "run", lambda *a, **k: _Done())
     ledger = mac.PermissionLedger()
-    mac.MacKeySink._check_accessibility(ledger)
+    _sink(ledger)._check_system_events()
     assert ledger.denied() == {AUTOMATION}

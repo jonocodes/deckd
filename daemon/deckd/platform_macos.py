@@ -13,7 +13,7 @@ too: ``Quartz.CGWindowListCopyWindowInfo`` yields on-screen windows
 ``ApplicationServices`` Accessibility raise the chosen one. Window
 numbers are stable for a window's lifetime and serve as the opaque
 ``window_id`` sent to the client. Accessibility consent is gated by
-``MacKeySink._check_accessibility`` at keysink startup.
+``MacKeySink._check_system_events`` at keysink startup.
 
 Capability matrix (sketch):
 
@@ -258,20 +258,35 @@ class PermissionLedger:
         self._lock = threading.Lock()
 
     def observe(self, returncode: int, stderr: str, *, keystroke: bool) -> str | None:
-        """Record one System Events call. Returns the denied issue id, if any."""
-        issue = classify_osascript_error(stderr) if returncode != 0 else None
+        """Record one finished osascript call. Returns the denied issue id, if any."""
+        if returncode == 0:
+            self.record_success(keystroke=keystroke)
+            return None
+        return self.record_failure(stderr)
+
+    def record_failure(self, stderr: str) -> str | None:
+        """Record a failed System Events call; only a permission refusal counts.
+
+        Returns the denied issue id, or ``None`` for an unrelated failure,
+        which says nothing about the grants either way.
+        """
+        issue = classify_osascript_error(stderr)
+        if issue is None:
+            return None
         with self._lock:
-            if issue is not None:
-                self._denied.add(issue)
-                if issue == ACCESSIBILITY_MISSING:
-                    # System Events answered, so the Apple event got through.
-                    self._denied.discard(AUTOMATION_MISSING)
-                return issue
-            if returncode == 0:
+            self._denied.add(issue)
+            if issue == ACCESSIBILITY_MISSING:
+                # System Events answered, so the Apple event got through.
                 self._denied.discard(AUTOMATION_MISSING)
-                if keystroke:
-                    self._denied.discard(ACCESSIBILITY_MISSING)
-        return None
+        return issue
+
+    def record_success(self, *, keystroke: bool) -> None:
+        """A System Events call worked: Automation is granted, and if it sent
+        a keystroke, Accessibility is too."""
+        with self._lock:
+            self._denied.discard(AUTOMATION_MISSING)
+            if keystroke:
+                self._denied.discard(ACCESSIBILITY_MISSING)
 
     def denied(self) -> frozenset[str]:
         with self._lock:
@@ -288,9 +303,10 @@ _KEYSTROKE_PROBE = 'tell application "System Events" to keystroke ""'
 def _probe_keystroke() -> tuple[int, str]:
     """Send an empty keystroke through System Events: ``(returncode, stderr)``.
 
-    Exercises both grants without typing anything. Only run while a denial
-    is held (see :meth:`MacFocusBackend.health_issues`), so a healthy host
-    never pays for it.
+    Exercises both grants without typing anything. Run once at keysink
+    startup, then only while a denial is held (see
+    :meth:`MacFocusBackend.health_issues`), so a healthy host never pays
+    for it in the poll.
     """
     try:
         proc = subprocess.run(
@@ -298,8 +314,8 @@ def _probe_keystroke() -> tuple[int, str]:
             capture_output=True, text=True, timeout=10,
         )
     except (OSError, subprocess.TimeoutExpired) as exc:
-        return -1, str(exc)
-    return proc.returncode, proc.stderr
+        return -1, f"osascript keystroke probe: {exc}"
+    return proc.returncode, proc.stderr or ""
 
 
 def _blocked_message(issue_id: str) -> str:
@@ -430,9 +446,9 @@ class MacFocusBackend(PlatformBackend):
         except RuntimeError as exc:
             # A -1743 here is the focus half of a missing Automation grant
             # (#196): the deck stops following the front app.
-            self._ledger.observe(1, str(exc), keystroke=False)
+            self._ledger.record_failure(str(exc))
             raise
-        self._ledger.observe(0, "", keystroke=False)
+        self._ledger.record_success(keystroke=False)
         proc_name, _, title = out.partition("|||")
         return AppInfo(
             app_id=proc_name.strip() or None,
@@ -745,47 +761,36 @@ class MacKeySink(KeySink):
         # ``LeftMouseDragged`` (not ``MouseMoved``) while the user is
         # mid-drag. The server drives this via pad_drag start/end.
         self._dragging_left = False
-        self._check_accessibility(self._ledger)
+        self._check_system_events()
         self._check_ax_trust()
 
     # -- key -----------------------------------------------------------------
 
-    @staticmethod
-    def _check_accessibility(ledger: PermissionLedger) -> None:
+    def _check_system_events(self) -> None:
         """Check that osascript can send keystrokes via System Events.
 
-        macOS 14+ may silently deny keystroke injection even when the
-        terminal is listed in Accessibility preferences (a re-add often
-        fixes it). This probe warns the user at startup with actionable
-        instructions instead of failing silently on the first button
-        press, and records the result in ``ledger`` so the client's
-        banner is up before any button is pressed (#196).
+        Needs both grants: Automation (System Events) and Accessibility.
+        macOS 14+ may silently deny keystroke injection even when the app
+        is listed in Accessibility preferences (a re-add often fixes it).
+        This probe warns at startup with actionable instructions instead
+        of failing silently on the first button press, and records the
+        result in the ledger so the client's banner is up before any
+        button is pressed (#196).
         """
-        try:
-            proc = subprocess.run(
-                ["osascript", "-e", _KEYSTROKE_PROBE],
-                capture_output=True, text=True, timeout=10,
-            )
-            issue = ledger.observe(proc.returncode, proc.stderr or "", keystroke=True)
-            if proc.returncode != 0:
-                reason = (proc.stderr or "").strip() or f"exit code {proc.returncode}"
-                grant = (
-                    "Automation > System Events"
-                    if issue == AUTOMATION_MISSING
-                    else "Accessibility"
-                )
-                log.warning(
-                    "[mac key] osascript keystroke probe failed: %s\n"
-                    "  Grant %s to %s in System Settings > Privacy & Security.\n"
-                    "  If already listed, remove it, re-add it, then restart the app.",
-                    reason,
-                    grant,
-                    _responsible_app_name(),
-                )
-        except FileNotFoundError:
-            log.warning("[mac key] osascript not found; key injection unavailable")
-        except subprocess.TimeoutExpired:
-            log.warning("[mac key] osascript keystroke probe timed out")
+        returncode, stderr = _probe_keystroke()
+        issue = self._ledger.observe(returncode, stderr, keystroke=True)
+        if returncode == 0:
+            return
+        reason = stderr.strip() or f"exit code {returncode}"
+        grant = "Automation > System Events" if issue == AUTOMATION_MISSING else "Accessibility"
+        log.warning(
+            "[mac key] osascript keystroke probe failed: %s\n"
+            "  Grant %s to %s in System Settings > Privacy & Security.\n"
+            "  If already listed, remove it, re-add it, then restart the app.",
+            reason,
+            grant,
+            _responsible_app_name(),
+        )
 
     @staticmethod
     def _check_ax_trust() -> None:

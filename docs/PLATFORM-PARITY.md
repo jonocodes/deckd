@@ -148,7 +148,7 @@ so KDE could honestly re-advertise them.
   | grant | gates | failure mode without it |
   |---|---|---|
   | Accessibility | Quartz `CGEventPost` (pointer, click, drag, scroll) + the `AXRaise` half of `raise_window` | events **silently dropped**, no error; raise activates the app then fails `kAXErrorAPIDisabled` (-25211) |
-  | System Events | focus detection + `osascript keystroke` | osascript exits non-zero; `MacKeySink._check_accessibility` warns at startup |
+  | System Events | focus detection + `osascript keystroke` | osascript exits non-zero (`-1743` Automation, `(1002)` Accessibility); the client gets a health banner and, on a refused key press, an `action_error` toast (#196) |
   | Screen Recording | `kCGWindowName` in `CGWindowList` | every enumerated `title` is `None`; rows label by app name |
 
   This is why "it doesn't work on my Mac" is usually a *process-tree*
