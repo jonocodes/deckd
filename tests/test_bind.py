@@ -18,6 +18,7 @@ from deckd.bind import (
     IFACE_PREFIX,
     ResolvedBind,
     parse_bind_specs,
+    lan_address,
     resolve_bind,
     url_for,
 )
@@ -198,6 +199,126 @@ def test_url_for_empty_binds() -> None:
 def test_url_for_respects_scheme() -> None:
     binds = [ResolvedBind(host="127.0.0.1", family=socket.AF_INET, original="127.0.0.1")]
     assert url_for(binds, 443, scheme="https") == "https://127.0.0.1:443/"
+
+
+# ---------------------------------------------------------------------------
+# Wildcard binds → an address a phone can open (issue #206)
+# ---------------------------------------------------------------------------
+
+
+def _bind(host: str, original: str | None = None, iface: str | None = None) -> ResolvedBind:
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    return ResolvedBind(host=host, family=family, original=original or host, iface=iface)
+
+
+@pytest.fixture
+def fake_lan(monkeypatch: pytest.MonkeyPatch) -> dict[int, str | None]:
+    """Replace :func:`deckd.bind.lan_address` with a per-family table
+    and record every lookup in ``table["calls"]``."""
+    import deckd.bind as bind_mod
+
+    table: dict = {
+        socket.AF_INET: "192.168.1.20",
+        socket.AF_INET6: "2001:db8:1::20",
+        "calls": [],
+    }
+
+    def fake(family: int) -> str | None:
+        table["calls"].append(family)
+        return table[family]
+
+    monkeypatch.setattr(bind_mod, "lan_address", fake)
+    return table
+
+
+def test_url_for_substitutes_lan_ipv4_for_ipv4_wildcard(fake_lan) -> None:
+    assert url_for([_bind("0.0.0.0")], 8765) == "http://192.168.1.20:8765/"
+
+
+def test_url_for_substitutes_lan_ipv6_for_ipv6_wildcard(fake_lan) -> None:
+    # IPv6 sockets are IPV6_V6ONLY (server._open_bind_sockets), so a bare
+    # ``::`` bind only answers on v6 — a v4 URL would be refused.
+    assert url_for([_bind("::")], 8765) == "http://[2001:db8:1::20]:8765/"
+    assert fake_lan["calls"] == [socket.AF_INET6]
+
+
+def test_url_for_dual_wildcard_prefers_ipv4(fake_lan) -> None:
+    binds = [_bind("::"), _bind("0.0.0.0")]
+    assert url_for(binds, 8765) == "http://192.168.1.20:8765/"
+
+
+def test_url_for_wildcard_falls_back_to_same_family_loopback(fake_lan) -> None:
+    fake_lan[socket.AF_INET] = None
+    fake_lan[socket.AF_INET6] = None
+    assert url_for([_bind("0.0.0.0")], 8765) == "http://127.0.0.1:8765/"
+    assert url_for([_bind("::")], 8765) == "http://[::1]:8765/"
+
+
+def test_url_for_ranks_lan_bind_above_loopback(fake_lan) -> None:
+    # Loopback v4 + wildcard v6: only the v6 socket is reachable from a phone.
+    binds = [_bind("127.0.0.1"), _bind("::")]
+    assert url_for(binds, 8765) == "http://[2001:db8:1::20]:8765/"
+
+
+def test_url_for_literal_bind_does_not_probe_lan(fake_lan) -> None:
+    assert url_for([_bind("192.168.1.9")], 80) == "http://192.168.1.9:80/"
+    assert url_for([_bind("::1")], 80) == "http://[::1]:80/"
+    assert fake_lan["calls"] == []
+
+
+def test_url_for_iface_bind_does_not_probe_lan(fake_lan) -> None:
+    bind = _bind("192.168.1.9", original="iface:en0", iface="en0")
+    assert url_for([bind], 80) == "http://192.168.1.9:80/"
+    assert fake_lan["calls"] == []
+
+
+def _no_hosts(_family: int) -> list[str]:
+    return []
+
+
+def test_lan_address_prefers_default_route_source() -> None:
+    assert lan_address(
+        socket.AF_INET,
+        route_source=lambda _f: "192.168.1.20",
+        host_addresses=lambda _f: ["10.0.0.9"],
+    ) == "192.168.1.20"
+
+
+@pytest.mark.parametrize(
+    ("family", "bad"),
+    [
+        (socket.AF_INET, "127.0.0.1"),
+        (socket.AF_INET, "0.0.0.0"),
+        (socket.AF_INET, "169.254.10.10"),
+        (socket.AF_INET, "2001:db8::5"),  # wrong family
+        (socket.AF_INET6, "::1"),
+        (socket.AF_INET6, "fe80::1"),
+        (socket.AF_INET6, "::ffff:192.168.1.20"),  # v4-mapped
+        (socket.AF_INET6, "192.168.1.20"),  # wrong family
+    ],
+)
+def test_lan_address_rejects_unusable_candidates(family: int, bad: str) -> None:
+    assert lan_address(
+        family, route_source=lambda _f: bad, host_addresses=_no_hosts
+    ) is None
+
+
+def test_lan_address_falls_back_to_hostname_addresses() -> None:
+    # No default route (isolated LAN): the probe fails, but the host's
+    # own addresses still include a reachable one.
+    assert lan_address(
+        socket.AF_INET,
+        route_source=lambda _f: None,
+        host_addresses=lambda _f: ["127.0.0.1", "169.254.1.1", "10.0.0.9"],
+    ) == "10.0.0.9"
+
+
+def test_lan_address_none_when_nothing_usable() -> None:
+    assert lan_address(
+        socket.AF_INET,
+        route_source=lambda _f: None,
+        host_addresses=lambda _f: ["127.0.0.1"],
+    ) is None
 
 
 def test_iface_prefix_constant_matches_documented_shape() -> None:

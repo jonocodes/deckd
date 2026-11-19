@@ -19,7 +19,7 @@ import ipaddress
 import logging
 import socket
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Callable, Iterable
 
 log = logging.getLogger("deckd.bind")
 
@@ -182,19 +182,33 @@ def _iface_addresses(name: str) -> list[tuple[str, int]]:
 
 
 def url_for(binds: Iterable[ResolvedBind], port: int, scheme: str = "http") -> str:
-    """Build a pairing URL from the first resolved bind.
+    """Build a pairing URL from the best resolved bind.
 
-    Prefers IPv4 over IPv6 because phones on the same LAN more often
-    have working v4 than a clean v6 path. The port is the
-    actually-listening port (``self.port`` after ``start()``
-    resolved any ``port=0`` sentinel).
+    Ranks non-loopback binds above loopback ones (a phone can't use
+    ``127.0.0.1``), then IPv4 above IPv6 because phones on the same LAN
+    more often have working v4 than a clean v6 path. The port is the
+    actually-listening port (``self.port`` after ``start()`` resolved
+    any ``port=0`` sentinel).
+
+    A wildcard bind (``0.0.0.0`` / ``::``) is not something a phone can
+    open, so it is replaced by :func:`lan_address` of the same family —
+    IPv6 sockets are ``IPV6_V6ONLY``, so ``::`` only answers on v6 — or
+    that family's loopback when none is found. The URL never contains a
+    wildcard (issue #206).
     """
     family_priority: dict[int, int] = {socket.AF_INET: 0, socket.AF_INET6: 1}
-    sorted_binds = sorted(binds, key=lambda b: family_priority.get(b.family, 99))
-    if not sorted_binds:
+    ranked = sorted(
+        binds,
+        key=lambda b: (_is_loopback(b.host), family_priority.get(b.family, 99)),
+    )
+    if not ranked:
         return ""
-    host = _url_host(sorted_binds[0])
-    return f"{scheme}://{host}:{port}/"
+    chosen = ranked[0]
+    if _is_wildcard(chosen.host):
+        loopback = "::1" if chosen.is_ipv6 else "127.0.0.1"
+        host = lan_address(chosen.family) or loopback
+        chosen = ResolvedBind(host=host, family=chosen.family, original=chosen.original)
+    return f"{scheme}://{_url_host(chosen)}:{port}/"
 
 
 def _url_host(bind: ResolvedBind) -> str:
@@ -202,3 +216,89 @@ def _url_host(bind: ResolvedBind) -> str:
     if bind.is_ipv6:
         return f"[{bind.host}]"
     return bind.host
+
+
+def _ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    try:
+        return ipaddress.ip_address(host.partition("%")[0])
+    except ValueError:
+        return None
+
+
+def _is_wildcard(host: str) -> bool:
+    ip = _ip(host)
+    return ip is not None and ip.is_unspecified
+
+
+def _is_loopback(host: str) -> bool:
+    ip = _ip(host)
+    return ip is not None and ip.is_loopback
+
+
+# Connecting a UDP socket only asks the kernel to pick a route and a
+# source address — no packet is sent. Documentation prefixes (RFC 5737
+# / RFC 3849) keep us from naming a real third party.
+_ROUTE_PROBE: dict[int, tuple[str, int]] = {
+    socket.AF_INET: ("192.0.2.1", 9),
+    socket.AF_INET6: ("2001:db8::1", 9),
+}
+
+
+def lan_address(
+    family: int,
+    *,
+    route_source: Callable[[int], str | None] | None = None,
+    host_addresses: Callable[[int], list[str]] | None = None,
+) -> str | None:
+    """Return an address of ``family`` a LAN client can reach, or ``None``.
+
+    Tries, in order:
+
+    1. the source address of the default route (:func:`_route_source`);
+    2. the addresses the machine's own hostname resolves to
+       (:func:`_hostname_addresses`) — covers a LAN with no default
+       route, where step 1 has nothing to connect through.
+
+    Loopback, link-local and unspecified candidates are skipped — a
+    phone can't use them. Both sources are injectable for tests.
+    """
+    route_source = route_source or _route_source
+    host_addresses = host_addresses or _hostname_addresses
+    first = route_source(family)
+    if first is not None and _usable(first, family):
+        return first
+    for candidate in host_addresses(family):
+        if _usable(candidate, family):
+            return candidate
+    return None
+
+
+def _usable(host: str, family: int) -> bool:
+    ip = _ip(host)
+    if ip is None or (ip.version == 6) != (family == socket.AF_INET6):
+        return False
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        # ``::ffff:a.b.c.d`` is really v4; a V6ONLY socket won't see it.
+        return False
+    return not (ip.is_loopback or ip.is_link_local or ip.is_unspecified)
+
+
+def _route_source(family: int) -> str | None:
+    """Source address the kernel would use for the default route."""
+    try:
+        with socket.socket(family, socket.SOCK_DGRAM) as sock:
+            sock.connect(_ROUTE_PROBE[family])
+            return str(sock.getsockname()[0])
+    except (OSError, KeyError):
+        return None
+
+
+def _hostname_addresses(family: int) -> list[str]:
+    """Addresses the machine's hostname resolves to, in resolver order."""
+    try:
+        infos = socket.getaddrinfo(
+            socket.gethostname(), None, family, socket.SOCK_STREAM
+        )
+    except OSError:
+        return []
+    return [str(info[4][0]).partition("%")[0] for info in infos]

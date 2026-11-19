@@ -87,7 +87,9 @@ Three places surface it:
 
 - `GET /health` (open-auth): adds `bind` (raw specs), `addresses`
   (resolved `[host:port, …]`, IPv6 bracketed), and `url` (single
-  pairing URL, IPv4 wins).
+  pairing URL: LAN over loopback, then IPv4; a wildcard bind is
+  replaced by a LAN address of the same family, falling back to that
+  family's loopback — issue #206).
 - `GET /diag` (open-auth): mirrors the same three fields for the
   AI-debugging surface.
 - `deckctl status`: prints `listening on: <url>` and
