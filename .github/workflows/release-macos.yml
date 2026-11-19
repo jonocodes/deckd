@@ -19,9 +19,17 @@ name: Release macOS app
 # Silicon Macs. An Intel / universal2 build is a documented follow-up
 # (issue #165, "Open questions").
 #
-# The bundle is ad-hoc signed and NOT notarized (no paid Apple Developer
-# Program), so a browser-downloaded DMG is quarantined — first launch needs
-# right-click → Open or `xattr -dr com.apple.quarantine /Applications/deckd.app`.
+# Signing (#194): when the DECKD_CODESIGN_P12_BASE64 / DECKD_CODESIGN_P12_PASSWORD
+# secrets are set, the bundle is signed with the project's long-lived
+# self-signed certificate (packaging/macos/signing/), so its designated
+# requirement is the certificate rather than the build's hash, and users'
+# Accessibility / System Events grants survive upgrades. Without them (forks,
+# fork PRs) it falls back to ad-hoc and warns. test-app then asserts the
+# installed app's requirement names the certificate leaf.
+#
+# Either way it is NOT notarized (no paid Apple Developer Program), so a
+# browser-downloaded DMG is quarantined — first launch needs right-click →
+# Open or `xattr -dr com.apple.quarantine /Applications/deckd.app`.
 
 on:
   push:
@@ -34,6 +42,7 @@ on:
       - "daemon/deckd/app_bundle.py"
       - "daemon/deckd/platform_macos.py"
       - "pyproject.toml"
+      - "Justfile"
   workflow_dispatch:
     inputs:
       tag:
@@ -64,6 +73,8 @@ env:
 jobs:
   dmg:
     runs-on: macos-15
+    outputs:
+      signed: ${{ steps.signing.outputs.signed }}
     steps:
       # Full history + tags: setuptools-scm derives the bundled version from
       # the nearest release tag (ADR-0013).
@@ -101,6 +112,16 @@ jobs:
       - name: Resolve version from the tag
         run: echo "DECKD_VERSION=${RELEASE_TAG#v}" >> "$GITHUB_ENV"
 
+      # Puts the certificate in a throwaway keychain and exports
+      # DECKD_CODESIGN_IDENTITY for `just build-macos-app`. No secret →
+      # signed=false and an ad-hoc build (with a warning).
+      - name: Import the code-signing certificate
+        id: signing
+        env:
+          DECKD_CODESIGN_P12_BASE64: ${{ secrets.DECKD_CODESIGN_P12_BASE64 }}
+          DECKD_CODESIGN_P12_PASSWORD: ${{ secrets.DECKD_CODESIGN_P12_PASSWORD }}
+        run: packaging/macos/signing/import-cert.sh
+
       - name: Build .app + DMG
         run: just build-macos-dmg
 
@@ -128,8 +149,12 @@ jobs:
           name: deckd-macos-dmg
           path: dmg
 
+      # A signed build must keep a certificate-based designated requirement
+      # all the way to the installed app (#194).
       - name: Install + drive the app
-        run: packaging/macos/test/test-app.sh --pregrant dmg/deckd-*.dmg test-app-out
+        env:
+          EXPECT_SIGNED: ${{ needs.dmg.outputs.signed == 'true' && '--expect-signed' || '' }}
+        run: packaging/macos/test/test-app.sh --pregrant $EXPECT_SIGNED dmg/deckd-*.dmg test-app-out
 
       - uses: actions/upload-artifact@v7
         if: always()

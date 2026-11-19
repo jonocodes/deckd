@@ -380,8 +380,46 @@ class RunningWindowsMessage(BaseModel):
     windows: list[WindowListEntry]
 
 
+class HealthIssue(BaseModel):
+    """One thing the daemon knows is broken on this host (issue #195).
+
+    Platform-neutral: a backend mints these from whatever it can probe
+    (macOS Accessibility trust today; Automation, Linux ``uinput`` access
+    are follow-ups). ``id`` is a stable machine key (``accessibility_missing``)
+    the client can dedupe and dismiss by. ``fix_steps`` are complete,
+    user-facing sentences that name the exact app to grant and the
+    Settings path. ``affects`` lists the input primitives that silently
+    fail while the issue stands (``pointer``, ``scroll``, ``key``,
+    ``raise_window``, ...).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1)
+    severity: Literal["error", "warning"]
+    title: str = Field(min_length=1)
+    detail: str
+    fix_steps: list[str]
+    affects: list[str]
+
+
+class HealthMessage(BaseModel):
+    """Daemon -> client push: the full list of active health issues (#195).
+
+    Full snapshot, pushed only when the list changes; an empty list is
+    what clears the client's banner. Replayed on connect only when the
+    list is non-empty, so the client resets to "no issues" on every new
+    connection before that replay can arrive.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["health"]
+    issues: list[HealthIssue]
+
+
 ServerMessage = Annotated[
-    Union[DeckMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, MediaErrorMessage, ChromeMediaMessage, EventMessage, MacroResultMessage, ConfirmRequestMessage, RunningWindowsMessage, ErrorMessage],
+    Union[DeckMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, MediaErrorMessage, ChromeMediaMessage, EventMessage, MacroResultMessage, ConfirmRequestMessage, RunningWindowsMessage, HealthMessage, ErrorMessage],
     Field(discriminator="type"),
 ]
 

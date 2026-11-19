@@ -48,8 +48,10 @@ from collections.abc import AsyncIterator, Sequence
 from types import ModuleType
 from typing import Any
 
+from .macos_app import BUNDLE_ID
 from .input import MODIFIER_MAP, KeySink, ScrollSink, name_from_keycode
 from .platform import AppInfo, PlatformBackend, RaiseWindowFailed, WindowInfo, _run
+from .protocol import HealthIssue
 
 log = logging.getLogger("deckd.platform_macos")
 
@@ -101,6 +103,68 @@ def _terminal_name() -> str:
     return env or "your terminal"
 
 
+def _responsible_app_name() -> str:
+    """The app macOS charges this process's permissions to.
+
+    TCC grants follow the *responsible* process: inside the packaged app
+    that is ``deckd.app`` itself (its parent is launchd, which is no help
+    to a user hunting through Settings); from a checkout it is whatever
+    terminal / editor launched the daemon.
+    """
+    if getattr(sys, "frozen", False):
+        return "deckd.app"
+    return _terminal_name()
+
+
+def _log_input_monitoring_hint(prefix: str) -> None:
+    log.info(
+        "%s macOS 15+ may require Input Monitoring permission for %s "
+        "(System Settings > Privacy & Security > Input Monitoring)",
+        prefix,
+        _responsible_app_name(),
+    )
+
+
+def _accessibility_missing_issue(app: str, bundle_id: str | None) -> HealthIssue:
+    """The ``accessibility_missing`` health issue, naming ``app`` (#195).
+
+    The re-add step is for a stale grant: an ad-hoc build gets a new code
+    identity on every rebuild, and the first certificate-signed build
+    changes it once (#194), so Settings can show deckd switched on while the
+    grant no longer applies. macOS 26's Settings gives no reliable way to
+    remove that entry, so when the bundle id is known (the packaged app)
+    the step gives the ``tccutil`` command that clears it. From a checkout
+    the grant is the terminal's, whose bundle id we don't know.
+    """
+    if bundle_id is not None:
+        stale = (
+            f"Turn on {app}. If it is already listed and on, run "
+            f"`tccutil reset Accessibility {bundle_id}` in Terminal, then add "
+            f"{app} again with +."
+        )
+    else:
+        stale = (
+            f"Turn on {app}. If it is already listed and on, switch it off "
+            "and on again, or remove it and add it back with +."
+        )
+    return HealthIssue(
+        id="accessibility_missing",
+        severity="error",
+        title="Accessibility permission missing",
+        detail=(
+            f"macOS isn't letting {app} control the mouse and keyboard. "
+            "Buttons that open apps still work."
+        ),
+        fix_steps=[
+            "On the Mac, open System Settings → Privacy & Security → Accessibility.",
+            stale,
+            "This warning clears by itself a few seconds after the grant. If "
+            f"buttons still do nothing after that, quit and reopen {app}.",
+        ],
+        affects=["pointer", "scroll", "key", "raise_window"],
+    )
+
+
 # ---------------------------------------------------------------------------
 # Focus
 # ---------------------------------------------------------------------------
@@ -136,8 +200,26 @@ class MacFocusBackend(PlatformBackend):
             title=title.strip() or None,
         )
 
+    # Resolved once: ``_terminal_name`` shells out to ``ps`` and the
+    # health poller asks every few seconds.
+    _app_name: str | None = None
+
     def capabilities(self) -> frozenset[str]:
         return frozenset({"watch_active_app", "watch_windows", "raise_window"})
+
+    def health_issues(self) -> list[HealthIssue]:
+        """Report a missing Accessibility grant (issue #195).
+
+        ``AXIsProcessTrusted`` is re-read on every call, so a grant made
+        while the daemon runs clears the issue on the next poll. ``None``
+        (no PyObjC, so no way to tell) reports nothing.
+        """
+        if _ax_trusted() is not False:
+            return []
+        if self._app_name is None:
+            self._app_name = _responsible_app_name()
+        bundle_id = BUNDLE_ID if getattr(sys, "frozen", False) else None
+        return [_accessibility_missing_issue(self._app_name, bundle_id)]
 
     async def watch_windows(
         self, *, interval_s: float = 0.1
@@ -402,11 +484,7 @@ class MacKeySink(KeySink):
                 "(install with: pip install pyobjc-framework-Quartz)"
             )
         else:
-            log.info(
-                "[mac key] macOS 15+ may require Input Monitoring permission "
-                "for %s (System Settings > Privacy & Security > Input Monitoring)",
-                _terminal_name(),
-            )
+            _log_input_monitoring_hint("[mac key]")
         # Track the held-button state so emit_pointer emits
         # ``LeftMouseDragged`` (not ``MouseMoved``) while the user is
         # mid-drag. The server drives this via pad_drag start/end.
@@ -467,7 +545,7 @@ class MacKeySink(KeySink):
             "raise_window will fail (kAXErrorAPIDisabled).\n"
             "  Grant it in System Settings > Privacy & Security > "
             "Accessibility, then restart that app.",
-            _terminal_name(),
+            _responsible_app_name(),
         )
 
     def emit_key(self, keycodes: list[int]) -> None:
@@ -586,11 +664,7 @@ class MacScrollSink(ScrollSink):
         self._Quartz, self._available = _load_quartz()
         if self._available:
             log.info("[mac scroll] Quartz loaded; wheel events will be injected")
-            log.info(
-                "[mac scroll] macOS 15+ may require Input Monitoring permission "
-                "for %s (System Settings > Privacy & Security > Input Monitoring)",
-                _terminal_name(),
-            )
+            _log_input_monitoring_hint("[mac scroll]")
         else:
             log.warning(
                 "[mac scroll] PyObjC Quartz not available; "

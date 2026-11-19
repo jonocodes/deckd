@@ -106,6 +106,36 @@ describe("useDeckdSocket — reconnect feedback (issue #64)", () => {
     );
   });
 
+  it("routes a health frame to onHealth (issue #195)", async () => {
+    const onHealth = vi.fn();
+    renderHook(() =>
+      useDeckdSocket(noop, noop, noop, undefined, undefined, undefined, undefined, undefined, onHealth),
+    );
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1));
+    const ws = FakeWebSocket.instances[0];
+    act(() => ws.open());
+    const frame = { type: "health", issues: [] };
+    act(() => ws.onmessage?.({ data: JSON.stringify(frame) }));
+    expect(onHealth).toHaveBeenCalledWith(frame);
+  });
+
+  it("a new connection resets health to empty before the daemon's replay", async () => {
+    // A healthy daemon sends no ``health`` frame on connect, so an issue
+    // that cleared while we were disconnected (e.g. the user quit and
+    // reopened deckd.app after granting) must not leave a stale banner.
+    const onHealth = vi.fn();
+    renderHook(() =>
+      useDeckdSocket(noop, noop, noop, undefined, undefined, undefined, undefined, undefined, onHealth),
+    );
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1));
+    const ws = FakeWebSocket.instances[0];
+    act(() => ws.open());
+    expect(onHealth).toHaveBeenLastCalledWith({ type: "health", issues: [] });
+    const frame = { type: "health", issues: [{ id: "x" }] };
+    act(() => ws.onmessage?.({ data: JSON.stringify(frame) }));
+    expect(onHealth).toHaveBeenLastCalledWith(frame);
+  });
+
   it("cancel stops the retry loop; retry resumes it", async () => {
     const { result } = renderHook(() => useDeckdSocket(...hookArgs()));
     await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1));

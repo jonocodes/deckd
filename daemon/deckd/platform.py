@@ -13,6 +13,10 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from dbus_fast.aio import MessageBus
 
+    # Type-only: ``protocol`` -> ``decks`` -> ``platform`` would cycle at
+    # import time, and the base implementation never builds one.
+    from .protocol import HealthIssue
+
 log = logging.getLogger("deckd.platform")
 
 
@@ -428,6 +432,17 @@ class PlatformBackend:
         surfaces the corresponding empty state (issue #120, decision 8).
         """
         return frozenset({"watch_active_app"})
+
+    def health_issues(self) -> "list[HealthIssue]":
+        """OS-level problems that make input silently fail (issue #195).
+
+        Called by the server's health poller every few seconds, so it must
+        be cheap and must re-probe on every call: a permission granted
+        while the daemon runs has to clear the issue without a restart.
+        The default is "nothing known to be wrong"; backends that can probe
+        a permission (macOS Accessibility today) override this.
+        """
+        return []
 
     async def start(self) -> None:
         """Acquire any long-lived resources (a D-Bus bus name, a session

@@ -118,8 +118,8 @@ jobs:
 
       - run: pip install -e ".[dev]"
 
-      - name: "[macOS] platform-parity + macOS backend"
-        run: pytest -v tests/test_platform_parity.py tests/test_platform_macos.py
+      - name: "[macOS] platform-parity + macOS backend + health issues + signing"
+        run: pytest -v tests/test_platform_parity.py tests/test_platform_macos.py tests/test_health_issues.py tests/test_macos_signing.py
 
   # Nix packaging: builds packages.deckd + the focus-watcher bundles,
   # evaluates the NixOS/home-manager modules against dummy configs,

@@ -139,7 +139,7 @@ Machine-verified on hardware 2026-08-06 (macOS 15.6.1, Apple Silicon) by driving
 
 **TCC permissions are per-process-tree, and that bites.** macOS attributes a grant to the *responsible* process — the terminal (or launchd agent) that started the daemon — not to `python` itself. Consequences worth knowing before you debug the wrong layer:
 
-- **Accessibility** gates Quartz `CGEventPost` *and* the `AXRaise` half of raise. Without it, pointer/click/drag/scroll are **silently dropped** (no per-event error; the daemon only logs one `Accessibility is not granted …` warning at startup) and `raise_window` fails with `kAXErrorAPIDisabled` (-25211) after the app has already been activated — so the app comes forward but the specific window doesn't rise.
+- **Accessibility** gates Quartz `CGEventPost` *and* the `AXRaise` half of raise. Without it, pointer/click/drag/scroll are **silently dropped** (no per-event error; the daemon only logs one `Accessibility is not granted …` warning at startup) and `raise_window` fails with `kAXErrorAPIDisabled` (-25211) after the app has already been activated — so the app comes forward but the specific window doesn't rise. The daemon re-checks this every few seconds and shows a banner on the client while it's missing (see [Feedback and recovery](#feedback-and-recovery)).
 - **System Events** (the focus + `keystroke` path) is a *separate* grant, which is why focus detection and key injection can work fine while every Quartz path is dead.
 - Run the daemon from a *different* terminal (or under an editor/agent harness) and you inherit that tree's grants, not the ones you clicked through earlier.
 - **Screen Recording** gates `kCGWindowName`. Without it every enumerated window's `title` is `None`, so the running-windows list is labelled by app name alone. deckd works either way — the label falls back — but title-based deck matching (`title:` tokens) can't see enumerated windows.
@@ -284,6 +284,7 @@ Every non-happy state explains itself in plain language rather than leaving a st
 - **Reconnecting / disconnected** — when the socket drops, an overlay sits over the last-rendered deck naming the attempt count and the last error (e.g. *Attempt 3 — daemon not reachable*). While the client is retrying it offers **Cancel** to pause the auto-retry loop; once paused (or when the socket is closed) it offers **Retry** to reconnect immediately. The bottom-strip connection dot keeps showing live / reconnecting / disconnected alongside it.
 - **Screen locked / asleep** — the full-surface lock takeover names the cause (*Screensaver or lock screen active on ‹host›*) and states that input is held until you unlock. The soft "asleep" banner shown for a blank that hasn't locked says *suspend or display blank*, and a press wakes the machine.
 - **Deck errors** — a deck that fails to load (bad YAML or a schema violation) replaces the grid with the pydantic detail plus a plain-language line naming the deck and the offending widget (`Couldn't load the "firefox" deck. Widget "back" is invalid.`) and a **Return to focused app** button that clears a pinned chrome view. A chrome view that no longer resolves shows *That view isn't available on this daemon.* with the same button.
+- **Missing permissions** — when the daemon knows input will fail silently because an OS permission is missing (today: macOS Accessibility not granted), a banner above the grid names the problem, what won't work (*trackpad & clicks, scrolling, key presses, raising windows from the list*), and the exact fix, including the app to grant and the System Settings path. It clears by itself a few seconds after you grant the permission, with no reconnect needed. **Dismiss** hides it for the rest of this page session. `deckctl diag` shows the same list under `health`.
 - **Media errors** — a media command the daemon couldn't deliver (player gone, method rejected) surfaces a non-blocking toast naming the player (`VLC media player — player disappeared`) with **Retry** (re-sends the last command for that player) and **Dismiss**.
 
 Each of these is announced through the client's `aria-live` region, and every animation is suppressed under `prefers-reduced-motion: reduce` or the in-app *Reduce motion* setting.
@@ -680,7 +681,7 @@ Beyond the source-checkout + LaunchAgent path above, deckd ships as a self-conta
 #### Install
 
 1. Download `deckd-<version>.dmg` from the [GitHub releases](https://github.com/jonocodes/deckd/releases) and drag **deckd** into **Applications**.
-2. The bundle is **ad-hoc signed, not notarized** (no paid Apple Developer Program; see [#194](https://github.com/jonocodes/deckd/issues/194)), so Gatekeeper blocks the first launch of a browser download. Right-click → **Open**, or:
+2. Release DMGs are signed with the project's self-signed certificate once the release workflow has it (see [Code signing](#code-signing-self-signed-certificate)); older releases and local builds are ad-hoc signed. Either way the bundle is **not notarized** (no paid Apple Developer Program), so Gatekeeper blocks the first launch of a browser download. Right-click → **Open**, or:
 
    ```sh
    xattr -dr com.apple.quarantine /Applications/deckd.app
@@ -696,7 +697,7 @@ Grants belong to `deckd.app` itself, in System Settings → **Privacy & Security
 
 | permission | what breaks without it | how to grant |
 | --- | --- | --- |
-| **Accessibility** | trackpad pointer, click, drag, scroll strip, keyboard-shortcut buttons (System Events refuses to type for an app without it), raising a specific window | Not prompted. Open **Accessibility**, click **+** under the list, pick `/Applications/deckd.app`, make sure its toggle is on. **Then restart deckd** (menu → Restart server, or quit and relaunch): it checks the grant at startup. |
+| **Accessibility** | trackpad pointer, click, drag, scroll strip, keyboard-shortcut buttons (System Events refuses to type for an app without it), raising a specific window | Not prompted. Open **Accessibility**, click **+** under the list, pick `/Applications/deckd.app`, make sure its toggle is on. The phone's banner clears within a few seconds; if buttons still do nothing after that, restart deckd (menu → Restart server, or quit and relaunch). |
 | **Automation → System Events** | following the focused app (decks don't switch), keyboard-shortcut buttons (e.g. Firefox **New window** sends ⌘N) | Prompted shortly after launch, the first time deckd checks which app is focused: *"deckd wants access to control System Events"* → **Allow**. If you clicked Don't Allow, turn it on under **Automation → deckd → System Events**. |
 | **Screen Recording** *(optional)* | window titles in the running-windows list (labels fall back to the app name) and `title:` deck matching on enumerated windows | Open **Screen Recording**, add `deckd.app`. |
 
@@ -706,7 +707,7 @@ To check, look for these lines in `~/Library/Logs/deckd.log` after a restart. A 
 - `osascript is not allowed to send keystrokes (1002)` → Accessibility missing.
 - `Not authorized to send Apple events to System Events. (-1743)` → Automation missing.
 
-The client doesn't show these yet; that's [#195](https://github.com/jonocodes/deckd/issues/195).
+The phone shows a banner while Accessibility is missing ([#195](https://github.com/jonocodes/deckd/issues/195)); detecting a missing Automation grant is a follow-up.
 
 #### LAN access
 
@@ -721,13 +722,20 @@ The menu offers Open surface / Open decks folder / Restart server / Allow LAN ac
 
 #### Upgrading
 
-Because the bundle is ad-hoc signed, macOS identifies it by its content hash: **every new build looks like a different app, and the old Accessibility / Automation grants stop applying**, without any prompt ([#194](https://github.com/jonocodes/deckd/issues/194)). The symptom after an upgrade is the same as never granting, typically decks still switching while the trackpad, scroll strip, and shortcut buttons do nothing. The toggle in System Settings may still show *on*, for the old build.
+macOS records each Accessibility / Automation grant against the app's code identity (its "designated requirement"). Builds signed with the project's certificate keep the same identity from version to version, so **your grants carry over when you upgrade** ([#194](https://github.com/jonocodes/deckd/issues/194)). Two cases still need a re-grant:
 
-Clear deckd's stale entries (this only touches deckd's grants), then grant again as above and restart deckd:
+- **The first signed build after an ad-hoc one** changes the identity once.
+- **Ad-hoc builds** (older releases, local builds without the certificate) are identified by their content hash, so every new build looks like a different app.
+
+In both cases the old grants stop applying without any prompt. The symptom is the same as never granting: decks still switch while the trackpad, scroll strip, and shortcut buttons do nothing, and the phone shows the missing-permission banner. The toggle in System Settings may still show *on*, for the old build. `codesign -d -r- /Applications/deckd.app` tells the two kinds apart: `certificate leaf = H"…"` is a signed build, `cdhash H"…"` an ad-hoc one.
+
+To fix it, quit deckd, clear its stale entries (this only touches deckd's grants), reopen it, and grant again as above:
 
 ```sh
+osascript -e 'quit app id "com.deckd.daemon"'
 tccutil reset Accessibility com.deckd.daemon
 tccutil reset AppleEvents com.deckd.daemon
+open -a /Applications/deckd.app
 ```
 
 (In System Settings you can instead select the `deckd` row by its name, not its toggle, and press **−** under the list.) Decks, the password, and the LAN setting survive an upgrade.
@@ -741,7 +749,7 @@ just build-macos-app     # -> dist/deckd.app
 just build-macos-dmg     # -> dist/deckd-<version>.dmg
 ```
 
-A local build is a new identity too, so running it means granting permissions to `dist/deckd.app` (and again after every rebuild).
+Without the signing certificate a local build is ad-hoc, so running it means granting permissions to `dist/deckd.app`, and again after every rebuild. Set `DECKD_CODESIGN_IDENTITY` to sign it with the project certificate instead (see [Code signing](#code-signing-self-signed-certificate)).
 
 Verified on hardware (macOS 26.6.2, Apple Silicon, 2026-11-18): installed from the release DMG and driven from a phone over LAN, focus-following deck switching, the trackpad, the scroll strip, and keyboard-shortcut buttons all worked once Accessibility and Automation were granted to `deckd.app`, and none of them (except deck switching) did before.
 
@@ -752,6 +760,34 @@ Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workf
 Before anything is published, a `test-app` job installs the DMG on a second, fresh runner and clicks through the real menu-bar item ([`packaging/macos/test/test-app.sh`](../packaging/macos/test/test-app.sh)). It checks the menu's items, that **Allow LAN access** opens and closes the LAN port, toggles its ✓, and stays on across a relaunch, **Restart server**, **Open decks folder** (a Finder window), **Open deckd surface** (Safari loads it), **Quit**, and that an in-place upgrade keeps the password and decks. It uploads screenshots (`deckd-macos-test-app` artifact) of the open menu, the decks folder, the surface in Safari, and the first-run *"deckd wants access to control System Events"* prompt. Pull requests that touch the app run build + test (never publish).
 
 This works on GitHub's free hosted runners because they have a real logged-in desktop, and the image grants Accessibility and Screen Recording to `bash`/`osascript`. The script's `--pregrant` writes deckd's own TCC grants before launch (CI only: it needs Full Disk Access) — otherwise its System Events consent prompt sits on screen and blocks every System Events call. What CI can't cover: grants surviving an upgrade (they're pre-written), and Gatekeeper quarantine on a browser download (`spctl` output is logged, informational).
+
+#### Code signing (self-signed certificate)
+
+Release builds are signed with a self-signed code-signing certificate that never changes, so users' permission grants survive upgrades (see *Permission grants and upgrades* above). It's free, unlike a Developer ID, but it does **not** clear Gatekeeper's "unidentified developer" warning; that still needs Developer ID + notarization ($99/yr), a later step.
+
+The certificate is generated **once** for the project. A new certificate is a new identity to macOS, so every user would have to re-grant; `make-cert.sh` refuses to overwrite an existing one for that reason.
+
+```sh
+packaging/macos/signing/make-cert.sh ~/deckd-signing     # needs only openssl; prints the SHA-1 identity
+base64 < ~/deckd-signing/deckd-codesign.p12 | gh secret set DECKD_CODESIGN_P12_BASE64
+gh secret set DECKD_CODESIGN_P12_PASSWORD < ~/deckd-signing/deckd-codesign.p12.password
+```
+
+Keep `deckd-codesign.p12` and its password somewhere durable, such as a password manager: the GitHub secrets can't be read back, and these files are the only way to sign a release by hand. To do that on a Mac, import the certificate into your login keychain once and name its identity when building:
+
+```sh
+security import ~/deckd-signing/deckd-codesign.p12 -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign
+DECKD_CODESIGN_IDENTITY=<sha1 from make-cert> just build-macos-dmg
+```
+
+How the pieces fit ([`packaging/macos/signing/`](../packaging/macos/signing/)):
+
+- `release-macos.yml` runs `import-cert.sh`, which decodes the secret into a throwaway keychain and exports `DECKD_CODESIGN_IDENTITY`. Without the secrets (forks, fork PRs) it warns and the build stays ad-hoc.
+- `just build-macos-app` freezes the app ad-hoc with PyInstaller, then `sign-app.sh` re-signs the bundle with the identity. It doesn't use PyInstaller's own `codesign_identity`, which would force hardened runtime (its library validation rejects a self-signed, Team-ID-less bundle) and a network timestamp.
+- `check-dr.sh` asserts the result: the designated requirement must be `identifier "com.deckd.daemon" and certificate leaf = H"…"`, not `cdhash`. `sign-app.sh` runs it after signing, and `test-app.sh --expect-signed` runs it again on the installed DMG in CI.
+- `tests/test_macos_signing.py` covers the scripts. Its end-to-end case signs a real bundle in a temporary keychain; it runs on macOS CI, or locally with `DECKD_TEST_CODESIGN=1`.
+
+What CI can't show is a grant actually surviving an upgrade, because the runner's grants are pre-written. That needs a human: grant Accessibility to build N, install build N+1 over it, and confirm the trackpad still works without re-adding the app.
 
 To run the same test on your own Mac (it replaces `/Applications/deckd.app`; your terminal needs Accessibility + Screen Recording):
 

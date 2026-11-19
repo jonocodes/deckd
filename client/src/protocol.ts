@@ -31,6 +31,7 @@ import type {
   MacroResultMessage,
   ConfirmRequestMessage,
   RunningWindowsMessage,
+  HealthMessage,
   HelloMessage,
   PressMessage,
   JogMessage,
@@ -66,6 +67,8 @@ export type {
   ConfirmRequestMessage,
   WindowListEntry,
   RunningWindowsMessage,
+  HealthIssue,
+  HealthMessage,
   ServerMessage,
   HelloMessage,
   PressMessage,
@@ -199,6 +202,7 @@ export type ServerError = ErrorMessage;
 export type ServerMediaError = MediaErrorMessage;
 export type ServerMacroResult = MacroResultMessage;
 export type ServerConfirmRequest = ConfirmRequestMessage;
+export type ServerHealth = HealthMessage;
 // WindowListEntry carries an opaque ``icon`` field on the wire but the
 // client renders it as a typed ``Icon``. Mirror the ServerDeck rule:
 // declare the alias as a standalone interface so it stays compatible

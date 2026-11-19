@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerDeck, ServerMediaError, ServerMessage, ServerRunningWindows, ServerState, ServerWidgetUpdate, MediaState } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerDeck, ServerHealth, ServerMediaError, ServerMessage, ServerRunningWindows, ServerState, ServerWidgetUpdate, MediaState } from "./protocol";
 import { wireDeckToServer, wireWindowsToServer } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
@@ -60,6 +60,7 @@ export function useDeckdSocket(
   onRunningWindows?: (m: ServerRunningWindows) => void,
   onSessionState?: (m: ServerState) => void,
   onMediaError?: (m: ServerMediaError) => void,
+  onHealth?: (m: ServerHealth) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -128,6 +129,12 @@ export function useDeckdSocket(
       setStatus("connecting");
 
       ws.onopen = () => {
+        // Issue #195: a healthy daemon sends no ``health`` frame on connect,
+        // so each connection starts healthy and the daemon's replay (sent
+        // only when issues are active) fills it back in. Without this, an
+        // issue that cleared while we were away (e.g. deckd.app quit and
+        // reopened after the grant) would leave a stale banner up.
+        onHealth?.({ type: "health", issues: [] });
         setStatus("open");
         setRetrying(false);
         backoffRef.current = 500;
@@ -183,6 +190,11 @@ export function useDeckdSocket(
           // it so the client can name the player and offer a retry.
           else if (msg.type === "media_error" && onMediaError) {
             onMediaError(msg);
+          }
+          // Issue #195: the daemon's active health issues (missing OS
+          // permissions). Full list per push; an empty list clears.
+          else if (msg.type === "health" && onHealth) {
+            onHealth(msg);
           }
           else if (msg.type === "error" && msg.reason === "unauthorized") {
             // Wrong/absent password: stop reconnecting and prompt the user.
@@ -253,7 +265,7 @@ export function useDeckdSocket(
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onDeck, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, onSessionState, onMediaError, enabled, gen]);
+  }, [onDeck, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, onSessionState, onMediaError, onHealth, enabled, gen]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;

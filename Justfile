@@ -537,16 +537,32 @@ build-macos-app:
         echo "build-macos-app needs macOS; a .app can't be built on $(uname)." >&2
         exit 1
     fi
-    if ! command -v pyinstaller >/dev/null 2>&1; then
-        echo "installing PyInstaller ([packaging] extra)..."
-        uv pip install -e ".[packaging]"
+    # `uv pip install` targets $VIRTUAL_ENV, else ./.venv, and that env's bin
+    # dir isn't necessarily on PATH (e.g. a shell without direnv), so run
+    # PyInstaller from there rather than trusting PATH.
+    venv_bin="${VIRTUAL_ENV:-$PWD/.venv}/bin"
+    if command -v pyinstaller >/dev/null 2>&1; then
+        pyinstaller="$(command -v pyinstaller)"
+    else
+        if [ ! -x "$venv_bin/pyinstaller" ]; then
+            echo "installing PyInstaller ([packaging] extra)..."
+            uv pip install -e ".[packaging]"
+        fi
+        pyinstaller="$venv_bin/pyinstaller"
     fi
     if [ ! -f client/dist/index.html ]; then
         echo "client/dist missing; building client..."
         just build-client
     fi
-    pyinstaller --noconfirm --clean packaging/macos/deckd.spec
-    echo "Built dist/deckd.app (ad-hoc signed, not notarized)."
+    "$pyinstaller" --noconfirm --clean packaging/macos/deckd.spec
+    # Re-sign with the stable certificate when DECKD_CODESIGN_IDENTITY is set
+    # (#194), so permission grants survive upgrades; otherwise stay ad-hoc.
+    packaging/macos/signing/sign-app.sh dist/deckd.app
+    if [ -n "${DECKD_CODESIGN_IDENTITY:-}" ]; then
+        echo "Built dist/deckd.app (self-signed, not notarized)."
+    else
+        echo "Built dist/deckd.app (ad-hoc signed, not notarized)."
+    fi
 
 # Wrap dist/deckd.app in a distributable DMG for a GitHub release (#165).
 # ``DECKD_VERSION`` names the artifact (the release workflow sets it from the

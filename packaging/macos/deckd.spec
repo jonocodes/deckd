@@ -7,6 +7,10 @@ Build on macOS (a .app needs Apple tooling):
     # or: pyinstaller --noconfirm --clean packaging/macos/deckd.spec
 
 Output: ``dist/deckd.app`` (ad-hoc signed by PyInstaller; not notarized).
+``just build-macos-app`` then re-signs it with the stable self-signed
+certificate when ``DECKD_CODESIGN_IDENTITY`` is set (issue #194; see
+``packaging/macos/signing/sign-app.sh`` for why that isn't done here through
+``codesign_identity``).
 The menu-bar entry point is ``packaging/macos/menubar.py``; the client build
 and decks are copied in as data under ``Contents/Frameworks`` (where
 ``sys._MEIPASS`` points at runtime).
@@ -87,6 +91,8 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
+    # Ad-hoc here; packaging/macos/signing/sign-app.sh applies the real
+    # identity afterwards (PyInstaller would force hardened runtime with it).
     codesign_identity=None,
     entitlements_file=None,
 )

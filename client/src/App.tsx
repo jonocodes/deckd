@@ -39,6 +39,8 @@ import type {
   Icon as IconRef,
   ServerChromeMedia,
   ServerDeck,
+  HealthIssue,
+  ServerHealth,
   ServerMediaError,
   ServerRunningWindows,
   ServerState,
@@ -51,6 +53,7 @@ import { ReflowHelp } from "./ReflowHelp";
 import { ConfirmModal } from "./ConfirmModal";
 import { ConnectionOverlay } from "./ConnectionOverlay";
 import { MediaErrorToast } from "./MediaErrorToast";
+import { HealthBanner } from "./HealthBanner";
 import type { Widget, ConfirmRequestMessage, MediaCommandMessage } from "./protocol";
 import { wireWindowsToServer } from "./protocol";
 import { pathForView, viewFromPath, type View } from "./view-routing";
@@ -214,6 +217,18 @@ export function App() {
     Record<string, { command: MediaCommandMessage["command"]; value?: number }>
   >({});
   const onMediaError = useCallback((m: ServerMediaError) => setMediaError(m), []);
+  // Daemon health issues (issue #195): missing OS permissions that make
+  // input fail silently. The daemon pushes the full list on change, so
+  // the latest frame is the whole truth; empty means healthy.
+  const [healthIssues, setHealthIssues] = useState<HealthIssue[]>([]);
+  const onHealth = useCallback((m: ServerHealth) => setHealthIssues(m.issues), []);
+  // Dismissed issue ids, for the page session. Held here rather than in the
+  // banner so a lock takeover (which unmounts it) doesn't bring them back.
+  const [dismissedHealth, setDismissedHealth] = useState<ReadonlySet<string>>(() => new Set());
+  const dismissHealth = useCallback(
+    (id: string) => setDismissedHealth((prev) => new Set(prev).add(id)),
+    [],
+  );
   // Demo mode has no socket, so seed the media store once on mount with the
   // fixture readings — otherwise a media widget renders as "unavailable".
   const isDemo = demoDeck !== null;
@@ -256,6 +271,7 @@ export function App() {
     onRunningWindows,
     onSessionState,
     onMediaError,
+    onHealth,
     { enabled: !demoDeck && !isPlayground },
   );
   const playgroundSocket = usePlaygroundDaemon(
@@ -809,6 +825,11 @@ export function App() {
             </div>
           ) : (
             <>
+              <HealthBanner
+                issues={healthIssues}
+                dismissed={dismissedHealth}
+                onDismiss={dismissHealth}
+              />
               {renderBlankBanner && (
                 <div className="lock-banner" role="status" aria-live="polite">
                   <MoonIcon size={16} aria-hidden />

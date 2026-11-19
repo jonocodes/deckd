@@ -412,6 +412,7 @@ async def build_diag_snapshot(
     decks_task = getattr(server, "_decks_task", None)
     sensor_task = getattr(server, "_sensor_task", None)
     media_task = getattr(server, "_media_task", None)
+    health_task = getattr(server, "_health_task", None)
 
     def task_state(t: asyncio.Task[None] | None) -> str:
         if t is None:
@@ -490,6 +491,14 @@ async def build_diag_snapshot(
         "active_momenta": len(getattr(scroll, "_momentum_tasks", {})),
     }
 
+    # Issue #195: the same list the clients' banner shows (refreshed by
+    # the health poller), so "why is the banner up?" has one answer.
+    health_block = {
+        "issues": [
+            issue.model_dump() for issue in getattr(server, "_health_issues", [])
+        ],
+    }
+
     auth_required = getattr(server, "password", None) is not None
     auth_block: dict[str, Any] = {"enabled": auth_required}
 
@@ -522,12 +531,14 @@ async def build_diag_snapshot(
         "sensors": sensors_block,
         "media": mpris_block,
         "decks": decks_block,
+        "health": health_block,
         "sessions": sessions_block,
         "tasks": {
             "focus_watcher": task_state(focus_task),
             "decks_watcher": task_state(decks_task),
             "sensor_pump": task_state(sensor_task),
             "media_pump": task_state(media_task),
+            "health_watcher": task_state(health_task),
         },
     }
 
