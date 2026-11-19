@@ -241,14 +241,21 @@ When the daemon knows input will fail silently because an OS permission is missi
 
 - **On change**, every session gets `{"type": "health", "issues": [...]}` with the full list. An empty list clears the banner.
 - **On connect**, the current list is replayed only when it isn't empty; the client resets to "no issues" on every new connection, so a healthy daemon needs no frame.
-- `affects` names the primitives that won't work (`pointer`, `scroll`, `key`, `raise_window`). Unknown values render as-is, so a newer daemon can add one without a client release.
+- `affects` names the primitives that won't work (`pointer`, `scroll`, `key`, `raise_window`, `focus`). Unknown values render as-is, so a newer daemon can add one without a client release.
 - `GET /diag` carries the same list under `health.issues`.
 
 Issues reported today:
 
 | `id` | Platform | When | Clears |
 |---|---|---|---|
-| `accessibility_missing` | macOS | `AXIsProcessTrusted()` is false for the responsible app (`deckd.app` when packaged, else the launching terminal) | Within one poll of the grant, without a restart. If buttons still do nothing, quit and reopen the app. |
+| `accessibility_missing` | macOS | `AXIsProcessTrusted()` is false for the responsible app (`deckd.app` when packaged, else the launching terminal), or an osascript keystroke failed with `(1002)` | Within one poll of the grant, without a restart. If buttons still do nothing, quit and reopen the app. |
+| `automation_system_events_missing` | macOS | `AEDeterminePermissionToAutomateTarget` (asked without prompting) says the app may not send Apple events to System Events, or a focus query or keystroke failed with `(-1743)` | Within one poll of the grant. |
+
+The proactive checks can be unavailable or wrong, so the osascript calls also report what they see (#196). A refusal is held until a later call proves the grant: a focus query that succeeds clears the Automation issue; while either refusal is held, each poll re-checks with an empty keystroke, which clears both once it succeeds.
+
+### Action errors (`action_error`, #196)
+
+When the OS refuses an action for want of a permission (today: a macOS key press, `key:` / `text:` / macro key steps / manual-control keys and typing), the daemon sends the *requesting* session `{"type": "action_error", "id": <widget id or null>, "reason": "permission_denied", "issue_id": <health issue id>, "message": "Key press blocked: …"}` and re-polls health at once, so the toast and the banner with the fix steps arrive together. A macro stops at the refused step, even with `continue_on_error`. The attempt is recorded with `outcome="permission_denied"` in `/actions/recent` and `deckd_action_outcome_total` on `/metrics`. For a widget press it follows the usual `ok` (dispatched) record, the same pairing a failed macro gets (`ok` then `failed-at-step`). With `--no-focus` there is no platform backend to report health, so the toast still arrives but no banner does.
 
 ## Where to read next
 

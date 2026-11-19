@@ -216,6 +216,28 @@ class MediaErrorMessage(BaseModel):
     retryable: bool = True
 
 
+class ActionErrorMessage(BaseModel):
+    """Daemon -> client push: an action this session triggered was refused
+    by the OS (issue #196).
+
+    Sent only to the *requesting* session, like ``media_error``: the
+    failure is a consequence of one session's press. Today the one
+    ``reason`` is ``permission_denied`` (macOS refused the keystroke for
+    want of Accessibility or Automation); the client shows ``message``
+    as a toast. ``issue_id`` names the :class:`HealthIssue` with the fix
+    steps, which the daemon raises at the same time. ``id`` is the
+    pressed widget's id, ``None`` for manual-control keys and typed text.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["action_error"]
+    id: str | None = None
+    reason: Literal["permission_denied"]
+    issue_id: str
+    message: str
+
+
 class ChromeMediaMessage(BaseModel):
     """Daemon -> client push: the chrome media icon's passive
     playback-state snapshot (issue #47).
@@ -384,13 +406,13 @@ class HealthIssue(BaseModel):
     """One thing the daemon knows is broken on this host (issue #195).
 
     Platform-neutral: a backend mints these from whatever it can probe
-    (macOS Accessibility trust today; Automation, Linux ``uinput`` access
-    are follow-ups). ``id`` is a stable machine key (``accessibility_missing``)
-    the client can dedupe and dismiss by. ``fix_steps`` are complete,
+    (macOS Accessibility trust and Automation of System Events today;
+    Linux ``uinput`` access is a follow-up). ``id`` is a stable machine
+    key (``accessibility_missing``) the client can dedupe and dismiss by. ``fix_steps`` are complete,
     user-facing sentences that name the exact app to grant and the
     Settings path. ``affects`` lists the input primitives that silently
     fail while the issue stands (``pointer``, ``scroll``, ``key``,
-    ``raise_window``, ...).
+    ``raise_window``, ``focus``, ...).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -419,7 +441,7 @@ class HealthMessage(BaseModel):
 
 
 ServerMessage = Annotated[
-    Union[DeckMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, MediaErrorMessage, ChromeMediaMessage, EventMessage, MacroResultMessage, ConfirmRequestMessage, RunningWindowsMessage, HealthMessage, ErrorMessage],
+    Union[DeckMessage, StateMessage, BrightnessMessage, WidgetUpdateMessage, MediaStateMessage, MediaErrorMessage, ActionErrorMessage, ChromeMediaMessage, EventMessage, MacroResultMessage, ConfirmRequestMessage, RunningWindowsMessage, HealthMessage, ErrorMessage],
     Field(discriminator="type"),
 ]
 

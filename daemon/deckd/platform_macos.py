@@ -13,7 +13,7 @@ too: ``Quartz.CGWindowListCopyWindowInfo`` yields on-screen windows
 ``ApplicationServices`` Accessibility raise the chosen one. Window
 numbers are stable for a window's lifetime and serve as the opaque
 ``window_id`` sent to the client. Accessibility consent is gated by
-``MacKeySink._check_accessibility`` at keysink startup.
+``MacKeySink._check_system_events`` at keysink startup.
 
 Capability matrix (sketch):
 
@@ -40,20 +40,28 @@ evdev events.
 from __future__ import annotations
 
 import asyncio
+import ctypes
+import functools
 import logging
 import os
+import re
 import subprocess
 import sys
-from collections.abc import AsyncIterator, Sequence
+import threading
+from collections.abc import AsyncIterator, Callable, Sequence
 from types import ModuleType
 from typing import Any
 
 from .macos_app import BUNDLE_ID
-from .input import MODIFIER_MAP, KeySink, ScrollSink, name_from_keycode
+from .input import MODIFIER_MAP, KeySink, PermissionDenied, ScrollSink, name_from_keycode
 from .platform import AppInfo, PlatformBackend, RaiseWindowFailed, WindowInfo, _run
 from .protocol import HealthIssue
 
 log = logging.getLogger("deckd.platform_macos")
+
+# Health-issue ids for the two System Events grants (#195, #196).
+ACCESSIBILITY_MISSING = "accessibility_missing"
+AUTOMATION_MISSING = "automation_system_events_missing"
 
 
 def _load_quartz() -> tuple[ModuleType | None, bool]:
@@ -148,7 +156,7 @@ def _accessibility_missing_issue(app: str, bundle_id: str | None) -> HealthIssue
             "and on again, or remove it and add it back with +."
         )
     return HealthIssue(
-        id="accessibility_missing",
+        id=ACCESSIBILITY_MISSING,
         severity="error",
         title="Accessibility permission missing",
         detail=(
@@ -163,6 +171,238 @@ def _accessibility_missing_issue(app: str, bundle_id: str | None) -> HealthIssue
         ],
         affects=["pointer", "scroll", "key", "raise_window"],
     )
+
+
+def _automation_missing_issue(app: str, bundle_id: str | None) -> HealthIssue:
+    """The ``automation_system_events_missing`` health issue (#196).
+
+    Automation entries can't be added with + in Settings: macOS lists an
+    app only after it has asked once. So when the entry is missing (or on
+    but stale, the same story as Accessibility), the way back is to reset
+    the decision and let deckd's next System Events call ask again. The
+    focus poller makes that call within a second, so the prompt appears
+    on its own.
+    """
+    if bundle_id is not None:
+        missing = (
+            f"If {app} isn't listed, or System Events is already on, run "
+            f"`tccutil reset AppleEvents {bundle_id}` in Terminal, then click "
+            "OK when macOS asks to let it control System Events."
+        )
+    else:
+        missing = (
+            f"If {app} isn't listed, quit and reopen it, then click OK when "
+            "macOS asks to let it control System Events."
+        )
+    return HealthIssue(
+        id=AUTOMATION_MISSING,
+        severity="error",
+        title="Automation permission missing",
+        detail=(
+            f"macOS isn't letting {app} control System Events, so key "
+            "buttons do nothing and the deck may not follow the app in front."
+        ),
+        fix_steps=[
+            "On the Mac, open System Settings → Privacy & Security → Automation.",
+            f"Under {app}, turn on System Events.",
+            missing,
+            "This warning clears by itself a few seconds after the grant.",
+        ],
+        affects=["key", "focus"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Permission failures seen at action time (#196)
+# ---------------------------------------------------------------------------
+
+# AppleScript error numbers that mean "a TCC grant is missing", keyed to
+# the health issue that explains the fix. -1743 is errAEEventNotPermitted
+# (Automation of System Events denied); 1002 is System Events refusing
+# ``keystroke`` / ``key code`` because osascript's responsible app lacks
+# Accessibility.
+_PERMISSION_ERRORS: dict[int, str] = {
+    -1743: AUTOMATION_MISSING,
+    1002: ACCESSIBILITY_MISSING,
+}
+
+# osascript prints ``<range>: execution error: <text> (<number>)``. The
+# message text is localised, so classify by the trailing number only.
+_OSA_ERROR_NUMBER = re.compile(r"execution error: .*\((-?\d+)\)\s*$")
+
+
+def classify_osascript_error(stderr: str) -> str | None:
+    """Map osascript stderr to a health-issue id, or ``None`` if unrelated."""
+    for line in stderr.splitlines():
+        match = _OSA_ERROR_NUMBER.search(line)
+        if match is not None:
+            return _PERMISSION_ERRORS.get(int(match.group(1)))
+    return None
+
+
+class PermissionLedger:
+    """What osascript calls have shown about the two System Events grants.
+
+    The proactive checks (``AXIsProcessTrusted``, ``AEDeterminePermission-
+    ToAutomateTarget``) can be unavailable or disagree with what osascript
+    actually gets, so every System Events call reports its result here
+    too. A denial is held until a later call proves the grant: a focus
+    query that succeeds proves Automation; a keystroke that succeeds
+    proves both. Shared by the key sink (which records) and the focus
+    backend (which records and reports), and read from the health
+    poller's worker thread, hence the lock.
+    """
+
+    def __init__(self) -> None:
+        self._denied: set[str] = set()
+        self._lock = threading.Lock()
+
+    def observe(self, returncode: int, stderr: str, *, keystroke: bool) -> str | None:
+        """Record one finished osascript call. Returns the denied issue id, if any."""
+        if returncode == 0:
+            self.record_success(keystroke=keystroke)
+            return None
+        return self.record_failure(stderr)
+
+    def record_failure(self, stderr: str) -> str | None:
+        """Record a failed System Events call; only a permission refusal counts.
+
+        Returns the denied issue id, or ``None`` for an unrelated failure,
+        which says nothing about the grants either way.
+        """
+        issue = classify_osascript_error(stderr)
+        if issue is None:
+            return None
+        with self._lock:
+            self._denied.add(issue)
+            if issue == ACCESSIBILITY_MISSING:
+                # System Events answered, so the Apple event got through.
+                self._denied.discard(AUTOMATION_MISSING)
+        return issue
+
+    def record_success(self, *, keystroke: bool) -> None:
+        """A System Events call worked: Automation is granted, and if it sent
+        a keystroke, Accessibility is too."""
+        with self._lock:
+            self._denied.discard(AUTOMATION_MISSING)
+            if keystroke:
+                self._denied.discard(ACCESSIBILITY_MISSING)
+
+    def denied(self) -> frozenset[str]:
+        with self._lock:
+            return frozenset(self._denied)
+
+
+# The process-wide ledger: the key sink and focus backend are built
+# separately (``__main__`` / ``default_backend``) but must share it.
+PERMISSIONS = PermissionLedger()
+
+_KEYSTROKE_PROBE = 'tell application "System Events" to keystroke ""'
+
+
+def _probe_keystroke() -> tuple[int, str]:
+    """Send an empty keystroke through System Events: ``(returncode, stderr)``.
+
+    Exercises both grants without typing anything. Run once at keysink
+    startup, then only while a denial is held (see
+    :meth:`MacFocusBackend.health_issues`), so a healthy host never pays
+    for it in the poll.
+    """
+    try:
+        proc = subprocess.run(
+            ["osascript", "-e", _KEYSTROKE_PROBE],
+            capture_output=True, text=True, timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return -1, f"osascript keystroke probe: {exc}"
+    return proc.returncode, proc.stderr or ""
+
+
+def _blocked_message(issue_id: str) -> str:
+    """The toast for a key press the OS refused (#196)."""
+    app = _responsible_app_name()
+    if issue_id == AUTOMATION_MISSING:
+        return (
+            f"Key press blocked: {app} needs Automation permission to "
+            "control System Events."
+        )
+    return f"Key press blocked: {app} needs Accessibility permission."
+
+
+# ---------------------------------------------------------------------------
+# Proactive Automation check (#196)
+# ---------------------------------------------------------------------------
+
+_SYSTEM_EVENTS_BUNDLE_ID = "com.apple.systemevents"
+_AE_NO_ERR = 0
+_AE_EVENT_NOT_PERMITTED = -1743  # errAEEventNotPermitted
+
+
+def _fourcc(code: str) -> int:
+    return int.from_bytes(code.encode("ascii"), "big")
+
+
+class _AEDesc(ctypes.Structure):
+    _fields_ = [("descriptorType", ctypes.c_uint32), ("dataHandle", ctypes.c_void_p)]
+
+
+@functools.cache
+def _core_services() -> ctypes.CDLL:
+    lib = ctypes.CDLL("/System/Library/Frameworks/CoreServices.framework/CoreServices")
+    lib.AECreateDesc.argtypes = [
+        ctypes.c_uint32, ctypes.c_void_p, ctypes.c_long, ctypes.POINTER(_AEDesc)
+    ]
+    lib.AECreateDesc.restype = ctypes.c_int16
+    lib.AEDeterminePermissionToAutomateTarget.argtypes = [
+        ctypes.POINTER(_AEDesc), ctypes.c_uint32, ctypes.c_uint32, ctypes.c_bool
+    ]
+    lib.AEDeterminePermissionToAutomateTarget.restype = ctypes.c_int32
+    lib.AEDisposeDesc.argtypes = [ctypes.POINTER(_AEDesc)]
+    lib.AEDisposeDesc.restype = ctypes.c_int16
+    return lib
+
+
+def _automation_status(status: int) -> bool | None:
+    """Map ``AEDeterminePermissionToAutomateTarget``'s OSStatus to a verdict.
+
+    Only ``noErr`` and ``errAEEventNotPermitted`` are answers. Not asked
+    yet (-1744) isn't a denial: the first System Events call will prompt.
+    System Events not running (-600) and anything else mean "can't tell".
+    """
+    if status == _AE_NO_ERR:
+        return True
+    if status == _AE_EVENT_NOT_PERMITTED:
+        return False
+    return None
+
+
+def _automation_permission() -> bool | None:
+    """May this process send Apple events to System Events?
+
+    Asks TCC without showing the consent prompt (``askUserIfNeeded`` is
+    false). Plain ctypes against CoreServices: PyObjC doesn't wrap the
+    ``AEAddressDesc`` the call needs. ``None`` off macOS or on any error.
+    The call can block briefly, so the health poller runs it off the
+    event loop.
+    """
+    if sys.platform != "darwin":
+        return None
+    try:
+        lib = _core_services()
+        target = _SYSTEM_EVENTS_BUNDLE_ID.encode("ascii")
+        desc = _AEDesc()
+        if lib.AECreateDesc(_fourcc("bund"), target, len(target), ctypes.byref(desc)) != 0:
+            return None
+        try:
+            status = lib.AEDeterminePermissionToAutomateTarget(
+                ctypes.byref(desc), _fourcc("****"), _fourcc("****"), False
+            )
+        finally:
+            lib.AEDisposeDesc(ctypes.byref(desc))
+    except Exception as exc:  # a broken probe means "unknown", never a crash
+        log.debug("Automation probe failed: %s", exc)
+        return None
+    return _automation_status(status)
 
 
 # ---------------------------------------------------------------------------
@@ -191,8 +431,24 @@ class MacFocusBackend(PlatformBackend):
     None (the Mac concept doesn't map 1:1).
     """
 
+    def __init__(
+        self,
+        *,
+        ledger: PermissionLedger | None = None,
+        keystroke_probe: Callable[[], tuple[int, str]] | None = None,
+    ) -> None:
+        self._ledger = ledger if ledger is not None else PERMISSIONS
+        self._keystroke_probe = keystroke_probe or _probe_keystroke
+
     async def get_active_app(self) -> AppInfo:
-        out = await _run("osascript", "-e", _FOCUS_SCRIPT)
+        try:
+            out = await _run("osascript", "-e", _FOCUS_SCRIPT)
+        except RuntimeError as exc:
+            # A -1743 here is the focus half of a missing Automation grant
+            # (#196): the deck stops following the front app.
+            self._ledger.record_failure(str(exc))
+            raise
+        self._ledger.record_success(keystroke=False)
         proc_name, _, title = out.partition("|||")
         return AppInfo(
             app_id=proc_name.strip() or None,
@@ -208,18 +464,33 @@ class MacFocusBackend(PlatformBackend):
         return frozenset({"watch_active_app", "watch_windows", "raise_window"})
 
     def health_issues(self) -> list[HealthIssue]:
-        """Report a missing Accessibility grant (issue #195).
+        """Report missing Accessibility (#195) and Automation (#196) grants.
 
-        ``AXIsProcessTrusted`` is re-read on every call, so a grant made
-        while the daemon runs clears the issue on the next poll. ``None``
-        (no PyObjC, so no way to tell) reports nothing.
+        Each grant is missing when its proactive check says so
+        (``AXIsProcessTrusted`` / ``AEDeterminePermissionToAutomateTarget``,
+        re-read on every call so a grant made while the daemon runs clears
+        the issue on the next poll) *or* when an osascript call was refused
+        for it. A refusal held in the ledger is re-checked with an empty
+        keystroke each poll, so it clears on its own too. ``None`` from a
+        proactive check (no way to tell) reports nothing by itself.
         """
-        if _ax_trusted() is not False:
+        if self._ledger.denied():
+            returncode, stderr = self._keystroke_probe()
+            self._ledger.observe(returncode, stderr, keystroke=True)
+        held = self._ledger.denied()
+        accessibility = ACCESSIBILITY_MISSING in held or _ax_trusted() is False
+        automation = AUTOMATION_MISSING in held or _automation_permission() is False
+        if not (accessibility or automation):
             return []
         if self._app_name is None:
             self._app_name = _responsible_app_name()
         bundle_id = BUNDLE_ID if getattr(sys, "frozen", False) else None
-        return [_accessibility_missing_issue(self._app_name, bundle_id)]
+        issues: list[HealthIssue] = []
+        if accessibility:
+            issues.append(_accessibility_missing_issue(self._app_name, bundle_id))
+        if automation:
+            issues.append(_automation_missing_issue(self._app_name, bundle_id))
+        return issues
 
     async def watch_windows(
         self, *, interval_s: float = 0.1
@@ -475,7 +746,8 @@ class MacKeySink(KeySink):
     those into ``LeftMouseDown`` / ``LeftMouseDragged`` / ``LeftMouseUp``.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, ledger: PermissionLedger | None = None) -> None:
+        self._ledger = ledger if ledger is not None else PERMISSIONS
         self._Q, self._has_quartz = _load_quartz()
         if not self._has_quartz:
             log.warning(
@@ -489,41 +761,36 @@ class MacKeySink(KeySink):
         # ``LeftMouseDragged`` (not ``MouseMoved``) while the user is
         # mid-drag. The server drives this via pad_drag start/end.
         self._dragging_left = False
-        self._check_accessibility()
+        self._check_system_events()
         self._check_ax_trust()
 
     # -- key -----------------------------------------------------------------
 
-    @staticmethod
-    def _check_accessibility() -> None:
+    def _check_system_events(self) -> None:
         """Check that osascript can send keystrokes via System Events.
 
-        macOS 14+ may silently deny keystroke injection even when the
-        terminal is listed in Accessibility preferences (a re-add often
-        fixes it). This probe warns the user at startup with actionable
-        instructions instead of failing silently on the first button
-        press.
+        Needs both grants: Automation (System Events) and Accessibility.
+        macOS 14+ may silently deny keystroke injection even when the app
+        is listed in Accessibility preferences (a re-add often fixes it).
+        This probe warns at startup with actionable instructions instead
+        of failing silently on the first button press, and records the
+        result in the ledger so the client's banner is up before any
+        button is pressed (#196).
         """
-        try:
-            proc = subprocess.run(
-                ["osascript", "-e",
-                 'tell application "System Events" to keystroke ""'],
-                capture_output=True, text=True, timeout=10,
-            )
-            if proc.returncode != 0:
-                term = _terminal_name()
-                reason = proc.stderr.strip() or f"exit code {proc.returncode}"
-                log.warning(
-                    "[mac key] osascript keystroke probe failed: %s\n"
-                    "  Grant Accessibility to %s in System Settings > Privacy & Security.\n"
-                    "  If already listed, remove it, re-add it, then restart the terminal.",
-                    reason,
-                    term,
-                )
-        except FileNotFoundError:
-            log.warning("[mac key] osascript not found; key injection unavailable")
-        except subprocess.TimeoutExpired:
-            log.warning("[mac key] osascript keystroke probe timed out")
+        returncode, stderr = _probe_keystroke()
+        issue = self._ledger.observe(returncode, stderr, keystroke=True)
+        if returncode == 0:
+            return
+        reason = stderr.strip() or f"exit code {returncode}"
+        grant = "Automation > System Events" if issue == AUTOMATION_MISSING else "Accessibility"
+        log.warning(
+            "[mac key] osascript keystroke probe failed: %s\n"
+            "  Grant %s to %s in System Settings > Privacy & Security.\n"
+            "  If already listed, remove it, re-add it, then restart the app.",
+            reason,
+            grant,
+            _responsible_app_name(),
+        )
 
     @staticmethod
     def _check_ax_trust() -> None:
@@ -559,6 +826,13 @@ class MacKeySink(KeySink):
             text=True,
         )
         _, err = proc.communicate()
+        err = err or ""
+        issue = self._ledger.observe(proc.returncode or 0, err, keystroke=True)
+        if issue is not None:
+            # Refused for want of a grant (#196): raise so the server can
+            # toast the requesting client instead of the press vanishing.
+            log.warning("[mac key] osascript refused (%s): %s", issue, err.strip())
+            raise PermissionDenied(issue, _blocked_message(issue))
         if err:
             log.warning("[mac key] osascript stderr: %s", err.strip())
         else:

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ClientMessage, ServerChromeMedia, ServerConfirmRequest, ServerDeck, ServerHealth, ServerMediaError, ServerMessage, ServerRunningWindows, ServerState, ServerWidgetUpdate, MediaState } from "./protocol";
+import type { ClientMessage, ServerActionError, ServerChromeMedia, ServerConfirmRequest, ServerDeck, ServerHealth, ServerMediaError, ServerMessage, ServerRunningWindows, ServerState, ServerWidgetUpdate, MediaState } from "./protocol";
 import { wireDeckToServer, wireWindowsToServer } from "./protocol";
 
 type Status = "connecting" | "open" | "closed" | "unauthorized";
@@ -61,6 +61,7 @@ export function useDeckdSocket(
   onSessionState?: (m: ServerState) => void,
   onMediaError?: (m: ServerMediaError) => void,
   onHealth?: (m: ServerHealth) => void,
+  onActionError?: (m: ServerActionError) => void,
   options: { enabled?: boolean } = {},
 ) {
   const { enabled = true } = options;
@@ -196,6 +197,11 @@ export function useDeckdSocket(
           else if (msg.type === "health" && onHealth) {
             onHealth(msg);
           }
+          // Issue #196: the OS refused an action this session triggered
+          // (a key press macOS blocked for want of a grant). Toast it.
+          else if (msg.type === "action_error" && onActionError) {
+            onActionError(msg);
+          }
           else if (msg.type === "error" && msg.reason === "unauthorized") {
             // Wrong/absent password: stop reconnecting and prompt the user.
             unauthorizedRef.current = true;
@@ -265,7 +271,7 @@ export function useDeckdSocket(
       if (timer) window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [onDeck, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, onSessionState, onMediaError, onHealth, enabled, gen]);
+  }, [onDeck, onWidgetUpdate, onMediaState, onChromeMedia, onConfirmRequest, onRunningWindows, onSessionState, onMediaError, onHealth, onActionError, enabled, gen]);
 
   const send = (msg: ClientMessage) => {
     const ws = wsRef.current;

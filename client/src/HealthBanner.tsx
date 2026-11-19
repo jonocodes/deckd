@@ -8,6 +8,7 @@ const AFFECTS_LABELS: Record<string, string> = {
   scroll: "scrolling",
   key: "key presses",
   raise_window: "raising windows from the list",
+  focus: "switching decks with the app in front",
 };
 
 function describeAffects(affects: string[]): string {

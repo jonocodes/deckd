@@ -59,7 +59,9 @@ class ActionRecord:
     deck_id: str
     widget_id: str
     primitive: str  # "shell" | "key" | "dbus" | "terminal"
-    outcome: str  # "ok" | "error" | "guard_dropped" | "no_sink" | "no_widget" | "skipped"
+    # "ok" | "error" | "guard_dropped" | "lock_dropped" | "no_sink" |
+    # "no_widget" | "skipped" | "permission_denied" | a macro outcome
+    outcome: str
     command_text: str | None  # None on the wire
     error: str | None  # None on the wire
 

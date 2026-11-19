@@ -508,18 +508,38 @@ async def _text_paste(text: str, ctx: ActionContext, restore_clipboard: bool,
         log.warning("[text paste] failed to write clipboard: %s", exc)
         return
 
+    from .input import PermissionDenied
+
     sink = ctx.key_sink
     if sink is not None:
         from .input import parse_key_combo
 
         ctrlv = parse_key_combo("ctrl+v")
-        sink.emit_key(ctrlv)
+        try:
+            sink.emit_key(ctrlv)
+        except PermissionDenied:
+            # Refused (#196): nothing was pasted, so put the user's clipboard
+            # back now (no delay needed) before the refusal reaches the toast.
+            await _restore_clipboard(previous, copy_tool, restore_clipboard, paste_tool, 0)
+            raise
         log.info("[text paste] pasted %d chars via ctrl+v", len(text))
     else:
         log.info("[text paste log] text=%r (no sink wired)", text)
 
+    await _restore_clipboard(previous, copy_tool, restore_clipboard, paste_tool, restore_delay_ms)
+
+
+async def _restore_clipboard(
+    previous: str | None,
+    copy_tool: str,
+    restore_clipboard: bool,
+    paste_tool: str | None,
+    delay_ms: int,
+) -> None:
+    """Write ``previous`` back to the clipboard after ``delay_ms``, if asked to."""
     if restore_clipboard and previous is not None and paste_tool is not None:
-        await asyncio.sleep(restore_delay_ms / 1000.0)
+        if delay_ms:
+            await asyncio.sleep(delay_ms / 1000.0)
         try:
             proc = await asyncio.create_subprocess_exec(
                 *_clipboard_write_args(copy_tool),
@@ -550,10 +570,17 @@ class MacroOutcome:
 
 
 async def execute_macro(macro: Macro, ctx: ActionContext) -> MacroOutcome:
+    from .input import PermissionDenied
+
     steps = macro.steps
     for i, step in enumerate(steps):
         try:
             await _run_step(step, ctx)
+        except PermissionDenied:
+            # The OS refused a keystroke for want of a grant (#196). Every
+            # later key step would be refused the same way, even with
+            # ``continue_on_error``, so stop and let the server toast it.
+            raise
         except Exception as exc:
             err = f"{type(exc).__name__}: {exc}"
             log.warning("macro step %d failed: %s", i, err)

@@ -8,6 +8,23 @@ from typing import Protocol
 log = logging.getLogger("deckd.input")
 
 
+class PermissionDenied(Exception):
+    """The OS refused a synthetic input event for want of a permission (#196).
+
+    Raised by a sink when it can tell the failure apart from any other
+    (macOS: osascript's ``-1743`` / ``(1002)``), so the server can tell the
+    requesting client right away instead of the press vanishing into a log.
+    ``issue_id`` matches the :class:`~deckd.protocol.HealthIssue` the
+    backend reports for the same cause; ``message`` is the user-facing
+    sentence the client shows as-is.
+    """
+
+    def __init__(self, issue_id: str, message: str) -> None:
+        super().__init__(message)
+        self.issue_id = issue_id
+        self.message = message
+
+
 class ScrollSink(Protocol):
     def emit_scroll(self, delta: int) -> None:
         """Emit one high-resolution vertical wheel delta."""
