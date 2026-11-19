@@ -687,9 +687,9 @@ Beyond the source-checkout + LaunchAgent path above, deckd ships as a self-conta
    xattr -dr com.apple.quarantine /Applications/deckd.app
    ```
 
-3. Launch it. deckd runs as a menu-bar app (no Dock icon), seeds decks into `~/Library/Application Support/deckd/decks`, logs to `~/Library/Logs/deckd.log`, and serves the surface on `http://127.0.0.1:8765`. The password for the surface is in `~/.config/deckd/password`.
+3. Launch it. deckd runs as a menu-bar app (no Dock icon), seeds decks into `~/Library/Application Support/deckd/decks`, logs to `~/Library/Logs/deckd.log`, and serves the surface on port 8765 to your local network: `http://<your-mac>.local:8765` from a phone or tablet, `http://127.0.0.1:8765` on the Mac. The password for the surface is in `~/.config/deckd/password`.
 4. **Grant permissions** (next section). Without them deckd *looks* half-working, with no error on the phone. Missing Accessibility is the sneaky one: decks still follow the focused app, but the trackpad, scroll strip, and every keyboard-shortcut button silently do nothing.
-5. **Allow LAN access** to use it from a phone or tablet (below).
+5. Open the surface on your phone or tablet. **Allow LAN access** is on by default; turn it off for localhost-only (below).
 
 #### Grant permissions
 
@@ -711,10 +711,10 @@ The phone shows a banner while Accessibility is missing ([#195](https://github.c
 
 #### LAN access
 
-The app is localhost-only until you enable **Allow LAN access** in its menu; it then listens on all interfaces and the surface is at `http://<your-mac>.local:8765` (or the Mac's hostname / IP). The choice is remembered across quits, reboots, and upgrades. You can also set it without the menu bar, which helps if macOS isn't showing the icon ([#200](https://github.com/jonocodes/deckd/issues/200)):
+**Allow LAN access** is on by default: the app listens on all interfaces, so the surface is at `http://<your-mac>.local:8765` (or the Mac's hostname / IP), and every client other than the Mac itself must enter the password. Untick it in the menu to make the app localhost-only. The choice is remembered across quits, reboots, and upgrades. You can also set it without the menu bar, which helps if macOS isn't showing the icon ([#200](https://github.com/jonocodes/deckd/issues/200)):
 
 ```sh
-defaults write com.deckd.daemon AllowLAN -bool true    # LAN on (false or `defaults delete com.deckd.daemon AllowLAN` for localhost-only)
+defaults write com.deckd.daemon AllowLAN -bool false   # localhost-only (true, or `defaults delete com.deckd.daemon AllowLAN`, for the default: LAN on)
 osascript -e 'quit app id "com.deckd.daemon"'; open -a deckd   # relaunch to apply
 ```
 
@@ -757,7 +757,7 @@ Verified on hardware (macOS 26.6.2, Apple Silicon, 2026-11-18): installed from t
 
 Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workflows/release-macos.yml) on a `macos-15` runner: it builds the client, freezes the app, wraps it in a DMG (the same `just build-macos-dmg` recipe above), and attaches the DMG to the GitHub release for that tag. A manual **Run workflow** can attach to an existing tag, or — with **publish** unticked — just build the DMG and upload it as a workflow artifact, for trying a build without making a release.
 
-Before anything is published, a `test-app` job installs the DMG on a second, fresh runner and clicks through the real menu-bar item ([`packaging/macos/test/test-app.sh`](../packaging/macos/test/test-app.sh)). It checks the menu's items, that **Allow LAN access** opens and closes the LAN port, toggles its ✓, and stays on across a relaunch, **Restart server**, **Open decks folder** (a Finder window), **Open deckd surface** (Safari loads it), **Quit**, and that an in-place upgrade keeps the password and decks. It uploads screenshots (`deckd-macos-test-app` artifact) of the open menu, the decks folder, the surface in Safari, and the first-run *"deckd wants access to control System Events"* prompt. Pull requests that touch the app run build + test (never publish).
+Before anything is published, a `test-app` job installs the DMG on a second, fresh runner and clicks through the real menu-bar item ([`packaging/macos/test/test-app.sh`](../packaging/macos/test/test-app.sh)). It checks the menu's items, that **Allow LAN access** starts on, closes and reopens the LAN port, toggles its ✓, and that "off" survives a relaunch, **Restart server**, **Open decks folder** (a Finder window), **Open deckd surface** (Safari loads it), **Quit**, and that an in-place upgrade keeps the password and decks. It uploads screenshots (`deckd-macos-test-app` artifact) of the open menu, the decks folder, the surface in Safari, and the first-run *"deckd wants access to control System Events"* prompt. Pull requests that touch the app run build + test (never publish).
 
 This works on GitHub's free hosted runners because they have a real logged-in desktop, and the image grants Accessibility and Screen Recording to `bash`/`osascript`. The script's `--pregrant` writes deckd's own TCC grants before launch (CI only: it needs Full Disk Access) — otherwise its System Events consent prompt sits on screen and blocks every System Events call. What CI can't cover: grants surviving an upgrade (they're pre-written), and Gatekeeper quarantine on a browser download (`spctl` output is logged, informational).
 

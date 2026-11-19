@@ -134,8 +134,8 @@ fi
 
 step "Install from DMG and launch"
 quit_deckd
-# Start from a fresh install's choice (localhost-only); a dev Mac may have
-# AllowLAN saved from earlier use.
+# Start from a fresh install's choice (LAN on, nothing saved); a dev Mac may
+# have AllowLAN saved from earlier use.
 defaults delete "$BID" AllowLAN >/dev/null 2>&1 || true
 install_dmg
 codesign --verify --deep "$APP" && pass "code signature valid" || fail "code signature invalid"
@@ -148,7 +148,10 @@ fi
 spctl_out="$(spctl --assess --type execute "$APP" 2>&1 || true)"
 echo "  Gatekeeper (informational; not notarized => rejected): ${spctl_out:-accepted}"
 if launch; then pass "/health answers on 127.0.0.1:$PORT"; else fail "/health never answered"; fi
-if [ -n "$LAN_IP" ] && healthy "$LAN_IP"; then fail "LAN address answers before LAN access is enabled"; else pass "LAN address refused by default"; fi
+if [ -z "$LAN_IP" ]; then
+    echo "  skipped reachability: no LAN address"
+elif wait_for 15 healthy "$LAN_IP"; then pass "LAN address $LAN_IP answers by default"
+else fail "LAN address $LAN_IP not answering on a fresh install"; fi
 if grep -q "Accessibility is not granted" "$LOG" 2>/dev/null; then
     echo "  note: deckd reports Accessibility not granted (expected without --pregrant)"
 fi
@@ -185,7 +188,29 @@ else
     echo "  skipped: swiftc unavailable ($(head -1 "$OUT/.click.log"))"
 fi
 
-step "Allow LAN access (on)"
+step "Allow LAN access (on by default)"
+[ "$(mark_of "Allow LAN access")" = "✓" ] && pass "menu shows ✓ on a fresh install" || fail "no ✓ on a fresh install"
+
+step "Allow LAN access (off)"
+click_item "Allow LAN access"
+if [ -n "$LAN_IP" ]; then
+    sleep 2
+    wait_for 15 healthy 127.0.0.1 || true
+    if healthy "$LAN_IP"; then fail "LAN address still answers"; else pass "LAN address refused"; fi
+fi
+healthy 127.0.0.1 && pass "localhost still answers" || fail "localhost stopped answering"
+[ "$(mark_of "Allow LAN access")" != "✓" ] && pass "✓ cleared" || fail "✓ still shown"
+[ "$(defaults read "$BID" AllowLAN 2>/dev/null)" = 0 ] && pass "choice saved (AllowLAN = 0)" || fail "AllowLAN not saved"
+
+step "Allow LAN access (off) survives a relaunch"
+quit_deckd
+if launch; then pass "relaunched"; else fail "no /health after relaunch"; fi
+if [ -n "$LAN_IP" ]; then
+    if healthy "$LAN_IP"; then fail "LAN address answers after relaunch with LAN off"; else pass "LAN address still refused after relaunch"; fi
+fi
+[ "$(mark_of "Allow LAN access")" != "✓" ] && pass "no ✓ after relaunch" || fail "✓ back after relaunch"
+
+step "Allow LAN access (on again)"
 click_item "Allow LAN access"
 if [ -z "$LAN_IP" ]; then
     echo "  skipped reachability: no LAN address"
@@ -193,26 +218,6 @@ elif wait_for 15 healthy "$LAN_IP"; then pass "LAN address $LAN_IP answers"
 else fail "LAN address $LAN_IP never answered"; fi
 [ "$(mark_of "Allow LAN access")" = "✓" ] && pass "menu shows ✓" || fail "no ✓ on Allow LAN access"
 [ "$(defaults read "$BID" AllowLAN 2>/dev/null)" = 1 ] && pass "choice saved (AllowLAN = 1)" || fail "AllowLAN not saved"
-
-step "Allow LAN access survives a relaunch"
-quit_deckd
-if launch; then pass "relaunched"; else fail "no /health after relaunch"; fi
-if [ -z "$LAN_IP" ]; then
-    echo "  skipped reachability: no LAN address"
-elif wait_for 15 healthy "$LAN_IP"; then pass "LAN address $LAN_IP answers after relaunch"
-else fail "LAN address $LAN_IP not answering after relaunch"; fi
-[ "$(mark_of "Allow LAN access")" = "✓" ] && pass "menu shows ✓ after relaunch" || fail "no ✓ after relaunch"
-
-step "Allow LAN access (off)"
-click_item "Allow LAN access"
-if [ -n "$LAN_IP" ]; then
-    sleep 2
-    wait_for 15 healthy 127.0.0.1 || true
-    if healthy "$LAN_IP"; then fail "LAN address still answers"; else pass "LAN address refused again"; fi
-fi
-healthy 127.0.0.1 && pass "localhost still answers" || fail "localhost stopped answering"
-[ "$(mark_of "Allow LAN access")" != "✓" ] && pass "✓ cleared" || fail "✓ still shown"
-[ "$(defaults read "$BID" AllowLAN 2>/dev/null)" = 0 ] && pass "choice saved (AllowLAN = 0)" || fail "AllowLAN not cleared"
 
 step "Restart server"
 before="$(grep -c "deckd.server INFO listening on" "$LOG" || true)"

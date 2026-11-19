@@ -77,7 +77,7 @@ def overlay_src(root: Path) -> Path:
 class _BoolDefaults(Protocol):
     """The slice of ``NSUserDefaults`` that ``LanAccess`` uses."""
 
-    def boolForKey_(self, key: str) -> bool: ...
+    def objectForKey_(self, key: str) -> object | None: ...
     def setBool_forKey_(self, value: bool, key: str) -> None: ...
 
 
@@ -88,9 +88,12 @@ class LanAccess:
     ``com.deckd.daemon`` domain), so it survives quits, reboots, and in-place
     upgrades, and can be set without the menu bar at all:
 
-        defaults write com.deckd.daemon AllowLAN -bool true
+        defaults write com.deckd.daemon AllowLAN -bool false   # localhost-only
 
-    (then relaunch). Off by default: a fresh install stays localhost-only.
+    (then relaunch). On by default, so a fresh install is reachable from a
+    phone or tablet straight away; the shared password still gates every
+    non-localhost client. Only an explicit "off" (the menu item, or
+    ``-bool false``) keeps it localhost-only.
     """
 
     def __init__(self, defaults: _BoolDefaults) -> None:
@@ -98,7 +101,11 @@ class LanAccess:
 
     @property
     def enabled(self) -> bool:
-        return bool(self._defaults.boolForKey_(LAN_DEFAULTS_KEY))
+        # ``objectForKey_`` is nil for a key never written, which
+        # ``boolForKey_`` would report as False (indistinguishable from
+        # an explicit off).
+        saved = self._defaults.objectForKey_(LAN_DEFAULTS_KEY)
+        return True if saved is None else bool(saved)
 
     def toggle(self) -> bool:
         """Flip and persist the choice; return the new state."""
