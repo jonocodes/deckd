@@ -4,7 +4,7 @@
 # item's effect, upgrade in place, then capture the first-run permission
 # prompt. Screenshots land in OUT_DIR as evidence.
 #
-#   test-app.sh [--pregrant] [--yes] DMG [OUT_DIR]
+#   test-app.sh [--pregrant] [--expect-signed] [--yes] DMG [OUT_DIR]
 #
 #   --pregrant  write deckd's TCC grants (System Events, Accessibility, input)
 #               straight into the TCC databases before launch. Needs Full Disk
@@ -12,6 +12,9 @@
 #               not on a normal Mac (grant by hand there instead). Without the
 #               System Events grant, deckd's consent prompt blocks System
 #               Events and every menu check below times out.
+#   --expect-signed  fail unless the app is signed with a certificate (#194):
+#               its designated requirement must name the certificate leaf,
+#               not a cdhash, or permission grants reset on every upgrade.
 #   --yes       required outside CI: this replaces /Applications/deckd.app,
 #               quits any running deckd, clears its saved AllowLAN choice,
 #               and resets deckd's System Events grant at the end (to capture
@@ -21,17 +24,18 @@
 # locally via `just test-macos-app`.
 set -euo pipefail
 
-PREGRANT=0 YES=0
+PREGRANT=0 YES=0 EXPECT_SIGNED=0
 while [ $# -gt 0 ]; do
     case "$1" in
         --pregrant) PREGRANT=1 ;;
+        --expect-signed) EXPECT_SIGNED=1 ;;
         --yes) YES=1 ;;
         -*) echo "unknown option $1" >&2; exit 2 ;;
         *) break ;;
     esac
     shift
 done
-DMG="${1:?usage: test-app.sh [--pregrant] [--yes] DMG [OUT_DIR]}"
+DMG="${1:?usage: test-app.sh [--pregrant] [--expect-signed] [--yes] DMG [OUT_DIR]}"
 OUT="${2:-test-app-out}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
@@ -135,9 +139,14 @@ quit_deckd
 defaults delete "$BID" AllowLAN >/dev/null 2>&1 || true
 install_dmg
 codesign --verify --deep "$APP" && pass "code signature valid" || fail "code signature invalid"
-codesign -d -r- "$APP" 2>&1 | sed -n 's/^# designated => /  designated requirement: /p'
+dr_args=("$APP"); [ "$EXPECT_SIGNED" = 1 ] && dr_args=(--expect-signed "$APP")
+if "$HERE/../signing/check-dr.sh" "${dr_args[@]}"; then
+    pass "designated requirement$([ "$EXPECT_SIGNED" = 1 ] && echo " is stable across upgrades")"
+else
+    fail "designated requirement"
+fi
 spctl_out="$(spctl --assess --type execute "$APP" 2>&1 || true)"
-echo "  Gatekeeper (informational; ad-hoc + not notarized => rejected): ${spctl_out:-accepted}"
+echo "  Gatekeeper (informational; not notarized => rejected): ${spctl_out:-accepted}"
 if launch; then pass "/health answers on 127.0.0.1:$PORT"; else fail "/health never answered"; fi
 if [ -n "$LAN_IP" ] && healthy "$LAN_IP"; then fail "LAN address answers before LAN access is enabled"; else pass "LAN address refused by default"; fi
 if grep -q "Accessibility is not granted" "$LOG" 2>/dev/null; then

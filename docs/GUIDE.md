@@ -682,7 +682,7 @@ just build-macos-app     # -> dist/deckd.app
 just build-macos-dmg     # -> dist/deckd-<version>.dmg
 ```
 
-The bundle is **ad-hoc signed, not notarized** (no paid Apple Developer Program). A DMG downloaded through a browser is quarantined by Gatekeeper, so the first launch needs either right-click → Open, or:
+Release DMGs are **signed with the project's self-signed certificate, not notarized** (no paid Apple Developer Program) once the release workflow has that certificate (see [Code signing](#code-signing-self-signed-certificate)); a build without it is ad-hoc signed. A DMG downloaded through a browser is quarantined by Gatekeeper either way, so the first launch needs either right-click → Open, or:
 
 ```sh
 xattr -dr com.apple.quarantine /Applications/deckd.app
@@ -697,7 +697,12 @@ osascript -e 'quit app id "com.deckd.daemon"'; open -a deckd   # relaunch to app
 
 Opening deckd.app again while it's already running (Finder, Spotlight, `open -a deckd`) opens the surface in your browser, so the app stays reachable even with no menu-bar icon.
 
-Because the bundle is ad-hoc signed, its code identity is its content hash: **every rebuild changes it, so macOS may ask you to re-grant Accessibility / System Events after an upgrade.** Remove the stale `deckd` entry from System Settings → Privacy & Security and re-add the app if a grant stops working.
+**Permission grants and upgrades.** macOS records each Accessibility / System Events grant against the app's code identity ("designated requirement"). Release builds are signed with one long-lived certificate, so that identity stays the same from version to version and **your grants carry over when you upgrade** ([#194](https://github.com/jonocodes/deckd/issues/194)). Two exceptions:
+
+- **Moving from an older ad-hoc build to the first signed one** changes the identity once. Remove the stale `deckd` entry from System Settings → Privacy & Security → Accessibility (and Automation), add the app again, and quit and reopen it. Later upgrades keep the grant.
+- **Local builds without the certificate** are ad-hoc signed: their identity is the build's content hash, so every rebuild looks like a new app and needs the same remove-and-re-add.
+
+If a grant is missing, the phone shows a banner naming the permission and these steps (see [Feedback and recovery](#feedback-and-recovery)). `codesign -d -r- /Applications/deckd.app` prints the identity: `certificate leaf = H"…"` is a signed build, `cdhash H"…"` an ad-hoc one.
 
 Verified so far (macOS 26.6.2, Apple Silicon): the bundle builds, launches as a menu-bar app, seeds decks, and serves the surface on `127.0.0.1:8765` with logs in `~/Library/Logs/deckd.log`. The injected-input features still depend on the three TCC grants, which need a human on the target Mac to confirm — the same caveat as the source build.
 
@@ -708,6 +713,34 @@ Pushing a `v*` tag runs [`.github/workflows/release-macos.yml`](../.github/workf
 Before anything is published, a `test-app` job installs the DMG on a second, fresh runner and clicks through the real menu-bar item ([`packaging/macos/test/test-app.sh`](../packaging/macos/test/test-app.sh)). It checks the menu's items, that **Allow LAN access** opens and closes the LAN port, toggles its ✓, and stays on across a relaunch, **Restart server**, **Open decks folder** (a Finder window), **Open deckd surface** (Safari loads it), **Quit**, and that an in-place upgrade keeps the password and decks. It uploads screenshots (`deckd-macos-test-app` artifact) of the open menu, the decks folder, the surface in Safari, and the first-run *"deckd wants access to control System Events"* prompt. Pull requests that touch the app run build + test (never publish).
 
 This works on GitHub's free hosted runners because they have a real logged-in desktop, and the image grants Accessibility and Screen Recording to `bash`/`osascript`. The script's `--pregrant` writes deckd's own TCC grants before launch (CI only: it needs Full Disk Access) — otherwise its System Events consent prompt sits on screen and blocks every System Events call. What CI can't cover: grants surviving an upgrade (they're pre-written), and Gatekeeper quarantine on a browser download (`spctl` output is logged, informational).
+
+#### Code signing (self-signed certificate)
+
+Release builds are signed with a self-signed code-signing certificate that never changes, so users' permission grants survive upgrades (see *Permission grants and upgrades* above). It's free, unlike a Developer ID, but it does **not** clear Gatekeeper's "unidentified developer" warning; that still needs Developer ID + notarization ($99/yr), a later step.
+
+The certificate is generated **once** for the project. A new certificate is a new identity to macOS, so every user would have to re-grant; `make-cert.sh` refuses to overwrite an existing one for that reason.
+
+```sh
+packaging/macos/signing/make-cert.sh ~/deckd-signing     # needs only openssl; prints the SHA-1 identity
+base64 < ~/deckd-signing/deckd-codesign.p12 | gh secret set DECKD_CODESIGN_P12_BASE64
+gh secret set DECKD_CODESIGN_P12_PASSWORD < ~/deckd-signing/deckd-codesign.p12.password
+```
+
+Keep `deckd-codesign.p12` and its password somewhere durable, such as a password manager: the GitHub secrets can't be read back, and these files are the only way to sign a release by hand. To do that on a Mac, import the certificate into your login keychain once and name its identity when building:
+
+```sh
+security import ~/deckd-signing/deckd-codesign.p12 -k ~/Library/Keychains/login.keychain-db -T /usr/bin/codesign
+DECKD_CODESIGN_IDENTITY=<sha1 from make-cert> just build-macos-dmg
+```
+
+How the pieces fit ([`packaging/macos/signing/`](../packaging/macos/signing/)):
+
+- `release-macos.yml` runs `import-cert.sh`, which decodes the secret into a throwaway keychain and exports `DECKD_CODESIGN_IDENTITY`. Without the secrets (forks, fork PRs) it warns and the build stays ad-hoc.
+- `just build-macos-app` freezes the app ad-hoc with PyInstaller, then `sign-app.sh` re-signs the bundle with the identity. It doesn't use PyInstaller's own `codesign_identity`, which would force hardened runtime (its library validation rejects a self-signed, Team-ID-less bundle) and a network timestamp.
+- `check-dr.sh` asserts the result: the designated requirement must be `identifier "com.deckd.daemon" and certificate leaf = H"…"`, not `cdhash`. `sign-app.sh` runs it after signing, and `test-app.sh --expect-signed` runs it again on the installed DMG in CI.
+- `tests/test_macos_signing.py` covers the scripts. Its end-to-end case signs a real bundle in a temporary keychain; it runs on macOS CI, or locally with `DECKD_TEST_CODESIGN=1`.
+
+What CI can't show is a grant actually surviving an upgrade, because the runner's grants are pre-written. That needs a human: grant Accessibility to build N, install build N+1 over it, and confirm the trackpad still works without re-adding the app.
 
 To run the same test on your own Mac (it replaces `/Applications/deckd.app`; your terminal needs Accessibility + Screen Recording):
 

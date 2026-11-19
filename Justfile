@@ -543,7 +543,14 @@ build-macos-app:
         just build-client
     fi
     pyinstaller --noconfirm --clean packaging/macos/deckd.spec
-    echo "Built dist/deckd.app (ad-hoc signed, not notarized)."
+    # Re-sign with the stable certificate when DECKD_CODESIGN_IDENTITY is set
+    # (#194), so permission grants survive upgrades; otherwise stay ad-hoc.
+    packaging/macos/signing/sign-app.sh dist/deckd.app
+    if [ -n "${DECKD_CODESIGN_IDENTITY:-}" ]; then
+        echo "Built dist/deckd.app (self-signed, not notarized)."
+    else
+        echo "Built dist/deckd.app (ad-hoc signed, not notarized)."
+    fi
 
 # Wrap dist/deckd.app in a distributable DMG for a GitHub release (#165).
 # ``DECKD_VERSION`` names the artifact (the release workflow sets it from the
