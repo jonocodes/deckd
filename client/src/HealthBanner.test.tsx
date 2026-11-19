@@ -57,6 +57,13 @@ describe("HealthBanner", () => {
     expect(screen.getAllByRole("listitem").length).toBe(2);
   });
 
+  it("names the deck-following that a missing Automation grant breaks (issue #196)", () => {
+    render(<Harness issues={[{ ...AX, id: "automation_system_events_missing", affects: ["key", "focus"] }]} />);
+    const text = screen.getByRole("alert").textContent;
+    expect(text).toContain("key presses, switching decks with the app in front");
+    expect(text).not.toContain("focus");
+  });
+
   it("falls back to the raw key for an unknown primitive", () => {
     render(<Harness issues={[{ ...AX, affects: ["teleport"] }]} />);
     expect(screen.getByRole("alert").textContent).toContain("teleport");

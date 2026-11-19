@@ -85,7 +85,7 @@ The single `http://<bind-host>:<port>/` URL a phone types into its browser to re
 _Avoid_: connection URL, daemon URL
 
 **Health issue**:
-Something the daemon knows is wrong on the host that makes input fail silently, today a missing OS permission (macOS Accessibility). Reported by the platform backend, pushed to every client as a `health` frame (full list on change; an empty list means healthy), shown as a banner above the grid, and listed under `/diag`'s `health` block. Not the same as `GET /health` (host identity) or `focus.healthy` (is context switching working). See issue #195.
+Something the daemon knows is wrong on the host that makes input fail silently, today a missing OS permission (macOS Accessibility, or Automation of System Events). Reported by the platform backend (from proactive checks plus refusals seen at action time, #196), pushed to every client as a `health` frame (full list on change; an empty list means healthy), shown as a banner above the grid, and listed under `/diag`'s `health` block. Not the same as `GET /health` (host identity) or `focus.healthy` (is context switching working). See issue #195. An action the OS refuses for the same cause also gets an *action error* (`action_error`, a toast for the requesting session only).
 _Avoid_: warning, alert, permission error
 
 ### Session screen state (issue #160)

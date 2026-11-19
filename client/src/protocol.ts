@@ -28,6 +28,7 @@ import type {
   ChromeMediaMessage,
   ErrorMessage,
   MediaErrorMessage,
+  ActionErrorMessage,
   MacroResultMessage,
   ConfirmRequestMessage,
   RunningWindowsMessage,
@@ -61,6 +62,7 @@ export type {
   WidgetUpdateMessage,
   MediaStateMessage,
   MediaErrorMessage,
+  ActionErrorMessage,
   ChromeMediaMessage,
   EventMessage,
   MacroResultMessage,
@@ -200,6 +202,7 @@ export type ServerWidgetUpdate = WidgetUpdateMessage;
 export type ServerChromeMedia = ChromeMediaMessage;
 export type ServerError = ErrorMessage;
 export type ServerMediaError = MediaErrorMessage;
+export type ServerActionError = ActionErrorMessage;
 export type ServerMacroResult = MacroResultMessage;
 export type ServerConfirmRequest = ConfirmRequestMessage;
 export type ServerHealth = HealthMessage;

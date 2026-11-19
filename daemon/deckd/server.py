@@ -21,7 +21,7 @@ from pydantic import ValidationError
 from . import __version__
 from . import protocol as p
 from .actions import ActionContext, MacroOutcome, execute as run_action
-from .input import ScrollController, parse_key_combo, text_to_combos
+from .input import PermissionDenied, ScrollController, parse_key_combo, text_to_combos
 from .decks import (
     Deck,
     DeckLoadError,
@@ -749,6 +749,9 @@ class Server:
         # that make input fail silently. Starts empty ("nothing known to
         # be wrong"); the poller fills it within one interval.
         self._health_issues: list[p.HealthIssue] = []
+        # One-off re-polls after a permission refusal (#196); held so the
+        # loop doesn't garbage-collect them mid-flight.
+        self._health_refreshes: set[asyncio.Task[None]] = set()
         # Session screen awareness (issue #160). The backend may take a
         # couple of seconds to answer the first poll, so the daemon
         # opens on "nothing wrong" — which is also what the client's
@@ -1325,6 +1328,47 @@ class Server:
         except (ConnectionResetError, RuntimeError, ConnectionError):
             pass
 
+    async def _report_permission_denied(
+        self,
+        session: Session,
+        exc: PermissionDenied,
+        *,
+        primitive: str,
+        widget_id: str | None,
+        command_text: str | None = None,
+    ) -> None:
+        """An action the OS refused for want of a grant (issue #196).
+
+        Records ``permission_denied`` in the ring buffer and ``/metrics``,
+        toasts the requesting session (not a broadcast: it was this
+        session's press), and re-polls health so the banner with the fix
+        steps comes up with the toast instead of on the next tick.
+        """
+        log.info("[%s] refused by the OS: %s", primitive, exc.issue_id)
+        self.metrics.record_action(primitive, "permission_denied")
+        self.recent_actions.add(
+            ActionRecord(
+                ts=time.time(),
+                deck_id=self._current_app_id,
+                widget_id=(widget_id or primitive)[:64],
+                primitive=primitive,
+                outcome="permission_denied",
+                command_text=command_text,
+                error=exc.message,
+            )
+        )
+        self._refresh_health()
+        with contextlib.suppress(ConnectionResetError, RuntimeError, ConnectionError):
+            await session.send(
+                p.ActionErrorMessage(
+                    type="action_error",
+                    id=widget_id,
+                    reason="permission_denied",
+                    issue_id=exc.issue_id,
+                    message=exc.message,
+                )
+            )
+
     async def push_session_state_snapshot(self, session: Session) -> None:
         """Replay the current session state to a just-connected client.
 
@@ -1371,7 +1415,7 @@ class Server:
         failing = False
         while True:
             try:
-                issues = list(backend.health_issues())
+                issues = await self._probe_health(backend)
             except Exception as exc:  # a broken probe must not end the poller
                 if not failing:
                     log.warning("health probe failed (will keep retrying): %s", exc)
@@ -1380,6 +1424,30 @@ class Server:
                 failing = False
                 await self._on_health_issues(issues)
             await asyncio.sleep(interval)
+
+    @staticmethod
+    async def _probe_health(backend: "PlatformBackend") -> "list[p.HealthIssue]":
+        # Off the event loop: the macOS probes can shell out to osascript
+        # or block in TCC (#196).
+        return list(await asyncio.to_thread(backend.health_issues))
+
+    def _refresh_health(self) -> None:
+        """Re-poll health now, outside the watcher's cadence (#196)."""
+        backend = self.focus_backend
+        if backend is None:
+            return
+
+        async def once() -> None:
+            try:
+                issues = await self._probe_health(backend)
+            except Exception as exc:
+                log.debug("health refresh failed: %s", exc)
+                return
+            await self._on_health_issues(issues)
+
+        task = asyncio.create_task(once())
+        self._health_refreshes.add(task)
+        task.add_done_callback(self._health_refreshes.discard)
 
     async def _on_health_issues(self, issues: "list[p.HealthIssue]") -> None:
         """Record the latest list and broadcast it, only when it changed."""
@@ -2723,8 +2791,14 @@ class Server:
                 await self._refuse_locked(session, tmsg.text, "type")
                 return
             if self.key_sink is not None:
-                for combo in text_to_combos(tmsg.text):
-                    self.key_sink.emit_key(combo)
+                try:
+                    for combo in text_to_combos(tmsg.text):
+                        self.key_sink.emit_key(combo)
+                except PermissionDenied as exc:
+                    # No command_text: typed text stays out of the ring.
+                    await self._report_permission_denied(
+                        session, exc, primitive="type", widget_id=None
+                    )
             return
         if msg_type == "key":
             kmsg = p.KeyMessage.model_validate(data)
@@ -2734,7 +2808,13 @@ class Server:
                 await self._refuse_locked(session, kmsg.combo, "key")
                 return
             if self.key_sink is not None:
-                self.key_sink.emit_key(parse_key_combo(kmsg.combo))
+                try:
+                    self.key_sink.emit_key(parse_key_combo(kmsg.combo))
+                except PermissionDenied as exc:
+                    await self._report_permission_denied(
+                        session, exc, primitive="key", widget_id=None,
+                        command_text=kmsg.combo,
+                    )
             return
         if msg_type == "media_command":
             media_command = p.MediaCommandMessage.model_validate(data)
@@ -2958,6 +3038,12 @@ class Server:
             widget.action = action
             try:
                 await run_action(widget, ctx)
+            except PermissionDenied as exc:
+                primitive, command_text = _action_primitive(action)
+                await self._report_permission_denied(
+                    session, exc, primitive=primitive, widget_id=press.id,
+                    command_text=command_text,
+                )
             finally:
                 widget.action = original
             return
@@ -3184,7 +3270,14 @@ class Server:
                 )
             )
         )
-        outcome = await run_action(widget, ctx)
+        try:
+            outcome = await run_action(widget, ctx)
+        except PermissionDenied as exc:
+            await self._report_permission_denied(
+                session, exc, primitive=primitive, widget_id=widget.id,
+                command_text=command_text,
+            )
+            return
         if isinstance(outcome, MacroOutcome) and outcome.outcome != "ok":
             self.metrics.record_action(primitive, outcome.outcome)
             self.recent_actions.add(

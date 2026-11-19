@@ -262,6 +262,32 @@ export type MediaErrorMessage = {
 };
 
 /**
+ * Daemon -> client push: an action this session triggered was refused
+ *     by the OS (issue #196).
+ *
+ *     Sent only to the *requesting* session, like ``media_error``: the
+ *     failure is a consequence of one session's press. Today the one
+ *     ``reason`` is ``permission_denied`` (macOS refused the keystroke for
+ *     want of Accessibility or Automation); the client shows ``message``
+ *     as a toast. ``issue_id`` names the :class:`HealthIssue` with the fix
+ *     steps, which the daemon raises at the same time. ``id`` is the
+ *     pressed widget's id, ``None`` for manual-control keys and typed text.
+ *     
+ */
+export type ActionErrorMessage = {
+
+  type: "action_error";
+
+  id?: string | null;
+
+  reason: "permission_denied";
+
+  issue_id: string;
+
+  message: string;
+};
+
+/**
  * Daemon -> client push: the chrome media icon's passive
  *     playback-state snapshot (issue #47).
  *
@@ -465,13 +491,13 @@ export type RunningWindowsMessage = {
  * One thing the daemon knows is broken on this host (issue #195).
  *
  *     Platform-neutral: a backend mints these from whatever it can probe
- *     (macOS Accessibility trust today; Automation, Linux ``uinput`` access
- *     are follow-ups). ``id`` is a stable machine key (``accessibility_missing``)
- *     the client can dedupe and dismiss by. ``fix_steps`` are complete,
+ *     (macOS Accessibility trust and Automation of System Events today;
+ *     Linux ``uinput`` access is a follow-up). ``id`` is a stable machine
+ *     key (``accessibility_missing``) the client can dedupe and dismiss by. ``fix_steps`` are complete,
  *     user-facing sentences that name the exact app to grant and the
  *     Settings path. ``affects`` lists the input primitives that silently
  *     fail while the issue stands (``pointer``, ``scroll``, ``key``,
- *     ``raise_window``, ...).
+ *     ``raise_window``, ``focus``, ...).
  *     
  */
 export type HealthIssue = {
@@ -509,7 +535,7 @@ export type HealthMessage = {
   issues: HealthIssue[];
 };
 
-export type ServerMessage = DeckMessage | StateMessage | BrightnessMessage | WidgetUpdateMessage | MediaStateMessage | MediaErrorMessage | ChromeMediaMessage | EventMessage | MacroResultMessage | ConfirmRequestMessage | RunningWindowsMessage | HealthMessage | ErrorMessage;
+export type ServerMessage = DeckMessage | StateMessage | BrightnessMessage | WidgetUpdateMessage | MediaStateMessage | MediaErrorMessage | ActionErrorMessage | ChromeMediaMessage | EventMessage | MacroResultMessage | ConfirmRequestMessage | RunningWindowsMessage | HealthMessage | ErrorMessage;
 
 export type HelloMessage = {
 

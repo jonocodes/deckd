@@ -16,7 +16,7 @@
  */
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ClientMessage, ServerChromeMedia, ServerDeck, ServerMediaError, ServerState } from "./protocol";
+import type { ClientMessage, ServerChromeMedia, ServerDeck, ServerMediaError, ServerActionError, ServerState } from "./protocol";
 
 /** Replace the real socket hook with a controllable fake. The chrome
  * icon's job is to call ``send`` with the right message; the test
@@ -42,6 +42,7 @@ const cancelReconnect = vi.fn();
 const retryNow = vi.fn();
 let sessionStateHandler: ((m: ServerState) => void) | null = null;
 let mediaErrorHandler: ((m: ServerMediaError) => void) | null = null;
+let actionErrorHandler: ((m: ServerActionError) => void) | null = null;
 vi.mock("./socket", () => ({
   useDeckdSocket: (
     deckCb: (m: ServerDeck) => void,
@@ -52,12 +53,15 @@ vi.mock("./socket", () => ({
     _runningWindowsCb: unknown,
     sessionStateCb: ((m: ServerState) => void) | undefined,
     mediaErrorCb: ((m: ServerMediaError) => void) | undefined,
+    _healthCb: unknown,
+    actionErrorCb: ((m: ServerActionError) => void) | undefined,
     _options: unknown,
   ) => {
     onDeck.mockImplementation(deckCb);
     chromeMediaHandler = chromeMediaCb ?? null;
     sessionStateHandler = sessionStateCb ?? null;
     mediaErrorHandler = mediaErrorCb ?? null;
+    actionErrorHandler = actionErrorCb ?? null;
     return {
       get status() {
         return mockStatus;
@@ -1419,5 +1423,62 @@ describe("App — media error toast", () => {
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByText(/player disappeared/)).toBeNull();
     expect(send.mock.calls.length).toBe(before);
+  });
+});
+
+/* -------------------------------------------------------------------------
+ * Action refused by the OS (issue #196): a key press macOS blocked for want
+ * of a permission toasts at once; a media failure after it takes its place.
+ * --------------------------------------------------------------------- */
+
+describe("App — action error toast", () => {
+  afterEach(cleanup);
+  beforeEach(() => {
+    send.mockReset();
+    actionErrorHandler = null;
+    mediaErrorHandler = null;
+    mockStatus = "open";
+    window.history.replaceState(null, "", "/?demo=mpris");
+  });
+
+  const blocked: ServerActionError = {
+    type: "action_error",
+    id: "new-window",
+    reason: "permission_denied",
+    issue_id: "automation_system_events_missing",
+    message: "Key press blocked: deckd.app needs Automation permission to control System Events.",
+  };
+
+  it("shows the message and announces it", () => {
+    render(<App />);
+    act(() => actionErrorHandler?.(blocked));
+    expect(screen.getAllByText(blocked.message).length).toBeGreaterThan(0);
+    expect(screen.getByRole("status").textContent).toBe(blocked.message);
+  });
+
+  it("dismisses", () => {
+    render(<App />);
+    act(() => actionErrorHandler?.(blocked));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(document.querySelector(".media-error-toast")).toBeNull();
+  });
+
+  it("the newer failure replaces the older toast", () => {
+    render(<App />);
+    act(() => actionErrorHandler?.(blocked));
+    act(() =>
+      mediaErrorHandler?.({
+        type: "media_error",
+        id: "mpris.vlc",
+        player: "VLC media player",
+        message: "player disappeared",
+        retryable: true,
+      }),
+    );
+    expect(document.querySelectorAll(".media-error-toast").length).toBe(1);
+    expect(screen.getByText(/player disappeared/)).toBeTruthy();
+    act(() => actionErrorHandler?.(blocked));
+    expect(document.querySelectorAll(".media-error-toast").length).toBe(1);
+    expect(screen.queryByText(/player disappeared/)).toBeNull();
   });
 });

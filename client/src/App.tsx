@@ -42,6 +42,7 @@ import type {
   HealthIssue,
   ServerHealth,
   ServerMediaError,
+  ServerActionError,
   ServerRunningWindows,
   ServerState,
   WindowListEntry,
@@ -53,6 +54,7 @@ import { ReflowHelp } from "./ReflowHelp";
 import { ConfirmModal } from "./ConfirmModal";
 import { ConnectionOverlay } from "./ConnectionOverlay";
 import { MediaErrorToast } from "./MediaErrorToast";
+import { ActionErrorToast } from "./ActionErrorToast";
 import { HealthBanner } from "./HealthBanner";
 import type { Widget, ConfirmRequestMessage, MediaCommandMessage } from "./protocol";
 import { wireWindowsToServer } from "./protocol";
@@ -216,7 +218,18 @@ export function App() {
   const lastMediaCommandRef = useRef<
     Record<string, { command: MediaCommandMessage["command"]; value?: number }>
   >({});
-  const onMediaError = useCallback((m: ServerMediaError) => setMediaError(m), []);
+  // Action refused by the OS (issue #196): a key press macOS blocked for
+  // want of Accessibility / Automation. Both toasts sit in the same spot,
+  // so the newer failure replaces the older one, whichever kind it is.
+  const [actionError, setActionError] = useState<ServerActionError | null>(null);
+  const onMediaError = useCallback((m: ServerMediaError) => {
+    setActionError(null);
+    setMediaError(m);
+  }, []);
+  const onActionError = useCallback((m: ServerActionError) => {
+    setMediaError(null);
+    setActionError(m);
+  }, []);
   // Daemon health issues (issue #195): missing OS permissions that make
   // input fail silently. The daemon pushes the full list on change, so
   // the latest frame is the whole truth; empty means healthy.
@@ -272,6 +285,7 @@ export function App() {
     onSessionState,
     onMediaError,
     onHealth,
+    onActionError,
     { enabled: !demoDeck && !isPlayground },
   );
   const playgroundSocket = usePlaygroundDaemon(
@@ -706,6 +720,11 @@ export function App() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setLiveText(`Media error: ${mediaError.player || mediaError.id}`);
   }, [mediaError]);
+  useEffect(() => {
+    if (!actionError) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLiveText(actionError.message);
+  }, [actionError]);
 
   // Chrome app-identity badge (ADR-0007): the daemon relays an
   // optional ``display_name`` / ``theme`` / ``icon`` per deck; the
@@ -1188,6 +1207,14 @@ export function App() {
           retryable={mediaError.retryable ?? true}
           onRetry={retryMedia}
           onDismiss={() => setMediaError(null)}
+        />
+      ) : null}
+      {/* Key press refused by the OS (issue #196). The health banner has
+          the fix steps; this says what just happened. */}
+      {actionError ? (
+        <ActionErrorToast
+          message={actionError.message}
+          onDismiss={() => setActionError(null)}
         />
       ) : null}
     </>

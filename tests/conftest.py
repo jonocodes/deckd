@@ -189,6 +189,22 @@ class FakeDbusBusFactory:
 # Server fixture
 # ---------------------------------------------------------------------------
 
+@pytest.fixture(autouse=True)
+def _no_host_tcc(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the macOS permission checks off the host's real TCC state (#196).
+
+    ``MacFocusBackend.health_issues`` asks TCC whether this process may
+    automate System Events, and the process-wide ledger remembers refusals
+    across calls. On a Mac checkout either would make a test's result
+    depend on the developer's own grants (or on an earlier test), so every
+    test starts with "can't tell" and an empty ledger.
+    """
+    import deckd.platform_macos as mac
+
+    monkeypatch.setattr(mac, "_automation_permission", lambda: None)
+    monkeypatch.setattr(mac, "PERMISSIONS", mac.PermissionLedger())
+
+
 @pytest.fixture
 def as_linux(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pin ``sys.platform`` to Linux for tests that assert the Linux branch.

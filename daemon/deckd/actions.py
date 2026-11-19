@@ -550,10 +550,17 @@ class MacroOutcome:
 
 
 async def execute_macro(macro: Macro, ctx: ActionContext) -> MacroOutcome:
+    from .input import PermissionDenied
+
     steps = macro.steps
     for i, step in enumerate(steps):
         try:
             await _run_step(step, ctx)
+        except PermissionDenied:
+            # The OS refused a keystroke for want of a grant (#196). Every
+            # later key step would be refused the same way, even with
+            # ``continue_on_error``, so stop and let the server toast it.
+            raise
         except Exception as exc:
             err = f"{type(exc).__name__}: {exc}"
             log.warning("macro step %d failed: %s", i, err)

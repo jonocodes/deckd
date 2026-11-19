@@ -119,6 +119,27 @@ describe("useDeckdSocket — reconnect feedback (issue #64)", () => {
     expect(onHealth).toHaveBeenCalledWith(frame);
   });
 
+  it("routes an action_error frame to onActionError (issue #196)", async () => {
+    const onActionError = vi.fn();
+    renderHook(() =>
+      useDeckdSocket(
+        noop, noop, noop, undefined, undefined, undefined, undefined, undefined, undefined, onActionError,
+      ),
+    );
+    await waitFor(() => expect(FakeWebSocket.instances.length).toBe(1));
+    const ws = FakeWebSocket.instances[0];
+    act(() => ws.open());
+    const frame = {
+      type: "action_error",
+      id: "new-window",
+      reason: "permission_denied",
+      issue_id: "accessibility_missing",
+      message: "Key press blocked: deckd.app needs Accessibility permission.",
+    };
+    act(() => ws.onmessage?.({ data: JSON.stringify(frame) }));
+    expect(onActionError).toHaveBeenCalledWith(frame);
+  });
+
   it("a new connection resets health to empty before the daemon's replay", async () => {
     // A healthy daemon sends no ``health`` frame on connect, so an issue
     // that cleared while we were disconnected (e.g. the user quit and
