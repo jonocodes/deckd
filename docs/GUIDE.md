@@ -11,7 +11,7 @@ endpoints see [REFERENCE.md](REFERENCE.md); for the system architecture see
 
 - [Repository layout](#repository-layout)
 - [Web-app decks](#web-app-decks)
-- [Running deckd](#running-deckd) — install, macOS, KDE Plasma Wayland, phone/tablet testing
+- [Running deckd](#running-deckd) — install, macOS ([app + permissions](#macos-app-bundle-experimental-165)), KDE Plasma Wayland, phone/tablet testing
 - [Design tooling](#design-tooling-no-daemon-required), [hosted demo](#hosted-demo-github-pages), [PWA install](#pwa-install-over-https-tailscale)
 - Client features — [chrome](#client-chrome), [manual control](#manual-control-mode), [deck editor](#deck-editor), [app badge](#chrome-app-badge), [app icons](#app-icons-source-desktop), [tuning](#client-tuning), [accessibility](#accessibility)
 - [uinput permissions](#uinput-permissions), [live reload](#live-reload), [focus watcher](#focus-watcher), [dev UX](#dev-ux-auto-ignore--deck-override), [smoke test](#smoke-test), [CLI](#cli)
@@ -139,7 +139,7 @@ Machine-verified on hardware 2026-08-06 (macOS 15.6.1, Apple Silicon) by driving
 
 **TCC permissions are per-process-tree, and that bites.** macOS attributes a grant to the *responsible* process — the terminal (or launchd agent) that started the daemon — not to `python` itself. Consequences worth knowing before you debug the wrong layer:
 
-- **Accessibility** gates Quartz `CGEventPost` *and* the `AXRaise` half of raise. Without it, pointer/click/drag/scroll are **silently dropped** (no error, no log line) and `raise_window` fails with `kAXErrorAPIDisabled` (-25211) after the app has already been activated — so the app comes forward but the specific window doesn't rise.
+- **Accessibility** gates Quartz `CGEventPost` *and* the `AXRaise` half of raise. Without it, pointer/click/drag/scroll are **silently dropped** (no per-event error; the daemon only logs one `Accessibility is not granted …` warning at startup) and `raise_window` fails with `kAXErrorAPIDisabled` (-25211) after the app has already been activated — so the app comes forward but the specific window doesn't rise.
 - **System Events** (the focus + `keystroke` path) is a *separate* grant, which is why focus detection and key injection can work fine while every Quartz path is dead.
 - Run the daemon from a *different* terminal (or under an editor/agent harness) and you inherit that tree's grants, not the ones you clicked through earlier.
 - **Screen Recording** gates `kCGWindowName`. Without it every enumerated window's `title` is `None`, so the running-windows list is labelled by app name alone. deckd works either way — the label falls back — but title-based deck matching (`title:` tokens) can't see enumerated windows.
@@ -675,31 +675,75 @@ tail -f deckd.log                       # follow logs (written in the checkout)
 
 ### macOS app bundle (experimental, [#165](https://github.com/jonocodes/deckd/issues/165))
 
-Beyond the source-checkout + LaunchAgent path above, deckd can be built as a self-contained `deckd.app`: a private Python runtime, the built client, and the decks in one bundle, driven by a menu-bar UI. The target Mac needs no Python, Node, or Homebrew. Build it **on a Mac** (a `.app` needs Apple tooling):
+Beyond the source-checkout + LaunchAgent path above, deckd ships as a self-contained `deckd.app`: a private Python runtime, the built client, and the decks in one bundle, driven by a menu-bar UI. The target Mac needs no Python, Node, or Homebrew. Apple Silicon only for now.
 
-```sh
-just build-macos-app     # -> dist/deckd.app
-just build-macos-dmg     # -> dist/deckd-<version>.dmg
-```
+#### Install
 
-The bundle is **ad-hoc signed, not notarized** (no paid Apple Developer Program). A DMG downloaded through a browser is quarantined by Gatekeeper, so the first launch needs either right-click → Open, or:
+1. Download `deckd-<version>.dmg` from the [GitHub releases](https://github.com/jonocodes/deckd/releases) and drag **deckd** into **Applications**.
+2. The bundle is **ad-hoc signed, not notarized** (no paid Apple Developer Program; see [#194](https://github.com/jonocodes/deckd/issues/194)), so Gatekeeper blocks the first launch of a browser download. Right-click → **Open**, or:
 
-```sh
-xattr -dr com.apple.quarantine /Applications/deckd.app
-```
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/deckd.app
+   ```
 
-Then grant the TCC permissions as for the source build (see [macOS](#macos) above): Accessibility, System Events, and — for window titles — Screen Recording. The app seeds decks into `~/Library/Application Support/deckd/decks` on first run and logs to `~/Library/Logs/deckd.log`. The menu offers Open surface / Open decks folder / Restart server / Allow LAN access / Quit; it stays localhost-only until you enable LAN access. The **Allow LAN access** choice is remembered across quits, reboots, and upgrades. You can also set it without the menu bar, which helps if macOS isn't showing the icon:
+3. Launch it. deckd runs as a menu-bar app (no Dock icon), seeds decks into `~/Library/Application Support/deckd/decks`, logs to `~/Library/Logs/deckd.log`, and serves the surface on `http://127.0.0.1:8765`. The password for the surface is in `~/.config/deckd/password`.
+4. **Grant permissions** (next section). Without them deckd *looks* half-working, with no error on the phone. Missing Accessibility is the sneaky one: decks still follow the focused app, but the trackpad, scroll strip, and every keyboard-shortcut button silently do nothing.
+5. **Allow LAN access** to use it from a phone or tablet (below).
+
+#### Grant permissions
+
+Grants belong to `deckd.app` itself, in System Settings → **Privacy & Security**:
+
+| permission | what breaks without it | how to grant |
+| --- | --- | --- |
+| **Accessibility** | trackpad pointer, click, drag, scroll strip, keyboard-shortcut buttons (System Events refuses to type for an app without it), raising a specific window | Not prompted. Open **Accessibility**, click **+** under the list, pick `/Applications/deckd.app`, make sure its toggle is on. **Then restart deckd** (menu → Restart server, or quit and relaunch): it checks the grant at startup. |
+| **Automation → System Events** | following the focused app (decks don't switch), keyboard-shortcut buttons (e.g. Firefox **New window** sends ⌘N) | Prompted shortly after launch, the first time deckd checks which app is focused: *"deckd wants access to control System Events"* → **Allow**. If you clicked Don't Allow, turn it on under **Automation → deckd → System Events**. |
+| **Screen Recording** *(optional)* | window titles in the running-windows list (labels fall back to the app name) and `title:` deck matching on enumerated windows | Open **Screen Recording**, add `deckd.app`. |
+
+To check, look for these lines in `~/Library/Logs/deckd.log` after a restart. A clean start has none of them:
+
+- `Accessibility is not granted to deckd.app` → Accessibility missing (or granted to a previous build, see *Upgrading*).
+- `osascript is not allowed to send keystrokes (1002)` → Accessibility missing.
+- `Not authorized to send Apple events to System Events. (-1743)` → Automation missing.
+
+The client doesn't show these yet; that's [#195](https://github.com/jonocodes/deckd/issues/195).
+
+#### LAN access
+
+The app is localhost-only until you enable **Allow LAN access** in its menu; it then listens on all interfaces and the surface is at `http://<your-mac>.local:8765` (or the Mac's hostname / IP). The choice is remembered across quits, reboots, and upgrades. You can also set it without the menu bar, which helps if macOS isn't showing the icon ([#200](https://github.com/jonocodes/deckd/issues/200)):
 
 ```sh
 defaults write com.deckd.daemon AllowLAN -bool true    # LAN on (false or `defaults delete com.deckd.daemon AllowLAN` for localhost-only)
 osascript -e 'quit app id "com.deckd.daemon"'; open -a deckd   # relaunch to apply
 ```
 
-Opening deckd.app again while it's already running (Finder, Spotlight, `open -a deckd`) opens the surface in your browser, so the app stays reachable even with no menu-bar icon.
+The menu offers Open surface / Open decks folder / Restart server / Allow LAN access / Quit. Opening deckd.app again while it's already running (Finder, Spotlight, `open -a deckd`) opens the surface in your browser, so the app stays reachable even with no menu-bar icon. Without the menu, restart it with the `osascript … quit` / `open -a deckd` pair above.
 
-Because the bundle is ad-hoc signed, its code identity is its content hash: **every rebuild changes it, so macOS may ask you to re-grant Accessibility / System Events after an upgrade.** Remove the stale `deckd` entry from System Settings → Privacy & Security and re-add the app if a grant stops working.
+#### Upgrading
 
-Verified so far (macOS 26.6.2, Apple Silicon): the bundle builds, launches as a menu-bar app, seeds decks, and serves the surface on `127.0.0.1:8765` with logs in `~/Library/Logs/deckd.log`. The injected-input features still depend on the three TCC grants, which need a human on the target Mac to confirm — the same caveat as the source build.
+Because the bundle is ad-hoc signed, macOS identifies it by its content hash: **every new build looks like a different app, and the old Accessibility / Automation grants stop applying**, without any prompt ([#194](https://github.com/jonocodes/deckd/issues/194)). The symptom after an upgrade is the same as never granting, typically decks still switching while the trackpad, scroll strip, and shortcut buttons do nothing. The toggle in System Settings may still show *on*, for the old build.
+
+Clear deckd's stale entries (this only touches deckd's grants), then grant again as above and restart deckd:
+
+```sh
+tccutil reset Accessibility com.deckd.daemon
+tccutil reset AppleEvents com.deckd.daemon
+```
+
+(In System Settings you can instead select the `deckd` row by its name, not its toggle, and press **−** under the list.) Decks, the password, and the LAN setting survive an upgrade.
+
+#### Building it yourself
+
+Build **on a Mac** (a `.app` needs Apple tooling):
+
+```sh
+just build-macos-app     # -> dist/deckd.app
+just build-macos-dmg     # -> dist/deckd-<version>.dmg
+```
+
+A local build is a new identity too, so running it means granting permissions to `dist/deckd.app` (and again after every rebuild).
+
+Verified on hardware (macOS 26.6.2, Apple Silicon, 2026-11-18): installed from the release DMG and driven from a phone over LAN, focus-following deck switching, the trackpad, the scroll strip, and keyboard-shortcut buttons all worked once Accessibility and Automation were granted to `deckd.app`, and none of them (except deck switching) did before.
 
 #### Releasing a DMG
 

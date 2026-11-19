@@ -267,9 +267,10 @@ const INSTALL = {
   macOS: `<ol>
     <li><a class="dl" href="${REL}">Download the DMG</a><span class="note">Apple Silicon</span></li>
     <li>Drag deckd to Applications. It isn't notarized yet, so open it the first time with right-click → Open.</li>
-    <li>Allow Accessibility when asked, then pick <b>Allow LAN access</b> from the menu-bar icon.</li>
-    <li>Open the address on your phone.</li></ol>
-    <p class="note">Now playing and D-Bus actions are Linux-only for now.</p>`,
+    <li>When macOS asks if deckd may control <b>System Events</b>, click Allow. That's how it sees the focused app and sends shortcuts.</li>
+    <li>macOS won't ask for this one: in System Settings → Privacy &amp; Security → <b>Accessibility</b>, add deckd with <b>+</b>, then quit and reopen it. Without it the decks switch, but the trackpad, scrolling and shortcuts do nothing.</li>
+    <li>Pick <b>Allow LAN access</b> from the menu-bar icon and open <code>http://&lt;your-mac&gt;.local:8765</code> on your phone. The password is in <code>~/.config/deckd/password</code>.</li></ol>
+    <p class="note">After an upgrade, macOS treats deckd as a new app, so grant Accessibility again (<a href="https://github.com/jonocodes/deckd/blob/main/docs/GUIDE.md#upgrading">how</a>). Now playing and D-Bus actions are Linux-only for now.</p>`,
   "From source": `<pre>git clone https://github.com/jonocodes/deckd && cd deckd
 uv venv --python 3.11 && uv pip install -e ".[uinput,dbus]"
 (cd client && npm install) && just build-client
