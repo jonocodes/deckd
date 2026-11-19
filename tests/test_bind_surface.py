@@ -250,6 +250,45 @@ async def test_health_brackets_ipv6_in_addresses(
         await server.scroll.close()
 
 
+@pytest.mark.parametrize("wildcard", ["0.0.0.0", "::"])
+async def test_wildcard_bind_reports_lan_pairing_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, wildcard: str
+) -> None:
+    """Issue #206: a wildcard bind must not leak into ``url`` — a phone
+    can't open ``http://0.0.0.0:8765/``. ``addresses`` keeps the raw
+    bound socket because that one is accurate."""
+    import deckd.bind as bind_mod
+
+    monkeypatch.setattr(bind_mod, "primary_lan_ipv4", lambda: "192.168.1.20")
+    (tmp_path / "default.yaml").write_text(
+        "match:\n  - default\nwidgets: []\n"
+    )
+    server = Server(
+        decks_dir=tmp_path,
+        bind=[wildcard],
+        port=0,
+        scroll=ScrollController(FakeScrollSink()),
+        key_sink=FakePointerSink(),
+        dbus_bus_factory=FakeDbusBusFactory(),
+    )
+    test_server = TestServer(server.app, host="127.0.0.1")
+    await test_server.start_server()
+    try:
+        port = test_server.port
+        async with aiohttp.ClientSession() as http:
+            async with http.get(f"http://127.0.0.1:{port}/health") as r:
+                health = await r.json()
+            async with http.get(f"http://127.0.0.1:{port}/diag") as r:
+                diag = await r.json()
+        raw = f"[{wildcard}]" if ":" in wildcard else wildcard
+        assert health["addresses"] == [f"{raw}:{port}"]
+        assert health["url"] == f"http://192.168.1.20:{port}/"
+        assert diag["url"] == f"http://192.168.1.20:{port}/"
+    finally:
+        await test_server.close()
+        await server.scroll.close()
+
+
 async def test_diag_includes_bind_addresses_url(srv: ServerHandle) -> None:
     """``/diag`` mirrors the same bind fields as ``/health`` so
     AI agents and operators get them from the richer surface too

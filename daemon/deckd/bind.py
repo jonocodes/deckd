@@ -19,7 +19,7 @@ import ipaddress
 import logging
 import socket
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Callable, Iterable, Protocol
 
 log = logging.getLogger("deckd.bind")
 
@@ -181,19 +181,37 @@ def _iface_addresses(name: str) -> list[tuple[str, int]]:
     return results
 
 
-def url_for(binds: Iterable[ResolvedBind], port: int, scheme: str = "http") -> str:
+def url_for(
+    binds: Iterable[ResolvedBind],
+    port: int,
+    scheme: str = "http",
+    *,
+    lan_address: Callable[[], str | None] | None = None,
+) -> str:
     """Build a pairing URL from the first resolved bind.
 
     Prefers IPv4 over IPv6 because phones on the same LAN more often
     have working v4 than a clean v6 path. The port is the
     actually-listening port (``self.port`` after ``start()``
     resolved any ``port=0`` sentinel).
+
+    A wildcard bind (``0.0.0.0`` / ``::``) is not something a phone can
+    open, so it is replaced by the host's LAN IPv4 from ``lan_address``
+    (default :func:`primary_lan_ipv4`), or ``127.0.0.1`` when none is
+    found. The URL never contains a wildcard (issue #206).
     """
     family_priority: dict[int, int] = {socket.AF_INET: 0, socket.AF_INET6: 1}
     sorted_binds = sorted(binds, key=lambda b: family_priority.get(b.family, 99))
     if not sorted_binds:
         return ""
-    host = _url_host(sorted_binds[0])
+    chosen = sorted_binds[0]
+    if _is_wildcard(chosen.host):
+        # Looked up at call time (not as a default arg) so tests can
+        # monkeypatch the module-level discovery.
+        discover = lan_address or primary_lan_ipv4
+        host = discover() or "127.0.0.1"
+    else:
+        host = _url_host(chosen)
     return f"{scheme}://{host}:{port}/"
 
 
@@ -202,3 +220,55 @@ def _url_host(bind: ResolvedBind) -> str:
     if bind.is_ipv6:
         return f"[{bind.host}]"
     return bind.host
+
+
+def _is_wildcard(host: str) -> bool:
+    try:
+        return ipaddress.ip_address(host).is_unspecified
+    except ValueError:
+        return False
+
+
+# Any routable address works: connecting a UDP socket only asks the
+# kernel to pick a route and source address — no packet is sent.
+# TEST-NET-1 (RFC 5737) keeps us from naming a real third party.
+_ROUTE_PROBE: tuple[str, int] = ("192.0.2.1", 9)
+
+
+class _UdpProbe(Protocol):
+    def connect(self, address: tuple[str, int], /) -> None: ...
+    def getsockname(self) -> tuple[str, int]: ...
+    def close(self) -> None: ...
+
+
+def primary_lan_ipv4(
+    socket_factory: Callable[[], _UdpProbe] | None = None,
+) -> str | None:
+    """Return the host's primary LAN IPv4, or ``None`` if there isn't one.
+
+    "Primary" is the source address of the default route, found by
+    connecting an unsent UDP socket and reading ``getsockname()``.
+    Loopback, link-local and unspecified results are rejected — a phone
+    can't use them. ``socket_factory`` is injectable for tests.
+    """
+    factory = socket_factory or (
+        lambda: socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    )
+    try:
+        sock = factory()
+    except OSError:
+        return None
+    try:
+        sock.connect(_ROUTE_PROBE)
+        local = sock.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        sock.close()
+    try:
+        ip = ipaddress.IPv4Address(local)
+    except ValueError:
+        return None
+    if ip.is_loopback or ip.is_link_local or ip.is_unspecified:
+        return None
+    return str(ip)

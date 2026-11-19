@@ -18,6 +18,7 @@ from deckd.bind import (
     IFACE_PREFIX,
     ResolvedBind,
     parse_bind_specs,
+    primary_lan_ipv4,
     resolve_bind,
     url_for,
 )
@@ -198,6 +199,110 @@ def test_url_for_empty_binds() -> None:
 def test_url_for_respects_scheme() -> None:
     binds = [ResolvedBind(host="127.0.0.1", family=socket.AF_INET, original="127.0.0.1")]
     assert url_for(binds, 443, scheme="https") == "https://127.0.0.1:443/"
+
+
+# ---------------------------------------------------------------------------
+# Wildcard binds → an address a phone can open (issue #206)
+# ---------------------------------------------------------------------------
+
+
+def _bind(host: str, original: str | None = None, iface: str | None = None) -> ResolvedBind:
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    return ResolvedBind(host=host, family=family, original=original or host, iface=iface)
+
+
+def test_url_for_substitutes_lan_ipv4_for_ipv4_wildcard() -> None:
+    url = url_for([_bind("0.0.0.0")], 8765, lan_address=lambda: "192.168.1.20")
+    assert url == "http://192.168.1.20:8765/"
+
+
+def test_url_for_substitutes_lan_ipv4_for_ipv6_wildcard() -> None:
+    # ``::`` is dual-stack on macOS/Linux, so a v4 LAN address reaches
+    # it, and v4 is what a phone on a home LAN most likely has a route to.
+    url = url_for([_bind("::")], 8765, lan_address=lambda: "10.0.0.5")
+    assert url == "http://10.0.0.5:8765/"
+
+
+def test_url_for_wildcard_falls_back_to_loopback_never_wildcard() -> None:
+    assert url_for([_bind("0.0.0.0")], 8765, lan_address=lambda: None) == (
+        "http://127.0.0.1:8765/"
+    )
+    assert url_for([_bind("::")], 8765, lan_address=lambda: None) == (
+        "http://127.0.0.1:8765/"
+    )
+
+
+def test_url_for_literal_bind_does_not_probe_lan() -> None:
+    def boom() -> str:
+        raise AssertionError("lan_address must not be called for a literal bind")
+
+    assert url_for([_bind("192.168.1.9")], 80, lan_address=boom) == (
+        "http://192.168.1.9:80/"
+    )
+    assert url_for([_bind("::1")], 80, lan_address=boom) == "http://[::1]:80/"
+
+
+def test_url_for_iface_bind_does_not_probe_lan() -> None:
+    def boom() -> str:
+        raise AssertionError("lan_address must not be called for an iface bind")
+
+    bind = _bind("192.168.1.9", original="iface:en0", iface="en0")
+    assert url_for([bind], 80, lan_address=boom) == "http://192.168.1.9:80/"
+
+
+def test_url_for_wildcard_uses_module_default_discovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Callers (``/health``, ``/diag``) pass no ``lan_address``; the
+    module-level :func:`primary_lan_ipv4` is looked up at call time so
+    tests can swap it."""
+    import deckd.bind as bind_mod
+
+    monkeypatch.setattr(bind_mod, "primary_lan_ipv4", lambda: "172.16.0.7")
+    assert url_for([_bind("0.0.0.0")], 8765) == "http://172.16.0.7:8765/"
+
+
+class _FakeUdpSocket:
+    def __init__(self, local: str | None = None, error: Exception | None = None) -> None:
+        self._local = local
+        self._error = error
+        self.connected_to: tuple[str, int] | None = None
+        self.closed = False
+
+    def connect(self, addr: tuple[str, int]) -> None:
+        self.connected_to = addr
+        if self._error is not None:
+            raise self._error
+
+    def getsockname(self) -> tuple[str, int]:
+        assert self._local is not None
+        return (self._local, 54321)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_primary_lan_ipv4_returns_default_route_source() -> None:
+    sock = _FakeUdpSocket(local="192.168.1.20")
+    assert primary_lan_ipv4(socket_factory=lambda: sock) == "192.168.1.20"
+    assert sock.connected_to is not None
+    assert sock.closed
+
+
+@pytest.mark.parametrize(
+    "local",
+    ["127.0.0.1", "0.0.0.0", "169.254.10.10"],
+    ids=["loopback", "unspecified", "link-local"],
+)
+def test_primary_lan_ipv4_rejects_unusable_source(local: str) -> None:
+    sock = _FakeUdpSocket(local=local)
+    assert primary_lan_ipv4(socket_factory=lambda: sock) is None
+
+
+def test_primary_lan_ipv4_no_route_returns_none() -> None:
+    sock = _FakeUdpSocket(error=OSError("Network is unreachable"))
+    assert primary_lan_ipv4(socket_factory=lambda: sock) is None
+    assert sock.closed
 
 
 def test_iface_prefix_constant_matches_documented_shape() -> None:
