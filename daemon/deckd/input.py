@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import sys
 from collections.abc import Sequence
 from typing import Protocol
+
+from .protocol import HealthIssue
 
 log = logging.getLogger("deckd.input")
 
@@ -223,6 +226,9 @@ class LoggingScrollSink:
 class LoggingKeySink:
     """Fallback sink that logs key + pointer events when uinput is unavailable."""
 
+    def __init__(self, error: Exception | None = None) -> None:
+        self.error = error
+
     def emit_key(self, keycodes: list[int]) -> None:
         log.info("[key log] keycodes=%s", keycodes)
 
@@ -354,7 +360,75 @@ def make_key_sink() -> KeySink:
         return UinputSink()
     except Exception as exc:
         log.warning("uinput key unavailable; falling back to logging only: %s", exc)
-        return LoggingKeySink()
+        return LoggingKeySink(exc)
+
+
+def uinput_health_issue(sink: KeySink | None) -> HealthIssue | None:
+    """Describe why a Linux input sink fell back to logging (issue #197)."""
+    if (
+        sys.platform != "linux"
+        or not isinstance(sink, LoggingKeySink)
+        or sink.error is None
+    ):
+        return None
+
+    error = sink.error
+    if isinstance(error, RuntimeError) and isinstance(error.__cause__, ImportError):
+        title = "Linux input support is not installed"
+        detail = (
+            "python-evdev is missing, so deckd can log but not inject keyboard, "
+            "scroll, or pointer events."
+        )
+        fix_steps = [
+            "Install deckd's uinput extra from a checkout with "
+            '`uv pip install -e ".[dev,uinput,dbus]"`, or install python-evdev '
+            "with your system package manager.",
+            "Restart deckd after installing python-evdev.",
+        ]
+    elif isinstance(error, PermissionError):
+        title = "Linux input permission missing"
+        detail = (
+            f"deckd cannot write to /dev/uinput ({error}), so keyboard, scroll, "
+            "and pointer buttons do nothing."
+        )
+        fix_steps = [
+            "Install `packaging/udev/70-deckd-uinput.rules` in `/etc/udev/rules.d/`, "
+            "reload and trigger udev, and add your user to the `input` group.",
+            "For an AppImage or tarball, run the bundled "
+            "`install-system-integration.sh` helper instead.",
+            "Log out and back in so the group membership applies, then restart "
+            "deckd. From a checkout, `just check-uinput` confirms access.",
+        ]
+    elif isinstance(error, FileNotFoundError):
+        title = "Linux uinput device unavailable"
+        detail = (
+            f"The /dev/uinput device is missing ({error}), so keyboard, scroll, "
+            "and pointer buttons do nothing."
+        )
+        fix_steps = [
+            "Load the `uinput` kernel module with `sudo modprobe uinput` and "
+            "configure it to load at boot.",
+            "Restart deckd after /dev/uinput is available.",
+        ]
+    else:
+        title = "Linux input unavailable"
+        detail = (
+            f"deckd could not initialize /dev/uinput ({error}), so keyboard, "
+            "scroll, and pointer buttons do nothing."
+        )
+        fix_steps = [
+            "Check that /dev/uinput exists and is writable by the user running "
+            "deckd, then restart deckd.",
+        ]
+
+    return HealthIssue(
+        id="uinput_unavailable",
+        severity="error",
+        title=title,
+        detail=detail,
+        fix_steps=fix_steps,
+        affects=["key", "scroll", "pointer"],
+    )
 
 
 # ---------------------------------------------------------------------------
