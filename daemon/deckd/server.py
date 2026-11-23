@@ -21,7 +21,13 @@ from pydantic import ValidationError
 from . import __version__
 from . import protocol as p
 from .actions import ActionContext, MacroOutcome, execute as run_action
-from .input import PermissionDenied, ScrollController, parse_key_combo, text_to_combos
+from .input import (
+    PermissionDenied,
+    ScrollController,
+    parse_key_combo,
+    text_to_combos,
+    uinput_health_issue,
+)
 from .decks import (
     Deck,
     DeckLoadError,
@@ -1407,9 +1413,9 @@ class Server:
     HEALTH_POLL_INTERVAL_S = 3.0
 
     async def run_health_watcher(self, *, interval_s: float | None = None) -> None:
-        """Poll the backend's health issues and broadcast on change."""
+        """Poll backend and input health issues and broadcast on change."""
         backend = self.focus_backend
-        if backend is None:
+        if backend is None and uinput_health_issue(self.key_sink) is None:
             return
         interval = self.HEALTH_POLL_INTERVAL_S if interval_s is None else interval_s
         failing = False
@@ -1425,17 +1431,24 @@ class Server:
                 await self._on_health_issues(issues)
             await asyncio.sleep(interval)
 
-    @staticmethod
-    async def _probe_health(backend: "PlatformBackend") -> "list[p.HealthIssue]":
+    async def _probe_health(
+        self, backend: "PlatformBackend | None"
+    ) -> "list[p.HealthIssue]":
         # Off the event loop: the macOS probes can shell out to osascript
         # or block in TCC (#196).
-        return list(await asyncio.to_thread(backend.health_issues))
+        issues = (
+            list(await asyncio.to_thread(backend.health_issues))
+            if backend is not None
+            else []
+        )
+        input_issue = uinput_health_issue(self.key_sink)
+        if input_issue is not None:
+            issues.append(input_issue)
+        return issues
 
     def _refresh_health(self) -> None:
         """Re-poll health now, outside the watcher's cadence (#196)."""
         backend = self.focus_backend
-        if backend is None:
-            return
 
         async def once() -> None:
             try:
@@ -1490,7 +1503,9 @@ class Server:
     def start_health_watcher(
         self, *, interval_s: float | None = None
     ) -> asyncio.Task[None] | None:
-        if self._health_task is not None or self.focus_backend is None:
+        if self._health_task is not None:
+            return None
+        if self.focus_backend is None and uinput_health_issue(self.key_sink) is None:
             return None
         self._health_task = asyncio.create_task(
             self.run_health_watcher(interval_s=interval_s)

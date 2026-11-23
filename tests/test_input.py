@@ -17,6 +17,7 @@ from deckd.input import (
     LoggingScrollSink,
     name_from_keycode,
     text_to_combos,
+    uinput_health_issue,
 )
 
 
@@ -161,6 +162,72 @@ def test_build_sinks_falls_back_to_logging_when_platform_sink_raises(
     assert sink is None
     assert isinstance(scroll_sink, LoggingScrollSink)
     assert isinstance(key_sink, LoggingKeySink)
+
+
+def test_build_sinks_preserves_uinput_failure_for_health_report(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import deckd.__main__ as main_mod
+
+    monkeypatch.delenv("DECKD_FAKE_INPUT", raising=False)
+    monkeypatch.setattr(main_mod.sys, "platform", "linux")
+    error = PermissionError(13, "Permission denied")
+
+    def boom() -> None:
+        raise error
+
+    monkeypatch.setattr(main_mod, "UinputSink", boom)
+    _sink, _scroll_sink, key_sink = main_mod._build_sinks()
+
+    assert isinstance(key_sink, LoggingKeySink)
+    assert key_sink.error is error
+
+
+def test_uinput_health_issue_distinguishes_missing_evdev(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    try:
+        raise ImportError("No module named 'evdev'")
+    except ImportError as exc:
+        error = RuntimeError("evdev is not installed; install deckd with the uinput extra")
+        error.__cause__ = exc
+
+    issue = uinput_health_issue(LoggingKeySink(error))
+
+    assert issue is not None
+    assert issue.title == "Linux input support is not installed"
+    assert "python-evdev" in issue.detail
+    assert ".[dev,uinput,dbus]" in " ".join(issue.fix_steps)
+
+
+def test_uinput_health_issue_distinguishes_missing_device(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    error = FileNotFoundError(2, "No such file or directory", "/dev/uinput")
+
+    issue = uinput_health_issue(LoggingKeySink(error))
+
+    assert issue is not None
+    assert issue.title == "Linux uinput device unavailable"
+    assert "sudo modprobe uinput" in " ".join(issue.fix_steps)
+
+
+def test_uinput_health_issue_ignores_fake_or_non_linux_sinks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import sys
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert uinput_health_issue(LoggingKeySink()) is None
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert uinput_health_issue(LoggingKeySink(PermissionError(13, "Denied"))) is None
 
 
 def test_sink_failure_hint_names_the_fix_for_uinput_access() -> None:

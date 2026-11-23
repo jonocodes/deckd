@@ -133,7 +133,7 @@ def _build_sinks() -> tuple[object | None, ScrollSink, KeySink]:
             exc,
             hint,
         )
-        return None, LoggingScrollSink(), LoggingKeySink()
+        return None, LoggingScrollSink(), LoggingKeySink(exc)
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -299,6 +299,29 @@ async def test_watcher_survives_a_failing_probe() -> None:
     assert [i.id for i in server._health_issues] == ["accessibility_missing"]
 
 
+@pytest.mark.parametrize("backend", [None, PlatformBackend()])
+async def test_watcher_reports_uinput_fallback(monkeypatch, backend) -> None:
+    import websockets as _ws
+
+    import deckd.input as input_mod
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    error = PermissionError(13, "Permission denied")
+    async with _boot(backend) as (server, port):
+        server.key_sink = input_mod.LoggingKeySink(error)
+        task = server.start_health_watcher(interval_s=0.01)
+        assert task is not None
+        async with _ws.connect(f"ws://127.0.0.1:{port}/ws") as ws:
+            assert (await _recv(ws))["type"] == "deck"
+            health = await _recv(ws)
+    assert health["type"] == "health"
+    assert [i["id"] for i in health["issues"]] == ["uinput_unavailable"]
+    issue = health["issues"][0]
+    assert set(issue["affects"]) == {"key", "scroll", "pointer"}
+    assert "Permission denied" in issue["detail"]
+    assert any("input" in step and "group" in step for step in issue["fix_steps"])
+
+
 async def test_watcher_noop_without_backend() -> None:
     async with _boot(None) as (server, _port):
         assert server.start_health_watcher() is None
